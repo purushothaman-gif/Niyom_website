@@ -1,15 +1,18 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { computeAll, parseDate, isoDate, type NavPoint } from "../_shared/mfReturns.ts";
 
 /**
  * update-mutual-funds
  * -------------------
  * Populates the `mutual_funds` table with REAL fund data from mfapi.in
  * (free, no API key). For a curated set of funds it resolves the AMFI scheme
- * code, pulls the NAV history, and computes real 1Y / 3Y / 5Y returns.
+ * code, pulls the NAV history, and computes real YTD / 6M / 1Y / 3Y / 5Y /
+ * since-inception returns plus current NAV, NAV date and 52-week high/low.
  *
- * mfapi.in does NOT expose AUM, expense ratio or fund manager, so those fields
- * are left null and are not shown on the MF Research page.
+ * mfapi.in does NOT expose AUM or expense ratio, so those columns stay null and
+ * are not shown on the MF Research page. `fund_house` (AMC) and an inception
+ * `launch_date` (oldest NAV point) ARE derived and stored.
  *
  * POST → { success, updated, skipped }.
  */
@@ -27,59 +30,80 @@ const json = (body: unknown, status = 200) =>
   });
 
 // Curated funds to track. `match` locates the Direct-Growth plan in the AMFI
-// scheme list; `category` is the top-level bucket the UI filters by.
+// scheme list; `category` is the top-level bucket the UI filters by; `risk` is
+// a house view (mfapi.in has no risk field). ~50 well-known schemes across
+// equity, debt and hybrid.
 const TARGETS: { match: string; category: "Equity" | "Debt" | "Hybrid"; risk: string }[] = [
+  // --- Equity: flexi / multi cap ---
   { match: "Parag Parikh Flexi Cap Fund", category: "Equity", risk: "High" },
+  { match: "HDFC Flexi Cap Fund", category: "Equity", risk: "High" },
+  { match: "Kotak Flexicap Fund", category: "Equity", risk: "High" },
+  { match: "UTI Flexi Cap Fund", category: "Equity", risk: "High" },
+  { match: "Quant Active Fund", category: "Equity", risk: "High" },
+  // --- Equity: large cap / bluechip ---
   { match: "Mirae Asset Large Cap Fund", category: "Equity", risk: "Moderate" },
+  { match: "ICICI Prudential Bluechip Fund", category: "Equity", risk: "Moderate" },
+  { match: "Canara Robeco Bluechip Equity Fund", category: "Equity", risk: "Moderate" },
+  { match: "Nippon India Large Cap Fund", category: "Equity", risk: "Moderate" },
+  { match: "SBI Bluechip Fund", category: "Equity", risk: "Moderate" },
+  { match: "Axis Bluechip Fund", category: "Equity", risk: "Moderate" },
+  // --- Equity: large & mid / mid cap ---
   { match: "Axis Midcap Fund", category: "Equity", risk: "High" },
+  { match: "Kotak Emerging Equity Fund", category: "Equity", risk: "High" },
+  { match: "HDFC Mid-Cap Opportunities Fund", category: "Equity", risk: "High" },
+  { match: "Motilal Oswal Midcap Fund", category: "Equity", risk: "High" },
+  { match: "PGIM India Midcap Opportunities Fund", category: "Equity", risk: "High" },
+  { match: "Mirae Asset Large & Midcap Fund", category: "Equity", risk: "High" },
+  // --- Equity: small cap ---
   { match: "SBI Small Cap Fund", category: "Equity", risk: "High" },
   { match: "Nippon India Small Cap Fund", category: "Equity", risk: "High" },
-  { match: "HDFC Flexi Cap Fund", category: "Equity", risk: "High" },
-  { match: "ICICI Prudential Bluechip Fund", category: "Equity", risk: "Moderate" },
-  { match: "Kotak Emerging Equity Fund", category: "Equity", risk: "High" },
-  { match: "Canara Robeco Bluechip Equity Fund", category: "Equity", risk: "Moderate" },
+  { match: "Axis Small Cap Fund", category: "Equity", risk: "High" },
+  { match: "HDFC Small Cap Fund", category: "Equity", risk: "High" },
+  { match: "Quant Small Cap Fund", category: "Equity", risk: "High" },
+  // --- Equity: ELSS (tax saver) ---
   { match: "Mirae Asset ELSS Tax Saver Fund", category: "Equity", risk: "Moderate" },
+  { match: "Quant ELSS Tax Saver Fund", category: "Equity", risk: "High" },
+  { match: "Canara Robeco ELSS Tax Saver", category: "Equity", risk: "Moderate" },
+  // --- Equity: value / focused / sectoral ---
+  { match: "ICICI Prudential Value Discovery Fund", category: "Equity", risk: "Moderate" },
+  { match: "SBI Focused Equity Fund", category: "Equity", risk: "High" },
+  { match: "ICICI Prudential Technology Fund", category: "Equity", risk: "High" },
+  { match: "Nippon India Pharma Fund", category: "Equity", risk: "High" },
+  // --- Equity: index ---
+  { match: "UTI Nifty 50 Index Fund", category: "Equity", risk: "Moderate" },
+  { match: "HDFC Index Fund Nifty 50 Plan", category: "Equity", risk: "Moderate" },
+  // --- Debt: corporate bond / banking & PSU ---
   { match: "HDFC Corporate Bond Fund", category: "Debt", risk: "Low" },
   { match: "ICICI Prudential Corporate Bond Fund", category: "Debt", risk: "Low" },
+  { match: "Aditya Birla Sun Life Corporate Bond Fund", category: "Debt", risk: "Low" },
+  { match: "Kotak Corporate Bond Fund", category: "Debt", risk: "Low" },
+  // --- Debt: gilt ---
   { match: "SBI Magnum Gilt Fund", category: "Debt", risk: "Low" },
+  { match: "ICICI Prudential Gilt Fund", category: "Debt", risk: "Low" },
+  // --- Debt: short / low duration / liquid ---
+  { match: "HDFC Short Term Debt Fund", category: "Debt", risk: "Low" },
+  { match: "ICICI Prudential Short Term Fund", category: "Debt", risk: "Low" },
+  { match: "Axis Liquid Fund", category: "Debt", risk: "Low" },
+  { match: "SBI Liquid Fund", category: "Debt", risk: "Low" },
+  // --- Debt: dynamic bond ---
+  { match: "ICICI Prudential All Seasons Bond Fund", category: "Debt", risk: "Moderate" },
+  // --- Hybrid: balanced advantage / dynamic asset allocation ---
   { match: "HDFC Balanced Advantage Fund", category: "Hybrid", risk: "Moderate" },
   { match: "ICICI Prudential Balanced Advantage Fund", category: "Hybrid", risk: "Moderate" },
+  { match: "Edelweiss Balanced Advantage Fund", category: "Hybrid", risk: "Moderate" },
+  // --- Hybrid: aggressive / equity hybrid ---
   { match: "SBI Equity Hybrid Fund", category: "Hybrid", risk: "Moderate" },
+  { match: "ICICI Prudential Equity & Debt Fund", category: "Hybrid", risk: "Moderate" },
+  { match: "Canara Robeco Equity Hybrid Fund", category: "Hybrid", risk: "Moderate" },
+  // --- Hybrid: multi asset / conservative ---
+  { match: "ICICI Prudential Multi-Asset Fund", category: "Hybrid", risk: "Moderate" },
+  { match: "SBI Conservative Hybrid Fund", category: "Hybrid", risk: "Low" },
 ];
 
 interface SchemeListEntry { schemeCode: number; schemeName: string; }
-interface NavPoint { date: string; nav: string; }
 interface SchemeDetail {
   meta: { scheme_name: string; scheme_category?: string; fund_house?: string };
   data: NavPoint[];
-}
-
-/** Parse mfapi.in "dd-mm-yyyy" into a Date. */
-function parseDate(s: string): Date {
-  const [d, m, y] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-/** NAV closest to (but not after) `target`, scanning newest→oldest history. */
-function navOnOrBefore(data: NavPoint[], target: Date): number | null {
-  for (const p of data) {
-    if (parseDate(p.date).getTime() <= target.getTime()) {
-      const v = parseFloat(p.nav);
-      return Number.isFinite(v) && v > 0 ? v : null;
-    }
-  }
-  return null;
-}
-
-/** Annualised (CAGR) return % over `years`; simple % when years === 1. */
-function computeReturn(data: NavPoint[], latest: number, latestDate: Date, years: number): number {
-  const target = new Date(latestDate);
-  target.setFullYear(target.getFullYear() - years);
-  const past = navOnOrBefore(data, target);
-  if (!past) return 0;
-  const growth = latest / past;
-  const r = years === 1 ? growth - 1 : Math.pow(growth, 1 / years) - 1;
-  return Math.round(r * 1000) / 10; // one decimal place, as a percentage
 }
 
 function pickSubCategory(schemeCategory?: string): string {
@@ -132,24 +156,35 @@ Deno.serve(async (req: Request) => {
       .map((t) => ({ ...t, code: resolveCode(list, t.match) }))
       .filter((t): t is typeof t & { code: number } => t.code != null);
 
-    // 3. Fetch each fund's NAV history in parallel and compute returns.
+    // 3. Fetch each fund's NAV history in parallel and compute the full metric spread.
     const details = await Promise.all(
       resolved.map(async (t) => {
         const detail = await getJson<SchemeDetail>(`https://api.mfapi.in/mf/${t.code}`);
         if (!detail || !detail.data?.length) return null;
 
-        const latest = parseFloat(detail.data[0].nav);
-        const latestDate = parseDate(detail.data[0].date);
-        if (!Number.isFinite(latest) || latest <= 0) return null;
+        const metrics = computeAll(detail.data);
+        if (!metrics) return null;
+
+        // Inception ≈ oldest NAV point in the history.
+        const first = detail.data[detail.data.length - 1];
+        const launch_date = first ? isoDate(parseDate(first.date)) : null;
 
         return {
           fund_name: detail.meta.scheme_name.replace(/\s*-\s*(direct|regular|growth).*$/i, "").trim(),
           fund_code: String(t.code),
           category: t.category,
           sub_category: pickSubCategory(detail.meta.scheme_category),
-          return_1y: computeReturn(detail.data, latest, latestDate, 1),
-          return_3y: computeReturn(detail.data, latest, latestDate, 3),
-          return_5y: computeReturn(detail.data, latest, latestDate, 5),
+          fund_house: detail.meta.fund_house ?? null,
+          fund_manager: detail.meta.fund_house ?? null,
+          current_nav: metrics.current_nav,
+          nav_date: metrics.nav_date,
+          return_ytd: metrics.return_ytd,
+          return_6m: metrics.return_6m,
+          return_1y: metrics.return_1y,
+          return_3y: metrics.return_3y,
+          return_5y: metrics.return_5y,
+          return_si: metrics.return_si,
+          launch_date,
           risk_level: t.risk,
           min_investment: 500,
           updated_at: new Date().toISOString(),

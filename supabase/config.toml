@@ -421,6 +421,17 @@ verify_jwt = false
 [functions.nsdl-refresh-cache]
 verify_jwt = false
 
+# --- Public MF Research page functions (no JWT; called from the unauthenticated
+#     public MF Research page, and mf-universe's refresh from pg_cron). ---
+[functions.update-mutual-funds]
+verify_jwt = false
+
+[functions.mf-universe]
+verify_jwt = false
+
+[functions.mf-detail]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
