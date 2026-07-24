@@ -84,8 +84,10 @@ export const REQUIRE_MFA_FOR_PRIVILEGED = true;
 export const ALLOW_TRUSTED_DEVICES = true;
 export const TRUSTED_DEVICE_DAYS = 30;
 
+export const TRUSTED_DEVICE_PREFIX = 'nw_mfa_trusted_';
+
 function trustedDeviceKey(userId: string): string {
-  return `nw_mfa_trusted_${userId}`;
+  return `${TRUSTED_DEVICE_PREFIX}${userId}`;
 }
 
 /** Has THIS browser been remembered for this user, and not yet expired? */
@@ -136,6 +138,34 @@ export async function forgetThisDevice(): Promise<void> {
 export async function currentDeviceTrusted(): Promise<boolean> {
   const { data } = await supabase.auth.getUser();
   return data.user ? isDeviceTrusted(data.user.id) : false;
+}
+
+/**
+ * Clear browser storage on sign-out WITHOUT forgetting trusted devices.
+ *
+ * Sign-out handlers call localStorage.clear() to drop cached data — but that
+ * also wipes the "remember this device" markers, so the user gets challenged
+ * again on their own device after every logout, which defeats the feature.
+ * This clears everything except the nw_mfa_trusted_* keys, then clears
+ * sessionStorage. Use it in place of localStorage.clear()+sessionStorage.clear()
+ * in sign-out paths.
+ */
+export function clearStorageKeepingTrustedDevices(): void {
+  try {
+    const preserved: Array<[string, string]> = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(TRUSTED_DEVICE_PREFIX)) {
+        const v = localStorage.getItem(k);
+        if (v !== null) preserved.push([k, v]);
+      }
+    }
+    localStorage.clear();
+    for (const [k, v] of preserved) localStorage.setItem(k, v);
+  } catch {
+    /* storage unavailable — nothing to preserve */
+  }
+  try { sessionStorage.clear(); } catch { /* ignore */ }
 }
 
 /**

@@ -15,7 +15,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { NWEmployee } from '../crm/types';
-import { evaluateMfaGate, isMfaUnavailable } from '../crm/mfa';
+import { evaluateMfaGate, isMfaUnavailable, clearStorageKeepingTrustedDevices } from '../crm/mfa';
 import MfAdminLogin from './MfAdminLogin';
 import { AdminShell } from './layout/AdminShell';
 import { ADMIN_VIEW_TITLES } from './layout/adminNav';
@@ -91,8 +91,7 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
-    localStorage.clear();
-    sessionStorage.clear();
+    clearStorageKeepingTrustedDevices(); // keep "remember this device" markers
     window.location.replace('/mf-admin');
   };
 

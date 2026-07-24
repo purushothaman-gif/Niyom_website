@@ -8,6 +8,7 @@ import {
   Send, Target, Landmark,
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
+import { clearStorageKeepingTrustedDevices } from './mfa';
 
 interface Props {
   children: React.ReactNode;
@@ -113,7 +114,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
             <p className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{employee.full_name}</p>
             <p className="text-xs truncate" style={{ color: 'var(--text-faint)' }}>{employee.employee_code}</p>
           </div>
-          <button onClick={async () => { await supabase.auth.signOut(); localStorage.clear(); sessionStorage.clear(); window.location.replace('/crm'); }} className="crm-icon-danger p-1.5 rounded-lg transition-colors flex-shrink-0">
+          <button onClick={async () => { await supabase.auth.signOut(); clearStorageKeepingTrustedDevices(); window.location.replace('/crm'); }} className="crm-icon-danger p-1.5 rounded-lg transition-colors flex-shrink-0">
             <LogOut className="w-4 h-4" />
           </button>
         </div>

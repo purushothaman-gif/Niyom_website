@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, CRMPage } from './types';
-import { evaluateMfaGate, isMfaUnavailable } from './mfa';
+import { evaluateMfaGate, isMfaUnavailable, clearStorageKeepingTrustedDevices } from './mfa';
 import CRMLogin from './CRMLogin';
 import ChangePassword from './ChangePassword';
 import Layout from './Layout';
@@ -103,8 +103,7 @@ export default function CRM() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       (async () => {
         if (event === 'SIGNED_OUT') {
-          localStorage.clear();
-          sessionStorage.clear();
+          clearStorageKeepingTrustedDevices(); // keep "remember this device" markers
           window.location.replace('/crm');
           return;
         }
