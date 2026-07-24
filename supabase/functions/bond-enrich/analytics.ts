@@ -95,9 +95,17 @@ function dcf(a: Date, b: Date, conv: DayCount): number {
 }
 
 // Anchor day-of-month from the IP-date seed (else the maturity day).
+// The seed may be ISO ("2026-02-27,…"), DD-MM-YYYY, DD-Mon-YYYY or a bare
+// day-month ("27-02"). Parse the first token properly so we take the actual
+// day-of-month — never the leading two digits of an ISO year.
 function anchorDay(seed: string | undefined, maturity: Date): number {
-  const m = (seed ?? '').match(/(\d{1,2})/);
-  if (m) { const day = parseInt(m[1], 10); if (day >= 1 && day <= 31) return day; }
+  const first = (seed ?? '').split(/[,;|]/)[0]?.trim();
+  if (first) {
+    const iso = parseLooseDate(first);            // handles ISO / DD-MM-YYYY / DD-Mon-YYYY
+    if (iso) { const day = parseInt(iso.slice(8, 10), 10); if (day >= 1 && day <= 31) return day; }
+    const m = first.match(/^(\d{1,2})\b/);        // bare "27-02" style → leading day
+    if (m) { const day = parseInt(m[1], 10); if (day >= 1 && day <= 31) return day; }
+  }
   return maturity.getUTCDate();
 }
 
@@ -244,12 +252,18 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
   let ytm: number | null = null, mac: number | null = null, mod: number | null = null;
   if (dirty !== null) {
     const flows = cashflow.map(r => ({ date: toDate(r.date), amount: r.total_per_100 }));
-    ytm = xirr(flows, settlement, dirty);
-    if (ytm !== null) {
+    const eay = xirr(flows, settlement, dirty);   // money-weighted effective annual yield
+    if (eay !== null) {
+      // Quote YTM in the market convention: nominal annual, compounded at the
+      // coupon frequency (m payments/yr). This makes a bond priced at par read
+      // YTM = coupon, matching Excel YIELD and Indian bond platforms. XIRR alone
+      // returns the effective-annual rate, which overstates YTM on sub-annual bonds.
+      const m = zero ? 1 : Math.max(1, Math.round(12 / step));
+      const ytmNom = m > 1 ? m * (Math.pow(1 + eay, 1 / m) - 1) : eay;
       let pvw = 0, pv = 0;
-      for (const f of flows) { const t = days(settlement, f.date) / 365; if (t <= 0) continue; const d = f.amount / Math.pow(1 + ytm, t); pv += d; pvw += t * d; }
-      if (pv > 0) { mac = +(pvw / pv).toFixed(4); mod = +(mac / (1 + ytm)).toFixed(4); }
-      ytm = +(ytm * 100).toFixed(4);
+      for (const f of flows) { const t = days(settlement, f.date) / 365; if (t <= 0) continue; const d = f.amount / Math.pow(1 + eay, t); pv += d; pvw += t * d; }
+      if (pv > 0) { mac = +(pvw / pv).toFixed(4); mod = +(mac / (1 + ytmNom / m)).toFixed(4); }
+      ytm = +(ytmNom * 100).toFixed(4);
     }
   }
 
