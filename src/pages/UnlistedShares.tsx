@@ -1,7 +1,6 @@
 import { ArrowLeft, TrendingUp, TrendingDown, Search, X, Menu, ChevronRight, Info, Calendar, IndianRupee, Building2, Briefcase, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
 import { Logo } from '../components/Logo';
 import { HeroBackground } from '../components/HeroBackground';
 
@@ -46,7 +45,6 @@ interface Bond {
 }
 
 export function UnlistedShares({ onBack, onNavigateToSignUp, onNavigateToKYC, initialTab = 'shares' }: UnlistedSharesProps) {
-  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'shares' | 'bonds'>(initialTab);
   const [shares, setShares] = useState<Share[]>([]);
   const [bonds, setBonds] = useState<Bond[]>([]);
@@ -84,14 +82,10 @@ export function UnlistedShares({ onBack, onNavigateToSignUp, onNavigateToKYC, in
     }
   };
 
-  const handleBuyClick = (type: 'buy' | 'sell') => {
-    if (!user) {
-      onNavigateToSignUp();
-      return;
-    }
-    if (selectedItem && isShare(selectedItem)) {
-      window.location.href = `/order-placement?shareId=${selectedItem.id}&type=${type}`;
-    }
+  const handleBuyClick = () => {
+    // Orders now flow through the Wealth Portal / CRM, not the retired
+    // Supabase order-placement page.
+    onNavigateToSignUp();
   };
 
 
@@ -558,24 +552,22 @@ export function UnlistedShares({ onBack, onNavigateToSignUp, onNavigateToKYC, in
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => handleBuyClick('buy')}
+                  onClick={handleBuyClick}
                   className="flex-1 bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-900 transition-all duration-300"
                 >
                   Buy Now
                 </button>
                 <button
-                  onClick={() => handleBuyClick('sell')}
+                  onClick={handleBuyClick}
                   className="flex-1 bg-accent-soft text-black py-3 rounded-lg font-semibold hover:bg-accent-soft-deep transition-all duration-300"
                 >
                   Sell
                 </button>
               </div>
 
-              {!user && (
-                <p className="text-center text-sm text-text-muted mt-4">
-                  Sign up to start trading
-                </p>
-              )}
+              <p className="text-center text-sm text-text-muted mt-4">
+                Log in to the client portal to start trading
+              </p>
             </div>
           </div>
         </div>
