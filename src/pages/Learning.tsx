@@ -161,10 +161,14 @@ function CommodityCard({ label, unit, snapshot }: { label: string; unit: string;
       {price != null ? (
         <>
           <div className="text-2xl font-bold text-text-primary mb-1" style={{ fontFamily: 'var(--font-display)' }}>{inr(price)}</div>
-          <div className="flex items-center gap-1 text-sm font-medium mb-3" style={{ color: up ? 'rgb(var(--success-soft-rgb))' : 'rgb(var(--danger-soft-rgb))' }}>
-            {up ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}
-            {inr(Math.abs(snapshot!.change))} ({Math.abs(snapshot!.changePct).toFixed(2)}%)
-          </div>
+          {snapshot!.series.length > 1 ? (
+            <div className="flex items-center gap-1 text-sm font-medium mb-3" style={{ color: up ? 'rgb(var(--success-soft-rgb))' : 'rgb(var(--danger-soft-rgb))' }}>
+              {up ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}
+              {inr(Math.abs(snapshot!.change))} ({Math.abs(snapshot!.changePct).toFixed(2)}%)
+            </div>
+          ) : (
+            <div className="text-xs text-text-muted mb-3">as of {new Date(snapshot!.latest!.price_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>
+          )}
           <Sparkline series={snapshot!.series.map((s) => s.price)} />
         </>
       ) : (
