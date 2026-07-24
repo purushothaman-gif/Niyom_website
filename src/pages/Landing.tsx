@@ -102,7 +102,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                 )}
               </div>
               <button
-                onClick={() => onNavigate('client-login')}
+                onClick={() => window.open('/client-login', '_blank')}
                 className={`lift press bg-accent-soft hover:bg-accent-soft-deep text-black px-8 py-3 rounded-xl font-semibold shadow-md ${isLoaded ? 'animate-slideDown animate-delay-200' : 'opacity-0'}`}
               >
                 Client Login
@@ -284,7 +284,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                 </button>
                 <button
                   onClick={() => {
-                    onNavigate('client-login');
+                    window.open('/client-login', '_blank');
                     setIsMobileMenuOpen(false);
                   }}
                   className="w-full bg-accent-soft hover:bg-accent-soft-deep text-black font-semibold py-3 px-4 rounded mb-3 transition-colors"
@@ -342,7 +342,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               </button>
               <button
                 onClick={() => {
-                  onNavigate('client-login');
+                  window.open('/client-login', '_blank');
                   setIsMobileMenuOpen(false);
                 }}
                 className="bg-accent-soft hover:bg-accent-soft-deep text-black px-4 py-3 rounded-md font-semibold transition-all duration-300"
@@ -378,7 +378,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             {/* CTAs */}
             <div className={`flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-4 ${isLoaded ? 'animate-fadeInUp animate-delay-300' : 'opacity-0'}`}>
               <button
-                onClick={() => onNavigate('client-login')}
+                onClick={() => window.open('/client-login', '_blank')}
                 className="cta-glow press bg-accent-soft hover:bg-accent-soft-deep text-black font-bold py-4 px-9 rounded-xl flex items-center gap-2.5 text-lg w-full sm:w-auto justify-center"
               >
                 Start Investing <ArrowRight size={20} />
@@ -504,7 +504,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             Schedule a complimentary consultation to explore investment products and opportunities.
           </p>
           <button
-            onClick={() => onNavigate('client-login')}
+            onClick={() => window.open('/client-login', '_blank')}
             className={`lift press bg-black hover:bg-gray-900 text-white font-bold py-4 px-10 rounded-xl shadow-lg text-lg ${isLoaded ? 'animate-fadeInUp animate-delay-400' : 'opacity-0'}`}
           >
             Create Your Account
