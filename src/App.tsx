@@ -16,10 +16,6 @@ import { MutualFundsLead } from './pages/MutualFundsLead';
 import { PrimaryBondsLead } from './pages/PrimaryBondsLead';
 import { FixedDepositsLead } from './pages/FixedDepositsLead';
 import { InsuranceLead } from './pages/InsuranceLead';
-import CRMLogin from './pages/CRMLogin';
-import EmployeeDashboard from './pages/EmployeeDashboard';
-import AdminDashboard from './pages/AdminDashboard';
-import AddDeal from './pages/AddDeal';
 import CRM from './crm/CRM';
 import MfAdminApp from './mfadmin/MfAdminApp';
 import ClientLogin from './pages/ClientLogin';
@@ -31,7 +27,7 @@ import PublicDebitNoteView from './pages/PublicDebitNoteView';
 
 function AppContent() {
   const { loading } = useAuth();
-  const [currentPage, setCurrentPage] = useState<'landing' | 'services' | 'learning' | 'news' | 'mfresearch' | 'calculator' | 'unlisted' | 'bonds' | 'privacy' | 'terms' | 'risk' | 'disclaimer' | 'mutual-funds' | 'primary-bonds' | 'fixed-deposits' | 'insurance' | 'crm-login' | 'crm-employee' | 'crm-admin' | 'crm-add-deal' | 'crm-new' | 'client-portal' | 'client-login' | 'mf-admin'>('landing');
+  const [currentPage, setCurrentPage] = useState<'landing' | 'services' | 'learning' | 'news' | 'mfresearch' | 'calculator' | 'unlisted' | 'bonds' | 'privacy' | 'terms' | 'risk' | 'disclaimer' | 'mutual-funds' | 'primary-bonds' | 'fixed-deposits' | 'insurance' | 'crm-new' | 'client-portal' | 'client-login' | 'mf-admin'>('landing');
   // Client portal state — persisted to sessionStorage so a page refresh keeps
   // the client inside the portal instead of dropping back to landing/dashboard.
   const [clientPortalId, setClientPortalId] = useState<string | null>(() => {
@@ -287,23 +283,6 @@ function AppContent() {
         }}
       />
     );
-  }
-
-  // CRM routes must be checked before the generic `user` check
-  if (currentPage === 'crm-login') {
-    return <CRMLogin />;
-  }
-
-  if (currentPage === 'crm-employee') {
-    return <EmployeeDashboard />;
-  }
-
-  if (currentPage === 'crm-admin') {
-    return <AdminDashboard />;
-  }
-
-  if (currentPage === 'crm-add-deal') {
-    return <AddDeal />;
   }
 
   if (currentPage === 'services') {

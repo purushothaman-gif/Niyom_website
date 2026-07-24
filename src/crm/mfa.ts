@@ -31,7 +31,7 @@ import { NWEmployee } from './types';
 // This only governs the APPLICATION gate. It cannot forge assurance: a session
 // that skips the challenge stays aal1, so if aal2 is ever required in RLS the
 // database still refuses it. Flip this one line to re-enforce.
-export const MFA_REQUIRED = false;
+export const MFA_REQUIRED = true;
 
 /** Roles required to carry a second factor. */
 export function isPrivileged(role: string | null | undefined): boolean {
@@ -63,7 +63,7 @@ export type MfaGate =
  * thing between an attacker and every client's PAN, Aadhaar, bank and demat
  * details, the full portfolio book, and the ability to raise payment links.
  */
-export const REQUIRE_MFA_FOR_PRIVILEGED = false;
+export const REQUIRE_MFA_FOR_PRIVILEGED = true;
 
 /**
  * True when the PROJECT has TOTP switched off (Supabase dashboard → Auth → MFA).
