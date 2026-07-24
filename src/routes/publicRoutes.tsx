@@ -1,4 +1,3 @@
-import { lazy } from 'react';
 import type { ReactElement } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import { Landing } from '../pages/Landing';
@@ -6,24 +5,24 @@ import { Landing } from '../pages/Landing';
 /**
  * Single source of truth for the public (indexed) pages: the router builds a
  * <Route> per entry, each renders a <Seo> from `meta`, and the sitemap mirrors
- * the same set of `path`s. Page components are code-split with React.lazy
- * (Landing stays eager — it's the home/LCP). Navigation callbacks the existing
- * pages expect are supplied here via `render(navigate)`, so the page components
- * themselves need no edits.
+ * the same set of `path`s. Navigation callbacks the existing pages expect are
+ * supplied here via `render(navigate)`, so the page components need no edits.
+ *
+ * These public marketing pages are imported EAGERLY (not React.lazy): they are
+ * small, and code-splitting them made a full-screen loading fallback flash
+ * between every public navigation (e.g. home → MF Research). The heavy
+ * authenticated sub-apps (CRM / Client Portal / MF Admin) stay lazy — see App.tsx.
  */
-
-// Named-export pages need the `.then(m => ({ default: … }))` shim for React.lazy;
-// default-export pages (News, MFResearch, Calculator, Learning) import directly.
-const Services = lazy(() => import('../pages/Services').then((m) => ({ default: m.Services })));
-const Learning = lazy(() => import('../pages/Learning'));
-const News = lazy(() => import('../pages/News'));
-const MFResearch = lazy(() => import('../pages/MFResearch'));
-const Calculator = lazy(() => import('../pages/Calculator'));
-const UnlistedShares = lazy(() => import('../pages/UnlistedShares').then((m) => ({ default: m.UnlistedShares })));
-const PrivacyPolicy = lazy(() => import('../pages/PrivacyPolicy').then((m) => ({ default: m.PrivacyPolicy })));
-const TermsOfUse = lazy(() => import('../pages/TermsOfUse').then((m) => ({ default: m.TermsOfUse })));
-const RiskDisclaimer = lazy(() => import('../pages/RiskDisclaimer').then((m) => ({ default: m.RiskDisclaimer })));
-const Disclaimer = lazy(() => import('../pages/Disclaimer').then((m) => ({ default: m.Disclaimer })));
+import { Services } from '../pages/Services';
+import Learning from '../pages/Learning';
+import News from '../pages/News';
+import MFResearch from '../pages/MFResearch';
+import Calculator from '../pages/Calculator';
+import { UnlistedShares } from '../pages/UnlistedShares';
+import { PrivacyPolicy } from '../pages/PrivacyPolicy';
+import { TermsOfUse } from '../pages/TermsOfUse';
+import { RiskDisclaimer } from '../pages/RiskDisclaimer';
+import { Disclaimer } from '../pages/Disclaimer';
 
 /** The public CTAs open the client portal login in a new tab (unchanged behaviour). */
 const openClientLogin = () => window.open('/client-login', '_blank');

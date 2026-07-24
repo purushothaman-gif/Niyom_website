@@ -20,9 +20,11 @@ const PublicDealView = lazy(() => import('./pages/PublicDealView'));
 const PublicDebitNoteView = lazy(() => import('./pages/PublicDebitNoteView'));
 
 function LoadingScreen() {
+  // Theme-aware (not white) so lazy sub-app loads don't flash a jarring white
+  // screen on a dark theme.
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-50">
-      <div className="text-slate-600">Loading...</div>
+    <div className="flex items-center justify-center min-h-screen bg-bg-base">
+      <div className="text-text-muted">Loading...</div>
     </div>
   );
 }
