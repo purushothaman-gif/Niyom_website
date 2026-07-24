@@ -15,19 +15,15 @@ export interface MutualFund {
   fund_code: string | null;
   category: string | null;
   sub_category: string | null;
-  aum: number;
-  expense_ratio: number;
   return_1y: number;
   return_3y: number;
   return_5y: number;
-  launch_date: string | null;
   risk_level: string | null;
   min_investment: number;
-  fund_manager: string | null;
   updated_at: string | null;
 }
 
-export type MfSortKey = 'return_1y' | 'return_3y' | 'return_5y' | 'aum';
+export type MfSortKey = 'return_1y' | 'return_3y' | 'return_5y';
 
 export interface MfSource {
   /** Top-level categories for filtering (first entry should be 'all'). */

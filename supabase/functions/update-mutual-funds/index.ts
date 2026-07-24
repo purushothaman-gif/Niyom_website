@@ -4,11 +4,14 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 /**
  * update-mutual-funds
  * -------------------
- * Seeds/refreshes the `mutual_funds` table with a curated sample dataset used by
- * the public MF Research page. This is illustrative data (no external API) —
- * swap `sampleFunds()` for a real registrar/AMFI feed when integrating live data.
+ * Populates the `mutual_funds` table with REAL fund data from mfapi.in
+ * (free, no API key). For a curated set of funds it resolves the AMFI scheme
+ * code, pulls the NAV history, and computes real 1Y / 3Y / 5Y returns.
  *
- * POST → upserts all funds (on fund_code) and returns { updated }.
+ * mfapi.in does NOT expose AUM, expense ratio or fund manager, so those fields
+ * are left null and are not shown on the MF Research page.
+ *
+ * POST → { success, updated, skipped }.
  */
 
 const corsHeaders = {
@@ -23,40 +26,90 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-interface Fund {
-  fund_name: string;
-  fund_code: string;
-  category: string;
-  sub_category: string;
-  aum: number;
-  expense_ratio: number;
-  return_1y: number;
-  return_3y: number;
-  return_5y: number;
-  launch_date: string;
-  risk_level: string;
-  min_investment: number;
-  fund_manager: string;
+// Curated funds to track. `match` locates the Direct-Growth plan in the AMFI
+// scheme list; `category` is the top-level bucket the UI filters by.
+const TARGETS: { match: string; category: "Equity" | "Debt" | "Hybrid"; risk: string }[] = [
+  { match: "Parag Parikh Flexi Cap Fund", category: "Equity", risk: "High" },
+  { match: "Mirae Asset Large Cap Fund", category: "Equity", risk: "Moderate" },
+  { match: "Axis Midcap Fund", category: "Equity", risk: "High" },
+  { match: "SBI Small Cap Fund", category: "Equity", risk: "High" },
+  { match: "Nippon India Small Cap Fund", category: "Equity", risk: "High" },
+  { match: "HDFC Flexi Cap Fund", category: "Equity", risk: "High" },
+  { match: "ICICI Prudential Bluechip Fund", category: "Equity", risk: "Moderate" },
+  { match: "Kotak Emerging Equity Fund", category: "Equity", risk: "High" },
+  { match: "Canara Robeco Bluechip Equity Fund", category: "Equity", risk: "Moderate" },
+  { match: "Mirae Asset ELSS Tax Saver Fund", category: "Equity", risk: "Moderate" },
+  { match: "HDFC Corporate Bond Fund", category: "Debt", risk: "Low" },
+  { match: "ICICI Prudential Corporate Bond Fund", category: "Debt", risk: "Low" },
+  { match: "SBI Magnum Gilt Fund", category: "Debt", risk: "Low" },
+  { match: "HDFC Balanced Advantage Fund", category: "Hybrid", risk: "Moderate" },
+  { match: "ICICI Prudential Balanced Advantage Fund", category: "Hybrid", risk: "Moderate" },
+  { match: "SBI Equity Hybrid Fund", category: "Hybrid", risk: "Moderate" },
+];
+
+interface SchemeListEntry { schemeCode: number; schemeName: string; }
+interface NavPoint { date: string; nav: string; }
+interface SchemeDetail {
+  meta: { scheme_name: string; scheme_category?: string; fund_house?: string };
+  data: NavPoint[];
 }
 
-function sampleFunds(): Fund[] {
-  return [
-    { fund_name: "HDFC Equity Growth Fund", fund_code: "HDFC-EQ-001", category: "Equity", sub_category: "Large Cap", aum: 45000, expense_ratio: 1.8, return_1y: 18.5, return_3y: 22.3, return_5y: 19.7, launch_date: "2015-03-15", risk_level: "Moderate", min_investment: 500, fund_manager: "Prashant Jain" },
-    { fund_name: "ICICI Prudential Bluechip Fund", fund_code: "ICICI-BC-002", category: "Equity", sub_category: "Large Cap", aum: 38000, expense_ratio: 1.75, return_1y: 17.2, return_3y: 21.5, return_5y: 18.9, launch_date: "2014-08-20", risk_level: "Moderate", min_investment: 1000, fund_manager: "Sankaran Naren" },
-    { fund_name: "SBI Small Cap Fund", fund_code: "SBI-SC-003", category: "Equity", sub_category: "Small Cap", aum: 12000, expense_ratio: 2.1, return_1y: 25.8, return_3y: 28.4, return_5y: 24.2, launch_date: "2016-05-10", risk_level: "High", min_investment: 500, fund_manager: "R. Srinivasan" },
-    { fund_name: "Axis Midcap Fund", fund_code: "AXIS-MC-004", category: "Equity", sub_category: "Mid Cap", aum: 22000, expense_ratio: 1.95, return_1y: 22.4, return_3y: 25.7, return_5y: 21.8, launch_date: "2015-11-25", risk_level: "High", min_investment: 1000, fund_manager: "Shreyash Devalkar" },
-    { fund_name: "Kotak Equity Opportunities Fund", fund_code: "KOTAK-EO-005", category: "Equity", sub_category: "Multi Cap", aum: 28000, expense_ratio: 1.85, return_1y: 19.8, return_3y: 23.1, return_5y: 20.5, launch_date: "2014-02-18", risk_level: "Moderate", min_investment: 500, fund_manager: "Harsha Upadhyaya" },
-    { fund_name: "Mirae Asset Large Cap Fund", fund_code: "MIRAE-LC-006", category: "Equity", sub_category: "Large Cap", aum: 32000, expense_ratio: 1.7, return_1y: 20.2, return_3y: 24.5, return_5y: 21.3, launch_date: "2013-09-30", risk_level: "Moderate", min_investment: 1000, fund_manager: "Neelesh Surana" },
-    { fund_name: "HDFC Corporate Bond Fund", fund_code: "HDFC-CB-007", category: "Debt", sub_category: "Corporate Bond", aum: 15000, expense_ratio: 0.95, return_1y: 7.8, return_3y: 8.2, return_5y: 7.9, launch_date: "2016-07-12", risk_level: "Low", min_investment: 5000, fund_manager: "Anil Bamboli" },
-    { fund_name: "ICICI Prudential Gilt Fund", fund_code: "ICICI-GILT-008", category: "Debt", sub_category: "Gilt", aum: 8000, expense_ratio: 0.85, return_1y: 6.5, return_3y: 7.1, return_5y: 6.8, launch_date: "2015-04-22", risk_level: "Low", min_investment: 5000, fund_manager: "Manish Banthia" },
-    { fund_name: "SBI Magnum Balanced Advantage Fund", fund_code: "SBI-BA-009", category: "Hybrid", sub_category: "Balanced Advantage", aum: 18000, expense_ratio: 1.65, return_1y: 14.5, return_3y: 16.8, return_5y: 15.2, launch_date: "2014-10-05", risk_level: "Moderate", min_investment: 1000, fund_manager: "Dinesh Ahuja" },
-    { fund_name: "HDFC Hybrid Equity Fund", fund_code: "HDFC-HE-010", category: "Hybrid", sub_category: "Aggressive Hybrid", aum: 25000, expense_ratio: 1.75, return_1y: 16.2, return_3y: 18.9, return_5y: 17.1, launch_date: "2013-12-15", risk_level: "Moderate", min_investment: 500, fund_manager: "Chirag Setalvad" },
-    { fund_name: "Parag Parikh Flexi Cap Fund", fund_code: "PP-FC-011", category: "Equity", sub_category: "Flexi Cap", aum: 35000, expense_ratio: 1.92, return_1y: 21.5, return_3y: 26.8, return_5y: 23.4, launch_date: "2013-05-28", risk_level: "High", min_investment: 1000, fund_manager: "Rajeev Thakkar" },
-    { fund_name: "UTI Nifty Index Fund", fund_code: "UTI-NIF-012", category: "Equity", sub_category: "Index Fund", aum: 42000, expense_ratio: 0.45, return_1y: 15.8, return_3y: 19.2, return_5y: 17.5, launch_date: "2012-01-10", risk_level: "Moderate", min_investment: 500, fund_manager: "Sharwan Kumar Goyal" },
-    { fund_name: "DSP Tax Saver Fund", fund_code: "DSP-TS-013", category: "Equity", sub_category: "ELSS", aum: 16000, expense_ratio: 1.88, return_1y: 19.3, return_3y: 22.7, return_5y: 20.1, launch_date: "2014-06-18", risk_level: "Moderate", min_investment: 500, fund_manager: "Vinit Sambre" },
-    { fund_name: "Franklin India Short Term Income Plan", fund_code: "FRANK-ST-014", category: "Debt", sub_category: "Short Duration", aum: 9000, expense_ratio: 0.92, return_1y: 7.2, return_3y: 7.8, return_5y: 7.4, launch_date: "2015-09-08", risk_level: "Low", min_investment: 5000, fund_manager: "Santosh Kamath" },
-    { fund_name: "Aditya Birla Sun Life Focused Equity Fund", fund_code: "ABSL-FE-015", category: "Equity", sub_category: "Focused", aum: 14000, expense_ratio: 1.98, return_1y: 23.7, return_3y: 27.3, return_5y: 24.8, launch_date: "2016-02-14", risk_level: "High", min_investment: 1000, fund_manager: "Mahesh Patil" },
-  ];
+/** Parse mfapi.in "dd-mm-yyyy" into a Date. */
+function parseDate(s: string): Date {
+  const [d, m, y] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** NAV closest to (but not after) `target`, scanning newest→oldest history. */
+function navOnOrBefore(data: NavPoint[], target: Date): number | null {
+  for (const p of data) {
+    if (parseDate(p.date).getTime() <= target.getTime()) {
+      const v = parseFloat(p.nav);
+      return Number.isFinite(v) && v > 0 ? v : null;
+    }
+  }
+  return null;
+}
+
+/** Annualised (CAGR) return % over `years`; simple % when years === 1. */
+function computeReturn(data: NavPoint[], latest: number, latestDate: Date, years: number): number {
+  const target = new Date(latestDate);
+  target.setFullYear(target.getFullYear() - years);
+  const past = navOnOrBefore(data, target);
+  if (!past) return 0;
+  const growth = latest / past;
+  const r = years === 1 ? growth - 1 : Math.pow(growth, 1 / years) - 1;
+  return Math.round(r * 1000) / 10; // one decimal place, as a percentage
+}
+
+function pickSubCategory(schemeCategory?: string): string {
+  if (!schemeCategory) return "";
+  const parts = schemeCategory.split(" - ");
+  return (parts[1] ?? parts[0]).replace(/Fund$/i, "").trim();
+}
+
+/** Find the Direct-Growth scheme code for a fund name. */
+function resolveCode(list: SchemeListEntry[], match: string): number | null {
+  const m = match.toLowerCase();
+  const candidates = list.filter((s) => {
+    const n = s.schemeName.toLowerCase();
+    return n.includes(m) && n.includes("direct") && n.includes("growth") &&
+      !n.includes("idcw") && !n.includes("dividend");
+  });
+  return candidates.length ? candidates[0].schemeCode : null;
+}
+
+async function getJson<T>(url: string, timeoutMs = 12000): Promise<T | null> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -67,17 +120,54 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !serviceKey) throw new Error("Missing Supabase environment variables");
-
     const supabase = createClient(supabaseUrl, serviceKey);
-    const funds = sampleFunds();
-    const now = new Date().toISOString();
 
-    const { error } = await supabase
-      .from("mutual_funds")
-      .upsert(funds.map((f) => ({ ...f, updated_at: now })), { onConflict: "fund_code" });
+    // 1. Whole AMFI scheme list (to resolve codes by fund name). Large payload —
+    //    allow a longer timeout.
+    const list = await getJson<SchemeListEntry[]>("https://api.mfapi.in/mf", 45000);
+    if (!list) throw new Error("Could not reach mfapi.in scheme list");
+
+    // 2. Resolve each target to a scheme code.
+    const resolved = TARGETS
+      .map((t) => ({ ...t, code: resolveCode(list, t.match) }))
+      .filter((t): t is typeof t & { code: number } => t.code != null);
+
+    // 3. Fetch each fund's NAV history in parallel and compute returns.
+    const details = await Promise.all(
+      resolved.map(async (t) => {
+        const detail = await getJson<SchemeDetail>(`https://api.mfapi.in/mf/${t.code}`);
+        if (!detail || !detail.data?.length) return null;
+
+        const latest = parseFloat(detail.data[0].nav);
+        const latestDate = parseDate(detail.data[0].date);
+        if (!Number.isFinite(latest) || latest <= 0) return null;
+
+        return {
+          fund_name: detail.meta.scheme_name.replace(/\s*-\s*(direct|regular|growth).*$/i, "").trim(),
+          fund_code: String(t.code),
+          category: t.category,
+          sub_category: pickSubCategory(detail.meta.scheme_category),
+          return_1y: computeReturn(detail.data, latest, latestDate, 1),
+          return_3y: computeReturn(detail.data, latest, latestDate, 3),
+          return_5y: computeReturn(detail.data, latest, latestDate, 5),
+          risk_level: t.risk,
+          min_investment: 500,
+          updated_at: new Date().toISOString(),
+        };
+      }),
+    );
+
+    const funds = details.filter((f): f is NonNullable<typeof f> => f !== null);
+    if (funds.length === 0) throw new Error("No fund data could be computed from mfapi.in");
+
+    const { error } = await supabase.from("mutual_funds").upsert(funds, { onConflict: "fund_code" });
     if (error) throw error;
 
-    return json({ success: true, updated: funds.length });
+    // Purge the earlier placeholder funds (their codes contain dashes;
+    // real AMFI scheme codes are purely numeric).
+    await supabase.from("mutual_funds").delete().like("fund_code", "%-%");
+
+    return json({ success: true, updated: funds.length, skipped: TARGETS.length - funds.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return json({ success: false, error: message }, 500);

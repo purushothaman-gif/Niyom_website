@@ -13,12 +13,9 @@ const SORTS: { key: MfSortKey; label: string }[] = [
   { key: 'return_1y', label: '1Y Return' },
   { key: 'return_3y', label: '3Y Return' },
   { key: 'return_5y', label: '5Y Return' },
-  { key: 'aum', label: 'AUM' },
 ];
 
 const fmtPct = (n: number) => `${n > 0 ? '+' : ''}${n.toFixed(1)}%`;
-const fmtAum = (cr: number) =>
-  cr >= 1000 ? `₹${(cr / 1000).toFixed(2)}k Cr` : `₹${cr.toLocaleString('en-IN')} Cr`;
 const returnColor = (n: number) =>
   n > 0 ? 'rgb(var(--success-soft-rgb))' : n < 0 ? 'rgb(var(--danger-soft-rgb))' : 'var(--text-muted)';
 
@@ -86,7 +83,7 @@ export default function MFResearch({ onBack }: MFResearchProps) {
       .filter((f) =>
         q === ''
           ? true
-          : `${f.fund_name} ${f.fund_manager ?? ''} ${f.sub_category ?? ''}`.toLowerCase().includes(q),
+          : `${f.fund_name} ${f.sub_category ?? ''}`.toLowerCase().includes(q),
       )
       .sort((a, b) => (b[sortBy] ?? 0) - (a[sortBy] ?? 0));
   }, [funds, category, search, sortBy]);
@@ -198,8 +195,6 @@ export default function MFResearch({ onBack }: MFResearchProps) {
                     <th className="px-4 py-3 font-semibold text-right">1Y</th>
                     <th className="px-4 py-3 font-semibold text-right">3Y</th>
                     <th className="px-4 py-3 font-semibold text-right">5Y</th>
-                    <th className="px-4 py-3 font-semibold text-right">AUM</th>
-                    <th className="px-4 py-3 font-semibold text-right">Expense</th>
                     <th className="px-4 py-3 font-semibold">Risk</th>
                   </tr>
                 </thead>
@@ -208,14 +203,12 @@ export default function MFResearch({ onBack }: MFResearchProps) {
                     <tr key={f.id} className="transition-colors hover:bg-hover" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                       <td className="px-5 py-3">
                         <div className="font-semibold text-text-primary">{f.fund_name}</div>
-                        <div className="text-xs text-text-muted">{f.sub_category}{f.fund_manager ? ` · ${f.fund_manager}` : ''}</div>
+                        <div className="text-xs text-text-muted">{f.sub_category}</div>
                       </td>
                       <td className="px-4 py-3 text-text-secondary">{f.category}</td>
                       <td className="px-4 py-3 text-right font-semibold" style={{ color: returnColor(f.return_1y) }}>{fmtPct(f.return_1y)}</td>
                       <td className="px-4 py-3 text-right font-semibold" style={{ color: returnColor(f.return_3y) }}>{fmtPct(f.return_3y)}</td>
                       <td className="px-4 py-3 text-right font-semibold" style={{ color: returnColor(f.return_5y) }}>{fmtPct(f.return_5y)}</td>
-                      <td className="px-4 py-3 text-right text-text-secondary">{fmtAum(f.aum)}</td>
-                      <td className="px-4 py-3 text-right text-text-secondary">{f.expense_ratio.toFixed(2)}%</td>
                       <td className="px-4 py-3"><RiskBadge level={f.risk_level} /></td>
                     </tr>
                   ))}
@@ -243,10 +236,7 @@ export default function MFResearch({ onBack }: MFResearchProps) {
                     </div>
                   ))}
                 </div>
-                <div className="flex items-center justify-between text-xs text-text-muted">
-                  <span>AUM {fmtAum(f.aum)}</span>
-                  <span>Expense {f.expense_ratio.toFixed(2)}%</span>
-                </div>
+                <div className="text-xs text-text-muted">Min. investment ₹{f.min_investment.toLocaleString('en-IN')}</div>
               </div>
             ))}
           </div>

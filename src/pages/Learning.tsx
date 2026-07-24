@@ -245,7 +245,7 @@ export function Learning({ onBack }: LearningProps) {
           <div className="space-y-4">
             <CommodityCard label="Gold" unit="per 10g" snapshot={snapshots.gold} />
             <CommodityCard label="Silver" unit="per kg" snapshot={snapshots.silver} />
-            <p className="text-xs text-text-faint leading-relaxed">Indicative MCX-aligned prices for educational reference. Not a quote or an offer to transact.</p>
+            <p className="text-xs text-text-faint leading-relaxed">Reference gold &amp; silver prices, indicative only — not a dealing quote or an offer to transact.</p>
           </div>
         </div>
       </div>
