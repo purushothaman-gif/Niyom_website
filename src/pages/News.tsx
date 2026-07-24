@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Newspaper, RefreshCw, ExternalLink, Clock, AlertCircle } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Newspaper, ExternalLink, Clock, AlertCircle } from 'lucide-react';
 import { PublicPageChrome } from './shared/PublicPageChrome';
 import { newsSource, type NewsArticle } from './shared/newsSource';
 
@@ -106,10 +106,8 @@ interface NewsProps {
 export default function News({ onBack }: NewsProps) {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [category, setCategory] = useState('all');
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async (cat: string) => {
     setLoading(true);
@@ -123,24 +121,35 @@ export default function News({ onBack }: NewsProps) {
     }
   }, []);
 
+  // Read the cached table on mount and whenever the category changes — fast, so
+  // the visitor sees articles immediately.
   useEffect(() => {
     load(category);
   }, [category, load]);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    setNotice(null);
-    setError(null);
-    try {
-      const result = await newsSource.refresh();
-      await load(category);
-      setNotice(`Updated — ${result.inserted} new article${result.inserted === 1 ? '' : 's'} added.`);
-    } catch {
-      setError('Refresh failed. Please try again shortly.');
-    } finally {
-      setRefreshing(false);
-    }
-  };
+  // On open, silently pull the latest feeds in the background and re-read the
+  // currently selected category when the ingest finishes. The categoryRef keeps
+  // the ingest from re-firing on every tab switch while still reloading whichever
+  // category is selected when the fetch returns.
+  const categoryRef = useRef(category);
+  useEffect(() => {
+    categoryRef.current = category;
+  }, [category]);
+
+  useEffect(() => {
+    let active = true;
+    newsSource
+      .refresh()
+      .then(() => {
+        if (active) load(categoryRef.current);
+      })
+      .catch(() => {
+        /* silent — the cached list stays visible */
+      });
+    return () => {
+      active = false;
+    };
+  }, [load]);
 
   return (
     <PublicPageChrome
@@ -150,16 +159,6 @@ export default function News({ onBack }: NewsProps) {
       title="Financial news, curated for investors"
       subtitle="Stay ahead with the latest from the markets, IPOs, commodities, mutual funds and unlisted shares."
       documentTitle="Market News — Niyom Wealth"
-      actions={
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="lift press inline-flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black font-semibold px-5 py-2.5 rounded-xl shadow-md disabled:opacity-60"
-        >
-          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-          {refreshing ? 'Refreshing…' : 'Refresh feed'}
-        </button>
-      }
     >
       {/* Category filter */}
       <div className="flex flex-wrap gap-2 mb-6" role="tablist" aria-label="News category">
@@ -184,11 +183,6 @@ export default function News({ onBack }: NewsProps) {
         })}
       </div>
 
-      {notice && (
-        <div className="mb-6 rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(var(--success-soft-rgb),0.12)', color: 'rgb(var(--success-soft-rgb))', border: '1px solid rgba(var(--success-soft-rgb),0.3)' }}>
-          {notice}
-        </div>
-      )}
       {error && (
         <div className="mb-6 flex items-center gap-2 rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(var(--danger-soft-rgb),0.12)', color: 'rgb(var(--danger-soft-rgb))', border: '1px solid rgba(var(--danger-soft-rgb),0.3)' }}>
           <AlertCircle size={16} /> {error}
@@ -203,7 +197,7 @@ export default function News({ onBack }: NewsProps) {
         <div className="text-center py-20">
           <Newspaper className="w-12 h-12 mx-auto text-text-faint mb-4" />
           <p className="text-text-secondary font-medium">No articles in this category yet.</p>
-          <p className="text-text-muted text-sm mt-1">Try refreshing the feed or picking another category.</p>
+          <p className="text-text-muted text-sm mt-1">New stories are pulled automatically — check back shortly or pick another category.</p>
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
