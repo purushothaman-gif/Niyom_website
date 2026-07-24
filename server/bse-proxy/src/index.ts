@@ -15,6 +15,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import cors from 'cors';
 import { loadConfig } from './config.js';
 import { BseClient, BseError } from './bseClient.js';
+import { webhookRouter } from './webhooks.js';
 import {
   toAppOrderResult,
   toAppScheme,
@@ -64,6 +65,9 @@ async function requireSupabaseUser(req: Request, res: Response, next: NextFuncti
 app.get('/health', (_req, res) => {
   res.json({ ok: true, env: cfg.bseEnv, ts: new Date().toISOString() });
 });
+
+// Public — BSE calls this, so it must sit BEFORE the Supabase-JWT gate.
+app.use('/webhooks', webhookRouter(cfg));
 
 app.use(requireSupabaseUser);
 
