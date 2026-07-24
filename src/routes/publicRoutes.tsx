@@ -20,10 +20,6 @@ const News = lazy(() => import('../pages/News'));
 const MFResearch = lazy(() => import('../pages/MFResearch'));
 const Calculator = lazy(() => import('../pages/Calculator'));
 const UnlistedShares = lazy(() => import('../pages/UnlistedShares').then((m) => ({ default: m.UnlistedShares })));
-const MutualFundsLead = lazy(() => import('../pages/MutualFundsLead').then((m) => ({ default: m.MutualFundsLead })));
-const PrimaryBondsLead = lazy(() => import('../pages/PrimaryBondsLead').then((m) => ({ default: m.PrimaryBondsLead })));
-const FixedDepositsLead = lazy(() => import('../pages/FixedDepositsLead').then((m) => ({ default: m.FixedDepositsLead })));
-const InsuranceLead = lazy(() => import('../pages/InsuranceLead').then((m) => ({ default: m.InsuranceLead })));
 const PrivacyPolicy = lazy(() => import('../pages/PrivacyPolicy').then((m) => ({ default: m.PrivacyPolicy })));
 const TermsOfUse = lazy(() => import('../pages/TermsOfUse').then((m) => ({ default: m.TermsOfUse })));
 const RiskDisclaimer = lazy(() => import('../pages/RiskDisclaimer').then((m) => ({ default: m.RiskDisclaimer })));
@@ -34,13 +30,9 @@ const openClientLogin = () => window.open('/client-login', '_blank');
 
 /**
  * Landing's `onNavigate(page)` uses internal page keys — map them to clean
- * paths. Note 'primary-bonds' (the Invest-Now dropdown key) routes to /bonds.
+ * paths. Now only the footer legal links use it.
  */
 const PAGE_TO_PATH: Record<string, string> = {
-  'mutual-funds': '/mutual-funds',
-  'primary-bonds': '/bonds',
-  'fixed-deposits': '/fixed-deposits',
-  insurance: '/insurance',
   privacy: '/privacy',
   terms: '/terms',
   risk: '/risk',
@@ -142,50 +134,6 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
     },
     sitemap: { changefreq: 'monthly', priority: '0.7' },
     render: (navigate) => <Calculator onBack={() => navigate('/')} />,
-  },
-  {
-    path: '/mutual-funds',
-    meta: {
-      title: `Mutual Funds — ${BRAND}`,
-      description:
-        'Invest in mutual funds through Niyom Wealth. Start your SIP or lumpsum investment with expert distribution support.',
-      label: 'Mutual Funds',
-    },
-    sitemap: { changefreq: 'monthly', priority: '0.8' },
-    render: (navigate) => <MutualFundsLead onBack={() => navigate('/')} />,
-  },
-  {
-    path: '/bonds',
-    meta: {
-      title: `Bonds — ${BRAND}`,
-      description:
-        'Primary bond offerings distributed by Niyom Wealth. Explore fixed-income opportunities with competitive yields.',
-      label: 'Bonds',
-    },
-    sitemap: { changefreq: 'monthly', priority: '0.8' },
-    render: (navigate) => <PrimaryBondsLead onBack={() => navigate('/')} />,
-  },
-  {
-    path: '/fixed-deposits',
-    meta: {
-      title: `Fixed Deposits — ${BRAND}`,
-      description:
-        'Corporate and bank fixed deposits distributed by Niyom Wealth with attractive interest rates and flexible tenures.',
-      label: 'Fixed Deposits',
-    },
-    sitemap: { changefreq: 'monthly', priority: '0.8' },
-    render: (navigate) => <FixedDepositsLead onBack={() => navigate('/')} />,
-  },
-  {
-    path: '/insurance',
-    meta: {
-      title: `Insurance — ${BRAND}`,
-      description:
-        'Life, health and general insurance solutions distributed by Niyom Wealth to protect what matters most.',
-      label: 'Insurance',
-    },
-    sitemap: { changefreq: 'monthly', priority: '0.8' },
-    render: (navigate) => <InsuranceLead onBack={() => navigate('/')} />,
   },
   {
     path: '/unlisted-shares',

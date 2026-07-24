@@ -166,8 +166,7 @@ function AppContent() {
             <Route key={route.path} path={route.path} element={<PublicPage route={route} />} />
           ))}
 
-          {/* Old-slug redirects & convenience aliases. */}
-          <Route path="/primary-bonds" element={<Navigate to="/bonds" replace />} />
+          {/* Convenience aliases. */}
           <Route path="/login" element={<Navigate to="/client-login" replace />} />
           <Route path="/contact" element={<Navigate to="/#contact" replace />} />
 

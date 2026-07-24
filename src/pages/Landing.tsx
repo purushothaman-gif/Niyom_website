@@ -22,7 +22,6 @@ interface LandingProps {
 export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFResearch, onViewCalculator, onNavigate }: LandingProps) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isInvestDropdownOpen, setIsInvestDropdownOpen] = useState(false);
   const [isEmployeeDropdownOpen, setIsEmployeeDropdownOpen] = useState(false);
 
   useEffect(() => {
@@ -154,48 +153,6 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             >
               Calculator
             </button>
-            <div className="relative">
-              <button
-                onMouseEnter={() => setIsInvestDropdownOpen(true)}
-                onMouseLeave={() => setIsInvestDropdownOpen(false)}
-                className={`text-white hover:text-accent-soft font-medium transition-colors duration-300 py-3 flex items-center gap-1 ${isLoaded ? 'animate-slideDown animate-delay-600' : 'opacity-0'}`}
-              >
-                Invest Now
-                <ChevronDown size={16} className={`transition-transform duration-200 ${isInvestDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
-              {isInvestDropdownOpen && (
-                <div
-                  onMouseEnter={() => setIsInvestDropdownOpen(true)}
-                  onMouseLeave={() => setIsInvestDropdownOpen(false)}
-                  className="absolute top-full left-0 mt-0 bg-black border border-accent-soft/20 rounded-md shadow-lg min-w-[200px] z-50"
-                >
-                  <button
-                    onClick={() => onNavigate('mutual-funds')}
-                    className="w-full text-left px-4 py-3 text-white hover:text-accent-soft hover:bg-bg-elevated/5 transition-colors duration-200 first:rounded-t-md"
-                  >
-                    Mutual Funds
-                  </button>
-                  <button
-                    onClick={() => onNavigate('primary-bonds')}
-                    className="w-full text-left px-4 py-3 text-white hover:text-accent-soft hover:bg-bg-elevated/5 transition-colors duration-200"
-                  >
-                    Primary Bonds
-                  </button>
-                  <button
-                    onClick={() => onNavigate('fixed-deposits')}
-                    className="w-full text-left px-4 py-3 text-white hover:text-accent-soft hover:bg-bg-elevated/5 transition-colors duration-200"
-                  >
-                    Fixed Deposits
-                  </button>
-                  <button
-                    onClick={() => onNavigate('insurance')}
-                    className="w-full text-left px-4 py-3 text-white hover:text-accent-soft hover:bg-bg-elevated/5 transition-colors duration-200 last:rounded-b-md"
-                  >
-                    Insurance
-                  </button>
-                </div>
-              )}
-            </div>
             <button
               onClick={() => scrollToSection('contact')}
               className={`text-white hover:text-accent-soft font-medium transition-colors duration-300 py-3 ${isLoaded ? 'animate-slideDown animate-delay-650' : 'opacity-0'}`}
@@ -290,45 +247,6 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                   className="w-full bg-accent-soft hover:bg-accent-soft-deep text-black font-semibold py-3 px-4 rounded mb-3 transition-colors"
                 >
                   Client Login
-                </button>
-              </div>
-              <div className="border-t border-accent-soft/20 my-2 pt-2">
-                <div className="text-accent-soft text-xs uppercase tracking-wider px-4 py-2 font-semibold">Invest Now</div>
-                <button
-                  onClick={() => {
-                    onNavigate('mutual-funds');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full text-white hover:text-accent-soft font-medium py-3 px-6 text-left hover:bg-bg-elevated/5 rounded transition-colors"
-                >
-                  Mutual Funds
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('primary-bonds');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full text-white hover:text-accent-soft font-medium py-3 px-6 text-left hover:bg-bg-elevated/5 rounded transition-colors"
-                >
-                  Primary Bonds
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('fixed-deposits');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full text-white hover:text-accent-soft font-medium py-3 px-6 text-left hover:bg-bg-elevated/5 rounded transition-colors"
-                >
-                  Fixed Deposits
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('insurance');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full text-white hover:text-accent-soft font-medium py-3 px-6 text-left hover:bg-bg-elevated/5 rounded transition-colors"
-                >
-                  Insurance
                 </button>
               </div>
               <button

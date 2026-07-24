@@ -38,30 +38,6 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.niyomwealth.com/mutual-funds</loc>
-    <lastmod>2026-07-25</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.niyomwealth.com/bonds</loc>
-    <lastmod>2026-07-25</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.niyomwealth.com/fixed-deposits</loc>
-    <lastmod>2026-07-25</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.niyomwealth.com/insurance</loc>
-    <lastmod>2026-07-25</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://www.niyomwealth.com/unlisted-shares</loc>
     <lastmod>2026-07-25</lastmod>
     <changefreq>weekly</changefreq>
