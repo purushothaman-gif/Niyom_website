@@ -9,8 +9,11 @@ import { createClient } from "npm:@supabase/supabase-js@2";
  *
  * Live source: metalpriceapi.com. Set the Supabase secret `METALS_API_KEY`:
  *     supabase secrets set METALS_API_KEY=your_key
- * (free tier: https://metalpriceapi.com). Prices are returned per troy ounce and
- * converted to the Indian retail units (gold/10g, silver/kg).
+ * (free tier: https://metalpriceapi.com). The API returns INTERNATIONAL SPOT per
+ * troy ounce; we convert to Indian retail units (gold/10g, silver/kg) AND to
+ * Indian retail rates by adding import duty + GST + a market premium. All factors
+ * are env-overridable: METAL_IMPORT_DUTY, METAL_GST, GOLD_MARKET_PREMIUM,
+ * SILVER_MARKET_PREMIUM.
  *
  * POST {}                                → fetch live prices for today (needs key).
  *                                          Without a key, clears any placeholder
@@ -93,13 +96,23 @@ Deno.serve(async (req: Request) => {
       }
 
       // rates.X = troy ounces of metal per 1 INR → INR per troy ounce = 1 / rate.
+      // metalpriceapi returns INTERNATIONAL SPOT (INR/troy-oz). Indian retail
+      // rates add import duty + GST + a market/dealer premium, so convert spot →
+      // Indian rate. Every factor is env-overridable for easy tuning.
+      const num = (name: string, def: number) => Number(Deno.env.get(name) ?? def);
+      const IMPORT_DUTY = num("METAL_IMPORT_DUTY", 0.06); // 6% customs duty
+      const GST = num("METAL_GST", 0.03);                 // 3% GST
+      const GOLD_PREMIUM = num("GOLD_MARKET_PREMIUM", 0.03);
+      const SILVER_PREMIUM = num("SILVER_MARKET_PREMIUM", 0.19);
+      const indiaFactor = (premium: number) => (1 + IMPORT_DUTY) * (1 + GST) * (1 + premium);
+
       const goldPerOz = 1 / rates.XAU;
       const silverPerOz = 1 / rates.XAG;
       const priceDate = new Date().toISOString().slice(0, 10);
 
       const rows = [
-        { commodity: "gold", price: Math.round((goldPerOz / OZ_TO_GRAM) * 10), price_date: priceDate, source: "metalpriceapi" },
-        { commodity: "silver", price: Math.round((silverPerOz / OZ_TO_GRAM) * 1000), price_date: priceDate, source: "metalpriceapi" },
+        { commodity: "gold", price: Math.round((goldPerOz / OZ_TO_GRAM) * 10 * indiaFactor(GOLD_PREMIUM)), price_date: priceDate, source: "metalpriceapi" },
+        { commodity: "silver", price: Math.round((silverPerOz / OZ_TO_GRAM) * 1000 * indiaFactor(SILVER_PREMIUM)), price_date: priceDate, source: "metalpriceapi" },
       ];
 
       const { error } = await db
