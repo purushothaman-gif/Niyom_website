@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase';
 import { NWEmployee } from './types';
 import {
   evaluateMfaGate, listVerifiedTotpFactors, startTotpEnrollment, verifyTotpCode,
-  cancelEnrollment, mfaErrorMessage, isMfaUnavailable, type TotpEnrollment,
+  cancelEnrollment, mfaErrorMessage, isMfaUnavailable, trustThisDevice,
+  TRUSTED_DEVICE_DAYS, type TotpEnrollment,
 } from './mfa';
 import { Shield, Users, BarChart3, Mail, Lock, Eye, EyeOff, ArrowRight, ChevronLeft, ArrowLeft, AlertTriangle, KeyRound, CheckCircle2, RotateCw, Smartphone } from 'lucide-react';
 import { HeroBackground } from '../components/HeroBackground';
@@ -94,6 +95,11 @@ export default function CRMLogin({ onLogin }: Props) {
   const [mfaError, setMfaError] = useState('');
   const [enrollment, setEnrollment] = useState<TotpEnrollment | null>(null);
   const [showSecret, setShowSecret] = useState(false);
+  // "Remember this device" — when ticked, a successful code entry marks this
+  // browser trusted so the next login here skips the challenge (personal devices
+  // only). Defaults on, since the whole point is fewer prompts on your own Mac
+  // and phone; untick it on a shared or public computer.
+  const [rememberDevice, setRememberDevice] = useState(true);
 
   // --- Forgot-password (OTP) flow state ---
   const [otp, setOtp] = useState('');
@@ -254,6 +260,8 @@ export default function CRMLogin({ onLogin }: Props) {
     setLoading(true);
     try {
       await verifyTotpCode(mfaFactorId, mfaCode);
+      // Remember this browser so the code isn't asked for again here for a while.
+      if (rememberDevice) { try { await trustThisDevice(); } catch {} }
       setLoading(false);
       onLogin(pendingEmp);
     } catch (err) {
@@ -576,6 +584,14 @@ export default function CRMLogin({ onLogin }: Props) {
                     style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}
                   />
                 </div>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input type="checkbox" checked={rememberDevice}
+                    onChange={e => setRememberDevice(e.target.checked)}
+                    className="w-4 h-4 rounded flex-shrink-0" style={{ accentColor: 'var(--accent-soft)' }} />
+                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    Trust this device for {TRUSTED_DEVICE_DAYS} days — skip the code next time. Personal devices only.
+                  </span>
+                </label>
                 <button type="submit" disabled={loading || mfaCode.length !== 6}
                   className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
                   style={{ background: 'var(--accent-soft)', color: 'var(--text-on-accent)' }}>
@@ -643,6 +659,14 @@ export default function CRMLogin({ onLogin }: Props) {
                     style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}
                   />
                 </div>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input type="checkbox" checked={rememberDevice}
+                    onChange={e => setRememberDevice(e.target.checked)}
+                    className="w-4 h-4 rounded flex-shrink-0" style={{ accentColor: 'var(--accent-soft)' }} />
+                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    Trust this device for {TRUSTED_DEVICE_DAYS} days — skip the code next time. Personal devices only.
+                  </span>
+                </label>
                 <button type="submit" disabled={loading || mfaCode.length !== 6}
                   className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
                   style={{ background: 'var(--accent-soft)', color: 'var(--text-on-accent)' }}>

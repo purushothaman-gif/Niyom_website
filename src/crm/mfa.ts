@@ -65,6 +65,79 @@ export type MfaGate =
  */
 export const REQUIRE_MFA_FOR_PRIVILEGED = true;
 
+// --- Trusted devices ("remember this device") -------------------------------
+//
+// A convenience bypass for a person's OWN devices. After a full TOTP
+// verification on a given browser, that browser can be remembered so the same
+// user is not asked for the 6-digit code again on it until the trust lapses.
+//
+// This is a deliberate security/convenience trade-off: on a trusted device the
+// PASSWORD ALONE re-enters the CRM (the second factor is skipped) until the
+// window expires. So it is only appropriate on personal devices the user
+// physically controls — never a shared or public computer. The marker is:
+//   - per-user AND per-browser (localStorage, keyed by auth user id),
+//   - time-boxed (TRUSTED_DEVICE_DAYS), self-expiring,
+//   - never transmitted or synced — it cannot move to another device.
+// It never raises the session's assurance: a trusted-device login stays aal1,
+// so if aal2 is ever required in RLS the database still refuses it. This only
+// relaxes the APPLICATION gate.
+export const ALLOW_TRUSTED_DEVICES = true;
+export const TRUSTED_DEVICE_DAYS = 30;
+
+function trustedDeviceKey(userId: string): string {
+  return `nw_mfa_trusted_${userId}`;
+}
+
+/** Has THIS browser been remembered for this user, and not yet expired? */
+export function isDeviceTrusted(userId: string): boolean {
+  if (!ALLOW_TRUSTED_DEVICES || !userId) return false;
+  try {
+    const raw = localStorage.getItem(trustedDeviceKey(userId));
+    if (!raw) return false;
+    const { exp } = JSON.parse(raw) as { exp?: number };
+    if (typeof exp !== 'number' || Date.now() > exp) {
+      localStorage.removeItem(trustedDeviceKey(userId)); // lapsed — clean up
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Remember this browser for the current user, so 2FA is skipped here for a while. */
+export async function trustThisDevice(days = TRUSTED_DEVICE_DAYS): Promise<void> {
+  if (!ALLOW_TRUSTED_DEVICES) return;
+  const { data } = await supabase.auth.getUser();
+  const userId = data.user?.id;
+  if (!userId) return;
+  const exp = Date.now() + days * 24 * 60 * 60 * 1000;
+  try {
+    localStorage.setItem(trustedDeviceKey(userId), JSON.stringify({ exp }));
+  } catch {
+    // Storage unavailable (private mode / quota) — silently fall back to always
+    // challenging, which is the safe direction.
+  }
+}
+
+/** Forget this browser for the current user — the next login here challenges again. */
+export async function forgetThisDevice(): Promise<void> {
+  const { data } = await supabase.auth.getUser();
+  const userId = data.user?.id;
+  if (!userId) return;
+  try {
+    localStorage.removeItem(trustedDeviceKey(userId));
+  } catch {
+    /* nothing to clean up */
+  }
+}
+
+/** Is this browser currently remembered for the signed-in user? (for Settings UI) */
+export async function currentDeviceTrusted(): Promise<boolean> {
+  const { data } = await supabase.auth.getUser();
+  return data.user ? isDeviceTrusted(data.user.id) : false;
+}
+
 /**
  * True when the PROJECT has TOTP switched off (Supabase dashboard → Auth → MFA).
  *
@@ -115,13 +188,21 @@ export async function evaluateMfaGate(emp: Pick<NWEmployee, 'role'>): Promise<Mf
   // Already stepped up in this session.
   if (aal?.currentLevel === 'aal2') return 'ok';
 
-  // A verified factor exists -> Supabase wants us at aal2 -> challenge.
+  // A verified factor exists -> Supabase wants us at aal2 -> normally challenge.
   // This holds regardless of REQUIRE_MFA_FOR_PRIVILEGED: someone who deliberately
   // enrolled expects to be asked, and skipping it would leave the session at aal1
   // while the account looks protected. To stop being challenged, remove the
   // factor (Settings → Security), which is an explicit act rather than a silent
   // downgrade.
-  if (aal?.nextLevel === 'aal2') return 'challenge';
+  //
+  // EXCEPTION: a browser the user explicitly ticked "remember this device" on
+  // (after a real code entry) skips the challenge until that trust lapses. This
+  // is opt-in and per-device — see the trusted-device section above.
+  if (aal?.nextLevel === 'aal2') {
+    const { data: u } = await supabase.auth.getUser();
+    if (u.user && isDeviceTrusted(u.user.id)) return 'ok';
+    return 'challenge';
+  }
 
   // No verified factor. Mandatory mode sends them through setup; otherwise
   // enrolment is opt-in and they carry on.

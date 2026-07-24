@@ -31,6 +31,8 @@ import {
   listVerifiedTotpFactors,
   mfaErrorMessage,
   verifyTotpCode,
+  trustThisDevice,
+  TRUSTED_DEVICE_DAYS,
 } from '../crm/mfa';
 import { ThemeToggle } from '../theme/ThemeToggle';
 
@@ -81,6 +83,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [rememberDevice, setRememberDevice] = useState(true);
   const pendingEmployee = useRef<NWEmployee | null>(null);
   const factorId = useRef<string | null>(null);
   const codeInput = useRef<HTMLInputElement>(null);
@@ -177,6 +180,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
     setBusy(true);
     try {
       await verifyTotpCode(factorId.current, code.trim());
+      if (rememberDevice) { try { await trustThisDevice(); } catch {} }
       sessionStorage.removeItem(RL_KEY);
       onLogin(pendingEmployee.current);
     } catch (err) {
@@ -297,6 +301,19 @@ export default function MfAdminLogin({ onLogin }: Props) {
                 placeholder="••••••"
                 className="w-full rounded-token-md border border-border bg-bg-base py-3 text-center font-mono text-xl tracking-[0.5em] text-text-primary outline-none focus:border-accent"
               />
+
+              <label className="flex cursor-pointer select-none items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={rememberDevice}
+                  onChange={(e) => setRememberDevice(e.target.checked)}
+                  className="h-4 w-4 flex-shrink-0 rounded"
+                  style={{ accentColor: 'var(--accent)' }}
+                />
+                <span className="text-xs text-text-secondary">
+                  Trust this device for {TRUSTED_DEVICE_DAYS} days — skip the code next time. Personal devices only.
+                </span>
+              </label>
 
               <button
                 type="submit"

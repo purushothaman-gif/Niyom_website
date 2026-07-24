@@ -6,6 +6,7 @@ import { User, Lock, Bell, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Smart
 import {
   listVerifiedTotpFactors, startTotpEnrollment, verifyTotpCode, cancelEnrollment,
   disableTotp, mfaErrorMessage, isMfaUnavailable, employeeIsPrivileged,
+  currentDeviceTrusted, forgetThisDevice, TRUSTED_DEVICE_DAYS,
   type TotpEnrollment,
 } from './mfa';
 
@@ -51,6 +52,8 @@ export default function Settings({ employee }: Props) {
   const [mfaCode, setMfaCode] = useState('');
   const [mfaBusy, setMfaBusy] = useState(false);
   const [confirmDisable, setConfirmDisable] = useState(false);
+  // Whether THIS browser is currently remembered (2FA skipped here).
+  const [deviceTrusted, setDeviceTrusted] = useState(false);
 
   const refreshMfa = useCallback(async () => {
     try {
@@ -59,9 +62,16 @@ export default function Settings({ employee }: Props) {
       if (isMfaUnavailable(err)) { setMfaSupported(false); setMfaOn(false); return; }
       setMfaOn(false);
     }
+    try { setDeviceTrusted(await currentDeviceTrusted()); } catch { setDeviceTrusted(false); }
   }, []);
 
   useEffect(() => { refreshMfa(); }, [refreshMfa]);
+
+  const forgetDevice = async () => {
+    await forgetThisDevice();
+    setDeviceTrusted(false);
+    notify('This device will ask for your code at the next sign-in.');
+  };
 
   const notify = (msg: string, isErr = false) => {
     if (isErr) setError(msg); else setSuccess(msg);
@@ -119,6 +129,7 @@ export default function Settings({ employee }: Props) {
     setMfaBusy(true);
     try {
       await disableTotp();
+      await forgetThisDevice(); // trusted-device markers are meaningless without a factor
       setConfirmDisable(false);
       await refreshMfa();
       notify('Two-factor authentication is off. Your password is now the only thing protecting this account.');
@@ -311,6 +322,39 @@ export default function Settings({ employee }: Props) {
               </div>
             )}
           </div>
+
+          {/* Trusted device — only relevant once a factor exists */}
+          {mfaSupported && mfaOn && (
+            <div className="rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
+                    <Shield className="w-4 h-4" style={{ color: 'var(--accent)' }} /> This Device
+                  </h3>
+                  <p className="text-xs mt-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    {deviceTrusted
+                      ? `Remembered — you won't be asked for a code on this device for up to ${TRUSTED_DEVICE_DAYS} days. Only leave it remembered on personal devices you control.`
+                      : `Not remembered — you'll enter a code each time you sign in here. Tick "Trust this device" at sign-in to skip it for ${TRUSTED_DEVICE_DAYS} days.`}
+                  </p>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full shrink-0"
+                  style={deviceTrusted
+                    ? { background: 'rgba(245,158,11,0.12)', color: 'var(--warning)' }
+                    : { background: 'rgba(16,185,129,0.12)', color: 'var(--success)' }}>
+                  {deviceTrusted ? 'Remembered' : 'Not remembered'}
+                </span>
+              </div>
+              {deviceTrusted && (
+                <div className="flex justify-end">
+                  <button onClick={forgetDevice}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold"
+                    style={{ color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                    Forget this device
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <form onSubmit={savePassword} className="rounded-2xl p-6 space-y-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
             <h3 className="text-sm font-bold text-text-primary flex items-center gap-2"><Lock className="w-4 h-4" style={{ color: 'var(--accent)' }} /> Change Password</h3>
