@@ -1,30 +1,3 @@
-export interface UserProfile {
-  id: string;
-  full_name: string;
-  email: string;
-  phone: string | null;
-  address: string | null;
-  kyc_status: 'pending' | 'submitted' | 'approved' | 'rejected';
-  created_at: string;
-  updated_at: string;
-}
-
-export interface KYCSubmission {
-  id: string;
-  user_id: string;
-  status: 'pending' | 'approved' | 'rejected';
-  pan: string | null;
-  aadhar: string | null;
-  demat: string | null;
-  pan_document: Record<string, any> | null;
-  aadhar_document: Record<string, any> | null;
-  demat_document: Record<string, any> | null;
-  bank_cheque_leaf: Record<string, any> | null;
-  notes: string | null;
-  submitted_at: string | null;
-  updated_at: string;
-}
-
 export interface AuthUser {
   id: string;
   email: string;

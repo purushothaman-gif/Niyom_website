@@ -7,13 +7,7 @@ import { Learning } from './pages/Learning';
 import News from './pages/News';
 import MFResearch from './pages/MFResearch';
 import Calculator from './pages/Calculator';
-import { Login } from './pages/Login';
-import { SignUp } from './pages/SignUp';
-import { Dashboard } from './pages/Dashboard';
-import { KYCForm } from './pages/KYCForm';
-import { AdminKYC } from './pages/AdminKYC';
 import { UnlistedShares } from './pages/UnlistedShares';
-import OrderPlacement from './pages/OrderPlacement';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { TermsOfUse } from './pages/TermsOfUse';
 import { RiskDisclaimer } from './pages/RiskDisclaimer';
@@ -36,13 +30,8 @@ import PublicDealView from './pages/PublicDealView';
 import PublicDebitNoteView from './pages/PublicDebitNoteView';
 
 function AppContent() {
-  const { user, loading } = useAuth();
-  const [currentPage, setCurrentPage] = useState<'landing' | 'services' | 'learning' | 'news' | 'mfresearch' | 'calculator' | 'unlisted' | 'bonds' | 'login' | 'signup' | 'dashboard' | 'kyc' | 'admin' | 'order-placement' | 'privacy' | 'terms' | 'risk' | 'disclaimer' | 'mutual-funds' | 'primary-bonds' | 'fixed-deposits' | 'insurance' | 'crm-login' | 'crm-employee' | 'crm-admin' | 'crm-add-deal' | 'crm-new' | 'client-portal' | 'client-login' | 'mf-admin'>('landing');
-  const [showAuth, setShowAuth] = useState(false);
-  const [showSignup, setShowSignup] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  // null = unknown, true = public client, false = CRM employee (don't redirect to dashboard)
-  const [isPublicClient, setIsPublicClient] = useState<boolean | null>(null);
+  const { loading } = useAuth();
+  const [currentPage, setCurrentPage] = useState<'landing' | 'services' | 'learning' | 'news' | 'mfresearch' | 'calculator' | 'unlisted' | 'bonds' | 'privacy' | 'terms' | 'risk' | 'disclaimer' | 'mutual-funds' | 'primary-bonds' | 'fixed-deposits' | 'insurance' | 'crm-login' | 'crm-employee' | 'crm-admin' | 'crm-add-deal' | 'crm-new' | 'client-portal' | 'client-login' | 'mf-admin'>('landing');
   // Client portal state — persisted to sessionStorage so a page refresh keeps
   // the client inside the portal instead of dropping back to landing/dashboard.
   const [clientPortalId, setClientPortalId] = useState<string | null>(() => {
@@ -59,8 +48,6 @@ function AppContent() {
   useEffect(() => {
     const checkRoute = () => {
       const pathname = window.location.pathname;
-      const params = new URLSearchParams(window.location.search);
-      const adminKey = params.get('admin');
       let hasPortalSession = false;
       try { hasPortalSession = !!sessionStorage.getItem('nw_portal_client'); } catch {}
 
@@ -84,8 +71,6 @@ function AppContent() {
         setCurrentPage('crm-new');
       } else if (pathname === '/mf-admin' || pathname === '/mf-admin/' || pathname.startsWith('/mf-admin/')) {
         setCurrentPage('mf-admin');
-      } else if (pathname === '/order-placement') {
-        setCurrentPage('order-placement');
       } else if (pathname === '/privacy') {
         setCurrentPage('privacy');
       } else if (pathname === '/terms') {
@@ -102,9 +87,6 @@ function AppContent() {
         setCurrentPage('fixed-deposits');
       } else if (pathname === '/insurance') {
         setCurrentPage('insurance');
-      } else if (adminKey === 'niyom_admin_2024') {
-        setIsAdmin(true);
-        setCurrentPage('admin');
       } else if (hasPortalSession) {
         // A refreshed client-portal session that landed on a non-specific route
         // (e.g. '/' because the portal was entered via an in-app link that never
@@ -142,49 +124,10 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Resolve whether the logged-in user is a public client or CRM employee (runs once per user session)
-  useEffect(() => {
-    if (!user) { setIsPublicClient(null); return; }
-    import('./lib/supabase').then(({ supabase }) => {
-      supabase.from('nw_employees').select('id').eq('auth_user_id', user.id).maybeSingle()
-        .then(({ data }) => setIsPublicClient(!data));
-    });
-  }, [user]);
-
-  useEffect(() => {
-    if (loading) return;
-
-    const pathname = window.location.pathname;
-    if (pathname.startsWith('/crm') || pathname.startsWith('/client-login') || pathname.startsWith('/mf-admin')) return;
-
-    // An active client-portal session must never be redirected to the public
-    // client dashboard — it stays in the portal (see checkRoute restoration).
-    if (clientPortalId) return;
-
-    if (!user || isAdmin) {
-      if (!isAdmin) {
-        setShowAuth(false);
-        setShowSignup(false);
-      }
-      return;
-    }
-
-    // Wait until we know whether this is a public client or CRM employee
-    if (isPublicClient === null) return;
-  
-
-    // Only redirect to dashboard on initial login (when on landing/showing auth)
-    if (isPublicClient && (currentPage === 'landing' || showAuth)) {
-      setCurrentPage('dashboard');
-      setShowAuth(false);
-      setShowSignup(false);
-    }
-    // Once logged in, don't force-redirect — let the user navigate freely
-  }, [user, loading, isAdmin, isPublicClient, clientPortalId]);
-
-  const handleGetStarted = () => {
-    setShowAuth(true);
-    setShowSignup(false);
+  // The public "Get Started / Sign Up / Invest" CTAs funnel into the Wealth
+  // Portal login (the legacy Supabase self-signup + dashboard has been retired).
+  const goToClientLogin = () => {
+    window.open('/client-login', '_blank');
   };
 
   const handleViewServices = () => {
@@ -217,19 +160,6 @@ function AppContent() {
 
   const handleBackToLanding = () => {
     setCurrentPage('landing');
-  };
-
-  const handleSwitchToSignup = () => {
-    setShowSignup(true);
-  };
-
-  const handleSwitchToLogin = () => {
-    setShowSignup(false);
-  };
-
-  const handleCloseAuth = () => {
-    setShowAuth(false);
-    setShowSignup(false);
   };
 
   const handleNavigate = (page: string) => {
@@ -272,10 +202,6 @@ function AppContent() {
     setCurrentPage('client-login');
   };
 
-  const handleKYCSuccess = () => {
-    setCurrentPage('dashboard');
-  };
-
   // Public secure deal-confirmation page — fully unauthenticated, takes priority
   if ((currentPage as any) === 'public-deal' && dealToken) {
     return <PublicDealView token={dealToken} />;
@@ -292,12 +218,6 @@ function AppContent() {
         <div className="text-slate-600">Loading...</div>
       </div>
     );
-  }
-
-  if (isAdmin) {
-    if (currentPage === 'admin') {
-      return <AdminKYC onClose={handleBackToLanding} />;
-    }
   }
 
   // Public onboarding page
@@ -386,27 +306,8 @@ function AppContent() {
     return <AddDeal />;
   }
 
-  if (currentPage === 'order-placement') {
-    if (!user) {
-      window.location.href = '/';
-      return null;
-    }
-    return <OrderPlacement onClose={handleBackToLanding} />;
-  }
-
-  if (user && isPublicClient) {
-    if (currentPage === 'kyc') {
-      return <KYCForm onSubmitSuccess={handleKYCSuccess} onClose={handleBackToLanding} />;
-    }
-    if (currentPage === 'dashboard' || currentPage === 'landing') {
-      return <Dashboard onNavigate={handleNavigate} onClose={handleBackToLanding} />;
-    }
-    // Allow public clients to navigate to public pages (learning, news, etc.)
-    // They fall through to the page-specific renders below
-  }
-
   if (currentPage === 'services') {
-    return <Services onBack={handleBackToLanding} onGetStarted={handleGetStarted} />;
+    return <Services onBack={handleBackToLanding} onGetStarted={goToClientLogin} />;
   }
 
   if (currentPage === 'learning') {
@@ -426,11 +327,11 @@ function AppContent() {
   }
 
   if (currentPage === 'unlisted') {
-    return <UnlistedShares onBack={handleBackToLanding} onNavigateToSignUp={handleSwitchToSignup} onNavigateToKYC={() => handleNavigate('kyc')} initialTab="shares" />;
+    return <UnlistedShares onBack={handleBackToLanding} onNavigateToSignUp={goToClientLogin} onNavigateToKYC={goToClientLogin} initialTab="shares" />;
   }
 
   if (currentPage === 'bonds') {
-    return <UnlistedShares onBack={handleBackToLanding} onNavigateToSignUp={handleSwitchToSignup} onNavigateToKYC={() => handleNavigate('kyc')} initialTab="bonds" />;
+    return <UnlistedShares onBack={handleBackToLanding} onNavigateToSignUp={goToClientLogin} onNavigateToKYC={goToClientLogin} initialTab="bonds" />;
   }
 
   if (currentPage === 'privacy') {
@@ -465,14 +366,7 @@ function AppContent() {
     return <InsuranceLead onBack={handleBackToLanding} />;
   }
 
-  if (showAuth) {
-    if (showSignup) {
-      return <SignUp onSwitchToLogin={handleSwitchToLogin} onClose={handleCloseAuth} />;
-    }
-    return <Login onSwitchToSignup={handleSwitchToSignup} onClose={handleCloseAuth} />;
-  }
-
-  return <Landing onGetStarted={handleGetStarted} onViewServices={handleViewServices} onViewLearning={handleViewLearning} onViewNews={handleViewNews} onViewMFResearch={handleViewMFResearch} onViewCalculator={handleViewCalculator} onViewUnlisted={handleViewUnlisted} onViewBonds={handleViewBonds} onNavigate={handleNavigate} />;
+  return <Landing onGetStarted={goToClientLogin} onViewServices={handleViewServices} onViewLearning={handleViewLearning} onViewNews={handleViewNews} onViewMFResearch={handleViewMFResearch} onViewCalculator={handleViewCalculator} onViewUnlisted={handleViewUnlisted} onViewBonds={handleViewBonds} onNavigate={handleNavigate} />;
 }
 
 function App() {
