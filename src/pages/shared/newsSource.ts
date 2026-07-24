@@ -59,7 +59,11 @@ class SupabaseNewsSource implements NewsSource {
   categories = NEWS_CATEGORIES;
 
   async list(options: NewsListOptions = {}): Promise<NewsArticle[]> {
-    const { category, limit = 100, withinDays = 30 } = options;
+    const { category, withinDays = 30 } = options;
+    // A specific category is capped at 20 articles; the 'all' view shows the
+    // aggregate across categories (each of which the backend caps at 20).
+    const specific = Boolean(category && category !== 'all');
+    const limit = options.limit ?? (specific ? 20 : 100);
 
     let query = supabase
       .from('news')

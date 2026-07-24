@@ -34,23 +34,47 @@ interface Article {
   published_at: string;
 }
 
-// Economic Times RSS feeds mapped onto the News page's filter categories.
-const FEEDS: { url: string; source: string; category: string }[] = [
+// Google News RSS search feed for a topic query, scoped to India / English.
+// Used for categories whose dedicated publisher feeds are unreliable.
+const googleNews = (query: string) =>
+  `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-IN&gl=IN&ceid=IN:en`;
+
+// News feeds mapped onto the News page's filter categories. Economic Times RSS
+// covers stock market + commodities. The ET IPO and mutual-fund category feeds
+// return no items, so those two use Google News RSS topic search (India/EN),
+// which is reliable and not IP-blocked (Moneycontrol / Business Standard 403).
+const FEEDS: { url: string; source: string; category: string; google?: boolean }[] = [
   { url: "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms", source: "Economic Times", category: "stock market" },
-  { url: "https://economictimes.indiatimes.com/markets/ipo/rssfeeds/67656811.cms", source: "Economic Times", category: "IPO" },
   { url: "https://economictimes.indiatimes.com/wealth/invest/rssfeeds/837555174.cms", source: "Economic Times", category: "stock market" },
-  { url: "https://economictimes.indiatimes.com/mf/rssfeeds/46607993.cms", source: "Economic Times", category: "mutual funds" },
   { url: "https://economictimes.indiatimes.com/commoditiesmarkets/rssfeeds/1808152121.cms", source: "Economic Times", category: "commodities" },
+  { url: googleNews("India IPO GMP listing subscription allotment when:7d"), source: "Google News", category: "IPO", google: true },
+  { url: googleNews("mutual fund India SIP NFO when:7d"), source: "Google News", category: "mutual funds", google: true },
 ];
 
-// Per-category fallback image when an RSS item carries none. The News page also
-// renders its own branded placeholder if the image fails to load.
-const CATEGORY_IMAGE: Record<string, string> = {
-  "stock market": "https://images.pexels.com/photos/6801648/pexels-photo-6801648.jpeg",
-  "IPO": "https://images.pexels.com/photos/7788009/pexels-photo-7788009.jpeg",
-  "mutual funds": "https://images.pexels.com/photos/6772076/pexels-photo-6772076.jpeg",
-  "commodities": "https://images.pexels.com/photos/6102538/pexels-photo-6102538.jpeg",
+// Per-category fallback images used when an RSS item carries none (e.g. Google
+// News items have no image). A pool per category — picked deterministically from
+// the article URL — so cards don't all share one image. The News page also
+// renders its own branded placeholder if an image fails to load.
+const px = (id: number) =>
+  `https://images.pexels.com/photos/${id}/pexels-photo-${id}.jpeg?auto=compress&cs=tinysrgb&w=800`;
+
+const CATEGORY_IMAGES: Record<string, string[]> = {
+  "stock market": [6801648, 187041, 210607, 159888, 5980856, 6770610].map(px),
+  "IPO": [7788009, 6266285, 5716001, 3943716, 8353802, 4386370].map(px),
+  "mutual funds": [6772076, 4386366, 5849577, 6289065, 4968630, 259027].map(px),
+  "commodities": [259165, 730547, 259200, 6801874, 7567443, 4968391].map(px),
 };
+
+// Stable 32-bit string hash (FNV-1a) so a given article URL always maps to the
+// same pooled image across refreshes.
+function hashStr(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
 
 const first = (s: string, re: RegExp): string | null => {
   const m = s.match(re);
@@ -60,14 +84,27 @@ const first = (s: string, re: RegExp): string | null => {
 const clean = (s: string) =>
   s.replace(/<!\[CDATA\[/g, "").replace(/\]\]>/g, "").replace(/<[^>]*>/g, "").trim();
 
-function parseFeed(xml: string, feed: { source: string; category: string }): Article[] {
+function parseFeed(xml: string, feed: { source: string; category: string; google?: boolean }): Article[] {
   const items = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
   const out: Article[] = [];
 
-  for (const item of items.slice(0, 10)) {
-    const title = clean(first(item, /<title>([\s\S]*?)<\/title>/) ?? "");
+  for (const item of items.slice(0, 20)) {
+    let title = clean(first(item, /<title>([\s\S]*?)<\/title>/) ?? "");
     const link = (first(item, /<link>([\s\S]*?)<\/link>/) ?? first(item, /<guid[^>]*>([\s\S]*?)<\/guid>/) ?? "").trim();
-    const description = clean(first(item, /<description>([\s\S]*?)<\/description>/) ?? "").slice(0, 300);
+    let description = clean(first(item, /<description>([\s\S]*?)<\/description>/) ?? "").slice(0, 300);
+    let source = feed.source;
+
+    // Google News titles are "Headline - Publisher" and descriptions are a
+    // related-articles blob; pull out the real publisher and drop the blob so
+    // the card falls back to the clean headline.
+    if (feed.google) {
+      const dash = title.lastIndexOf(" - ");
+      if (dash > 0) {
+        source = title.slice(dash + 3).trim() || feed.source;
+        title = title.slice(0, dash).trim();
+      }
+      description = "";
+    }
 
     let publishedAt = new Date().toISOString();
     const pub = first(item, /<pubDate>([\s\S]*?)<\/pubDate>/);
@@ -76,11 +113,11 @@ function parseFeed(xml: string, feed: { source: string; category: string }): Art
       if (!Number.isNaN(d.getTime())) publishedAt = d.toISOString();
     }
 
+    const pool = CATEGORY_IMAGES[feed.category] ?? CATEGORY_IMAGES["stock market"];
     const image =
       first(item, /<enclosure[^>]*url="([^"]+)"/) ??
       first(item, /<media:content[^>]*url="([^"]+)"/) ??
-      CATEGORY_IMAGE[feed.category] ??
-      CATEGORY_IMAGE["stock market"];
+      pool[hashStr(link) % pool.length];
 
     if (title && link.startsWith("http")) {
       out.push({
@@ -89,7 +126,7 @@ function parseFeed(xml: string, feed: { source: string; category: string }): Art
         content: description || title,
         url: link,
         image_url: image,
-        source: feed.source,
+        source,
         category: feed.category,
         published_at: publishedAt,
       });
@@ -98,7 +135,7 @@ function parseFeed(xml: string, feed: { source: string; category: string }): Art
   return out;
 }
 
-async function fetchFeed(feed: { url: string; source: string; category: string }): Promise<Article[]> {
+async function fetchFeed(feed: { url: string; source: string; category: string; google?: boolean }): Promise<Article[]> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
   try {
@@ -143,17 +180,20 @@ Deno.serve(async (req: Request) => {
     );
 
     if (articles.length === 0) {
-      return json({ success: false, fetched: 0, inserted: 0, sources: "Economic Times RSS", message: "No articles fetched (feeds unreachable)" });
+      return json({ success: false, fetched: 0, inserted: 0, sources: "Economic Times + Google News RSS", message: "No articles fetched (feeds unreachable)" });
     }
 
     // Purge the earlier placeholder seed (fake articles used news.niyomwealth.com URLs).
     await supabase.from("news").delete().like("url", "https://news.niyomwealth.com/%");
 
-    // Insert only URLs we don't already have.
+    // Insert only URLs we don't already have. We fetch all existing URLs (the
+    // table is capped at ~20/category, so this is a small, bounded query) rather
+    // than filtering with `.in(...)` — Google News URLs are ~600 chars each and
+    // would overflow the request URL length.
     const { data: existing, error: selError } = await supabase
       .from("news")
       .select("url")
-      .in("url", articles.map((a) => a.url));
+      .limit(2000);
     if (selError) throw selError;
 
     const known = new Set((existing ?? []).map((r) => r.url));
@@ -164,11 +204,14 @@ Deno.serve(async (req: Request) => {
       if (insError) throw insError;
     }
 
+    // Keep only the newest 20 articles per category; older ones auto-delete.
+    await supabase.rpc("prune_news_to_cap", { max_per_category: 20 });
+
     return json({
       success: true,
       fetched: articles.length,
       inserted: fresh.length,
-      sources: "Economic Times RSS",
+      sources: "Economic Times + Google News RSS",
       message: `Fetched ${articles.length} articles, inserted ${fresh.length} new`,
     });
   } catch (err) {
