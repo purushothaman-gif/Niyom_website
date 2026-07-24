@@ -1,0 +1,93 @@
+import { supabase } from '../../lib/supabase';
+
+/**
+ * News data-source abstraction.
+ *
+ * The News page depends only on the `NewsSource` interface, never on Supabase
+ * directly. To integrate a real news API later, implement `NewsSource` against
+ * that API and export it as `newsSource` — the page needs no changes.
+ */
+
+export interface NewsArticle {
+  id: string;
+  title: string;
+  description: string | null;
+  content: string | null;
+  url: string | null;
+  image_url: string | null;
+  source: string | null;
+  category: string | null;
+  published_at: string;
+  created_at: string;
+}
+
+export interface NewsListOptions {
+  /** Category filter; omit or 'all' for everything. */
+  category?: string;
+  /** Max articles to return. */
+  limit?: number;
+  /** Only articles published within the last N days. */
+  withinDays?: number;
+}
+
+export interface RefreshResult {
+  fetched: number;
+  inserted: number;
+  sources?: string;
+}
+
+export interface NewsSource {
+  /** Curated categories the UI can filter by (first entry should be 'all'). */
+  categories: string[];
+  /** Fetch articles, newest first. */
+  list(options?: NewsListOptions): Promise<NewsArticle[]>;
+  /** Trigger a server-side refresh of the underlying feed. */
+  refresh(): Promise<RefreshResult>;
+}
+
+export const NEWS_CATEGORIES = [
+  'all',
+  'stock market',
+  'IPO',
+  'commodities',
+  'mutual funds',
+  'unlisted shares',
+];
+
+/** Default implementation backed by the `news` table + `fetch-financial-news`. */
+class SupabaseNewsSource implements NewsSource {
+  categories = NEWS_CATEGORIES;
+
+  async list(options: NewsListOptions = {}): Promise<NewsArticle[]> {
+    const { category, limit = 100, withinDays = 30 } = options;
+
+    let query = supabase
+      .from('news')
+      .select('*')
+      .order('published_at', { ascending: false })
+      .limit(limit);
+
+    if (withinDays) {
+      const since = new Date();
+      since.setDate(since.getDate() - withinDays);
+      query = query.gte('published_at', since.toISOString());
+    }
+    if (category && category !== 'all') {
+      query = query.eq('category', category);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []) as NewsArticle[];
+  }
+
+  async refresh(): Promise<RefreshResult> {
+    const url = import.meta.env.VITE_SUPABASE_URL;
+    const res = await fetch(`${url}/functions/v1/fetch-financial-news`, { method: 'POST' });
+    if (!res.ok) throw new Error(`Refresh failed (${res.status})`);
+    const json = await res.json();
+    return { fetched: json.fetched ?? 0, inserted: json.inserted ?? 0, sources: json.sources };
+  }
+}
+
+export const newsSource: NewsSource = new SupabaseNewsSource();

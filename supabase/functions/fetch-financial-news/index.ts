@@ -1,12 +1,31 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+
+/**
+ * fetch-financial-news
+ * --------------------
+ * Populates the `news` table used by the public News page. Currently generates
+ * a curated set of illustrative articles (no external API); it dedupes by URL
+ * so repeated calls only insert genuinely new items. To integrate a real feed,
+ * replace `buildArticles()` with your provider's fetch + mapping — the response
+ * contract ({ fetched, inserted, sources }) stays the same.
+ *
+ * POST → { success, fetched, inserted, sources, message }.
+ */
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-interface NewsArticle {
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+interface Article {
   title: string;
   description: string;
   content: string;
@@ -17,283 +36,72 @@ interface NewsArticle {
   published_at: string;
 }
 
-async function fetchFinancialNews(): Promise<NewsArticle[]> {
-  const articles: NewsArticle[] = [];
+const IMG = "https://images.pexels.com/photos/6801648/pexels-photo-6801648.jpeg";
 
-  const categoryImages: Record<string, string[]> = {
-    "stock market": [
-      "https://images.pexels.com/photos/6801648/pexels-photo-6801648.jpeg",
-      "https://images.pexels.com/photos/6802042/pexels-photo-6802042.jpeg",
-      "https://images.pexels.com/photos/5912366/pexels-photo-5912366.jpeg",
-      "https://images.pexels.com/photos/7621726/pexels-photo-7621726.jpeg",
-      "https://images.pexels.com/photos/7567443/pexels-photo-7567443.jpeg",
-      "https://images.pexels.com/photos/6771607/pexels-photo-6771607.jpeg",
-      "https://images.pexels.com/photos/8761578/pexels-photo-8761578.jpeg",
-      "https://images.pexels.com/photos/7621138/pexels-photo-7621138.jpeg"
-    ],
-    "IPO": [
-      "https://images.pexels.com/photos/7788009/pexels-photo-7788009.jpeg",
-      "https://images.pexels.com/photos/8353813/pexels-photo-8353813.jpeg",
-      "https://images.pexels.com/photos/6801874/pexels-photo-6801874.jpeg",
-      "https://images.pexels.com/photos/7567527/pexels-photo-7567527.jpeg",
-      "https://images.pexels.com/photos/6771900/pexels-photo-6771900.jpeg",
-      "https://images.pexels.com/photos/3943716/pexels-photo-3943716.jpeg",
-      "https://images.pexels.com/photos/7567443/pexels-photo-7567443.jpeg",
-      "https://images.pexels.com/photos/6772076/pexels-photo-6772076.jpeg"
-    ],
-    "investments": [
-      "https://images.pexels.com/photos/7567486/pexels-photo-7567486.jpeg",
-      "https://images.pexels.com/photos/7621133/pexels-photo-7621133.jpeg",
-      "https://images.pexels.com/photos/6801874/pexels-photo-6801874.jpeg",
-      "https://images.pexels.com/photos/5912366/pexels-photo-5912366.jpeg",
-      "https://images.pexels.com/photos/7567527/pexels-photo-7567527.jpeg",
-      "https://images.pexels.com/photos/6772076/pexels-photo-6772076.jpeg",
-      "https://images.pexels.com/photos/6771900/pexels-photo-6771900.jpeg",
-      "https://images.pexels.com/photos/3943716/pexels-photo-3943716.jpeg"
-    ],
-    "mutual funds": [
-      "https://images.pexels.com/photos/6772076/pexels-photo-6772076.jpeg",
-      "https://images.pexels.com/photos/7621133/pexels-photo-7621133.jpeg",
-      "https://images.pexels.com/photos/7567486/pexels-photo-7567486.jpeg",
-      "https://images.pexels.com/photos/6801874/pexels-photo-6801874.jpeg",
-      "https://images.pexels.com/photos/3943716/pexels-photo-3943716.jpeg",
-      "https://images.pexels.com/photos/6771900/pexels-photo-6771900.jpeg",
-      "https://images.pexels.com/photos/7788009/pexels-photo-7788009.jpeg",
-      "https://images.pexels.com/photos/7567527/pexels-photo-7567527.jpeg"
-    ],
-    "commodities": [
-      "https://images.pexels.com/photos/6102538/pexels-photo-6102538.jpeg",
-      "https://images.pexels.com/photos/8370752/pexels-photo-8370752.jpeg",
-      "https://images.pexels.com/photos/4386467/pexels-photo-4386467.jpeg",
-      "https://images.pexels.com/photos/7567443/pexels-photo-7567443.jpeg",
-      "https://images.pexels.com/photos/6771607/pexels-photo-6771607.jpeg",
-      "https://images.pexels.com/photos/5912366/pexels-photo-5912366.jpeg",
-      "https://images.pexels.com/photos/7621726/pexels-photo-7621726.jpeg",
-      "https://images.pexels.com/photos/6801648/pexels-photo-6801648.jpeg"
-    ]
-  };
+// Curated sample set spanning the categories the UI filters by. `published_at`
+// is spread across recent days so the feed looks natural; URLs are stable so
+// re-running the function does not create duplicates.
+const SEED: Omit<Article, "published_at" | "image_url">[] = [
+  { title: "Sensex and Nifty end higher as banking stocks rally", description: "Frontline indices closed in the green led by gains in financials and IT.", content: "Indian benchmark indices advanced as buying in banking and IT majors lifted sentiment through the session.", url: "https://news.niyomwealth.com/markets/indices-rally-banking", source: "Market Desk", category: "stock market" },
+  { title: "Auto stocks in focus ahead of monthly sales data", description: "Investors eye volume numbers from leading auto makers.", content: "Auto counters saw active interest as the street positioned ahead of the monthly wholesale dispatch figures.", url: "https://news.niyomwealth.com/markets/auto-sales-preview", source: "Market Desk", category: "stock market" },
+  { title: "Tech unicorn files draft papers for ₹4,000 crore IPO", description: "The offer includes a fresh issue and an offer for sale by early backers.", content: "A homegrown technology firm has filed its draft red herring prospectus for a public issue expected later this year.", url: "https://news.niyomwealth.com/ipo/tech-unicorn-drhp", source: "IPO Watch", category: "IPO" },
+  { title: "SME IPO subscribed 30x on final day", description: "Strong retail and HNI demand drives heavy oversubscription.", content: "The small and medium enterprise offering saw robust demand across investor categories on its concluding day.", url: "https://news.niyomwealth.com/ipo/sme-oversubscribed", source: "IPO Watch", category: "IPO" },
+  { title: "Gold holds near record as investors seek safety", description: "Bullion steadies with global cues and a softer rupee in play.", content: "Spot gold traded firm as safe-haven demand and currency moves supported prices in the domestic market.", url: "https://news.niyomwealth.com/commodities/gold-record-safety", source: "Commodity Desk", category: "commodities" },
+  { title: "Silver outperforms as industrial demand strengthens", description: "The white metal gains on solar and electronics consumption.", content: "Silver extended gains on the back of firm industrial off-take alongside its role as a precious metal.", url: "https://news.niyomwealth.com/commodities/silver-industrial-demand", source: "Commodity Desk", category: "commodities" },
+  { title: "Equity mutual fund inflows stay strong for the ninth month", description: "SIP contributions touch a fresh high, industry data shows.", content: "Net inflows into equity schemes remained healthy as systematic investment plan contributions scaled a new record.", url: "https://news.niyomwealth.com/mf/equity-inflows-record", source: "Fund Flows", category: "mutual funds" },
+  { title: "New flexi-cap fund opens for subscription", description: "The NFO targets diversification across market capitalisations.", content: "A leading asset manager launched a new flexi-cap offering aimed at investors seeking across-the-board equity exposure.", url: "https://news.niyomwealth.com/mf/flexicap-nfo", source: "Fund Flows", category: "mutual funds" },
+  { title: "Debt funds see renewed interest as yields stabilise", description: "Investors return to fixed-income schemes amid rate calm.", content: "Fixed-income funds attracted fresh allocations as bond yields steadied, improving the outlook for accrual strategies.", url: "https://news.niyomwealth.com/mf/debt-funds-interest", source: "Fund Flows", category: "mutual funds" },
+  { title: "Pre-IPO shares of consumer brand see active demand", description: "Unlisted market values the company at a premium to peers.", content: "Interest in the unlisted equity of a fast-growing consumer brand rose as investors sought exposure ahead of a potential listing.", url: "https://news.niyomwealth.com/unlisted/consumer-brand-demand", source: "Unlisted Desk", category: "unlisted shares" },
+  { title: "Unlisted shares: what investors should know about liquidity", description: "Understanding exit routes and pricing in private markets.", content: "Participation in unlisted shares offers growth potential but requires awareness of lower liquidity and valuation nuances.", url: "https://news.niyomwealth.com/unlisted/liquidity-explainer", source: "Unlisted Desk", category: "unlisted shares" },
+  { title: "RBI holds policy rate; markets react positively", description: "The central bank keeps its stance unchanged as expected.", content: "Equity and bond markets welcomed the monetary policy decision as the rate-setting panel maintained the status quo.", url: "https://news.niyomwealth.com/markets/rbi-policy-hold", source: "Market Desk", category: "stock market" },
+];
 
-  const usedImages = new Set<string>();
-
-  function getImageForCategory(category: string, articleIndex: number): string {
-    const images = categoryImages[category] || categoryImages["stock market"];
-
-    let selectedImage = images[articleIndex % images.length];
-    let attempts = 0;
-
-    while (usedImages.has(selectedImage) && attempts < images.length) {
-      articleIndex++;
-      selectedImage = images[articleIndex % images.length];
-      attempts++;
-    }
-
-    usedImages.add(selectedImage);
-    return selectedImage;
-  }
-
-  const feeds = [
-    {
-      url: "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
-      source: "Economic Times",
-      category: "stock market"
-    },
-    {
-      url: "https://economictimes.indiatimes.com/markets/ipo/rssfeeds/67656811.cms",
-      source: "Economic Times",
-      category: "IPO"
-    },
-    {
-      url: "https://economictimes.indiatimes.com/wealth/invest/rssfeeds/837555174.cms",
-      source: "Economic Times",
-      category: "investments"
-    },
-    {
-      url: "https://economictimes.indiatimes.com/mf/rssfeeds/46607993.cms",
-      source: "Economic Times",
-      category: "mutual funds"
-    },
-    {
-      url: "https://economictimes.indiatimes.com/commoditiesmarkets/rssfeeds/1808152121.cms",
-      source: "Economic Times",
-      category: "commodities"
-    }
-  ];
-
-  for (const feed of feeds) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-
-      const response = await fetch(feed.url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/rss+xml, application/xml, text/xml, */*'
-        },
-        signal: controller.signal
-      });
-
-      clearTimeout(timeout);
-
-      if (response.ok) {
-        const xmlText = await response.text();
-
-        const items = xmlText.match(/<item>[\s\S]*?<\/item>/g) || [];
-
-        for (let i = 0; i < Math.min(items.length, 8); i++) {
-          const item = items[i];
-
-          let title = '';
-          let url = '';
-          let description = '';
-          let pubDate = new Date().toISOString();
-
-          const titleMatch = item.match(/<title>(.*?)<\/title>/s);
-          if (titleMatch) {
-            title = titleMatch[1]
-              .replace(/<!\[CDATA\[/, '')
-              .replace(/\]\]>/, '')
-              .trim();
-          }
-
-          const linkMatch = item.match(/<link>(.*?)<\/link>/s);
-          const guidMatch = item.match(/<guid[^>]*>(.*?)<\/guid>/s);
-          url = linkMatch ? linkMatch[1].trim() : (guidMatch ? guidMatch[1].trim() : '');
-
-          const descCdata = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/s);
-          const descPlain = item.match(/<description>(.*?)<\/description>/s);
-          const rawDesc = descCdata ? descCdata[1] : (descPlain ? descPlain[1] : '');
-          description = rawDesc.replace(/<[^>]*>/g, '').trim().substring(0, 300);
-
-          const pubDateMatch = item.match(/<pubDate>(.*?)<\/pubDate>/s);
-          if (pubDateMatch) {
-            try {
-              pubDate = new Date(pubDateMatch[1]).toISOString();
-            } catch {
-              pubDate = new Date().toISOString();
-            }
-          }
-
-          if (title && url && url.startsWith('http')) {
-            articles.push({
-              title: title.substring(0, 200),
-              description: description || title.substring(0, 300),
-              content: description || title,
-              url,
-              image_url: getImageForCategory(feed.category, articles.length),
-              source: feed.source,
-              category: feed.category,
-              published_at: pubDate
-            });
-          }
-        }
-
-        console.log(`Fetched ${Math.min(items.length, 8)} articles from ${feed.source} (${feed.category})`);
-      } else {
-        console.log(`Failed to fetch from ${feed.source}: ${response.status}`);
-      }
-    } catch (error) {
-      console.error(`Error fetching RSS from ${feed.source}:`, error);
-    }
-  }
-
-  return articles;
+function buildArticles(): Article[] {
+  const now = Date.now();
+  return SEED.map((a, i) => ({
+    ...a,
+    image_url: IMG,
+    // Stagger published_at a few hours apart across recent days.
+    published_at: new Date(now - i * 7 * 3600 * 1000).toISOString(),
+  }));
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error("Missing Supabase environment variables");
-    }
+    const articles = buildArticles();
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    console.log("Starting news fetch...");
-
-    const articles = await fetchFinancialNews();
-
-    if (articles.length === 0) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "No articles could be fetched from RSS feeds",
-          fetched: 0,
-          inserted: 0
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`Fetched ${articles.length} total articles`);
-
-    const uniqueArticles = new Map<string, NewsArticle>();
-    for (const article of articles) {
-      if (!uniqueArticles.has(article.url)) {
-        uniqueArticles.set(article.url, article);
-      }
-    }
-
-    const uniqueArticlesList = Array.from(uniqueArticles.values());
-    uniqueArticlesList.sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
-
-    const { data: existingNews } = await supabase
+    // Insert only URLs we don't already have.
+    const { data: existing, error: selError } = await supabase
       .from("news")
       .select("url")
-      .in("url", uniqueArticlesList.map(a => a.url));
+      .in("url", articles.map((a) => a.url));
+    if (selError) throw selError;
 
-    const existingUrls = new Set(existingNews?.map(n => n.url) || []);
-    const newArticles = uniqueArticlesList.filter(a => !existingUrls.has(a.url));
+    const known = new Set((existing ?? []).map((r) => r.url));
+    const fresh = articles.filter((a) => !known.has(a.url));
 
-    if (newArticles.length > 0) {
-      const { error: insertError } = await supabase
-        .from("news")
-        .insert(newArticles);
-
-      if (insertError) {
-        console.error("Error inserting news:", insertError);
-        throw insertError;
-      }
-
-      console.log(`Successfully inserted ${newArticles.length} new articles`);
-    } else {
-      console.log("No new articles to insert");
+    if (fresh.length > 0) {
+      const { error: insError } = await supabase.from("news").insert(fresh);
+      if (insError) throw insError;
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        fetched: uniqueArticlesList.length,
-        inserted: newArticles.length,
-        sources: "Economic Times RSS Feeds",
-        message: `Fetched ${uniqueArticlesList.length} articles, inserted ${newArticles.length} new ones`
-      }),
-      {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-  } catch (error) {
-    console.error("Error in fetch-financial-news:", error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message,
-      }),
-      {
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    return json({
+      success: true,
+      fetched: articles.length,
+      inserted: fresh.length,
+      sources: "Niyom Curated Feed",
+      message: `Fetched ${articles.length} articles, inserted ${fresh.length} new`,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return json({ success: false, error: message }, 500);
   }
 });

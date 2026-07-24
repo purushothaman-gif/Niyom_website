@@ -1,24 +1,39 @@
-import React, { useEffect, useState } from 'react';
-import { TrendingUp, Filter, Search, ArrowLeft, RefreshCw, BarChart3, IndianRupee, Menu, X } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { Logo } from '../components/Logo';
+import { useEffect, useMemo, useState } from 'react';
+import { BarChart3, RefreshCw, Search, ArrowUpDown, AlertCircle } from 'lucide-react';
+import { PublicPageChrome } from './shared/PublicPageChrome';
+import { mfSource, type MutualFund, type MfSortKey } from './shared/mfSource';
 
-interface MutualFund {
-  id: string;
-  fund_name: string;
-  fund_code: string;
-  category: string;
-  sub_category: string;
-  aum: number;
-  expense_ratio: number;
-  return_1y: number;
-  return_3y: number;
-  return_5y: number;
-  launch_date: string;
-  risk_level: string;
-  min_investment: number;
-  fund_manager: string;
-  updated_at: string;
+/**
+ * Public mutual-fund research page. All data access goes through `mfSource`
+ * (see shared/mfSource.ts); search, filtering and sorting are applied in memory
+ * so the source stays a thin, swappable data provider.
+ */
+
+const SORTS: { key: MfSortKey; label: string }[] = [
+  { key: 'return_1y', label: '1Y Return' },
+  { key: 'return_3y', label: '3Y Return' },
+  { key: 'return_5y', label: '5Y Return' },
+  { key: 'aum', label: 'AUM' },
+];
+
+const fmtPct = (n: number) => `${n > 0 ? '+' : ''}${n.toFixed(1)}%`;
+const fmtAum = (cr: number) =>
+  cr >= 1000 ? `₹${(cr / 1000).toFixed(2)}k Cr` : `₹${cr.toLocaleString('en-IN')} Cr`;
+const returnColor = (n: number) =>
+  n > 0 ? 'rgb(var(--success-soft-rgb))' : n < 0 ? 'rgb(var(--danger-soft-rgb))' : 'var(--text-muted)';
+
+function RiskBadge({ level }: { level: string | null }) {
+  if (!level) return null;
+  const map: Record<string, string> = { Low: 'success-soft', Moderate: 'warning-soft', High: 'danger-soft' };
+  const token = map[level] ?? 'info-soft';
+  return (
+    <span
+      className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
+      style={{ background: `rgba(var(--${token}-rgb),0.14)`, color: `rgb(var(--${token}-rgb))` }}
+    >
+      {level}
+    </span>
+  );
 }
 
 interface MFResearchProps {
@@ -27,323 +42,222 @@ interface MFResearchProps {
 
 export default function MFResearch({ onBack }: MFResearchProps) {
   const [funds, setFunds] = useState<MutualFund[]>([]);
-  const [filteredFunds, setFilteredFunds] = useState<MutualFund[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'return_1y' | 'return_3y' | 'return_5y' | 'aum'>('return_1y');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const categories = ['all', 'Equity', 'Debt', 'Hybrid'];
+  const [category, setCategory] = useState('all');
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<MfSortKey>('return_1y');
 
-  useEffect(() => {
-    fetchFunds();
-    refreshFunds();
-
-    const interval = setInterval(() => {
-      refreshFunds();
-    }, 24 * 60 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    applyFilters();
-  }, [funds, selectedCategory, searchTerm, sortBy]);
-
-  const fetchFunds = async () => {
+  const load = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const { data, error } = await supabase
-        .from('mutual_funds')
-        .select('*')
-        .order('return_1y', { ascending: false });
-
-      if (error) throw error;
-
-      setFunds(data || []);
-    } catch (error) {
-      console.error('Error fetching funds:', error);
+      setFunds(await mfSource.list());
+    } catch {
+      setError('Unable to load fund data right now. Please try again shortly.');
     } finally {
       setLoading(false);
     }
   };
 
-  const refreshFunds = async () => {
-    setRefreshing(true);
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/update-mutual-funds`, {
-        method: 'POST',
-      });
+  useEffect(() => {
+    load();
+  }, []);
 
-      if (response.ok) {
-        await fetchFunds();
-      }
-    } catch (error) {
-      console.error('Error refreshing funds:', error);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await mfSource.refresh();
+      await load();
+    } catch {
+      setError('Refresh failed. Please try again shortly.');
     } finally {
       setRefreshing(false);
     }
   };
 
-  const applyFilters = () => {
-    let filtered = [...funds];
-
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(fund => fund.category === selectedCategory);
-    }
-
-    if (searchTerm) {
-      filtered = filtered.filter(fund =>
-        fund.fund_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        fund.fund_manager.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    filtered.sort((a, b) => {
-      const aValue = a[sortBy] || 0;
-      const bValue = b[sortBy] || 0;
-      return Number(bValue) - Number(aValue);
-    });
-
-    setFilteredFunds(filtered);
-  };
-
-  const getRiskColor = (risk: string) => {
-    const colors: { [key: string]: string } = {
-      'Low': 'bg-green-100 text-green-800',
-      'Moderate': 'bg-yellow-100 text-yellow-800',
-      'High': 'bg-red-100 text-red-800',
-    };
-    return colors[risk] || 'bg-bg-raised text-text-primary';
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-bg-base p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-center h-64">
-            <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return funds
+      .filter((f) => (category === 'all' ? true : f.category === category))
+      .filter((f) =>
+        q === ''
+          ? true
+          : `${f.fund_name} ${f.fund_manager ?? ''} ${f.sub_category ?? ''}`.toLowerCase().includes(q),
+      )
+      .sort((a, b) => (b[sortBy] ?? 0) - (a[sortBy] ?? 0));
+  }, [funds, category, search, sortBy]);
 
   return (
-    <div className="min-h-screen bg-bg-base">
-      <nav className="bg-black shadow-lg border-b border-accent-soft/20 sticky top-0 z-50 relative">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-          >
-            <Logo size="md" />
-            <div className="text-left">
-              <h1 className="text-2xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>MF Research</h1>
-              <p className="text-accent-soft text-xs tracking-wider">NIYOM WEALTH</p>
-            </div>
-          </button>
-
-          <button
-            onClick={onBack}
-            className="hidden md:flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black px-5 py-2.5 rounded-lg transition-all duration-300 font-semibold shadow-md"
-          >
-            <ArrowLeft size={18} />
-            Back to Home
-          </button>
-
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden text-white hover:text-accent-soft transition-colors"
-          >
-            {isMobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
-          </button>
+    <PublicPageChrome
+      onBack={onBack}
+      eyebrow="MF Research"
+      icon={BarChart3}
+      title="Research mutual funds, side by side"
+      subtitle="Compare returns, AUM, expense ratios and risk across curated equity, debt and hybrid funds."
+      documentTitle="Mutual Fund Research — Niyom Wealth"
+      actions={
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="lift press inline-flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black font-semibold px-5 py-2.5 rounded-xl shadow-md disabled:opacity-60"
+        >
+          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+          {refreshing ? 'Updating…' : 'Update data'}
+        </button>
+      }
+    >
+      {/* Controls */}
+      <div className="flex flex-col md:flex-row md:items-center gap-3 mb-6">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by fund, manager or category…"
+            aria-label="Search funds"
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm text-text-primary focus:outline-none focus-visible:ring-2"
+            style={{
+              background: 'var(--input-bg)',
+              border: '1px solid var(--border)',
+              // @ts-expect-error CSS custom prop for the focus ring color
+              '--tw-ring-color': 'var(--focus-ring)',
+            }}
+          />
         </div>
-
-        {isMobileMenuOpen && (
-          <div className="md:hidden absolute top-full left-0 right-0 bg-black border-t border-accent-soft/20 shadow-lg z-50">
-            <div className="flex flex-col p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          {mfSource.categories.map((cat) => {
+            const selected = cat === category;
+            return (
               <button
-                onClick={() => {
-                  onBack();
-                  setIsMobileMenuOpen(false);
-                }}
-                className="flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black px-4 py-3 rounded-lg transition-all duration-300 font-semibold"
+                key={cat}
+                onClick={() => setCategory(cat)}
+                className="press text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+                style={
+                  selected
+                    ? { background: 'rgb(var(--accent-soft-rgb))', color: 'var(--text-on-accent)' }
+                    : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }
+                }
               >
-                <ArrowLeft size={18} />
-                Back to Home
+                {cat}
               </button>
-            </div>
-          </div>
-        )}
-      </nav>
-
-      <div className="max-w-7xl mx-auto p-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-4xl font-bold text-text-primary flex items-center gap-3">
-                <BarChart3 className="w-10 h-10 text-blue-600" />
-                Mutual Fund Information
-              </h2>
-              <p className="text-text-secondary mt-2">View and compare mutual fund performance data for your reference</p>
-            </div>
-            <button
-              onClick={refreshFunds}
-              disabled={refreshing}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Updating...' : 'Update Data'}
-            </button>
-          </div>
-
-          <div className="bg-bg-elevated rounded-2xl shadow-sm p-6 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-muted w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Search by fund name or manager..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-border-strong rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div className="relative">
-                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-muted w-5 h-5" />
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-border-strong rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-bg-elevated"
-                >
-                  {categories.map((category) => (
-                    <option key={category} value={category}>
-                      {category === 'all' ? 'All Categories' : category}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="relative">
-                <TrendingUp className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-muted w-5 h-5" />
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className="w-full pl-10 pr-4 py-3 border border-border-strong rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-bg-elevated"
-                >
-                  <option value="return_1y">Sort by 1Y Returns</option>
-                  <option value="return_3y">Sort by 3Y Returns</option>
-                  <option value="return_5y">Sort by 5Y Returns</option>
-                  <option value="aum">Sort by AUM</option>
-                </select>
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
+        <div className="flex items-center gap-2">
+          <ArrowUpDown size={16} className="text-text-muted" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as MfSortKey)}
+            aria-label="Sort funds by"
+            className="text-sm font-medium px-3 py-2 rounded-lg focus:outline-none focus-visible:ring-2"
+            style={{
+              background: 'var(--input-bg)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-primary)',
+              // @ts-expect-error CSS custom prop for the focus ring color
+              '--tw-ring-color': 'var(--focus-ring)',
+            }}
+          >
+            {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+        </div>
+      </div>
 
-        {filteredFunds.length === 0 ? (
-          <div className="bg-bg-elevated rounded-2xl shadow-sm p-12 text-center">
-            <BarChart3 className="w-16 h-16 text-text-muted mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-text-primary mb-2">No funds found</h3>
-            <p className="text-text-secondary">Try adjusting your filters or search terms</p>
+      {error && (
+        <div className="mb-6 flex items-center gap-2 rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(var(--danger-soft-rgb),0.12)', color: 'rgb(var(--danger-soft-rgb))', border: '1px solid rgba(var(--danger-soft-rgb),0.3)' }}>
+          <AlertCircle size={16} /> {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="rounded-2xl p-10 text-center text-text-muted" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+          <RefreshCw className="w-6 h-6 mx-auto mb-3 animate-spin text-accent-soft" /> Loading funds…
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="rounded-2xl p-16 text-center" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+          <BarChart3 className="w-12 h-12 mx-auto text-text-faint mb-4" />
+          <p className="text-text-secondary font-medium">No funds match your filters.</p>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-text-muted mb-3">{visible.length} fund{visible.length === 1 ? '' : 's'}</p>
+
+          {/* Desktop: comparison table */}
+          <div className="hidden lg:block rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', boxShadow: 'var(--shadow-card)' }}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-text-muted" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                    <th className="px-5 py-3 font-semibold">Fund</th>
+                    <th className="px-4 py-3 font-semibold">Category</th>
+                    <th className="px-4 py-3 font-semibold text-right">1Y</th>
+                    <th className="px-4 py-3 font-semibold text-right">3Y</th>
+                    <th className="px-4 py-3 font-semibold text-right">5Y</th>
+                    <th className="px-4 py-3 font-semibold text-right">AUM</th>
+                    <th className="px-4 py-3 font-semibold text-right">Expense</th>
+                    <th className="px-4 py-3 font-semibold">Risk</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((f) => (
+                    <tr key={f.id} className="transition-colors hover:bg-hover" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td className="px-5 py-3">
+                        <div className="font-semibold text-text-primary">{f.fund_name}</div>
+                        <div className="text-xs text-text-muted">{f.sub_category}{f.fund_manager ? ` · ${f.fund_manager}` : ''}</div>
+                      </td>
+                      <td className="px-4 py-3 text-text-secondary">{f.category}</td>
+                      <td className="px-4 py-3 text-right font-semibold" style={{ color: returnColor(f.return_1y) }}>{fmtPct(f.return_1y)}</td>
+                      <td className="px-4 py-3 text-right font-semibold" style={{ color: returnColor(f.return_3y) }}>{fmtPct(f.return_3y)}</td>
+                      <td className="px-4 py-3 text-right font-semibold" style={{ color: returnColor(f.return_5y) }}>{fmtPct(f.return_5y)}</td>
+                      <td className="px-4 py-3 text-right text-text-secondary">{fmtAum(f.aum)}</td>
+                      <td className="px-4 py-3 text-right text-text-secondary">{f.expense_ratio.toFixed(2)}%</td>
+                      <td className="px-4 py-3"><RiskBadge level={f.risk_level} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-6">
-            {filteredFunds.map((fund) => (
-              <div
-                key={fund.id}
-                className="bg-bg-elevated rounded-2xl shadow-sm p-6 hover:shadow-lg transition-shadow"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-xl font-bold text-text-primary">{fund.fund_name}</h3>
-                      <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                        {fund.category}
-                      </span>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getRiskColor(fund.risk_level)}`}>
-                        {fund.risk_level} Risk
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-text-secondary">
-                      <span className="flex items-center gap-1">
-                        <IndianRupee className="w-4 h-4" />
-                        Min: {formatCurrency(fund.min_investment)}
-                      </span>
-                      <span>•</span>
-                      <span>Fund Manager: {fund.fund_manager}</span>
-                      <span>•</span>
-                      <span>AUM: ₹{(fund.aum / 100).toFixed(0)} Cr</span>
-                      <span>•</span>
-                      <span>Expense: {fund.expense_ratio}%</span>
-                    </div>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-3 gap-4 pt-4 border-t border-border">
-                  <div className="text-center">
-                    <p className="text-sm text-text-secondary mb-1">1 Year Return</p>
-                    <p className={`text-2xl font-bold ${fund.return_1y >= 15 ? 'text-green-600' : 'text-text-primary'}`}>
-                      {fund.return_1y}%
-                    </p>
+          {/* Mobile / tablet: cards */}
+          <div className="grid sm:grid-cols-2 gap-4 lg:hidden">
+            {visible.map((f) => (
+              <div key={f.id} className="rounded-2xl p-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', boxShadow: 'var(--shadow-card)' }}>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-text-primary leading-snug" style={{ fontFamily: 'var(--font-display)' }}>{f.fund_name}</h3>
+                    <p className="text-xs text-text-muted mt-0.5">{f.category} · {f.sub_category}</p>
                   </div>
-                  <div className="text-center border-x border-border">
-                    <p className="text-sm text-text-secondary mb-1">3 Year Return</p>
-                    <p className={`text-2xl font-bold ${fund.return_3y >= 18 ? 'text-green-600' : 'text-text-primary'}`}>
-                      {fund.return_3y}%
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-text-secondary mb-1">5 Year Return</p>
-                    <p className={`text-2xl font-bold ${fund.return_5y >= 15 ? 'text-green-600' : 'text-text-primary'}`}>
-                      {fund.return_5y}%
-                    </p>
-                  </div>
+                  <RiskBadge level={f.risk_level} />
                 </div>
-
-                <div className="mt-4 pt-4 border-t border-border">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-text-secondary">
-                      <span className="font-medium">Sub-Category:</span> {fund.sub_category}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {(['return_1y', 'return_3y', 'return_5y'] as const).map((k, i) => (
+                    <div key={k} className="rounded-lg px-2 py-2 text-center" style={{ background: 'var(--bg-raised)' }}>
+                      <div className="text-[10px] text-text-muted uppercase">{['1Y', '3Y', '5Y'][i]}</div>
+                      <div className="text-sm font-bold" style={{ color: returnColor(f[k]) }}>{fmtPct(f[k])}</div>
                     </div>
-                    <div className="text-sm text-text-secondary">
-                      <span className="font-medium">Launch Date:</span> {new Date(fund.launch_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}
-                    </div>
-                  </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between text-xs text-text-muted">
+                  <span>AUM {fmtAum(f.aum)}</span>
+                  <span>Expense {f.expense_ratio.toFixed(2)}%</span>
                 </div>
               </div>
             ))}
           </div>
-        )}
+        </>
+      )}
 
-        <div className="mt-8 space-y-4">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p className="text-sm text-yellow-900 font-semibold mb-2">
-              Disclaimer: We are not SEBI Registered Investment Advisers
-            </p>
-            <p className="text-sm text-yellow-900">
-              The information provided is for educational and informational purposes only. This does not constitute investment advice or a recommendation to buy/sell any mutual fund. Past performance is not indicative of future results. Please consult a qualified financial advisor before making investment decisions. Mutual fund investments are subject to market risks. Read all scheme-related documents carefully before investing.
-            </p>
-          </div>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              <strong>Auto-Update:</strong> Mutual fund data is automatically refreshed every 24 hours to keep you updated with the latest performance metrics.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
+      <p className="mt-6 text-xs text-text-faint leading-relaxed max-w-3xl">
+        Fund data shown here is for research and educational purposes only and may be delayed. Past
+        performance is not indicative of future returns. Please read all scheme related documents and
+        consult a qualified advisor before investing.
+      </p>
+    </PublicPageChrome>
   );
 }

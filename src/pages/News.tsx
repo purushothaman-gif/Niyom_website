@@ -1,19 +1,102 @@
-import React, { useEffect, useState } from 'react';
-import { Newspaper, RefreshCw, TrendingUp, Clock, ExternalLink, ArrowLeft, Menu, X } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { Logo } from '../components/Logo';
+import { useCallback, useEffect, useState } from 'react';
+import { Newspaper, RefreshCw, ExternalLink, Clock, AlertCircle } from 'lucide-react';
+import { PublicPageChrome } from './shared/PublicPageChrome';
+import { newsSource, type NewsArticle } from './shared/newsSource';
 
-interface NewsArticle {
-  id: string;
-  title: string;
-  description: string;
-  content: string;
-  url: string;
-  image_url: string;
-  source: string;
-  category: string;
-  published_at: string;
-  created_at: string;
+/**
+ * Public financial news feed. All data access goes through `newsSource`
+ * (see shared/newsSource.ts), so a real news API can replace the current
+ * Supabase-backed source without touching this component.
+ */
+
+const FALLBACK_IMAGE =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240"><rect width="400" height="240" fill="#0b2244"/><text x="50%" y="50%" fill="#d8bd86" font-family="sans-serif" font-size="20" text-anchor="middle" dominant-baseline="middle">Niyom Wealth</text></svg>`,
+  );
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const diff = Date.now() - then;
+  const mins = Math.round(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function CategoryBadge({ category }: { category: string | null }) {
+  if (!category) return null;
+  return (
+    <span
+      className="inline-block text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+      style={{ background: 'rgba(var(--accent-soft-rgb),0.14)', color: 'rgb(var(--accent-soft-rgb))' }}
+    >
+      {category}
+    </span>
+  );
+}
+
+function ArticleCard({ article }: { article: NewsArticle }) {
+  const [imgOk, setImgOk] = useState(true);
+  return (
+    <article
+      className="lift group rounded-2xl overflow-hidden flex flex-col h-full"
+      style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', boxShadow: 'var(--shadow-card)' }}
+    >
+      <div className="relative h-44 overflow-hidden" style={{ background: 'var(--bg-raised)' }}>
+        <img
+          src={imgOk && article.image_url ? article.image_url : FALLBACK_IMAGE}
+          alt=""
+          loading="lazy"
+          onError={() => setImgOk(false)}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+        />
+        <div className="absolute top-3 left-3"><CategoryBadge category={article.category} /></div>
+      </div>
+      <div className="p-5 flex flex-col flex-1">
+        <h3 className="text-base font-bold text-text-primary leading-snug mb-2 line-clamp-2" style={{ fontFamily: 'var(--font-display)' }}>
+          {article.title}
+        </h3>
+        {article.description && (
+          <p className="text-sm text-text-secondary leading-relaxed mb-4 line-clamp-3 flex-1">{article.description}</p>
+        )}
+        <div className="flex items-center justify-between mt-auto pt-3 border-t border-border-subtle">
+          <div className="flex items-center gap-2 text-xs text-text-muted min-w-0">
+            {article.source && <span className="truncate font-medium">{article.source}</span>}
+            <span className="inline-flex items-center gap-1 flex-shrink-0"><Clock size={12} /> {relativeTime(article.published_at)}</span>
+          </div>
+          {article.url && (
+            <a
+              href={article.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-accent-soft hover:underline flex-shrink-0"
+            >
+              Read <ExternalLink size={12} />
+            </a>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <div className="rounded-2xl overflow-hidden animate-pulse" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+      <div className="h-44" style={{ background: 'var(--bg-raised)' }} />
+      <div className="p-5 space-y-3">
+        <div className="h-4 rounded w-3/4" style={{ background: 'var(--bg-raised)' }} />
+        <div className="h-3 rounded w-full" style={{ background: 'var(--bg-raised)' }} />
+        <div className="h-3 rounded w-2/3" style={{ background: 'var(--bg-raised)' }} />
+      </div>
+    </div>
+  );
 }
 
 interface NewsProps {
@@ -21,279 +104,112 @@ interface NewsProps {
 }
 
 export default function News({ onBack }: NewsProps) {
-  const [news, setNews] = useState<NewsArticle[]>([]);
+  const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string>('');
+  const [category, setCategory] = useState('all');
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const categories = ['all', 'stock market', 'IPO', 'commodities', 'mutual funds', 'unlisted shares'];
-
-  useEffect(() => {
-    fetchNews();
-
-    const interval = setInterval(() => {
-      refreshNews();
-    }, 6 * 60 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchNews = async () => {
+  const load = useCallback(async (cat: string) => {
+    setLoading(true);
+    setError(null);
     try {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      const { data, error } = await supabase
-        .from('news')
-        .select('*')
-        .gte('published_at', thirtyDaysAgo.toISOString())
-        .order('published_at', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-
-      setNews(data || []);
-    } catch (error) {
-      console.error('Error fetching news:', error);
+      setArticles(await newsSource.list({ category: cat }));
+    } catch {
+      setError('Unable to load news right now. Please try again shortly.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const refreshNews = async () => {
+  useEffect(() => {
+    load(category);
+  }, [category, load]);
+
+  const handleRefresh = async () => {
     setRefreshing(true);
-    setSuccessMessage('');
+    setNotice(null);
+    setError(null);
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/fetch-financial-news`, {
-        method: 'POST',
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('News refresh result:', result);
-        await fetchNews();
-        setLastUpdated(new Date());
-        const sourceInfo = result.sources ? ` from ${result.sources}` : '';
-        setSuccessMessage(`Successfully fetched ${result.fetched} articles${sourceInfo}, ${result.inserted} new articles added`);
-        setTimeout(() => setSuccessMessage(''), 6000);
-      } else {
-        console.error('Failed to refresh news:', response.statusText);
-        setSuccessMessage('Failed to refresh news. Please try again.');
-        setTimeout(() => setSuccessMessage(''), 5000);
-      }
-    } catch (error) {
-      console.error('Error refreshing news:', error);
-      setSuccessMessage('Error refreshing news. Please check your connection.');
-      setTimeout(() => setSuccessMessage(''), 5000);
+      const result = await newsSource.refresh();
+      await load(category);
+      setNotice(`Updated — ${result.inserted} new article${result.inserted === 1 ? '' : 's'} added.`);
+    } catch {
+      setError('Refresh failed. Please try again shortly.');
     } finally {
       setRefreshing(false);
     }
   };
 
-  const filteredNews = selectedCategory === 'all'
-    ? news
-    : news.filter(article => article.category === selectedCategory);
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffHours < 1) return 'Just now';
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  const getCategoryColor = (category: string) => {
-    const colors: { [key: string]: string } = {
-      'stock market': 'bg-blue-100 text-blue-800',
-      'IPO': 'bg-green-100 text-green-800',
-      'commodities': 'bg-yellow-100 text-yellow-800',
-      'mutual funds': 'bg-indigo-100 text-indigo-800',
-      'unlisted shares': 'bg-orange-100 text-orange-800',
-    };
-    return colors[category] || 'bg-bg-raised text-text-primary';
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-bg-base p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-center h-64">
-            <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-bg-base">
-      <nav className="bg-black shadow-lg border-b border-accent-soft/20 sticky top-0 z-50 relative">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-          >
-            <Logo size="md" />
-            <div className="text-left">
-              <h1 className="text-2xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>Financial News & Information</h1>
-              <p className="text-accent-soft text-xs tracking-wider">NIYOM WEALTH</p>
-            </div>
-          </button>
-
-          <button
-            onClick={onBack}
-            className="hidden md:flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black px-5 py-2.5 rounded-lg transition-all duration-300 font-semibold shadow-md"
-          >
-            <ArrowLeft size={18} />
-            Back to Home
-          </button>
-
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden text-white hover:text-accent-soft transition-colors"
-          >
-            {isMobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
-          </button>
-        </div>
-
-        {isMobileMenuOpen && (
-          <div className="md:hidden absolute top-full left-0 right-0 bg-black border-t border-accent-soft/20 shadow-lg z-50">
-            <div className="flex flex-col p-4 space-y-3">
-              <button
-                onClick={() => {
-                  onBack();
-                  setIsMobileMenuOpen(false);
-                }}
-                className="flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black px-4 py-3 rounded-lg transition-all duration-300 font-semibold"
-              >
-                <ArrowLeft size={18} />
-                Back to Home
-              </button>
-            </div>
-          </div>
-        )}
-      </nav>
-
-      <div className="max-w-7xl mx-auto p-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-text-primary flex items-center gap-3">
-              <Newspaper className="w-10 h-10 text-blue-600" />
-              Financial News & Information
-            </h1>
-            <p className="text-text-secondary mt-2">
-              Latest market news for your information and awareness
-              {lastUpdated && (
-                <span className="ml-2 text-sm">
-                  • Last updated: {lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              )}
-            </p>
-            <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3 max-w-3xl">
-              <p className="text-sm text-yellow-900">
-                <strong>Disclaimer:</strong> News articles are for informational purposes only and do not constitute investment advice or recommendations. We are not SEBI Registered Investment Advisers.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={refreshNews}
-            disabled={refreshing}
-            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-          >
-            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing...' : 'Refresh News'}
-          </button>
-        </div>
-
-        {successMessage && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3 animate-fadeIn">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <p className="text-sm text-green-800 font-medium">{successMessage}</p>
-          </div>
-        )}
-
-        <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
-          {categories.map((category) => (
+    <PublicPageChrome
+      onBack={onBack}
+      eyebrow="Market News"
+      icon={Newspaper}
+      title="Financial news, curated for investors"
+      subtitle="Stay ahead with the latest from the markets, IPOs, commodities, mutual funds and unlisted shares."
+      documentTitle="Market News — Niyom Wealth"
+      actions={
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="lift press inline-flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black font-semibold px-5 py-2.5 rounded-xl shadow-md disabled:opacity-60"
+        >
+          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+          {refreshing ? 'Refreshing…' : 'Refresh feed'}
+        </button>
+      }
+    >
+      {/* Category filter */}
+      <div className="flex flex-wrap gap-2 mb-6" role="tablist" aria-label="News category">
+        {newsSource.categories.map((cat) => {
+          const selected = cat === category;
+          return (
             <button
-              key={category}
-              onClick={() => setSelectedCategory(category)}
-              className={`px-4 py-2 rounded-full whitespace-nowrap transition-colors ${
-                selectedCategory === category
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-bg-elevated text-text-secondary hover:bg-bg-raised'
-              }`}
+              key={cat}
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setCategory(cat)}
+              className="press capitalize text-sm font-medium px-3.5 py-2 rounded-lg transition-colors"
+              style={
+                selected
+                  ? { background: 'rgb(var(--accent-soft-rgb))', color: 'var(--text-on-accent)' }
+                  : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }
+              }
             >
-              {category.charAt(0).toUpperCase() + category.slice(1)}
+              {cat}
             </button>
-          ))}
-        </div>
-
-        {filteredNews.length === 0 ? (
-          <div className="bg-bg-elevated rounded-2xl shadow-sm p-12 text-center">
-            <Newspaper className="w-16 h-16 text-text-muted mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-text-primary mb-2">No news available</h3>
-            <p className="text-text-secondary mb-4">Click "Refresh News" to fetch the latest articles</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredNews.map((article) => (
-              <div
-                key={article.id}
-                className="bg-bg-elevated rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow"
-              >
-                <div className="p-6">
-                  <div className="mb-4">
-                    <h2 className={`text-xl font-bold mb-3 px-4 py-2 rounded-lg inline-block ${getCategoryColor(article.category)}`}>
-                      {article.category.toUpperCase()}
-                    </h2>
-                  </div>
-
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="flex items-center gap-1 text-xs text-text-muted">
-                      <Clock className="w-3 h-3" />
-                      {formatDate(article.published_at)}
-                    </span>
-                    <span className="text-xs text-text-muted flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3" />
-                      {article.source}
-                    </span>
-                  </div>
-
-                  <h3 className="text-lg font-bold text-text-primary mb-3 line-clamp-2">
-                    {article.title}
-                  </h3>
-
-                  <p className="text-text-secondary text-sm mb-4 line-clamp-3">
-                    {article.description}
-                  </p>
-
-                  <div className="flex items-center justify-end">
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm font-medium transition-all hover:gap-2"
-                      title="Open article in new tab"
-                    >
-                      Read More
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+          );
+        })}
       </div>
-    </div>
+
+      {notice && (
+        <div className="mb-6 rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(var(--success-soft-rgb),0.12)', color: 'rgb(var(--success-soft-rgb))', border: '1px solid rgba(var(--success-soft-rgb),0.3)' }}>
+          {notice}
+        </div>
+      )}
+      {error && (
+        <div className="mb-6 flex items-center gap-2 rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(var(--danger-soft-rgb),0.12)', color: 'rgb(var(--danger-soft-rgb))', border: '1px solid rgba(var(--danger-soft-rgb),0.3)' }}>
+          <AlertCircle size={16} /> {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      ) : articles.length === 0 ? (
+        <div className="text-center py-20">
+          <Newspaper className="w-12 h-12 mx-auto text-text-faint mb-4" />
+          <p className="text-text-secondary font-medium">No articles in this category yet.</p>
+          <p className="text-text-muted text-sm mt-1">Try refreshing the feed or picking another category.</p>
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {articles.map((a) => <ArticleCard key={a.id} article={a} />)}
+        </div>
+      )}
+    </PublicPageChrome>
   );
 }
