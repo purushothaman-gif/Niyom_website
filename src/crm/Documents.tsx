@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWClient, NWClientBankAccount } from './types';
 import {
   Folder, FolderOpen, Upload, Download, Trash2, Eye, Search,
   FileText, FileImage, File, X, CheckCircle2, AlertCircle,
-  ChevronRight, ChevronDown, RefreshCw, ArrowLeft, Plus, Pencil,
+  ChevronDown, RefreshCw, ArrowLeft, Plus, Pencil,
 } from 'lucide-react';
 
 interface Props {
@@ -38,12 +38,6 @@ interface NWDocument {
   client?: { full_name: string; client_code: string };
 }
 
-const ALLOWED_MIME = [
-  'application/pdf',
-  'image/jpeg', 'image/jpg', 'image/png',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-];
 const ALLOWED_EXT = ['.pdf', '.jpg', '.jpeg', '.png', '.docx', '.xlsx'];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 

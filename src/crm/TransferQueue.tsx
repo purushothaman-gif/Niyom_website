@@ -7,6 +7,19 @@ import {
   ShieldCheck, Info, RefreshCw,
 } from 'lucide-react';
 
+// ===========================================================================
+// Transfer Queue — admin-only Operations screen.
+//
+// Lists deals that are CONFIRMED (booked) and PAID (settled within ±₹50),
+// lets an admin review the full deal + payment ledger, then approve the
+// transfer — which creates the official nw_transactions row, closes the deal
+// and sends the closure email.
+//
+// Eligibility (which deals appear) is enforced authoritatively by the
+// nw_deal_transfer_eligible view; this component only renders it and drives
+// the transfer via the `transfer-deal` edge function (→ nw_transfer_deal RPC).
+// ===========================================================================
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -15,27 +28,7 @@ interface Props {
   employee: NWEmployee;
 }
 
-// Payment ledger row — read from nw_deal_payments on preview open.
-// Shape mirrors the columns needed by Section 5's ledger table.
-interface LedgerRow {
-  id: string;
-  payment_number: string;
-  payment_date: string;
-  payment_mode: string;
-  amount_inr: number;
-  utr_number: string | null;
-  cheque_number: string | null;
-  transaction_reference: string | null;
-}
-
-// Short-label map for payment_mode (used only in the ledger table)
-const MODE_LABEL: Record<string, string> = {
-  imps: 'IMPS', neft: 'NEFT', rtgs: 'RTGS', upi: 'UPI',
-  cheque: 'Cheque', cash: 'Cash', bank_transfer: 'Bank Transfer',
-  online_gateway: 'Online Gateway', demand_draft: 'Demand Draft',
-  internal_adjustment: 'Internal Adjustment',
-};
-
+// Row shape from the nw_deal_transfer_eligible view.
 interface EligibleDeal {
   deal_id: string;
   confirmation_number: string;
@@ -74,6 +67,26 @@ interface EligibleDeal {
   payment_count: number;
   last_payment_at: string | null;
 }
+
+// Payment ledger row — read from nw_deal_payments when a preview opens.
+interface LedgerRow {
+  id: string;
+  payment_number: string;
+  payment_date: string;
+  payment_mode: string;
+  amount_inr: number;
+  utr_number: string | null;
+  cheque_number: string | null;
+  transaction_reference: string | null;
+}
+
+// Short-label map for payment_mode (used only in the ledger table).
+const MODE_LABEL: Record<string, string> = {
+  imps: 'IMPS', neft: 'NEFT', rtgs: 'RTGS', upi: 'UPI',
+  cheque: 'Cheque', cash: 'Cash', bank_transfer: 'Bank Transfer',
+  online_gateway: 'Online Gateway', demand_draft: 'Demand Draft',
+  internal_adjustment: 'Internal Adjustment',
+};
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (locally scoped to keep this module self-contained)
@@ -152,9 +165,8 @@ type ChecklistKey = typeof CHECKLIST_ITEMS[number]['key'];
 
 const PAGE_SIZE = 10;
 
-// Sprint 4: a deal is settled for transfer when |outstanding| <= this (INR).
-// Must stay in sync with the nw_deal_transfer_eligible view + nw_transfer_deal
-// RPC (migration 20260713120000_transfer_outstanding_tolerance).
+// A deal is settled for transfer when |outstanding| <= this (INR). Must stay in
+// sync with the nw_deal_transfer_eligible view + nw_transfer_deal RPC.
 const SETTLEMENT_TOLERANCE = 50;
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -200,8 +212,8 @@ export default function TransferQueue({ employee }: Props) {
   const [resendMessage, setResendMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // -------------------------------------------------------------------------
-  // Guard: this page is admin-only. The nav already hides it for RMs, but
-  // in case someone deep-links to /crm/transfer_queue, we degrade gracefully.
+  // Guard: this page is admin-only. The nav already hides it for RMs, but in
+  // case someone deep-links to /crm/transfer_queue we degrade gracefully.
   // -------------------------------------------------------------------------
   if (!isAdmin) {
     return (
@@ -215,7 +227,8 @@ export default function TransferQueue({ employee }: Props) {
   }
 
   // -------------------------------------------------------------------------
-  // Data loading
+  // Data loading — the nw_deal_transfer_eligible view already restricts rows
+  // to confirmed + paid (within ₹50) + not-yet-transferred deals.
   // -------------------------------------------------------------------------
 
   const loadList = useCallback(async () => {
@@ -223,8 +236,6 @@ export default function TransferQueue({ employee }: Props) {
     const from = page * PAGE_SIZE;
     const to   = from + PAGE_SIZE - 1;
 
-    // A deal is transfer-ready once paid — order/filter by deal_date (there is
-    // no acceptance step, so accepted_at may be null).
     let q = supabase
       .from('nw_deal_transfer_eligible')
       .select('*', { count: 'exact' })
@@ -264,9 +275,8 @@ export default function TransferQueue({ employee }: Props) {
 
   // -------------------------------------------------------------------------
   // Open preview — fetch:
-  //   (a) the full Payment Ledger (chronological) for Section 5
-  //   (b) snap_depository (not part of nw_deal_transfer_eligible; used by the
-  //       Demat parser). No schema change — read directly from the deal row.
+  //   (a) the full Payment Ledger (chronological) for the Payment Details section
+  //   (b) snap_depository (not part of the view; used by the Demat parser).
   // -------------------------------------------------------------------------
 
   const openPreview = async (d: EligibleDeal) => {
@@ -315,7 +325,8 @@ export default function TransferQueue({ employee }: Props) {
     setError('');
     try {
       const { data, error: fnErr } = await supabase.functions.invoke('transfer-deal', {
-        // Acceptance is not required in this flow; always transfer a paid deal.
+        // Digital acceptance is not part of this flow; always transfer a
+        // confirmed, paid deal. The view + RPC enforce eligibility.
         body: { dealId: preview.deal_id, remarks: remarks.trim() || null, override: true },
       });
       if (fnErr || !data?.success) {
@@ -450,9 +461,8 @@ export default function TransferQueue({ employee }: Props) {
   }
 
   // ---- PREVIEW SCREEN ------------------------------------------------------
-  // Operations Verification Screen. Shows ONLY the fields the employee
-  // needs while entering the transfer into the external Transfer / Registrar
-  // portal. All other CRM chrome is intentionally omitted.
+  // Operations Verification Screen. Shows the fields the employee needs while
+  // entering the transfer into the external Transfer / Registrar portal.
   if (view === 'preview' && preview) {
     const demat        = parseDemat(preview.snap_demat_account, depository);
     const outstanding  = Number(preview.outstanding_amount);
@@ -502,8 +512,8 @@ export default function TransferQueue({ employee }: Props) {
         <Section title="Demat Details">
           {demat ? (
             <>
-              <FieldRow label="DP ID"                       value={demat.dpId}    mono strong />
-              <FieldRow label="Client ID (Demat Client ID)" value={demat.clientId} mono strong />
+              <FieldRow label="DP ID"                        value={demat.dpId}     mono strong />
+              <FieldRow label="Client ID (Demat Client ID)"  value={demat.clientId} mono strong />
             </>
           ) : (
             <div className="rounded-lg px-3 py-2 text-xs italic"
@@ -641,9 +651,9 @@ export default function TransferQueue({ employee }: Props) {
 
         {/* --- Approve action bar (sticky) --- */}
         {/* Defence-in-depth: the eligibility view already restricts this list to
-             settled deals (|outstanding| <= ₹50), but the ledger could change
-             between list load and click, so we re-check the same tolerance here.
-             The RPC re-checks it again authoritatively inside the lock. */}
+             confirmed, settled deals, but the ledger could change between list
+             load and click, so we re-check the same tolerance here. The RPC
+             re-checks confirmed + tolerance again authoritatively under the lock. */}
         <div className="sticky bottom-0 z-10 rounded-2xl px-5 py-4 flex items-center justify-between gap-3 flex-wrap"
           style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', backdropFilter: 'blur(6px)' }}>
           <div className="flex items-center gap-2 text-xs" style={{ color: isSettled ? 'var(--text-secondary)' : 'var(--warning)' }}>
@@ -681,7 +691,7 @@ export default function TransferQueue({ employee }: Props) {
           </div>
         </div>
 
-        {/* --- Confirmation dialog (unchanged 6-item checklist) --- */}
+        {/* --- Confirmation dialog (6-item checklist) --- */}
         {showConfirm && (
           <ConfirmDialog
             deal={preview}
@@ -708,7 +718,7 @@ export default function TransferQueue({ employee }: Props) {
         <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--accent)' }}>Operations</p>
         <h1 className="text-2xl font-bold text-text-primary">Transfer Queue</h1>
         <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-          Paid deals (settled within ₹{SETTLEMENT_TOLERANCE}) awaiting review &amp; transfer.
+          Confirmed deals, paid (settled within ₹{SETTLEMENT_TOLERANCE}), awaiting review &amp; transfer.
         </p>
       </div>
 
@@ -758,7 +768,7 @@ export default function TransferQueue({ employee }: Props) {
               No deals awaiting transfer
             </p>
             <p className="text-xs mt-1" style={{ color: 'var(--border-strong)' }}>
-              Deals appear here once their payment is settled (within ₹{SETTLEMENT_TOLERANCE}).
+              Deals appear here once confirmed and their payment is settled (within ₹{SETTLEMENT_TOLERANCE}).
             </p>
           </div>
         ) : (
@@ -986,7 +996,7 @@ function ConfirmDialog({
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'var(--success)' }} />
-                Make the transaction available for MSI Revenue.
+                Make the transaction available for MIS Revenue.
               </li>
             </ul>
             <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>

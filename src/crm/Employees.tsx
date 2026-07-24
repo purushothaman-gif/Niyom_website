@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { NWEmployee } from './types';
-import { fmt, fmtDate } from './utils';
+import { fmtDate } from './utils';
 import { Plus, X, Pencil, Users, UserCheck, UserX, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface Props { employee: NWEmployee; }

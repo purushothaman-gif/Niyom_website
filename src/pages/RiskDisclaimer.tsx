@@ -2,7 +2,6 @@ import { AlertTriangle } from 'lucide-react';
 import {
   LegalDocumentLayout,
   LegalSection,
-  LegalSubsection,
   LegalList,
   AlertBox,
   ContactBox

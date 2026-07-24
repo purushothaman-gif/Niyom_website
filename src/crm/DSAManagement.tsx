@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { NWEmployee, NWDSA } from './types';
 import {
   Handshake, Plus, X, Upload, CheckCircle2, AlertCircle,
-  Search, Phone, Mail, CreditCard, Building2, User, Eye, EyeOff,
+  Search, Phone, Mail, CreditCard, Building2, User, Eye,
   ToggleLeft, ToggleRight, Trash2, ChevronDown, Pencil,
 } from 'lucide-react';
 

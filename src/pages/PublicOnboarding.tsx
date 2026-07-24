@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
-  User, CreditCard, Phone, Mail, MapPin, Building2, Landmark,
-  Upload, FileText, CheckCircle2, AlertCircle, ChevronRight, ArrowLeft, X,
+  User, MapPin, Building2, Landmark,
+  Upload, FileText, CheckCircle2, AlertCircle, ChevronRight, ArrowLeft,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 

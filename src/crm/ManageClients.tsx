@@ -34,7 +34,7 @@ function InlineField({ label, children }: { label: string; children: React.React
   );
 }
 
-export default function ManageClients({ employee }: Props) {
+export default function ManageClients({ employee, onNavigate }: Props) {
   const [clients, setClients] = useState<NWClient[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);

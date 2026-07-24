@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWClient } from './types';
 import { DOC_FOLDERS, DocFolderKey, buildFileName, validateFile } from './Documents';

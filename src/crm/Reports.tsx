@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWHolding, NWTransaction, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_CHART_COLORS, TXN_LABELS, TXN_COLORS } from './utils';
@@ -10,7 +10,7 @@ type ReportMode = 'portfolio' | 'transactions' | 'clients';
 
 export default function Reports({ employee }: Props) {
   const [mode, setMode] = useState<ReportMode>('portfolio');
-  const [holdings, setHoldings] = useState<NWHolding[]>([]);
+  const [holdings, setHoldings] = useState<(NWHolding & { client?: { full_name: string; client_code: string; employee_id: string } })[]>([]);
   const [txns, setTxns] = useState<NWTransaction[]>([]);
   const [clients, setClients] = useState<NWClient[]>([]);
   const [empList, setEmpList] = useState<{ id: string; full_name: string; employee_code: string }[]>([]);
