@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Search, UploadCloud, Loader2, ShieldCheck, ShieldAlert, Clock, Landmark, Sparkles } from 'lucide-react';
-import { useBonds, enrichPendingLoop } from './bondClient';
+import { Search, UploadCloud, Loader2, ShieldCheck, ShieldAlert, Clock, Landmark, Sparkles, RefreshCw } from 'lucide-react';
+import { useBonds, enrichPendingLoop, recomputeAllActive } from './bondClient';
 import { BondPublic } from './bondTypes';
 
 interface Props { isAdmin: boolean; onUpload: () => void; onVerify: () => void; onOpen: (id: string) => void; }
@@ -48,6 +48,7 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
   const { data: bonds = [], isLoading, error } = useBonds(search);
   const qc = useQueryClient();
   const [mastering, setMastering] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState<{ done: number; total: number } | null>(null);
   const pending = bonds.filter(b => b.verification_status === 'pending' || b.verification_status === 'failed').length;
   const review = bonds.filter(b => b.verification_status === 'needs_review').length;
 
@@ -55,6 +56,14 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
     setMastering(0);
     try { await enrichPendingLoop(done => setMastering(done)); }
     finally { setMastering(null); qc.invalidateQueries({ queryKey: ['bm_bonds'] }); }
+  };
+
+  // Recompute yields/cashflows for every active bond from the current price (no
+  // provider calls). Use after a price change or an analytics-engine update.
+  const refreshYields = async () => {
+    setRefreshing({ done: 0, total: bonds.length });
+    try { await recomputeAllActive((done, total) => setRefreshing({ done, total })); }
+    finally { setRefreshing(null); qc.invalidateQueries({ queryKey: ['bm_bonds'] }); }
   };
 
   return (
@@ -83,6 +92,14 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
               style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
               {mastering !== null ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {mastering !== null ? `Mastering… ${mastering}` : `Master ${pending} pending`}
+            </button>
+          )}
+          {isAdmin && bonds.length > 0 && (
+            <button onClick={refreshYields} disabled={refreshing !== null} title="Recompute yields & cashflows from the current price"
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-60 flex items-center gap-2"
+              style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+              <RefreshCw className={`w-4 h-4 ${refreshing !== null ? 'animate-spin' : ''}`} />
+              {refreshing !== null ? `Refreshing… ${refreshing.done}/${refreshing.total}` : 'Refresh yields'}
             </button>
           )}
           {isAdmin && (

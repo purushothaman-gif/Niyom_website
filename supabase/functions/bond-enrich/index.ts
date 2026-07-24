@@ -120,14 +120,7 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
   Object.assign(upd, {
     issuer_id: issuerId,
     redemption_schedule: redemption ?? bond.redemption_schedule ?? [],
-    analytics: {
-      accrued_per_100: a.accrued_per_100, clean_price: a.clean_price, dirty_price: a.dirty_price,
-      current_yield: a.current_yield, ytm: a.ytm, macaulay_duration: a.macaulay_duration,
-      modified_duration: a.modified_duration, days_to_maturity: a.days_to_maturity,
-      years_to_maturity: a.years_to_maturity, total_future_interest_per_100: a.total_future_interest_per_100,
-      total_future_principal_per_100: a.total_future_principal_per_100, assumed_bullet: a.assumed_bullet,
-      settlement_date: a.settlement_date, ok: a.ok, reason: a.reason ?? null,
-    },
+    analytics: analyticsJson(a),
     analytics_computed_at: new Date().toISOString(),
     next_coupon_date: nextCoupon,
     data_quality_score: quality,
@@ -157,6 +150,52 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
   return { isin, status, quality, ytm: a.ytm, cashflows: a.cashflow_schedule.length };
 }
 
+// Fast recompute: recompute analytics + schedules from the bond's ALREADY-STORED
+// master + current latest_price, with NO provider calls. Used to refresh yields
+// after a daily price change and to backfill after an engine fix. Never touches
+// master fields, provenance, quality or verification status.
+async function recomputeOne(supabase: Client, bond: Record<string, unknown>, holidays: Set<string>) {
+  const bondId = String(bond.id);
+  const redemption = Array.isArray(bond.redemption_schedule) && (bond.redemption_schedule as unknown[]).length
+    ? (bond.redemption_schedule as { date: string; pct: number }[]) : undefined;
+  const a = computeAnalytics({
+    couponRate: numOrNull(bond.coupon_rate),
+    frequency: (String(bond.coupon_frequency ?? "") as Frequency),
+    maturityISO: (bond.maturity_date as string) ?? null,
+    issueDateISO: (bond.issue_date as string) ?? null,
+    ipDatesSeed: String(bond.interest_payment_dates ?? ""),
+    redemptionSchedule: redemption,
+    dayCount: (String(bond.day_count_convention ?? "actual_365") as DayCount),
+    bizConv: (String(bond.business_day_convention ?? "following") as BizConv),
+    holidays,
+    cleanPricePer100: numOrNull(bond.latest_price),
+  });
+  await supabase.from("bm_coupon_schedule").delete().eq("bond_id", bondId);
+  await supabase.from("bm_cashflow_schedule").delete().eq("bond_id", bondId);
+  if (a.ok) {
+    if (a.coupon_schedule.length) await supabase.from("bm_coupon_schedule").insert(a.coupon_schedule.map((c) => ({ bond_id: bondId, ...c })));
+    if (a.cashflow_schedule.length) await supabase.from("bm_cashflow_schedule").insert(a.cashflow_schedule.map((c) => ({ bond_id: bondId, ...c })));
+  }
+  const nextCoupon = a.ok && a.coupon_schedule[0] ? a.coupon_schedule[0].pay_date : null;
+  await supabase.from("bm_bonds").update({
+    analytics: analyticsJson(a),
+    analytics_computed_at: new Date().toISOString(),
+    next_coupon_date: nextCoupon,
+  }).eq("id", bondId);
+  return { isin: String(bond.isin), status: "recomputed", ytm: a.ytm, cashflows: a.cashflow_schedule.length };
+}
+
+function analyticsJson(a: ReturnType<typeof computeAnalytics>) {
+  return {
+    accrued_per_100: a.accrued_per_100, clean_price: a.clean_price, dirty_price: a.dirty_price,
+    current_yield: a.current_yield, ytm: a.ytm, macaulay_duration: a.macaulay_duration,
+    modified_duration: a.modified_duration, days_to_maturity: a.days_to_maturity,
+    years_to_maturity: a.years_to_maturity, total_future_interest_per_100: a.total_future_interest_per_100,
+    total_future_principal_per_100: a.total_future_principal_per_100, assumed_bullet: a.assumed_bullet,
+    settlement_date: a.settlement_date, ok: a.ok, reason: a.reason ?? null,
+  };
+}
+
 function numOrNull(v: unknown): number | null { const n = typeof v === "number" ? v : parseFloat(String(v ?? "")); return Number.isFinite(n) ? n : null; }
 function clean(o: Record<string, unknown>): Record<string, unknown> { const out: Record<string, unknown> = {}; for (const [k, v] of Object.entries(o)) if (v !== undefined) out[k] = v; return out; }
 
@@ -176,10 +215,12 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const limit = Math.min(Number(body.limit) || 25, 100);
+    const recompute = body.recompute === true;   // recompute analytics only, no provider calls
 
     let query = supabase.from("bm_bonds").select("*");
     if (Array.isArray(body.bond_ids) && body.bond_ids.length) query = query.in("id", body.bond_ids);
     else if (body.isin) query = query.eq("isin", String(body.isin).toUpperCase());
+    else if (recompute) query = query.eq("active_status", "active").limit(limit);
     else query = query.eq("verification_status", "pending").limit(limit);
     const { data: bonds, error } = await query;
     if (error) throw error;
@@ -189,10 +230,15 @@ Deno.serve(async (req) => {
 
     const results = [];
     for (const b of (bonds ?? [])) {
-      try { results.push(await enrichOne(supabase, b as Record<string, unknown>, holidays)); }
-      catch (e) { results.push({ isin: String((b as Record<string, unknown>).isin), status: "failed", error: String(e) }); await supabase.from("bm_bonds").update({ verification_status: "failed" }).eq("id", (b as Record<string, unknown>).id); }
+      const rec = b as Record<string, unknown>;
+      try {
+        results.push(recompute ? await recomputeOne(supabase, rec, holidays) : await enrichOne(supabase, rec, holidays));
+      } catch (e) {
+        results.push({ isin: String(rec.isin), status: "failed", error: String(e) });
+        if (!recompute) await supabase.from("bm_bonds").update({ verification_status: "failed" }).eq("id", rec.id);
+      }
     }
-    return new Response(JSON.stringify({ enriched: results.length, results }), { headers: { ...cors, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ enriched: results.length, recomputed: recompute ? results.length : undefined, results }), { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "error" }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
   }

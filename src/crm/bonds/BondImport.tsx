@@ -6,7 +6,7 @@ import { useRef, useState } from 'react';
 import { ArrowLeft, UploadCloud, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { parsePriceFile } from './excelImport';
 import { ParsedImportRow, ImportRow, ImportSummary } from './bondTypes';
-import { useImportPrices, enrichPendingLoop } from './bondClient';
+import { useImportPrices, enrichPendingLoop, recomputeAllActive } from './bondClient';
 
 interface Props { onBack: () => void; onDone: () => void; }
 type Phase = 'select' | 'parsing' | 'preview' | 'done';
@@ -20,6 +20,7 @@ export default function BondImport({ onBack, onDone }: Props) {
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [enrich, setEnrich] = useState<{ running: boolean; done: number; total: number } | null>(null);
+  const [refresh, setRefresh] = useState<{ running: boolean; done: number; total: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const importMut = useImportPrices();
 
@@ -48,13 +49,18 @@ export default function BondImport({ onBack, onDone }: Props) {
     try {
       const res = await importMut.mutateAsync(payload);
       setSummary(res); setPhase('done');
-      // Automatically master any new / still-pending bonds.
-      if (res.created > 0) {
-        setEnrich({ running: true, done: 0, total: res.created });
-        enrichPendingLoop(done => setEnrich(e => e ? { ...e, done } : e))
-          .then(done => setEnrich({ running: false, done, total: Math.max(res.created, done) }))
-          .catch(() => setEnrich(e => e ? { ...e, running: false } : e));
-      }
+      // 1) Master any new / still-pending bonds, then 2) refresh yields & cashflows
+      // on every active bond so they reflect today's price (price changed on update).
+      (async () => {
+        if (res.created > 0) {
+          setEnrich({ running: true, done: 0, total: res.created });
+          try { const done = await enrichPendingLoop(d => setEnrich(e => e ? { ...e, done: d } : e)); setEnrich({ running: false, done, total: Math.max(res.created, done) }); }
+          catch { setEnrich(e => e ? { ...e, running: false } : e); }
+        }
+        setRefresh({ running: true, done: 0, total: 0 });
+        try { const n = await recomputeAllActive((done, total) => setRefresh({ running: true, done, total })); setRefresh({ running: false, done: n, total: n }); }
+        catch { setRefresh(r => r ? { ...r, running: false } : r); }
+      })();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import failed.');
     }
@@ -89,6 +95,19 @@ export default function BondImport({ onBack, onDone }: Props) {
                 <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, (enrich.done / Math.max(1, enrich.total)) * 100)}%`, background: 'var(--accent)' }} />
               </div>
             )}
+          </div>
+        )}
+        {refresh && (
+          <div className="mb-6 rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-center gap-2 mb-1">
+              {refresh.running && <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--accent)' }} />}
+              <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                {refresh.running ? 'Refreshing yields to today’s price…' : 'Yields refreshed'}
+              </span>
+            </div>
+            <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+              {refresh.done}{refresh.total ? ` of ${refresh.total}` : ''} bonds recomputed{refresh.running ? '' : ' ✓'}
+            </p>
           </div>
         )}
         <button onClick={onDone} className="px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>Back to master</button>

@@ -71,10 +71,27 @@ export interface EnrichResult { isin: string; status: string; quality?: number; 
 export interface EnrichResponse { enriched: number; results: EnrichResult[] }
 
 // One enrichment batch (edge function loops internally, bounded by `limit`).
-export async function enrichBatch(params: { bond_ids?: string[]; isin?: string; limit?: number }): Promise<EnrichResponse> {
+export async function enrichBatch(params: { bond_ids?: string[]; isin?: string; limit?: number; recompute?: boolean }): Promise<EnrichResponse> {
   const { data, error } = await supabase.functions.invoke('bond-enrich', { body: params });
   if (error) throw error;
   return data as EnrichResponse;
+}
+
+// Recompute analytics (yields, cashflows, accrued) from the stored master + current
+// price for every ACTIVE bond — no provider calls, so it's fast and rate-limit-free.
+// Used after the fixed engine deploy and after each daily price upload so yields track
+// the latest price. Chunked by explicit ids to scale past one invocation's row cap.
+export async function recomputeAllActive(onProgress?: (done: number, total: number) => void, chunk = 40): Promise<number> {
+  const { data, error } = await supabase.from('bm_bonds_public').select('id').eq('active_status', 'active').limit(5000);
+  if (error) throw error;
+  const ids = ((data as { id: string }[]) ?? []).map(r => r.id);
+  let done = 0;
+  for (let i = 0; i < ids.length; i += chunk) {
+    const res = await enrichBatch({ recompute: true, bond_ids: ids.slice(i, i + chunk) });
+    done += res.enriched;
+    onProgress?.(done, ids.length);
+  }
+  return done;
 }
 
 // Drive enrichment of all pending bonds in safe batches (keeps each invocation
