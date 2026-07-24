@@ -54,6 +54,19 @@ export const NEWS_CATEGORIES = [
   'unlisted shares',
 ];
 
+// RSS titles/descriptions arrive HTML-escaped (e.g. `&amp;`, `&#39;`, `&#8217;`).
+// Decode them so cards render "M&M", "Q2's" rather than the raw entities.
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+};
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&([a-zA-Z]+);/g, (m, name) => NAMED_ENTITIES[name] ?? m);
+}
+
 /** Default implementation backed by the `news` table + `fetch-financial-news`. */
 class SupabaseNewsSource implements NewsSource {
   categories = NEWS_CATEGORIES;
@@ -82,7 +95,13 @@ class SupabaseNewsSource implements NewsSource {
 
     const { data, error } = await query;
     if (error) throw error;
-    return (data ?? []) as NewsArticle[];
+    return (data ?? []).map((row) => ({
+      ...(row as NewsArticle),
+      title: decodeEntities((row as NewsArticle).title),
+      description: (row as NewsArticle).description
+        ? decodeEntities((row as NewsArticle).description as string)
+        : (row as NewsArticle).description,
+    })) as NewsArticle[];
   }
 
   async refresh(): Promise<RefreshResult> {
