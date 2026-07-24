@@ -203,19 +203,53 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const url = Deno.env.get("SUPABASE_URL")!;
-    const supabase = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(url, serviceKey);
 
-    // Gate to active CRM staff (block bare anon-key callers).
+    // Authorize the caller. Two accepted callers:
+    //  • the scheduled job / backend — presents the service-role key as bearer (pg_cron
+    //    via pg_net); trusted, skips the staff check.
+    //  • the CRM app — presents a logged-in staff user's JWT, verified against nw_employees.
     const authHeader = req.headers.get("Authorization") ?? "";
-    const userClient = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: authHeader } } });
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
-    const { data: emp } = await supabase.from("nw_employees").select("id").eq("auth_user_id", user.id).eq("status", "active").maybeSingle();
-    if (!emp) return new Response(JSON.stringify({ error: "Staff only" }), { status: 403, headers: { ...cors, "Content-Type": "application/json" } });
+    const isCron = authHeader === `Bearer ${serviceKey}`;
+    if (!isCron) {
+      const userClient = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: authHeader } } });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
+      const { data: emp } = await supabase.from("nw_employees").select("id").eq("auth_user_id", user.id).eq("status", "active").maybeSingle();
+      if (!emp) return new Response(JSON.stringify({ error: "Staff only" }), { status: 403, headers: { ...cors, "Content-Type": "application/json" } });
+    }
 
     const body = await req.json().catch(() => ({}));
     const limit = Math.min(Number(body.limit) || 25, 100);
     const recompute = body.recompute === true;   // recompute analytics only, no provider calls
+    const stale = body.stale === true;            // only bonds whose price is newer than their analytics
+
+    const { data: hol } = await supabase.from("bm_holiday_calendar").select("holiday_date");
+    const holidays = new Set((hol ?? []).map((h: Record<string, unknown>) => String(h.holiday_date)));
+
+    // Stale-recompute sweep (used by the cron safety-net): recompute every active bond whose
+    // price changed after its analytics were last computed, looping in bounded batches until
+    // none remain. No provider calls, so it's cheap even across the whole book.
+    if (recompute && stale && !(Array.isArray(body.bond_ids) && body.bond_ids.length) && !body.isin) {
+      const batch = Math.min(Number(body.limit) || 100, 200);
+      const results = [];
+      const seen = new Set<string>();   // guarantees forward progress even if a bond keeps failing
+      for (let iter = 0; iter < 200; iter++) {
+        // Column-to-column staleness (price newer than analytics) lives in a SQL function,
+        // since PostgREST filters can only compare a column to a literal.
+        const { data: bonds, error } = await supabase.rpc("bm_stale_bonds", { p_limit: batch });
+        if (error) throw error;
+        const fresh = ((bonds as Record<string, unknown>[]) ?? []).filter((b) => !seen.has(String(b.id)));
+        if (fresh.length === 0) break;   // nothing left, or only rows that already failed this sweep
+        for (const rec of fresh) {
+          seen.add(String(rec.id));
+          try { results.push(await recomputeOne(supabase, rec, holidays)); }
+          catch (e) { results.push({ isin: String(rec.isin), status: "failed", error: String(e) }); }
+        }
+      }
+      return new Response(JSON.stringify({ recomputed: results.length, results }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
 
     let query = supabase.from("bm_bonds").select("*");
     if (Array.isArray(body.bond_ids) && body.bond_ids.length) query = query.in("id", body.bond_ids);
@@ -224,9 +258,6 @@ Deno.serve(async (req) => {
     else query = query.eq("verification_status", "pending").limit(limit);
     const { data: bonds, error } = await query;
     if (error) throw error;
-
-    const { data: hol } = await supabase.from("bm_holiday_calendar").select("holiday_date");
-    const holidays = new Set((hol ?? []).map((h: Record<string, unknown>) => String(h.holiday_date)));
 
     const results = [];
     for (const b of (bonds ?? [])) {
