@@ -27,6 +27,10 @@ export interface ProxyConfig {
   /** Supabase project URL + anon key — used to verify the caller's JWT. */
   supabaseUrl: string;
   supabaseAnonKey: string;
+  /** Supabase service-role key — enables webhook persistence (optional). */
+  supabaseServiceRoleKey: string | null;
+  /** Optional allowlist of BSE webhook source IPs. Empty = allow all. */
+  webhookAllowedIps: string[];
   /** Set false only for local smoke tests. */
   requireAuth: boolean;
 }
@@ -46,6 +50,11 @@ export function loadConfig(): ProxyConfig {
       .filter(Boolean),
     supabaseUrl: required('SUPABASE_URL'),
     supabaseAnonKey: required('SUPABASE_ANON_KEY'),
+    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || null,
+    webhookAllowedIps: (process.env.WEBHOOK_ALLOWED_IPS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
     requireAuth: process.env.REQUIRE_AUTH !== 'false',
   };
 }
