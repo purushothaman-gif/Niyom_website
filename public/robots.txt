@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+
+# Authenticated / private surfaces — keep out of the index.
+Disallow: /crm
+Disallow: /mf-admin
+Disallow: /client-login
+Disallow: /login
+Disallow: /onboarding
+Disallow: /deal
+Disallow: /debit-note
+
+Sitemap: https://www.niyomwealth.com/sitemap.xml
