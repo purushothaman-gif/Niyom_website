@@ -69,6 +69,55 @@ app.get('/health', (_req, res) => {
 // Public — BSE calls this, so it must sit BEFORE the Supabase-JWT gate.
 app.use('/webhooks', webhookRouter(cfg));
 
+/**
+ * Cashfree PAN verification relay. Called server-to-server by the Supabase edge
+ * function (public-pan-verify) with a shared secret — NOT a Supabase JWT — so it
+ * sits before the JWT gate. The whole point of routing through this droplet is
+ * that Cashfree only accepts calls from this box's whitelisted static IP.
+ * The edge function keeps all app logic (ownership, dedup, DB write); this route
+ * is a thin pass-through that adds the static IP + holds the Cashfree keys.
+ */
+app.post('/verify/pan', async (req: Request, res: Response) => {
+  if (!cfg.panRelaySecret || req.header('x-relay-secret') !== cfg.panRelaySecret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!cfg.cashfreeVerifyClientId || !cfg.cashfreeVerifySecret) {
+    return res.status(503).json({ error: 'Cashfree verification not configured' });
+  }
+  const pan = String(req.body?.pan ?? '').trim().toUpperCase();
+  const name = req.body?.name ? String(req.body.name).trim() : undefined;
+  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+    return res.status(400).json({ error: 'Invalid PAN format' });
+  }
+  const base = cfg.cashfreeVerifyEnv === 'sandbox'
+    ? 'https://sandbox.cashfree.com'
+    : 'https://api.cashfree.com';
+  try {
+    const cf = await fetch(`${base}/verification/pan`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-client-id': cfg.cashfreeVerifyClientId,
+        'x-client-secret': cfg.cashfreeVerifySecret,
+      },
+      body: JSON.stringify(name ? { pan, name } : { pan }),
+    });
+    const data = (await cf.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!cf.ok) {
+      return res.status(cf.status).json({ valid: false, error: (data.message as string) || 'PAN verification failed' });
+    }
+    const valid = data.valid === true;
+    res.json({
+      valid,
+      registered_name: valid ? ((data.registered_name as string) || (data.name_provided as string) || null) : null,
+      message: (data.message as string) ?? null,
+    });
+  } catch (e) {
+    console.error('[verify/pan] error', (e as Error)?.message);
+    res.status(502).json({ valid: false, error: 'Verification service unavailable' });
+  }
+});
+
 app.use(requireSupabaseUser);
 
 /** Scheme master → app FundScheme[]. */

@@ -7,6 +7,7 @@ import { useClientSnapshot } from './hooks/useClientSnapshot';
 import { buildDashboardData } from './services/dashboardModel';
 import { PortfolioService } from './services/PortfolioService';
 import { DashboardPage } from './features/dashboard/DashboardPage';
+import { OnboardingWizard } from './features/onboarding/OnboardingWizard';
 import { PortfolioPage } from './features/portfolio/PortfolioPage';
 import { AllocationPage } from './features/allocation/AllocationPage';
 import { MutualFundsModule } from './features/mutual-funds/MutualFundsModule';
@@ -64,6 +65,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
     // Snapshot-backed views (need the client record / holdings).
     const snapshotView =
       view === 'dashboard' ||
+      view === 'onboarding' ||
       view === 'portfolio' ||
       view === 'allocation' ||
       view === 'reports' ||
@@ -83,6 +85,15 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
           />
         ) : (
           <LoadingState />
+        );
+      case 'onboarding':
+        return (
+          <OnboardingWizard
+            client={client}
+            clientId={clientId}
+            onRefresh={refresh}
+            onNavigate={navigate}
+          />
         );
       case 'portfolio':
         return portfolioData ? <PortfolioPage data={portfolioData} /> : <LoadingState />;

@@ -46,15 +46,32 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
   const unread = alerts.filter(a => !a.read).length;
 
   useEffect(() => {
-    supabase.from('nw_alerts').select('*')
-      .eq('employee_id', employee.id).eq('read', false)
-      .order('created_at', { ascending: false }).limit(20)
-      .then(({ data }) => setAlerts(data || []));
+    let cancelled = false;
+    const load = () => {
+      supabase.from('nw_alerts').select('*')
+        .eq('employee_id', employee.id).eq('read', false)
+        .order('created_at', { ascending: false }).limit(20)
+        .then(({ data }) => { if (!cancelled) setAlerts(data || []); });
+    };
+    load();
+    // Light polling so new admin alerts (lead dropped / ready to assign) surface
+    // without a full page refresh.
+    const t = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(t); };
   }, [employee.id]);
 
   const markAllRead = async () => {
     await supabase.from('nw_alerts').update({ read: true }).eq('employee_id', employee.id).eq('read', false);
     setAlerts([]);
+  };
+
+  // Click an alert → mark it read and jump to the linked CRM page.
+  const openAlert = async (a: NWAlert) => {
+    setAlerts(prev => prev.filter(x => x.id !== a.id));
+    supabase.from('nw_alerts').update({ read: true }).eq('id', a.id).then(() => {});
+    setShowAlerts(false);
+    if (a.action_url && a.action_url.includes('/leads')) onNavigate('leads' as CRMPage);
+    else if (a.action_url && a.action_url.includes('/clients')) onNavigate('clients' as CRMPage);
   };
 
   const navItems = NAV.filter(n => (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin));
@@ -182,10 +199,12 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
                     {alerts.length === 0 ? (
                       <p className="text-sm text-center py-8" style={{ color: 'var(--text-faint)' }}>No new notifications</p>
                     ) : alerts.map(a => (
-                      <div key={a.id} className="px-4 py-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <button key={a.id} onClick={() => openAlert(a)}
+                        className="w-full text-left px-4 py-3 transition-colors hover:bg-[var(--hover-bg)]"
+                        style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                         <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{a.title}</p>
                         {a.message && <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{a.message}</p>}
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>

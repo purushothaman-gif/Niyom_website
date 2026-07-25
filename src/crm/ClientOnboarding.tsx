@@ -123,6 +123,32 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
   // Duplicate detection state
   const [dupWarnings, setDupWarnings] = useState<Record<'pan' | 'phone' | 'email', string | null>>({ pan: null, phone: null, email: null });
   const dupTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // PAN verify (Cashfree via droplet relay) → auto-fill name as per PAN.
+  const [panVerifying, setPanVerifying] = useState(false);
+  const [panVerifiedName, setPanVerifiedName] = useState<string | null>(null);
+  const [panVerifyErr, setPanVerifyErr] = useState('');
+
+  const handleVerifyPan = async () => {
+    setPanVerifyErr('');
+    const pan = form.pan.toUpperCase();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) { setPanVerifyErr('Enter a valid PAN first.'); return; }
+    setPanVerifying(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crm-pan-verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ pan }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.valid) { setPanVerifyErr(data.error || 'PAN could not be verified.'); setPanVerifying(false); return; }
+      if (data.name_as_per_pan) set('full_name', data.name_as_per_pan);
+      setPanVerifiedName(data.name_as_per_pan || '');
+    } catch (e: any) {
+      setPanVerifyErr(e?.message || 'Verification failed.');
+    }
+    setPanVerifying(false);
+  };
 
   const checkDuplicate = useCallback(async (field: 'pan' | 'phone' | 'email', value: string) => {
     if (!value || value.length < 3) {
@@ -334,6 +360,15 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
         verification_status: 'pending',
         sourced_via: sourcedVia || 'direct',
         dsa_id: dsaId,
+        // Onboarding funnel: the RM has collected full KYC here, so the client's
+        // portal shows "KYC Under Review" (not the self-service checklist) until
+        // an RM verifies. Mirror the docs actually uploaded so the CRM's
+        // Onboarding/KYC panel reads accurately. phone_verified / pan_verified stay
+        // false (no mobile OTP / Cashfree API verify happens in the CRM path).
+        onboarding_status: 'kyc_under_review',
+        pan_doc_uploaded: docFiles.some(d => d.type === 'PAN Card'),
+        bank_verified: docFiles.some(d => d.type === 'Bank Document'),
+        cml_uploaded: docFiles.some(d => d.type === 'CML'),
       }]).select().single();
 
       if (clientErr) throw clientErr;
@@ -677,8 +712,20 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
                 <Input value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="John Smith" />
               </Field>
               <Field label="PAN Number" required>
-                <Input value={form.pan} onChange={e => onFieldChange('pan', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))} placeholder="ABCDE1234F" maxLength={10} />
+                <Input value={form.pan} onChange={e => { onFieldChange('pan', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)); setPanVerifiedName(null); setPanVerifyErr(''); }} placeholder="ABCDE1234F" maxLength={10} />
                 <DupWarn msg={dupWarnings.pan} />
+                <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                  <button type="button" onClick={handleVerifyPan}
+                    disabled={panVerifying || !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan)}
+                    className="text-xs font-semibold px-2.5 py-1 rounded-lg disabled:opacity-40 transition-colors"
+                    style={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
+                    {panVerifying ? 'Verifying…' : 'Verify PAN & fetch name'}
+                  </button>
+                  {panVerifiedName && (
+                    <span className="text-xs font-medium" style={{ color: 'var(--success)' }}>✓ Name as per PAN: {panVerifiedName}</span>
+                  )}
+                </div>
+                {panVerifyErr && <p className="text-xs mt-1" style={{ color: 'var(--danger)' }}>{panVerifyErr}</p>}
               </Field>
               <Field label="Date of Birth" required>
                 <Input type="date" value={form.dob} onChange={e => set('dob', e.target.value)} />

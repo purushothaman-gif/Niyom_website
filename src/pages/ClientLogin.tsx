@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Lock, Eye, EyeOff, ArrowRight, ChevronLeft, AlertTriangle, CreditCard, Mail, Home, TrendingUp, X, FileText, CreditCard as IDCard, Landmark, Sparkles, Check } from 'lucide-react';
+import { Lock, Eye, EyeOff, ArrowRight, ChevronLeft, AlertTriangle, CreditCard, Mail, Home, TrendingUp, Sparkles, Check, Phone, ShieldCheck, RotateCcw } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
 
@@ -9,7 +9,7 @@ interface Props {
   onInvestNow?: () => void;
 }
 
-type View = 'login' | 'forgot' | 'reset_sent';
+type View = 'login' | 'forgot' | 'reset_sent' | 'otp_login';
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 300;
@@ -56,8 +56,14 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [lockoutMsg, setLockoutMsg] = useState('');
-  const [showInterestModal, setShowInterestModal] = useState(false);
   const lockoutTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Mobile-OTP return login (for clients still completing KYC — no password yet)
+  const [otpStage, setOtpStage] = useState<'phone' | 'code'>('phone');
+  const [otpPhone, setOtpPhone] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpMasked, setOtpMasked] = useState('');
+  const [otpResendIn, setOtpResendIn] = useState(0);
+  const otpTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const checkLockout = (): boolean => {
     const state = getRateLimitState();
@@ -86,6 +92,8 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
     }, 1000);
     return () => { if (lockoutTimer.current) clearInterval(lockoutTimer.current); };
   }, []);
+
+  useEffect(() => () => { if (otpTimer.current) clearInterval(otpTimer.current); }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,76 +173,56 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
     setView('reset_sent');
   };
 
+  // ── Mobile-OTP return login ────────────────────────────────────────────
+  const callPublicFn = async (name: string, payload: unknown) => {
+    const url = import.meta.env.VITE_SUPABASE_URL;
+    const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const res = await fetch(`${url}/functions/v1/${name}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon}`, Apikey: anon },
+      body: JSON.stringify(payload),
+    });
+    return { ok: res.ok, data: await res.json().catch(() => ({})) };
+  };
+
+  const startOtpCooldown = () => {
+    setOtpResendIn(30);
+    if (otpTimer.current) clearInterval(otpTimer.current);
+    otpTimer.current = setInterval(() => {
+      setOtpResendIn(s => { if (s <= 1 && otpTimer.current) { clearInterval(otpTimer.current); return 0; } return s - 1; });
+    }, 1000);
+  };
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const phone = otpPhone.replace(/\D/g, '').slice(-10);
+    if (!/^[6-9]\d{9}$/.test(phone)) { setError('Enter a valid 10-digit mobile number.'); return; }
+    setLoading(true);
+    const { ok, data } = await callPublicFn('public-onboard-send-otp', { phone });
+    setLoading(false);
+    if (!ok) { setError(data?.error || 'Could not send the code.'); return; }
+    setOtpMasked(data?.email_masked || 'your registered email');
+    setOtpStage('code');
+    startOtpCooldown();
+  };
+
+  const handleVerifyOtpLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const phone = otpPhone.replace(/\D/g, '').slice(-10);
+    if (!/^\d{6}$/.test(otpCode)) { setError('Enter the 6-digit code sent to your email.'); return; }
+    setLoading(true);
+    const { ok, data } = await callPublicFn('public-onboard-verify-otp', { phone, otp: otpCode });
+    if (!ok || !data?.token_hash) { setLoading(false); setError(data?.error || 'Verification failed.'); return; }
+    const { error: sessErr } = await supabase.auth.verifyOtp({ token_hash: data.token_hash, type: 'email' });
+    setLoading(false);
+    if (sessErr) { setError('Could not sign you in. Please try again.'); return; }
+    onLogin(data.client_id, true);
+  };
+
   return (
     <>
-    {/* Interest / Invest Now modal */}
-    {showInterestModal && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.88)' }}>
-        <div className="w-full max-w-md rounded-3xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
-          <div className="h-1.5 w-full" style={{ background: 'linear-gradient(90deg, var(--accent), var(--accent-strong), var(--accent))' }} />
-          <div className="p-7 space-y-5">
-            <div className="flex items-start justify-between">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(var(--accent-rgb),0.1)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
-                <TrendingUp className="w-6 h-6" style={{ color: 'var(--accent)' }} />
-              </div>
-              <button onClick={() => setShowInterestModal(false)} className="p-1.5 rounded-lg transition-colors" style={{ color: 'var(--text-secondary)' }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-faint)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-widest font-semibold" style={{ color: 'var(--accent)' }}>Thank You for Your Interest</p>
-              <h2 className="text-xl font-bold text-text-primary">Welcome to Niyom Wealth Distribution</h2>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                We are delighted to have you explore wealth management opportunities with us. To initiate your onboarding and issuance of your unique Client Code, kindly ensure you have the following documents readily available for upload.
-              </p>
-            </div>
-
-            <div className="space-y-2.5">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>Documents Required</p>
-              {[
-                { icon: IDCard, label: 'PAN Card Copy', desc: 'Self-attested copy of your Permanent Account Number card.' },
-                { icon: FileText, label: 'Client Master List (CML)', desc: 'Obtained from your Depository Participant (DP) — confirms your demat account details.' },
-                { icon: Landmark, label: 'Cancelled Cheque / Bank Statement', desc: 'Recent bank statement or a cancelled cheque leaf for account verification.' },
-              ].map(({ icon: Icon, label, desc }) => (
-                <div key={label} className="flex items-start gap-3 p-3.5 rounded-xl" style={{ background: 'rgba(var(--accent-rgb),0.04)', border: '1px solid rgba(var(--accent-rgb),0.1)' }}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(var(--accent-rgb),0.1)' }}>
-                    <Icon className="w-4 h-4" style={{ color: 'var(--accent)' }} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-text-primary">{label}</p>
-                    <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--text-muted)' }}>{desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              All submitted documents are processed in strict compliance with SEBI and KYC norms. Your information remains fully confidential and secure.
-            </p>
-
-            <div className="flex gap-3 pt-1">
-              <button onClick={() => setShowInterestModal(false)}
-                className="flex-1 py-3 rounded-xl text-sm font-semibold transition-colors"
-                style={{ background: 'var(--bg-raised)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-faint)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
-                Cancel
-              </button>
-              <button
-                onClick={() => { setShowInterestModal(false); onInvestNow?.(); }}
-                className="flex-1 py-3 rounded-xl text-sm font-bold text-on-accent flex items-center justify-center gap-2"
-                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
-                Continue <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
-
     <div className="min-h-screen flex relative" style={{ background: 'var(--bg-base)' }}>
       <div className="absolute top-4 right-4 z-20"><ThemeToggle variant="icon" /></div>
       {/* Left panel — animated brand rail (matches the public site heroes) */}
@@ -412,7 +400,7 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
                   </ul>
 
                   <button
-                    onClick={() => setShowInterestModal(true)}
+                    onClick={() => onInvestNow?.()}
                     className="lift press group flex w-full items-center justify-center gap-2 rounded-xl bg-black py-3.5 text-sm font-bold text-white transition-all hover:bg-gray-900"
                   >
                     <TrendingUp className="w-4 h-4 text-accent-soft" />
@@ -421,9 +409,19 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
                   </button>
 
                   <p className="text-center text-[10px] font-medium text-black/60">
-                    No paperwork &nbsp;·&nbsp; No account charges &nbsp;·&nbsp; Takes about 5 minutes
+                    Just name, mobile &amp; email &nbsp;·&nbsp; No account charges &nbsp;·&nbsp; Ready in 30 seconds
                   </p>
                 </div>
+              </div>
+
+              {/* Return path for clients still completing KYC (no password yet). */}
+              <div className="text-center">
+                <button type="button" onClick={() => { setView('otp_login'); setError(''); setOtpStage('phone'); setOtpPhone(''); setOtpCode(''); }}
+                  className="text-xs font-medium transition-colors" style={{ color: 'var(--text-muted)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+                  Already started? Continue with email OTP →
+                </button>
               </div>
 
               <div className="text-center">
@@ -502,6 +500,83 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
                 Back to Login
               </button>
             </div>
+          )}
+
+          {view === 'otp_login' && (
+            <>
+              <div>
+                <button onClick={() => { setView('login'); setError(''); }} className="flex items-center gap-1.5 text-xs mb-6 transition-colors" style={{ color: 'var(--text-muted)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-faint)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+                  <ChevronLeft className="w-3.5 h-3.5" /> Back to Login
+                </button>
+                <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--accent)' }}>Continue Your Application</p>
+                <h1 className="text-3xl font-bold text-text-primary">{otpStage === 'phone' ? 'Sign in with OTP' : 'Enter your OTP'}</h1>
+                <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {otpStage === 'phone'
+                    ? "Enter your registered mobile — we'll email you a code. No password needed."
+                    : <>We sent a 6-digit code to <span className="text-text-primary">{otpMasked || 'your email'}</span>.</>}
+                </p>
+              </div>
+
+              {error && (
+                <div className="p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                  <AlertTriangle className="w-4 h-4 text-c-red flex-shrink-0" />
+                  <p className="text-sm text-c-red">{error}</p>
+                </div>
+              )}
+
+              {otpStage === 'phone' ? (
+                <form onSubmit={handleSendOtp} className="space-y-5">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Mobile Number</label>
+                    <div className="relative">
+                      <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
+                      <input type="tel" inputMode="numeric" value={otpPhone} maxLength={10}
+                        onChange={e => setOtpPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                        placeholder="9876543210" autoFocus
+                        className="w-full py-3 rounded-xl text-sm text-text-primary outline-none transition-all tracking-widest"
+                        style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', paddingLeft: '2.75rem' }}
+                        onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                        onBlur={e => (e.target.style.borderColor = 'var(--border)')} />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading || otpPhone.length !== 10}
+                    className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent disabled:opacity-50 flex items-center justify-center gap-2"
+                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                    {loading ? 'Sending...' : <><span>Send OTP</span><ArrowRight className="w-4 h-4" /></>}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOtpLogin} className="space-y-5">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
+                      <ShieldCheck className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} /> 6-Digit OTP
+                    </label>
+                    <input value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      inputMode="numeric" maxLength={6} autoFocus placeholder="••••••"
+                      className="w-full px-4 py-3 rounded-xl text-center text-2xl font-bold tracking-[0.5em] outline-none text-text-primary"
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+                      onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                      onBlur={e => (e.target.style.borderColor = 'var(--border)')} />
+                  </div>
+                  <button type="submit" disabled={loading || otpCode.length !== 6}
+                    className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent disabled:opacity-50 flex items-center justify-center gap-2"
+                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                    {loading ? 'Verifying...' : <><span>Verify &amp; Continue</span><ArrowRight className="w-4 h-4" /></>}
+                  </button>
+                  <div className="flex items-center justify-between text-xs">
+                    <button type="button" onClick={() => { setOtpStage('phone'); setOtpCode(''); setError(''); }} className="flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
+                      <ChevronLeft className="w-3.5 h-3.5" /> Change number
+                    </button>
+                    <button type="button" onClick={() => { if (otpResendIn === 0) handleSendOtp({ preventDefault() {} } as React.FormEvent); }} disabled={otpResendIn > 0}
+                      className="flex items-center gap-1 disabled:opacity-50" style={{ color: 'var(--accent)' }}>
+                      <RotateCcw className="w-3.5 h-3.5" /> {otpResendIn > 0 ? `Resend in ${otpResendIn}s` : 'Resend code'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </>
           )}
 
         </div>

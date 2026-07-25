@@ -1,0 +1,127 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import {
+  corsHeaders, json, serviceClient, NIYOM_DEFAULT_EMPLOYEE_ID,
+  normalizePhone, isValidPhone, isValidEmail,
+  generateOTP, persistOtp, deliverOtp, isRateLimited, maskEmail,
+} from "../_shared/onboarding.ts";
+
+// Step 1 of the conversion-first onboarding. Creates a usable client account
+// from just Full Name + Mobile + Email, provisions a Supabase auth user, and
+// sends a mobile OTP. Public (verify_jwt = false); uses the service role.
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const full_name = (body.full_name || "").trim();
+    const email = (body.email || "").trim().toLowerCase();
+    const phone = normalizePhone(body.phone || "");
+
+    if (!full_name) return json({ error: "Please enter your full name." }, 400);
+    if (!isValidPhone(phone)) return json({ error: "Enter a valid 10-digit mobile number." }, 400);
+    if (!isValidEmail(email)) return json({ error: "Enter a valid email address." }, 400);
+
+    const db = serviceClient();
+
+    // If an account already exists for this mobile/email, don't create a second
+    // one — send them down the "continue your application" (OTP login) path.
+    // Two separate equality queries avoid interpolating email into an .or()
+    // filter (an email may legally contain a comma).
+    const [{ data: byPhone }, { data: byEmail }] = await Promise.all([
+      db.from("nw_clients").select("id").eq("phone", phone).maybeSingle(),
+      db.from("nw_clients").select("id").eq("email", email).maybeSingle(),
+    ]);
+    const existing = byPhone || byEmail;
+
+    if (existing) {
+      // Still send an OTP so the client can sign in and resume.
+      if (!(await isRateLimited(db, phone))) {
+        const code = generateOTP();
+        await persistOtp(db, phone, code);
+        await deliverOtp(phone, email, code);
+      }
+      return json({
+        already_exists: true,
+        email_masked: maskEmail(email),
+        message: "An account already exists for these details. We've emailed a code to sign you in.",
+      }, 200);
+    }
+
+    // Generate the client code under NIYOM-001.
+    const { data: clientCode, error: codeErr } = await db.rpc("nw2_generate_client_code", {
+      p_employee_id: NIYOM_DEFAULT_EMPLOYEE_ID,
+    });
+    if (codeErr) throw codeErr;
+
+    // Create the client row (minimal — KYC fields fill in progressively).
+    const { data: client, error: clientErr } = await db.from("nw_clients").insert([{
+      client_code: clientCode,
+      employee_id: NIYOM_DEFAULT_EMPLOYEE_ID,
+      full_name,
+      email,
+      phone,
+      verification_status: "pending",
+      onboarding_status: "account_created",
+      sourced_via: "direct",
+      client_login_enabled: true,
+      client_password_changed: true, // no password step in this flow (OTP login)
+    }]).select("id").single();
+    if (clientErr) throw clientErr;
+
+    // Provision / link a Supabase auth user for the client (reuses the
+    // create-client-login approach: reuse an existing auth user by email, else
+    // create one). Sign-in happens later via a magic-link token after OTP.
+    const randomPw = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+    let authUserId: string | null = null;
+
+    const { data: listed } = await db.auth.admin.listUsers();
+    const existingUser = listed?.users?.find((u) => u.email?.toLowerCase() === email);
+
+    if (existingUser) {
+      await db.auth.admin.updateUserById(existingUser.id, {
+        email_confirm: true,
+        user_metadata: { ...existingUser.user_metadata, client_id: client.id, is_client: true, phone },
+      });
+      authUserId = existingUser.id;
+    } else {
+      const { data: created, error: createErr } = await db.auth.admin.createUser({
+        email,
+        password: randomPw,
+        email_confirm: true,
+        user_metadata: { client_id: client.id, is_client: true, phone },
+      });
+      if (createErr) throw createErr;
+      authUserId = created.user.id;
+    }
+
+    await db.from("nw_clients")
+      .update({ client_auth_user_id: authUserId })
+      .eq("id", client.id);
+
+    // Send the OTP (SMS + email).
+    const code = generateOTP();
+    await persistOtp(db, phone, code);
+    await deliverOtp(phone, email, code);
+
+    // Activity log for the RM (mirrors public-client-onboard).
+    await db.from("nw_activity_logs").insert([{
+      employee_id: NIYOM_DEFAULT_EMPLOYEE_ID,
+      client_id: client.id,
+      action: "Client Self-Registered (Free Account)",
+      description: `${full_name} created a free account (${clientCode}) via the public portal. Mobile OTP sent; KYC pending.`,
+    }]);
+
+    return json({
+      success: true,
+      client_id: client.id,
+      client_code: clientCode,
+      email_masked: maskEmail(email),
+    }, 200);
+  } catch (err: any) {
+    console.error("public-onboard-start error:", err?.message);
+    return json({ error: err?.message || "An unexpected error occurred." }, 500);
+  }
+});

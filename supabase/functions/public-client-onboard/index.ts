@@ -77,6 +77,8 @@ Deno.serve(async (req: Request) => {
       verification_status: "pending",
       sourced_via: "direct",
       client_login_enabled: false,
+      // Superseded flow, but keep it lifecycle-consistent if any stale link hits it.
+      onboarding_status: "kyc_under_review",
     }]).select().single();
 
     if (clientErr) throw clientErr;

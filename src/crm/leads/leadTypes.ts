@@ -3,7 +3,7 @@
 
 export type LeadPriority = 'low' | 'medium' | 'high' | 'urgent';
 
-export type LeadOrigin = 'admin_upload' | 'admin_manual' | 'employee_manual';
+export type LeadOrigin = 'admin_upload' | 'admin_manual' | 'employee_manual' | 'website_signup';
 
 export type LeadScoreBand = 'Hot' | 'Warm' | 'Cold';
 

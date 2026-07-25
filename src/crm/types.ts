@@ -40,6 +40,17 @@ export interface NWClient {
   client_login_enabled: boolean;
   client_password_changed: boolean;
   client_auth_user_id: string | null;
+  // Progressive-onboarding funnel (see 20260725170000_onboarding_redesign.sql)
+  phone_verified: boolean;
+  pan_verified: boolean;
+  pan_name: string | null;
+  pan_doc_uploaded: boolean;
+  bank_verified: boolean;
+  cml_required: boolean;
+  cml_uploaded: boolean;
+  investment_preferences: string[];
+  onboarding_status: 'account_created' | 'kyc_in_progress' | 'kyc_submitted' | 'kyc_under_review' | 'active';
+  kyc_submitted_at: string | null;
   created_at: string;
   updated_at: string;
   employee?: { full_name: string; employee_code: string };
@@ -267,6 +278,10 @@ export interface NWAlert {
   message: string;
   read: boolean;
   created_at: string;
+  // Additive columns from the Lead Management module (nullable).
+  category?: string | null;
+  lead_id?: string | null;
+  action_url?: string | null;
 }
 
 export type ProductType = 'unlisted_share' | 'secondary_bond' | 'primary_bond' | 'mutual_fund' | 'fixed_deposit' | 'insurance';

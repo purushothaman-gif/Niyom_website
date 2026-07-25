@@ -24,6 +24,7 @@ import {
 /** Every routable view in the portal. */
 export type PortalView =
   | 'dashboard'
+  | 'onboarding'
   | 'portfolio'
   | 'allocation'
   | 'mutual-funds'
@@ -90,6 +91,7 @@ export const NAV_GROUPS: NavGroup[] = [
 /** Human-readable titles for the topbar breadcrumb. */
 export const VIEW_TITLES: Record<PortalView, string> = {
   dashboard: 'Wealth Dashboard',
+  onboarding: 'Complete Your KYC',
   portfolio: 'My Portfolio',
   allocation: 'Asset Allocation',
   'mutual-funds': 'Mutual Funds',

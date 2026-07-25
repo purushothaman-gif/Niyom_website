@@ -8,6 +8,19 @@ interface Props { employee: NWEmployee; onNavigate: (page: any, params?: any) =>
 
 const PAGE_SIZE = 10;
 
+// Progressive-onboarding funnel labels (see 20260725170000_onboarding_redesign.sql)
+const ONBOARDING_STATUS_LABELS: Record<string, string> = {
+  account_created: 'Account created',
+  kyc_in_progress: 'KYC in progress',
+  kyc_submitted: 'KYC submitted',
+  kyc_under_review: 'KYC under review',
+  active: 'Active — ready to invest',
+};
+const PRODUCT_LABELS: Record<string, string> = {
+  mutual_funds: 'Mutual Funds', bonds: 'Bonds', fixed_deposits: 'Fixed Deposits',
+  insurance: 'Insurance', unlisted_shares: 'Unlisted Shares',
+};
+
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
@@ -502,6 +515,15 @@ export default function ManageClients({ employee, onNavigate }: Props) {
               { title: 'Address', rows: [['Address', viewClient.address], ['City', viewClient.city], ['State', viewClient.state]] },
               { title: 'Demat & Bank', rows: [['Demat A/C', viewClient.demat_account], ['DP Name', viewClient.dp_name], ['Bank A/C', viewClient.bank_account], ['IFSC', viewClient.bank_ifsc], ['Bank', viewClient.bank_name]] },
               { title: 'Account', rows: [['Client Code', viewClient.client_code], ['Portfolio', fmt(viewClient.portfolio_value || 0)], ['Status', VERIFICATION_LABELS[viewClient.verification_status]], ['Created', fmtDate(viewClient.created_at)]] },
+              { title: 'Onboarding / KYC', rows: [
+                ['Stage', ONBOARDING_STATUS_LABELS[viewClient.onboarding_status] || viewClient.onboarding_status || '—'],
+                ['Mobile', viewClient.phone_verified ? 'Verified' : 'Pending'],
+                ['PAN', viewClient.pan_verified ? `Verified — ${viewClient.pan_name || viewClient.full_name}` : 'Pending'],
+                ['Bank Proof', viewClient.bank_verified ? 'Uploaded' : 'Pending'],
+                ['CML', viewClient.cml_required ? (viewClient.cml_uploaded ? 'Uploaded' : 'Pending') : 'Not required'],
+                ['Products', (viewClient.investment_preferences || []).map(p => PRODUCT_LABELS[p] || p).join(', ') || '—'],
+                ['KYC Submitted', viewClient.kyc_submitted_at ? fmtDate(viewClient.kyc_submitted_at) : '—'],
+              ] },
             ].map(s => (
               <div key={s.title}>
                 <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--accent)' }}>{s.title}</p>

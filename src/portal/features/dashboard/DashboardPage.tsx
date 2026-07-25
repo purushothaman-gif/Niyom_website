@@ -13,6 +13,8 @@ import { QuickActions } from './sections/QuickActions';
 import { MarketUpdatesCard } from './sections/MarketUpdatesCard';
 import { NoticesCard } from './sections/NoticesCard';
 import { SupportCard } from './sections/SupportCard';
+import { OnboardingChecklistCard } from '../onboarding/OnboardingChecklistCard';
+import { onboardingIncomplete } from '../onboarding/onboardingSteps';
 
 interface DashboardPageProps {
   client: NWClient | null;
@@ -48,6 +50,11 @@ export function DashboardPage({ client, data, refreshedAt, onNavigate }: Dashboa
           </p>
         )}
       </div>
+
+      {/* Onboarding checklist — only while the account is still being activated */}
+      {onboardingIncomplete(client) && (
+        <OnboardingChecklistCard client={client} onNavigate={onNavigate} />
+      )}
 
       {/* Row 1 — Net worth hero */}
       <NetWorthHero summary={data.summary} dailyChange={data.dailyChange} xirr={data.xirr} />

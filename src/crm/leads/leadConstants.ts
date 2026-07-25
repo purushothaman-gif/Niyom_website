@@ -54,6 +54,7 @@ export const LEAD_ORIGIN_LABEL: Record<LeadOrigin, string> = {
   admin_upload:    'Admin Upload',
   admin_manual:    'Admin Manual Entry',
   employee_manual: 'Employee Manual Entry',
+  website_signup:  'Website Sign-up',
 };
 
 // Communication / call outcomes (manual entry — no telephony).

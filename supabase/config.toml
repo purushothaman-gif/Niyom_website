@@ -432,6 +432,28 @@ verify_jwt = false
 [functions.mf-detail]
 verify_jwt = false
 
+# --- Conversion-first public onboarding. start/send-otp/verify-otp are fully
+#     anonymous (no session yet). pan-verify/record-doc/submit run public but
+#     require the client's own bearer token and verify record ownership inside
+#     the function. ---
+[functions.public-onboard-start]
+verify_jwt = false
+
+[functions.public-onboard-send-otp]
+verify_jwt = false
+
+[functions.public-onboard-verify-otp]
+verify_jwt = false
+
+[functions.public-pan-verify]
+verify_jwt = false
+
+[functions.public-onboard-record-doc]
+verify_jwt = false
+
+[functions.public-onboard-submit]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
