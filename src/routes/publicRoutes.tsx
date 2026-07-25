@@ -68,7 +68,7 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
     render: (navigate) => (
       <Landing
         onGetStarted={openSignUp}
-        onViewServices={() => navigate('/services')}
+        onViewServices={(tab) => navigate(tab ? `/services#${tab}` : '/services')}
         onViewLearning={() => navigate('/learning')}
         onViewNews={() => navigate('/news')}
         onViewMFResearch={() => navigate('/mf-research')}
@@ -88,7 +88,13 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
       label: 'Services',
     },
     sitemap: { changefreq: 'monthly', priority: '0.8' },
-    render: (navigate) => <Services onBack={() => navigate('/')} onGetStarted={openSignUp} />,
+    render: (navigate) => (
+      <Services
+        onBack={() => navigate('/')}
+        onGetStarted={openSignUp}
+        initialTab={window.location.hash.replace('#', '') || undefined}
+      />
+    ),
   },
   {
     path: '/learning',

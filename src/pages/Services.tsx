@@ -7,12 +7,18 @@ import { Reveal } from '../components/Reveal';
 interface ServicesProps {
   onBack: () => void;
   onGetStarted: () => void;
+  /** Tab to open on mount (e.g. from a Landing service card). Defaults to 'investment'. */
+  initialTab?: string;
 }
 
 type ServiceTab = 'investment' | 'financial' | 'risk' | 'wealth' | 'tax' | 'alternative';
 
-export function Services({ onBack, onGetStarted }: ServicesProps) {
-  const [activeTab, setActiveTab] = useState<ServiceTab>('investment');
+const SERVICE_TABS: ServiceTab[] = ['investment', 'financial', 'risk', 'wealth', 'tax', 'alternative'];
+
+export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
+  const [activeTab, setActiveTab] = useState<ServiceTab>(
+    SERVICE_TABS.includes(initialTab as ServiceTab) ? (initialTab as ServiceTab) : 'investment'
+  );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const services = [

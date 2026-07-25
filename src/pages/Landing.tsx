@@ -9,7 +9,7 @@ import { Reveal } from '../components/Reveal';
 
 interface LandingProps {
   onGetStarted: () => void;
-  onViewServices: () => void;
+  onViewServices: (tab?: string) => void;
   onViewLearning: () => void;
   onViewNews: () => void;
   onViewMFResearch: () => void;
@@ -345,12 +345,12 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
           <div className={`w-24 h-1 bg-accent-soft mx-auto mb-16 ${isLoaded ? 'animate-scaleIn animate-delay-200' : 'opacity-0'}`}></div>
           <div className="grid md:grid-cols-3 gap-8">
             {[
-              { icon: TrendingUp, title: 'Investment Products Distribution', desc: 'Access to mutual funds, stocks, and other investment products' },
-              { icon: Target, title: 'Financial Information', desc: 'Educational resources and market information to help you decide' },
-              { icon: Shield, title: 'Insurance Products', desc: 'Distribution of insurance solutions for asset protection' },
-              { icon: Users, title: 'Documentation Assistance', desc: 'Support with paperwork for estate planning and transfers' },
-              { icon: Award, title: 'Tax Information', desc: 'General information on tax-efficient investment structures' },
-              { icon: Zap, title: 'Alternative Products', desc: 'Distribution of secondary bonds, unlisted shares, and pre-IPO opportunities' },
+              { id: 'investment', icon: TrendingUp, title: 'Investment Products Distribution', desc: 'Access to mutual funds, stocks, and other investment products' },
+              { id: 'financial', icon: Target, title: 'Financial Information', desc: 'Educational resources and market information to help you decide' },
+              { id: 'risk', icon: Shield, title: 'Insurance Products', desc: 'Distribution of insurance solutions for asset protection' },
+              { id: 'wealth', icon: Users, title: 'Documentation Assistance', desc: 'Support with paperwork for estate planning and transfers' },
+              { id: 'tax', icon: Award, title: 'Tax Information', desc: 'General information on tax-efficient investment structures' },
+              { id: 'alternative', icon: Zap, title: 'Alternative Products', desc: 'Distribution of secondary bonds, unlisted shares, and pre-IPO opportunities' },
             ].map((service, i) => (
               <Reveal key={i} delay={(i % 3) * 90}>
                 <div className="lift group bg-bg-elevated rounded-xl overflow-hidden border border-border-subtle h-full flex flex-col" style={{ boxShadow: 'var(--shadow-card)' }}>
@@ -374,7 +374,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                     <h4 className="text-xl font-bold text-text-primary mb-3" style={{ fontFamily: 'var(--font-display)' }}>{service.title}</h4>
                     <p className="text-text-secondary leading-relaxed mb-4 flex-1">{service.desc}</p>
                     <button
-                      onClick={onViewServices}
+                      onClick={() => onViewServices(service.id)}
                       className="w-full bg-text-primary text-bg-elevated hover:bg-accent hover:text-on-accent font-semibold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 group"
                     >
                       View Details <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
