@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, RefreshCw, Search, ArrowUpDown, AlertCircle, Plus, Check, GitCompare, Building2, X } from 'lucide-react';
+import { BarChart3, RefreshCw, Search, ArrowUpDown, AlertCircle, Plus, Check, GitCompare, Building2, X, Wallet } from 'lucide-react';
 import { PublicPageChrome } from './shared/PublicPageChrome';
 import { mfSource, type MutualFund, type MfSortKey, type MfSchemeHit } from './shared/mfSource';
 import { fmtPct, returnColor, fmtNav, RiskBadge } from './shared/mfFormat';
@@ -31,7 +31,6 @@ interface MFResearchProps {
 export default function MFResearch({ onBack }: MFResearchProps) {
   const [funds, setFunds] = useState<MutualFund[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [category, setCategory] = useState('all');
@@ -87,19 +86,6 @@ export default function MFResearch({ onBack }: MFResearchProps) {
     }, 300);
     return () => clearTimeout(t);
   }, [search]);
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    setError(null);
-    try {
-      await mfSource.refresh();
-      await load();
-    } catch {
-      setError('Refresh failed. Please try again shortly.');
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   // Fund houses present in the curated set, for the AMC filter.
   const amcs = useMemo(() => {
@@ -160,12 +146,10 @@ export default function MFResearch({ onBack }: MFResearchProps) {
       documentTitle="Mutual Fund Research — Niyom Wealth"
       actions={
         <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="lift press inline-flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black font-semibold px-5 py-2.5 rounded-xl shadow-md disabled:opacity-60"
+          onClick={() => window.open('/onboarding', '_blank')}
+          className="lift press inline-flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black font-semibold px-5 py-2.5 rounded-xl shadow-md"
         >
-          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-          {refreshing ? 'Updating…' : 'Update data'}
+          <Wallet size={16} /> Invest now
         </button>
       }
     >

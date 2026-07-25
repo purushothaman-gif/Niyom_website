@@ -167,6 +167,23 @@ export function FundDetailModal({ seed, onClose }: FundDetailModalProps) {
             before investing.
           </p>
         </div>
+
+        {/* Conversion CTA — turn fund research into an onboarding opportunity.
+            Sticky so it stays visible while the detail scrolls. */}
+        <div
+          className="sticky bottom-0 z-10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-5 sm:px-6 py-4"
+          style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border-subtle)' }}
+        >
+          <p className="text-xs text-text-muted min-w-0 truncate">
+            Ready to invest in <span className="font-medium text-text-secondary">{meta?.scheme_name ?? seed.fund_name}</span>?
+          </p>
+          <button
+            onClick={() => window.open('/onboarding', '_blank')}
+            className="lift press inline-flex items-center justify-center gap-2 flex-shrink-0 bg-accent-soft hover:bg-accent-soft-deep text-black font-bold px-6 py-3 rounded-xl shadow-md"
+          >
+            <Wallet size={16} /> Invest Now
+          </button>
+        </div>
       </div>
     </div>
   );

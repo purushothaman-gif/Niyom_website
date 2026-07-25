@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Wallet } from 'lucide-react';
 import type { MutualFund } from './mfSource';
 import { fmtPct, returnColor, fmtNav, RiskBadge } from './mfFormat';
 
@@ -59,14 +59,22 @@ export function CompareModal({ funds, onClose, onRemove }: CompareModalProps) {
           <h2 className="font-bold text-text-primary" style={{ fontFamily: 'var(--font-display)' }}>
             Compare funds
           </h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="press p-1.5 rounded-lg"
-            style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)' }}
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.open('/onboarding', '_blank')}
+              className="lift press inline-flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black font-semibold px-4 py-2 rounded-lg shadow-md text-sm"
+            >
+              <Wallet size={15} /> Invest Now
+            </button>
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="press p-1.5 rounded-lg"
+              style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)' }}
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
