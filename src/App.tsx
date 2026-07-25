@@ -47,7 +47,10 @@ function PublicPage({ route }: { route: PublicRoute }) {
         path={route.path}
         breadcrumb={breadcrumb}
       />
-      {route.render(navigate)}
+      {/* Keyed by path so the entrance animation replays on every navigation. */}
+      <div key={route.path} className="page-enter">
+        {route.render(navigate)}
+      </div>
     </>
   );
 }

@@ -369,6 +369,38 @@ input[type='range'] {
   opacity: 0;
 }
 
+/* Route entrance — the routed content is keyed by pathname in App.tsx, so this
+   replays on every navigation, letting each page "rise into place" instead of
+   swapping flatly (echoes the home page's motion vocabulary).
+
+   Fill mode is `backwards` (NOT forwards/both) on purpose: the opacity-0 start
+   is applied from the first paint (no flash), but once the run finishes the
+   element reverts to its base style with NO transform at rest. That matters
+   because a lingering transform (even an identity matrix) turns the wrapper into
+   a containing block and would mis-position `position: fixed` descendants such
+   as the MF Research fund-detail / compare modals. The transform only exists
+   during the 0.55s entrance, when no modal is open. */
+.page-enter {
+  animation: pageEnter 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
+}
+
 @keyframes goldShine {
   0% {
     box-shadow: 0 0 10px rgba(201, 184, 150, 0.5);
