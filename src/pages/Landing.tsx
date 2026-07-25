@@ -296,7 +296,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             {/* CTAs */}
             <div className={`flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-4 ${isLoaded ? 'animate-fadeInUp animate-delay-300' : 'opacity-0'}`}>
               <button
-                onClick={() => window.open('/client-login', '_blank')}
+                onClick={() => window.open('/onboarding', '_blank')}
                 className="cta-glow press bg-accent-soft hover:bg-accent-soft-deep text-black font-bold py-4 px-9 rounded-xl flex items-center gap-2.5 text-lg w-full sm:w-auto justify-center"
               >
                 Start Investing <ArrowRight size={20} />
@@ -422,7 +422,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             Schedule a complimentary consultation to explore investment products and opportunities.
           </p>
           <button
-            onClick={() => window.open('/client-login', '_blank')}
+            onClick={() => window.open('/onboarding', '_blank')}
             className={`lift press bg-black hover:bg-gray-900 text-white font-bold py-4 px-10 rounded-xl shadow-lg text-lg ${isLoaded ? 'animate-fadeInUp animate-delay-400' : 'opacity-0'}`}
           >
             Create Your Account

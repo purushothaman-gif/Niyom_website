@@ -25,7 +25,7 @@ import { RiskDisclaimer } from '../pages/RiskDisclaimer';
 import { Disclaimer } from '../pages/Disclaimer';
 
 /** The public CTAs open the client portal login in a new tab (unchanged behaviour). */
-const openClientLogin = () => window.open('/client-login', '_blank');
+const openSignUp = () => window.open('/onboarding', '_blank');
 
 /**
  * Landing's `onNavigate(page)` uses internal page keys — map them to clean
@@ -67,7 +67,7 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
     sitemap: { changefreq: 'weekly', priority: '1.0' },
     render: (navigate) => (
       <Landing
-        onGetStarted={openClientLogin}
+        onGetStarted={openSignUp}
         onViewServices={() => navigate('/services')}
         onViewLearning={() => navigate('/learning')}
         onViewNews={() => navigate('/news')}
@@ -88,7 +88,7 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
       label: 'Services',
     },
     sitemap: { changefreq: 'monthly', priority: '0.8' },
-    render: (navigate) => <Services onBack={() => navigate('/')} onGetStarted={openClientLogin} />,
+    render: (navigate) => <Services onBack={() => navigate('/')} onGetStarted={openSignUp} />,
   },
   {
     path: '/learning',
@@ -146,8 +146,8 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
     render: (navigate) => (
       <UnlistedShares
         onBack={() => navigate('/')}
-        onNavigateToSignUp={openClientLogin}
-        onNavigateToKYC={openClientLogin}
+        onNavigateToSignUp={openSignUp}
+        onNavigateToKYC={openSignUp}
         initialTab="shares"
       />
     ),
@@ -164,8 +164,8 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
     render: (navigate) => (
       <UnlistedShares
         onBack={() => navigate('/')}
-        onNavigateToSignUp={openClientLogin}
-        onNavigateToKYC={openClientLogin}
+        onNavigateToSignUp={openSignUp}
+        onNavigateToKYC={openSignUp}
         initialTab="bonds"
       />
     ),
