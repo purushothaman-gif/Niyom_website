@@ -259,7 +259,7 @@ export function Learning({ onBack }: LearningProps) {
         <h2 className="text-2xl font-bold text-white mb-3" style={{ fontFamily: 'var(--font-display)' }}>Ready to put it into practice?</h2>
         <p className="text-gray-300 mb-6 max-w-xl mx-auto">Explore our investment solutions or talk to our team to build a plan around your goals.</p>
         <button
-          onClick={() => window.open('/client-login', '_blank')}
+          onClick={() => window.open('/onboarding', '_blank')}
           className="lift press bg-accent-soft hover:bg-accent-soft-deep text-black font-bold px-8 py-3.5 rounded-xl shadow-lg"
         >
           Start Investing
