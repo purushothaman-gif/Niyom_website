@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   User, Phone, Mail, ShieldCheck, ArrowLeft, ArrowRight, CheckCircle2,
-  AlertCircle, Clock, Sparkles, RotateCcw, type LucideIcon,
+  AlertCircle, Clock, Sparkles, RotateCcw, Home, type LucideIcon,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -132,11 +132,11 @@ export default function PublicOnboarding({ onBack }: Props) {
       {/* Top nav */}
       <div className="sticky top-0 z-10 px-6 py-4 flex items-center gap-4"
         style={{ background: 'var(--header-bg)', borderBottom: '1px solid var(--border-subtle)', backdropFilter: 'blur(8px)' }}>
-        <button onClick={onBack} className="flex items-center gap-2 text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
+        <a href="/" className="flex items-center gap-2 text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
           onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
           onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
-          <ArrowLeft className="w-4 h-4" /> Back to Login
-        </button>
+          <Home className="w-4 h-4" /> Home
+        </a>
         <div className="flex-1" />
         <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-8 w-auto object-contain" />
       </div>
