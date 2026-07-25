@@ -38,18 +38,6 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.niyomwealth.com/unlisted-shares</loc>
-    <lastmod>2026-07-25</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.niyomwealth.com/unlisted-bonds</loc>
-    <lastmod>2026-07-25</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://www.niyomwealth.com/privacy</loc>
     <lastmod>2026-07-25</lastmod>
     <changefreq>yearly</changefreq>

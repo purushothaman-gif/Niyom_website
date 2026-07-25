@@ -18,7 +18,6 @@ import Learning from '../pages/Learning';
 import News from '../pages/News';
 import MFResearch from '../pages/MFResearch';
 import Calculator from '../pages/Calculator';
-import { UnlistedShares } from '../pages/UnlistedShares';
 import { PrivacyPolicy } from '../pages/PrivacyPolicy';
 import { TermsOfUse } from '../pages/TermsOfUse';
 import { RiskDisclaimer } from '../pages/RiskDisclaimer';
@@ -73,8 +72,6 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
         onViewNews={() => navigate('/news')}
         onViewMFResearch={() => navigate('/mf-research')}
         onViewCalculator={() => navigate('/calculators')}
-        onViewUnlisted={() => navigate('/unlisted-shares')}
-        onViewBonds={() => navigate('/unlisted-bonds')}
         onNavigate={(page) => navigate(PAGE_TO_PATH[page] ?? '/')}
       />
     ),
@@ -139,42 +136,6 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
     },
     sitemap: { changefreq: 'monthly', priority: '0.7' },
     render: (navigate) => <Calculator onBack={() => navigate('/')} />,
-  },
-  {
-    path: '/unlisted-shares',
-    meta: {
-      title: `Unlisted Shares — ${BRAND}`,
-      description:
-        'Access unlisted and pre-IPO shares through Niyom Wealth. Explore opportunities in privately held companies.',
-      label: 'Unlisted Shares',
-    },
-    sitemap: { changefreq: 'weekly', priority: '0.8' },
-    render: (navigate) => (
-      <UnlistedShares
-        onBack={() => navigate('/')}
-        onNavigateToSignUp={openSignUp}
-        onNavigateToKYC={openSignUp}
-        initialTab="shares"
-      />
-    ),
-  },
-  {
-    path: '/unlisted-bonds',
-    meta: {
-      title: `Secondary Bonds — ${BRAND}`,
-      description:
-        'Secondary-market bonds available through Niyom Wealth. Diversify with fixed-income securities from established issuers.',
-      label: 'Secondary Bonds',
-    },
-    sitemap: { changefreq: 'weekly', priority: '0.8' },
-    render: (navigate) => (
-      <UnlistedShares
-        onBack={() => navigate('/')}
-        onNavigateToSignUp={openSignUp}
-        onNavigateToKYC={openSignUp}
-        initialTab="bonds"
-      />
-    ),
   },
   {
     path: '/privacy',

@@ -14,8 +14,6 @@ interface LandingProps {
   onViewNews: () => void;
   onViewMFResearch: () => void;
   onViewCalculator: () => void;
-  onViewUnlisted: () => void;
-  onViewBonds: () => void;
   onNavigate: (page: string) => void;
 }
 
