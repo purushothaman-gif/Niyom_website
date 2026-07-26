@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { corsHeaders, json, isValidPan } from "../_shared/onboarding.ts";
+import { corsHeaders, json, isValidPan, panAlreadyRegistered } from "../_shared/onboarding.ts";
 import { getPanGateway } from "../_shared/panGateway.ts";
 
 // Employee-facing PAN verification for the CRM onboarding form. An RM enters a
@@ -35,6 +35,12 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const pan = (body.pan || "").trim().toUpperCase();
     if (!isValidPan(pan)) return json({ error: "Enter a valid PAN (e.g. ABCDE1234F)." }, 400);
+
+    // Internal check FIRST — never pay Cashfree for a PAN already in our records.
+    // `admin` is the service-role client already built above for the employee lookup.
+    if (await panAlreadyRegistered(admin, pan)) {
+      return json({ already_registered: true }, 200);
+    }
 
     const result = await getPanGateway().verify(pan);
     if (!result.valid) {

@@ -93,7 +93,7 @@ function DupWarn({ msg, block }: { msg: string | null; block?: boolean }) {
     <div className="mt-1.5 flex items-start gap-2 px-3 py-2 rounded-lg" style={{ background: bg, border: `1px solid ${border}` }}>
       <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color }} />
       <p className="text-xs" style={{ color }}>
-        {msg}{block ? ' — this PAN is already registered. Enter a different PAN to continue.' : ''}
+        {msg}{block ? ' — enter a different PAN to continue.' : ''}
       </p>
     </div>
   );
@@ -173,6 +173,14 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
         body: JSON.stringify({ pan }),
       });
       const data = await res.json().catch(() => ({}));
+      // Already in our records → no Cashfree call was made; block, no names shown.
+      if (data.already_registered) {
+        setPanVerifiedName(null);
+        setDupWarnings(w => ({ ...w, pan: 'PAN already registered' }));
+        setPanVerifyErr('PAN already registered.');
+        setPanVerifying(false);
+        return;
+      }
       if (!res.ok || !data.valid) { setPanVerifyErr(data.error || 'PAN could not be verified.'); setPanVerifying(false); return; }
       if (data.name_as_per_pan) set('full_name', data.name_as_per_pan);
       setPanVerifiedName(data.name_as_per_pan || '');
@@ -196,7 +204,11 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     if (data && data.length > 0) {
       const match = data[0] as any;
       const empName = match.employee?.full_name || 'Admin';
-      const msg = `Client "${match.full_name}" already exists under ${empName}`;
+      // PAN dup is shown name-free ("PAN already registered"); phone/email keep the
+      // detailed "who owns it" hint for the RM.
+      const msg = field === 'pan'
+        ? 'PAN already registered'
+        : `Client "${match.full_name}" already exists under ${empName}`;
       setDupWarnings(w => ({ ...w, [field]: msg }));
       return msg;
     }
@@ -314,6 +326,13 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     if (stepName === 'DSA Details' && !validateDsaForm()) return;
     if (stepName === 'Basic Info') {
       if (!validateStep0Client()) return;
+      // PAN verification is mandatory: the RM must click "Verify PAN & fetch name"
+      // (a successful Cashfree verify) before advancing — even if every other field
+      // is filled. panVerifiedName resets to null whenever the PAN is edited.
+      if (!panVerifiedName) {
+        setError("Please verify the client's PAN — click 'Verify PAN & fetch name' — before continuing.");
+        return;
+      }
       // A client with this PAN cannot be onboarded twice. Re-check on the way out
       // (covers the debounced check not having fired yet, or a pasted PAN) and
       // block progression until the RM enters a PAN not already in our records.
@@ -1049,7 +1068,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
         </button>
         {step < STEPS.length - 1 ? (
           <button onClick={handleNext}
-            disabled={stepName === 'Basic Info' && !!dupWarnings.pan}
+            disabled={stepName === 'Basic Info' && (!!dupWarnings.pan || !panVerifiedName)}
             className="px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
             Next <ChevronRight className="w-4 h-4" />

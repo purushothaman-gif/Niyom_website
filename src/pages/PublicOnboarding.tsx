@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   User, Phone, Mail, ShieldCheck, ArrowLeft, ArrowRight, CheckCircle2,
-  AlertCircle, Clock, Sparkles, RotateCcw, Home, type LucideIcon,
+  AlertCircle, Clock, Sparkles, RotateCcw, Home, CreditCard, type LucideIcon,
 } from 'lucide-react';
 import { clientSupabase as supabase } from '../lib/supabase';
 import { ThemeToggle } from '../theme/ThemeToggle';
@@ -54,7 +54,8 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 }
 
 export default function PublicOnboarding({ onBack }: Props) {
-  const [view, setView] = useState<'form' | 'otp'>('form');
+  const [view, setView] = useState<'pan' | 'form' | 'otp'>('pan');
+  const [pan, setPan] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -78,18 +79,36 @@ export default function PublicOnboarding({ onBack }: Props) {
     }, 1000);
   };
 
+  const validPan = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan);
   const validForm =
     fullName.trim().length >= 2 &&
     /^[6-9]\d{9}$/.test(phone) &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  // ── Step 1: create the free account + trigger OTP ──────────────────────
+  // ── Step 1: verify PAN → fetch name-as-per-PAN, then advance to details ──
+  const handleVerifyPan = async () => {
+    setError('');
+    if (!validPan) return setError('Enter a valid PAN (e.g. ABCDE1234F).');
+    setBusy(true);
+    const { ok, data } = await callFn('public-onboard-pan-verify', { pan });
+    setBusy(false);
+    if (data?.already_registered) {
+      return setError('PAN already registered. Please sign in using "Already started your application?" below.');
+    }
+    if (!ok || !data?.valid || !data?.name_as_per_pan) {
+      return setError(data?.error || 'PAN could not be verified. Please check and try again.');
+    }
+    setFullName(data.name_as_per_pan);
+    setView('form');
+  };
+
+  // ── Step 2: create the free account + trigger OTP ──────────────────────
   const handleCreate = async () => {
     setError('');
-    if (!validForm) return setError('Please enter a valid name, 10-digit mobile and email.');
+    if (!validForm) return setError('Please enter a valid 10-digit mobile and email.');
     setBusy(true);
     const { ok, data } = await callFn('public-onboard-start', {
-      full_name: fullName.trim(), phone, email: email.trim().toLowerCase(),
+      full_name: fullName.trim(), pan, phone, email: email.trim().toLowerCase(),
     });
     setBusy(false);
     if (!ok && !data?.already_exists) return setError(data?.error || 'Could not create your account. Please try again.');
@@ -151,20 +170,23 @@ export default function PublicOnboarding({ onBack }: Props) {
             <Sparkles className="w-3.5 h-3.5" /> Open Your Free Account
           </div>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
-            {view === 'form' ? 'Start in 30 seconds' : 'Verify your email'}
+            {view === 'pan' ? 'Start in 30 seconds' : view === 'form' ? 'A few quick details' : 'Verify your email'}
           </h1>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            {view === 'form'
-              ? 'No documents needed to begin. Complete KYC later — about 5 minutes in total.'
+            {view === 'pan'
+              ? 'Enter your PAN — we’ll fetch your name instantly. No documents needed to begin.'
+              : view === 'form'
+              ? 'Just your mobile and email to finish creating your account.'
               : <>We sent a 6-digit code to <span style={{ color: 'var(--text-primary)' }}>{emailMasked || 'your email'}</span>.</>}
           </p>
         </div>
 
         {/* Progress: 2 dots */}
         <div className="flex items-center justify-center gap-2">
-          {['Create', 'Verify'].map((s, i) => {
-            const active = (view === 'form' ? 0 : 1) === i;
-            const done = (view === 'otp') && i === 0;
+          {['PAN', 'Details', 'Verify'].map((s, i) => {
+            const stepIndex = view === 'pan' ? 0 : view === 'form' ? 1 : 2;
+            const active = stepIndex === i;
+            const done = stepIndex > i;
             return (
               <div key={s} className="flex items-center gap-2">
                 <div className="flex items-center gap-1.5">
@@ -178,7 +200,7 @@ export default function PublicOnboarding({ onBack }: Props) {
                   </div>
                   <span className="text-xs font-medium" style={{ color: active ? 'var(--accent)' : done ? 'var(--success)' : 'var(--text-faint)' }}>{s}</span>
                 </div>
-                {i === 0 && <div className="w-8 h-px" style={{ background: 'var(--border)' }} />}
+                {i < 2 && <div className="w-8 h-px" style={{ background: 'var(--border)' }} />}
               </div>
             );
           })}
@@ -194,13 +216,35 @@ export default function PublicOnboarding({ onBack }: Props) {
 
         {/* Card */}
         <div className="rounded-2xl p-6 space-y-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-card)' }}>
-          {view === 'form' ? (
+          {view === 'pan' ? (
+            <>
+              <Field icon={CreditCard} label="PAN Number">
+                <Input value={pan} inputMode="text" autoFocus maxLength={10}
+                  onChange={e => setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+                  placeholder="ABCDE1234F" style={{ letterSpacing: '0.15em' }} />
+              </Field>
+              <button onClick={handleVerifyPan} disabled={busy || !validPan}
+                className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 press disabled:opacity-50 transition-opacity"
+                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))', color: 'var(--text-on-accent)' }}>
+                {busy ? 'Verifying…' : <>Verify PAN <ArrowRight className="w-4 h-4" /></>}
+              </button>
+              <p className="text-xs text-center" style={{ color: 'var(--text-faint)' }}>
+                We verify your PAN instantly and fetch your name — no typing needed.
+              </p>
+            </>
+          ) : view === 'form' ? (
             <>
               <Field icon={User} label="Full Name">
-                <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your full Name" autoFocus />
+                <div className="w-full px-3.5 py-2.5 rounded-xl text-sm flex items-center justify-between gap-2"
+                  style={{ background: 'var(--bg-raised)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+                  <span className="font-medium">{fullName}</span>
+                  <span className="text-xs flex items-center gap-1 flex-shrink-0" style={{ color: 'var(--success)' }}>
+                    <CheckCircle2 className="w-3.5 h-3.5" /> as per PAN
+                  </span>
+                </div>
               </Field>
               <Field icon={Phone} label="Mobile Number">
-                <Input type="tel" inputMode="numeric" value={phone} maxLength={10}
+                <Input type="tel" inputMode="numeric" value={phone} maxLength={10} autoFocus
                   onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="9876543210" />
               </Field>
               <Field icon={Mail} label="Email Address">
@@ -210,6 +254,9 @@ export default function PublicOnboarding({ onBack }: Props) {
                 className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 press disabled:opacity-50 transition-opacity"
                 style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))', color: 'var(--text-on-accent)' }}>
                 {busy ? 'Creating your account…' : <>Create Free Account <ArrowRight className="w-4 h-4" /></>}
+              </button>
+              <button onClick={() => { setView('pan'); setError(''); }} className="w-full flex items-center justify-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                <ArrowLeft className="w-3.5 h-3.5" /> Change PAN
               </button>
             </>
           ) : (
@@ -238,7 +285,7 @@ export default function PublicOnboarding({ onBack }: Props) {
         </div>
 
         {/* Already-started return path — routes to /client-login where the email-OTP sign-in lives. */}
-        {view === 'form' && (
+        {view === 'pan' && (
           <button onClick={onBack}
             className="group w-full flex items-center gap-3 p-4 rounded-xl text-left transition-all"
             style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}

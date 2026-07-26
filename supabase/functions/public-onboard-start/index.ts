@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   corsHeaders, json, serviceClient, NIYOM_DEFAULT_EMPLOYEE_ID,
-  normalizePhone, isValidPhone, isValidEmail,
+  normalizePhone, isValidPhone, isValidEmail, isValidPan,
   generateOTP, persistOtp, deliverOtp, isRateLimited, maskEmail,
 } from "../_shared/onboarding.ts";
 
@@ -19,8 +19,12 @@ Deno.serve(async (req: Request) => {
     const full_name = (body.full_name || "").trim();
     const email = (body.email || "").trim().toLowerCase();
     const phone = normalizePhone(body.phone || "");
+    // PAN was verified (name-as-per-PAN fetched) at the first step by
+    // public-onboard-pan-verify; the client's name comes from that verify.
+    const pan = (body.pan || "").trim().toUpperCase();
 
     if (!full_name) return json({ error: "Please enter your full name." }, 400);
+    if (!isValidPan(pan)) return json({ error: "Please verify your PAN first." }, 400);
     if (!isValidPhone(phone)) return json({ error: "Enter a valid 10-digit mobile number." }, 400);
     if (!isValidEmail(email)) return json({ error: "Enter a valid email address." }, 400);
 
@@ -63,6 +67,12 @@ Deno.serve(async (req: Request) => {
       full_name,
       email,
       phone,
+      // PAN captured + verified up front (Cashfree, via public-onboard-pan-verify),
+      // so the in-portal KYC wizard skips its PAN step. onboarding_status stays
+      // "account_created" so verify-otp's first-OTP funnel/website-lead logic fires.
+      pan,
+      pan_name: full_name,
+      pan_verified: true,
       verification_status: "pending",
       onboarding_status: "account_created",
       sourced_via: "direct",
