@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { NWEmployee } from '../types';
 import {
-  UserPlus, Archive, Lock, Unlock, CalendarClock, Download, ChevronDown, Loader2, X, GitMerge,
+  UserPlus, Archive, Lock, Unlock, CalendarClock, Download, ChevronDown, Loader2, X, GitMerge, Trash2, AlertCircle,
 } from 'lucide-react';
 import { NWLead, LeadStatus, LeadPriority, FollowupMode } from './leadTypes';
 import { LEAD_STATUSES, PRIORITIES, FOLLOWUP_MODES } from './leadConstants';
@@ -23,6 +23,7 @@ export default function LeadBulkToolbar({ employee, leads, onAssign, onDone, onC
   const [busy, setBusy] = useState(false);
   const [followupOpen, setFollowupOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [delOpen, setDelOpen] = useState(false);
   const ids = leads.map(l => l.id);
 
   // Chunk id lists: PATCH `.in('id', ids)` rides the URL (keep it short), while
@@ -59,6 +60,20 @@ export default function LeadBulkToolbar({ employee, leads, onAssign, onDone, onC
     downloadCsv(`leads_selected_${new Date().toISOString().slice(0, 10)}.csv`, leadsToCsv(leads));
   };
 
+  // Admin-only hard delete of the selected leads (via nw_delete_lead RPC, which
+  // enforces the admin check server-side; child rows cascade). Chunked so a big
+  // selection doesn't fire hundreds of calls at once.
+  const deleteSelected = async () => {
+    setBusy(true);
+    for (const c of chunk(ids, 20)) {
+      await Promise.all(c.map(id => supabase.rpc('nw_delete_lead', { p_lead_id: id })));
+    }
+    setBusy(false);
+    setDelOpen(false);
+    onClear();
+    onDone();
+  };
+
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl flex-wrap"
       style={{ background: 'rgba(var(--accent-rgb),0.08)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
@@ -67,6 +82,11 @@ export default function LeadBulkToolbar({ employee, leads, onAssign, onDone, onC
       </p>
       <div className="flex items-center gap-1.5 flex-wrap">
         <BulkBtn icon={UserPlus} label="Assign" onClick={() => onAssign(leads)} />
+        <button onClick={() => setDelOpen(true)}
+          className="text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all"
+          style={{ background: 'rgba(239,68,68,0.08)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.25)' }}>
+          <Trash2 className="w-3.5 h-3.5" /> Delete
+        </button>
 
         <div className="relative">
           <BulkBtn icon={ChevronDown} label="Status" onClick={() => setMenu(m => m === 'status' ? null : 'status')} />
@@ -111,6 +131,24 @@ export default function LeadBulkToolbar({ employee, leads, onAssign, onDone, onC
         <LeadMergeModal leadA={leads[0]} leadB={leads[1]}
           onClose={() => setMergeOpen(false)}
           onMerged={() => { setMergeOpen(false); onClear(); onDone(); }} />
+      )}
+      {delOpen && (
+        <Modal open onClose={() => !busy && setDelOpen(false)} title={`Delete ${leads.length} lead${leads.length > 1 ? 's' : ''}?`} width="max-w-md">
+          <div className="space-y-4">
+            <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}>
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--danger)' }} />
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                This permanently deletes <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{leads.length} lead{leads.length > 1 ? 's' : ''}</span> and all their activity, notes, follow-ups, communications and documents. This cannot be undone.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <GhostButton onClick={() => setDelOpen(false)} disabled={busy} className="!py-2 !px-4">Cancel</GhostButton>
+              <PrimaryButton onClick={deleteSelected} disabled={busy} className="!py-2 !px-4 flex items-center gap-2" style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)' }}>
+                <Trash2 className="w-4 h-4" /> {busy ? 'Deleting…' : `Delete ${leads.length}`}
+              </PrimaryButton>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
