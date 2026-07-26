@@ -24,6 +24,23 @@ export const PRODUCTS = [
 /** Products that mandate a CML upload. Mirrors the submit edge function. */
 export const CML_PRODUCTS = new Set(['bonds', 'unlisted_shares']);
 
+/** The CML products an active client can activate after onboarding. */
+export const ACTIVATABLE_PRODUCTS = [
+  { value: 'bonds', label: 'Bonds' },
+  { value: 'unlisted_shares', label: 'Unlisted Shares' },
+] as const;
+
+/** CML products this client hasn't enabled yet (empty ⇒ nothing left to add). */
+export function activatableProducts(client: NWClient | null): string[] {
+  const prefs = client?.investment_preferences || [];
+  return ACTIVATABLE_PRODUCTS.map((p) => p.value).filter((p) => !prefs.includes(p));
+}
+
+/** Show the "Activate Bonds & Unlisted Shares" entry point once KYC is active. */
+export function canActivateMoreProducts(client: NWClient | null): boolean {
+  return client?.onboarding_status === 'active' && activatableProducts(client).length > 0;
+}
+
 export function cmlRequiredFor(prefs: string[]): boolean {
   return prefs.some((p) => CML_PRODUCTS.has(p));
 }

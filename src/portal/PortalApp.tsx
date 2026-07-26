@@ -8,6 +8,7 @@ import { buildDashboardData } from './services/dashboardModel';
 import { PortfolioService } from './services/PortfolioService';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { OnboardingWizard } from './features/onboarding/OnboardingWizard';
+import { ActivateProductsModal } from './features/onboarding/ActivateProductsModal';
 import { PortfolioPage } from './features/portfolio/PortfolioPage';
 import { AllocationPage } from './features/allocation/AllocationPage';
 import { MutualFundsModule } from './features/mutual-funds/MutualFundsModule';
@@ -34,6 +35,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
   const { view, navigate } = usePortalRouter();
   const { snapshot, loading, error, refreshedAt, refresh } = useClientSnapshot(clientId);
   const [showChangePw, setShowChangePw] = useState(false);
+  const [showActivate, setShowActivate] = useState(false);
 
   const client = snapshot.client;
   const hasData = !!refreshedAt; // first load completed
@@ -84,6 +86,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
             data={dashboardData}
             refreshedAt={refreshedAt}
             onNavigate={navigate}
+            onActivateProducts={() => setShowActivate(true)}
           />
         ) : (
           <LoadingState />
@@ -109,6 +112,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
             client={client}
             clientId={clientId}
             onChangePassword={() => setShowChangePw(true)}
+            onActivateProducts={() => setShowActivate(true)}
           />
         );
       case 'sip':
@@ -135,6 +139,15 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
 
       {showChangePw && (
         <ChangePasswordModal clientId={clientId} onClose={() => setShowChangePw(false)} />
+      )}
+
+      {showActivate && (
+        <ActivateProductsModal
+          client={client}
+          clientId={clientId}
+          onClose={() => setShowActivate(false)}
+          onDone={refresh}
+        />
       )}
     </>
   );
