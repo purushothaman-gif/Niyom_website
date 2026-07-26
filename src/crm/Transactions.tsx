@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWTransaction, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, TXN_LABELS, TXN_COLORS } from './utils';
@@ -999,7 +1000,7 @@ export default function Transactions({ employee, onNavigate }: Props) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="text-center py-12"><div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin mx-auto" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} /></td></tr>
+                <tr><td colSpan={7} className="text-center py-12"><LogoLoader size={40} /></td></tr>
               ) : txns.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>No transactions found</td></tr>
               ) : txns.map(t => {

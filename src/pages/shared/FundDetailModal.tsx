@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { X, RefreshCw, AlertCircle, TrendingUp, Building2, CalendarDays, Wallet } from 'lucide-react';
+import { LogoLoader } from '../../components/LogoLoader';
+import { X, AlertCircle, TrendingUp, Building2, CalendarDays, Wallet } from 'lucide-react';
 import { mfSource, type MfDetail } from './mfSource';
 import { NavChart } from './NavChart';
 import { fmtPct, returnColor, fmtNav, fmtDate, RiskBadge } from './mfFormat';
@@ -110,8 +111,8 @@ export function FundDetailModal({ seed, onClose }: FundDetailModalProps) {
 
         <div className="px-5 sm:px-6 py-5">
           {loading ? (
-            <div className="py-16 text-center text-text-muted">
-              <RefreshCw className="w-6 h-6 mx-auto mb-3 animate-spin text-accent-soft" /> Loading fund detail…
+            <div className="py-16">
+              <LogoLoader size={44} label="Loading fund detail…" />
             </div>
           ) : error ? (
             <div

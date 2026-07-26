@@ -1,6 +1,7 @@
 // Bond Security Master — searchable list of every bond in the master.
 
 import { useState } from 'react';
+import { LogoLoader } from '../../components/LogoLoader';
 import { useQueryClient } from '@tanstack/react-query';
 import { Search, UploadCloud, Loader2, ShieldCheck, ShieldAlert, Clock, Landmark, Sparkles } from 'lucide-react';
 import { useBonds, enrichPendingLoop } from './bondClient';
@@ -97,7 +98,7 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
       {error && <p className="text-sm" style={{ color: 'rgb(239,68,68)' }}>{(error as Error).message}</p>}
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-24"><Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--accent)' }} /></div>
+        <div className="flex items-center justify-center py-24"><LogoLoader size={48} /></div>
       ) : bonds.length === 0 ? (
         <div className="text-center py-24 rounded-2xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
           <Landmark className="w-8 h-8 mx-auto mb-3" style={{ color: 'var(--text-faint)' }} />

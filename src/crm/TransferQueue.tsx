@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee } from './types';
 import {
@@ -759,7 +760,7 @@ export default function TransferQueue({ employee }: Props) {
         style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         {loading ? (
           <div className="flex justify-center py-16">
-            <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--accent)' }} />
+            <LogoLoader size={48} />
           </div>
         ) : deals.length === 0 ? (
           <div className="text-center py-16">

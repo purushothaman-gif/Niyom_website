@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWDSA } from './types';
 import {
@@ -528,7 +529,7 @@ export default function DSAManagement({ employee }: Props) {
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         {loading ? (
           <div className="py-16 flex items-center justify-center">
-            <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+            <LogoLoader size={48} />
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">

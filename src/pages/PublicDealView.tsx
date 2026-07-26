@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import html2pdf from 'html2pdf.js';
 import DealDocument, { DealDocumentData } from '../crm/DealDocument';
@@ -248,8 +249,7 @@ export default function PublicDealView({ token }: Props) {
     return (
       <Shell>
         <div style={{ ...card, padding: 48, textAlign: 'center' }}>
-          <Loader2 className="animate-spin" style={{ width: 28, height: 28, color: '#B8961E', margin: '0 auto' }} />
-          <p style={{ marginTop: 16, color: '#6b7280' }}>Loading your deal confirmation…</p>
+          <LogoLoader size={48} label="Loading your deal confirmation…" />
         </div>
       </Shell>
     );

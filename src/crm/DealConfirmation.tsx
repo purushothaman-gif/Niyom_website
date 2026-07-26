@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWClient } from './types';
 import {
@@ -969,7 +970,7 @@ export default function DealConfirmation({ employee }: Props) {
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         {loading ? (
           <div className="flex justify-center py-16">
-            <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+            <LogoLoader size={48} />
           </div>
         ) : filteredDeals.length === 0 ? (
           <div className="text-center py-16">

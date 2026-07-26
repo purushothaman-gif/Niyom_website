@@ -12,6 +12,7 @@
  * /mf-admin (back to this console's login), never bouncing through the CRM.
  */
 import { useEffect, useState, type ReactNode } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { NWEmployee } from '../crm/types';
@@ -127,10 +128,7 @@ function FullScreen({ children }: { children: ReactNode }) {
 function Spinner() {
   return (
     <div className="flex min-h-[50vh] items-center justify-center">
-      <div
-        className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
-        style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
-      />
+      <LogoLoader size={52} />
     </div>
   );
 }

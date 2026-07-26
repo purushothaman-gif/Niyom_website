@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { LogoLoader } from '../../components/LogoLoader';
 import { supabase } from '../../lib/supabase';
 import { NWEmployee } from '../types';
-import { RefreshCw, Activity as ActivityIcon } from 'lucide-react';
+import { Activity as ActivityIcon } from 'lucide-react';
 import { isAdminRole, relativeTime } from './leadUtils';
 import { statusRgb, priorityRgb } from './leadConstants';
 import {
@@ -52,7 +53,7 @@ export default function LeadDashboard({ employee, refreshKey, onOpenLead }: Prop
   useEffect(() => { load(); }, [load, refreshKey, localKey]);
 
   if (loading || !d) {
-    return <div className="flex justify-center py-20"><RefreshCw className="w-6 h-6 animate-spin" style={{ color: 'var(--accent)' }} /></div>;
+    return <div className="flex justify-center py-20"><LogoLoader size={48} /></div>;
   }
 
   const t = d.totals;

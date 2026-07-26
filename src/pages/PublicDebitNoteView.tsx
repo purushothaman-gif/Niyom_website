@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { CheckCircle2, AlertCircle, ShieldCheck, Loader2, PenLine, Mail } from 'lucide-react';
 import SignaturePad from '../components/SignaturePad';
@@ -141,8 +142,7 @@ export default function PublicDebitNoteView({ token }: Props) {
     return (
       <Shell>
         <div style={{ ...card, padding: 48, textAlign: 'center' }}>
-          <Loader2 className="animate-spin" style={{ width: 28, height: 28, color: '#B8961E', margin: '0 auto' }} />
-          <p style={{ marginTop: 16, color: '#6b7280' }}>Loading your debit note…</p>
+          <LogoLoader size={48} label="Loading your debit note…" />
         </div>
       </Shell>
     );

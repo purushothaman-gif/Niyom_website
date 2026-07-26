@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWTransaction, NWActivityLog, NWClient } from './types';
 import { fmt, fmtDate, timeAgo, TXN_LABELS, TXN_COLORS, VERIFICATION_COLORS, VERIFICATION_LABELS } from './utils';
@@ -125,7 +126,7 @@ export default function Dashboard({ employee, onNavigate }: Props) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+        <LogoLoader size={52} />
       </div>
     );
   }

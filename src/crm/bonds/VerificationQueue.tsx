@@ -1,7 +1,8 @@
 // Manual Verification Queue — bonds an admin should review (missing required
 // fields). Opening one goes to its profile to enrich / fix.
 
-import { ArrowLeft, Loader2, ShieldAlert, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ShieldAlert, ChevronRight } from 'lucide-react';
+import { LogoLoader } from '../../components/LogoLoader';
 import { useVerificationQueue } from './bondClient';
 
 interface Props { onBack: () => void; onOpen: (id: string) => void; }
@@ -20,7 +21,7 @@ export default function VerificationQueue({ onBack, onOpen }: Props) {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-24"><Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--accent)' }} /></div>
+        <div className="flex items-center justify-center py-24"><LogoLoader size={48} /></div>
       ) : items.length === 0 ? (
         <div className="text-center py-24 rounded-2xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
           <ShieldAlert className="w-8 h-8 mx-auto mb-3" style={{ color: 'rgb(16,185,129)' }} />

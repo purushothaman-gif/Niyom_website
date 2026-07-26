@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { LogoLoader } from '../../components/LogoLoader';
 import { supabase } from '../../lib/supabase';
 import { NWEmployee } from '../types';
 import {
@@ -524,7 +525,7 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
             <tbody>
               {loading ? (
                 <tr><td colSpan={isAdmin ? 11 : 10} className="text-center py-12">
-                  <RefreshCw className="w-5 h-5 animate-spin mx-auto" style={{ color: 'var(--accent)' }} />
+                  <LogoLoader size={40} />
                 </td></tr>
               ) : leads.length === 0 ? (
                 <tr><td colSpan={isAdmin ? 11 : 10} className="text-center py-14">
