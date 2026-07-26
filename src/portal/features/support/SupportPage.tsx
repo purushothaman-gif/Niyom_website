@@ -1,19 +1,31 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ChevronDown,
   Headphones,
   Mail,
   MessageSquare,
   Phone,
+  Ticket,
   type LucideIcon,
 } from 'lucide-react';
 import { Card } from '../../components/Card';
+import { timeAgo } from '../../../crm/utils';
+import { SupportService, type SupportTicket, type TicketStatus } from '../../services/SupportService';
+import { RaiseTicketModal } from './RaiseTicketModal';
+import { SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_PHONE_HREF, SUPPORT_WHATSAPP_HREF } from './contact';
 
 const CONTACTS: Array<{ icon: LucideIcon; label: string; value: string; href: string }> = [
-  { icon: Phone, label: 'Call us', value: '+91 99999 99999', href: 'tel:+919999999999' },
-  { icon: Mail, label: 'Email', value: 'support@niyomwealth.com', href: 'mailto:support@niyomwealth.com' },
-  { icon: MessageSquare, label: 'WhatsApp', value: 'Chat with us', href: 'https://wa.me/919999999999' },
+  { icon: Phone, label: 'Call us', value: SUPPORT_PHONE, href: SUPPORT_PHONE_HREF },
+  { icon: Mail, label: 'Email', value: SUPPORT_EMAIL, href: `mailto:${SUPPORT_EMAIL}` },
+  { icon: MessageSquare, label: 'WhatsApp', value: 'Chat with us', href: SUPPORT_WHATSAPP_HREF },
 ];
+
+const STATUS_META: Record<TicketStatus, { label: string; color: string }> = {
+  open: { label: 'Open', color: 'var(--info)' },
+  in_progress: { label: 'In progress', color: 'var(--accent)' },
+  resolved: { label: 'Resolved', color: 'var(--success)' },
+  closed: { label: 'Closed', color: 'var(--text-muted)' },
+};
 
 const FAQS: Array<{ q: string; a: string }> = [
   {
@@ -50,8 +62,47 @@ function FaqItem({ q, a, open, onToggle }: { q: string; a: string; open: boolean
   );
 }
 
-export function SupportPage() {
+function TicketRow({ ticket }: { ticket: SupportTicket }) {
+  const meta = STATUS_META[ticket.status];
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-border-subtle py-3 last:border-0">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[11px] text-text-faint">{ticket.ref}</span>
+          <span
+            className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+            style={{ color: meta.color, background: `color-mix(in srgb, ${meta.color} 12%, transparent)` }}
+          >
+            {meta.label}
+          </span>
+        </div>
+        <p className="mt-0.5 truncate text-sm font-semibold text-text-primary">{ticket.subject}</p>
+      </div>
+      <span className="shrink-0 whitespace-nowrap text-xs text-text-muted">{timeAgo(ticket.created_at)}</span>
+    </div>
+  );
+}
+
+export function SupportPage({ clientId }: { clientId: string }) {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [showTicketModal, setShowTicketModal] = useState(false);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [loadingTickets, setLoadingTickets] = useState(true);
+
+  const loadTickets = useCallback(async () => {
+    setLoadingTickets(true);
+    try {
+      setTickets(await SupportService.listTickets(clientId));
+    } catch {
+      setTickets([]);
+    } finally {
+      setLoadingTickets(false);
+    }
+  }, [clientId]);
+
+  useEffect(() => {
+    void loadTickets();
+  }, [loadTickets]);
 
   return (
     <div className="space-y-5">
@@ -67,13 +118,14 @@ export function SupportPage() {
               <p className="text-xs text-text-secondary">Available Mon–Sat, 9:00 AM – 7:00 PM IST.</p>
             </div>
           </div>
-          <a
-            href="mailto:support@niyomwealth.com?subject=Support%20request"
+          <button
+            type="button"
+            onClick={() => setShowTicketModal(true)}
             className="inline-flex items-center justify-center gap-2 rounded-token-md px-4 py-2.5 text-sm font-bold text-on-accent"
             style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
           >
             <MessageSquare className="h-4 w-4" /> Raise a Ticket
-          </a>
+          </button>
         </div>
       </Card>
 
@@ -98,6 +150,35 @@ export function SupportPage() {
         ))}
       </div>
 
+      {/* Your tickets */}
+      <Card>
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary">
+            <Ticket className="h-4 w-4 text-accent" /> Your tickets
+          </h3>
+          <button
+            type="button"
+            onClick={() => setShowTicketModal(true)}
+            className="text-xs font-semibold text-accent hover:underline"
+          >
+            New ticket
+          </button>
+        </div>
+        {loadingTickets ? (
+          <p className="py-3 text-xs text-text-muted">Loading…</p>
+        ) : tickets.length === 0 ? (
+          <p className="py-3 text-xs text-text-secondary">
+            You haven’t raised any tickets yet. Use “Raise a Ticket” and we’ll get back to you.
+          </p>
+        ) : (
+          <div>
+            {tickets.map((t) => (
+              <TicketRow key={t.id} ticket={t} />
+            ))}
+          </div>
+        )}
+      </Card>
+
       {/* FAQ */}
       <Card>
         <h3 className="mb-1 text-sm font-bold text-text-primary">Frequently Asked Questions</h3>
@@ -107,6 +188,14 @@ export function SupportPage() {
           ))}
         </div>
       </Card>
+
+      {showTicketModal && (
+        <RaiseTicketModal
+          clientId={clientId}
+          onClose={() => setShowTicketModal(false)}
+          onCreated={loadTickets}
+        />
+      )}
     </div>
   );
 }
