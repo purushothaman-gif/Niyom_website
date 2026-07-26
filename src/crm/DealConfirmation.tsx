@@ -84,8 +84,11 @@ interface DealRecord {
   revenue_basis_last_modified_at?: string | null;
 }
 
+// Deal Confirmations are raised ONLY for Unlisted Shares and Bonds (the products
+// that need a demat + CML). Mutual Funds, Fixed Deposits and Insurance are never
+// dealt through this document.
 const PRODUCT_TYPES = [
-  'Unlisted Share', 'Secondary Bond', 'Primary Bond', 'Fixed Deposit', 'Mutual Fund', 'Insurance', 'Other',
+  'Unlisted Share', 'Secondary Bond', 'Primary Bond',
 ];
 
 const emptyForm = (): DealForm => ({
