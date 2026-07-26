@@ -203,7 +203,10 @@ function FloatingChip({
 }) {
   return (
     // Layer A: absolute position (translate utilities are safe here — no inline transform).
-    <div className={`absolute ${pos}`}>
+    // Hidden below md: the chips hang off the panel's outer edges, which would
+    // overflow the viewport (horizontal scroll) on a phone. The panel itself
+    // still renders on mobile — just without the floating chips.
+    <div className={`absolute ${pos} hidden md:block`}>
       {/* Layer B: entrance (opacity + transform). */}
       <div style={enterStyle}>
         {/* Layer C: parallax (transform). */}

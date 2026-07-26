@@ -233,18 +233,9 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                 </button>
                 <button
                   onClick={() => { window.open('/mf-admin', '_blank'); setIsMobileMenuOpen(false); }}
-                  className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 px-4 rounded mb-3 transition-colors"
+                  className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 px-4 rounded transition-colors"
                 >
                   MF Admin
-                </button>
-                <button
-                  onClick={() => {
-                    window.open('/client-login', '_blank');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full bg-accent-soft hover:bg-accent-soft-deep text-black font-semibold py-3 px-4 rounded mb-3 transition-colors"
-                >
-                  Client Login
                 </button>
               </div>
               <button
@@ -273,21 +264,21 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
       {/* Inherently dark: the animated network backdrop renders in navy + gold,
           so it pins the dark token set regardless of the active theme —
           otherwise the light theme's dark-on-light gold would render muted. */}
-      <section id="home" data-theme="dark" className="relative text-white overflow-hidden min-h-[92vh] flex items-start px-6 pt-24 md:pt-28 pb-16">
+      <section id="home" data-theme="dark" className="relative text-white overflow-hidden min-h-[88vh] flex items-center px-5 sm:px-6 pt-12 md:pt-28 pb-16">
         {/* Original animated fintech backdrop — replaces the old stock photo. */}
         <HeroBackground />
-        <div className="relative w-full max-w-7xl mx-auto grid lg:grid-cols-2 gap-14 lg:gap-8 items-center">
+        <div className="relative w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-8 items-center">
 
           {/* Left — message */}
           <div className="text-center lg:text-left">
             {/* Headline — gold emphasis on "Build Wealth" and "Confidence" */}
-            <h1 className={`text-5xl md:text-6xl xl:text-7xl font-bold leading-[1.04] tracking-tight mb-6 ${isLoaded ? 'animate-fadeInUp animate-delay-100' : 'opacity-0'}`} style={{ fontFamily: 'var(--font-display)' }}>
+            <h1 className={`text-[2.5rem] leading-[1.08] sm:text-5xl md:text-6xl xl:text-7xl font-bold md:leading-[1.04] tracking-tight mb-5 sm:mb-6 ${isLoaded ? 'animate-fadeInUp animate-delay-100' : 'opacity-0'}`} style={{ fontFamily: 'var(--font-display)' }}>
               <span className="text-accent-soft">Build Wealth</span><br />
               <span className="text-white">with </span><span className="text-accent-soft">Confidence</span>
             </h1>
 
             {/* Sub-heading */}
-            <p className={`text-lg md:text-xl text-gray-300 leading-relaxed mb-9 max-w-xl mx-auto lg:mx-0 ${isLoaded ? 'animate-fadeInUp animate-delay-200' : 'opacity-0'}`}>
+            <p className={`text-base sm:text-lg md:text-xl text-gray-300 leading-relaxed mb-7 sm:mb-9 max-w-xl mx-auto lg:mx-0 ${isLoaded ? 'animate-fadeInUp animate-delay-200' : 'opacity-0'}`}>
               Premium investment solutions in Mutual Funds, Bonds, Fixed Deposits, Insurance &amp; Unlisted Shares—powered by research, transparency and personalized guidance.
             </p>
 
@@ -311,8 +302,8 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               </button>
             </div>
 
-            {/* Trust strip */}
-            <div className={`mt-11 flex flex-wrap justify-center lg:justify-start gap-x-6 gap-y-3 ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`}>
+            {/* Trust strip — a tidy 2-col grid on phones, inline wrap from sm up. */}
+            <div className={`mt-9 sm:mt-11 grid grid-cols-2 gap-x-4 gap-y-3 sm:flex sm:flex-wrap sm:justify-center lg:justify-start sm:gap-x-6 sm:gap-y-3 ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`}>
               {[
                 { icon: Search, label: 'Research Driven' },
                 { icon: Eye, label: 'Transparent Process' },
@@ -320,28 +311,30 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                 { icon: Target, label: 'Goal-Based Planning' },
                 { icon: Handshake, label: 'Trusted Guidance' },
               ].map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-center gap-2">
-                  <Icon size={16} className="text-accent-soft flex-shrink-0" />
-                  <span className="text-sm text-gray-300 whitespace-nowrap">{label}</span>
+                <div key={label} className="flex items-start sm:items-center gap-2 min-w-0">
+                  <Icon size={16} className="text-accent-soft flex-shrink-0 mt-0.5 sm:mt-0" />
+                  <span className="text-sm text-gray-300 leading-snug sm:whitespace-nowrap">{label}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Right — premium wealth visual */}
-          <div className="hidden md:block">
+          {/* Right — premium wealth visual. Now shown on mobile too (the
+              floating chips self-hide below md to avoid horizontal overflow),
+              so phones get the branded panel instead of an empty navy void. */}
+          <div className="block px-2 sm:px-0 mt-2 md:mt-0">
             <HeroShowcase />
           </div>
         </div>
       </section>
 
-      <section id="services" className="py-20 px-6 bg-gradient-to-b from-bg-base to-bg-raised">
+      <section id="services" className="py-14 sm:py-20 px-5 sm:px-6 bg-gradient-to-b from-bg-base to-bg-raised">
         <div className="max-w-7xl mx-auto">
-          <h3 className={`text-4xl font-bold text-center text-text-primary mb-4 ${isLoaded ? 'animate-fadeInUp' : 'opacity-0'}`} style={{ fontFamily: 'var(--font-display)' }}>
+          <h3 className={`text-3xl sm:text-4xl font-bold text-center text-text-primary mb-4 ${isLoaded ? 'animate-fadeInUp' : 'opacity-0'}`} style={{ fontFamily: 'var(--font-display)' }}>
             Our Services
           </h3>
-          <div className={`w-24 h-1 bg-accent-soft mx-auto mb-16 ${isLoaded ? 'animate-scaleIn animate-delay-200' : 'opacity-0'}`}></div>
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className={`w-24 h-1 bg-accent-soft mx-auto mb-10 sm:mb-16 ${isLoaded ? 'animate-scaleIn animate-delay-200' : 'opacity-0'}`}></div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             {[
               { id: 'investment', icon: TrendingUp, title: 'Investment Products Distribution', desc: 'Access to mutual funds, stocks, and other investment products' },
               { id: 'financial', icon: Target, title: 'Financial Information', desc: 'Educational resources and market information to help you decide' },
@@ -386,23 +379,23 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
       </section>
 
       {/* Inherently dark (animated backdrop) — pin the dark token set. */}
-      <section data-theme="dark" className="relative py-20 px-6 text-white overflow-hidden">
+      <section data-theme="dark" className="relative py-14 sm:py-20 px-5 sm:px-6 text-white overflow-hidden">
         <HeroBackground />
         <div className="relative max-w-7xl mx-auto">
-          <h3 className={`text-4xl font-bold text-center mb-4 ${isLoaded ? 'animate-fadeInUp' : 'opacity-0'}`} style={{ fontFamily: 'var(--font-display)' }}>
+          <h3 className={`text-3xl sm:text-4xl font-bold text-center mb-4 ${isLoaded ? 'animate-fadeInUp' : 'opacity-0'}`} style={{ fontFamily: 'var(--font-display)' }}>
             Why Choose <span className="text-accent-soft">Niyom Wealth</span>?
           </h3>
-          <div className={`w-24 h-1 bg-accent-soft mx-auto mb-16 ${isLoaded ? 'animate-scaleIn animate-delay-200' : 'opacity-0'}`}></div>
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className={`w-24 h-1 bg-accent-soft mx-auto mb-10 sm:mb-16 ${isLoaded ? 'animate-scaleIn animate-delay-200' : 'opacity-0'}`}></div>
+          <div className="grid sm:grid-cols-2 gap-5 sm:gap-8">
             {[
               { title: 'Transparency', desc: 'Open and honest communication in all our interactions' },
               { title: 'Innovation', desc: 'Leveraging technology and new ideas to enhance services' },
               { title: 'Trust', desc: 'Building lasting relationships on mutual respect and integrity' },
               { title: 'Client-Centric', desc: 'Your financial goals are at the heart of everything we do' },
             ].map((value, i) => (
-              <div key={i} className={`bg-white/5 backdrop-blur-sm p-8 rounded-xl border-l-4 border-accent-soft hover:bg-white/10 transition-all duration-300 ${isLoaded ? `animate-slideInLeft animate-delay-${(i + 2) * 100}` : 'opacity-0'}`}>
-                <h4 className="text-2xl font-bold text-accent-soft mb-3" style={{ fontFamily: 'var(--font-display)' }}>{value.title}</h4>
-                <p className="text-gray-300 leading-relaxed text-lg">{value.desc}</p>
+              <div key={i} className={`bg-white/5 backdrop-blur-sm p-6 sm:p-8 rounded-xl border-l-4 border-accent-soft hover:bg-white/10 transition-all duration-300 ${isLoaded ? `animate-slideInLeft animate-delay-${(i + 2) * 100}` : 'opacity-0'}`}>
+                <h4 className="text-xl sm:text-2xl font-bold text-accent-soft mb-2 sm:mb-3" style={{ fontFamily: 'var(--font-display)' }}>{value.title}</h4>
+                <p className="text-gray-300 leading-relaxed text-base sm:text-lg">{value.desc}</p>
               </div>
             ))}
           </div>
@@ -411,12 +404,12 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
 
       {/* Gold-fill CTA with black text — pin the dark (bright) gold so the fill
           stays legible; the light theme's darker gold would kill the contrast. */}
-      <section data-theme="dark" className="bg-gradient-to-br from-accent-soft to-accent-soft-deep text-black py-20 px-6">
+      <section data-theme="dark" className="bg-gradient-to-br from-accent-soft to-accent-soft-deep text-black py-14 sm:py-20 px-5 sm:px-6">
         <div className="max-w-5xl mx-auto text-center">
-          <h3 className={`text-4xl font-bold mb-6 ${isLoaded ? 'animate-fadeInUp' : 'opacity-0'}`} style={{ fontFamily: 'var(--font-display)' }}>
+          <h3 className={`text-3xl sm:text-4xl font-bold mb-4 sm:mb-6 ${isLoaded ? 'animate-fadeInUp' : 'opacity-0'}`} style={{ fontFamily: 'var(--font-display)' }}>
             Ready to Take Control of Your Financial Future?
           </h3>
-          <p className={`text-lg mb-10 text-black/80 leading-relaxed max-w-2xl mx-auto ${isLoaded ? 'animate-fadeInUp animate-delay-200' : 'opacity-0'}`}>
+          <p className={`text-base sm:text-lg mb-8 sm:mb-10 text-black/80 leading-relaxed max-w-2xl mx-auto ${isLoaded ? 'animate-fadeInUp animate-delay-200' : 'opacity-0'}`}>
             Schedule a complimentary consultation to explore investment products and opportunities.
           </p>
           <button
@@ -428,15 +421,15 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
         </div>
       </section>
 
-      <section id="contact" className="py-20 px-6 bg-bg-base">
+      <section id="contact" className="py-14 sm:py-20 px-5 sm:px-6 bg-bg-base">
         <div className="max-w-4xl mx-auto">
-          <h3 className="text-4xl font-bold text-center text-text-primary mb-4" style={{ fontFamily: 'var(--font-display)' }}>
+          <h3 className="text-3xl sm:text-4xl font-bold text-center text-text-primary mb-4" style={{ fontFamily: 'var(--font-display)' }}>
             Get in Touch
           </h3>
-          <div className="w-24 h-1 bg-accent-soft mx-auto mb-16"></div>
+          <div className="w-24 h-1 bg-accent-soft mx-auto mb-10 sm:mb-16"></div>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className={`bg-gradient-to-br from-black to-gray-900 rounded-xl p-8 shadow-xl hover:shadow-2xl transition-all duration-300 group ${isLoaded ? 'animate-fadeInUp animate-delay-100' : 'opacity-0'}`}>
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-5 sm:gap-8">
+            <div className={`bg-gradient-to-br from-black to-gray-900 rounded-xl p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300 group ${isLoaded ? 'animate-fadeInUp animate-delay-100' : 'opacity-0'}`}>
               <div className="flex items-center gap-4 mb-4">
                 <div className="bg-accent-soft p-4 rounded-full group-hover:scale-110 transition-transform duration-300">
                   <Phone className="w-8 h-8 text-black" />
@@ -453,7 +446,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               </a>
             </div>
 
-            <div className={`bg-gradient-to-br from-black to-gray-900 rounded-xl p-8 shadow-xl hover:shadow-2xl transition-all duration-300 group ${isLoaded ? 'animate-fadeInUp animate-delay-300' : 'opacity-0'}`}>
+            <div className={`bg-gradient-to-br from-black to-gray-900 rounded-xl p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300 group ${isLoaded ? 'animate-fadeInUp animate-delay-300' : 'opacity-0'}`}>
               <div className="flex items-center gap-4 mb-4">
                 <div className="bg-accent-soft p-4 rounded-full group-hover:scale-110 transition-transform duration-300">
                   <Mail className="w-8 h-8 text-black" />
@@ -470,7 +463,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               </a>
             </div>
 
-            <div className={`bg-gradient-to-br from-black to-gray-900 rounded-xl p-8 shadow-xl hover:shadow-2xl transition-all duration-300 group ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`}>
+            <div className={`bg-gradient-to-br from-black to-gray-900 rounded-xl p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300 group ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`}>
               <div className="flex items-center gap-4 mb-4">
                 <div className="bg-accent-soft p-4 rounded-full group-hover:scale-110 transition-transform duration-300">
                   <MessageCircle className="w-8 h-8 text-black" />
@@ -490,7 +483,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             </div>
           </div>
 
-          <div className={`lift mt-8 bg-gradient-to-br from-black to-gray-900 rounded-xl p-8 shadow-xl ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`}>
+          <div className={`lift mt-8 bg-gradient-to-br from-black to-gray-900 rounded-xl p-6 sm:p-8 shadow-xl ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`}>
             <div className="flex items-start gap-4">
               <div className="bg-accent-soft p-4 rounded-full shrink-0">
                 <MapPin className="w-8 h-8 text-black" />
@@ -521,7 +514,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
         </div>
       </section>
 
-      <footer className="bg-black text-white py-12 px-6 border-t border-accent-soft/20">
+      <footer className="bg-black text-white py-10 sm:py-12 px-5 sm:px-6 border-t border-accent-soft/20">
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-3 gap-8 mb-8">
             <div className="flex flex-col items-center md:items-start gap-3">
@@ -600,6 +593,42 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
           </div>
         </div>
       </footer>
+
+      {/* Spacer so the fixed mobile action bar never overlaps the last footer
+          lines when scrolled to the very bottom. */}
+      <div className="h-20 md:hidden" aria-hidden="true" />
+
+      {/* Sticky mobile action bar — a phone-native conversion pattern: the two
+          primary actions (start / call) stay reachable with the thumb no matter
+          how far the visitor has scrolled. Hidden from md up (desktop has the
+          nav CTAs). */}
+      <div
+        className="md:hidden fixed inset-x-0 bottom-0 z-40 px-4 pt-3 pb-[max(0.85rem,env(safe-area-inset-bottom))]"
+        style={{
+          background: 'rgba(7, 21, 36, 0.9)',
+          backdropFilter: 'saturate(160%) blur(14px)',
+          WebkitBackdropFilter: 'saturate(160%) blur(14px)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <a
+            href="tel:+918939433113"
+            aria-label="Call Niyom Wealth"
+            className="press flex items-center justify-center gap-2 h-12 px-5 rounded-xl font-semibold text-white flex-shrink-0"
+            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)' }}
+          >
+            <Phone size={18} className="text-accent-soft" />
+            Call
+          </a>
+          <button
+            onClick={() => window.open('/onboarding', '_blank')}
+            className="press flex-1 flex items-center justify-center gap-2 h-12 rounded-xl bg-accent-soft hover:bg-accent-soft-deep text-black font-bold"
+          >
+            Start Investing <ArrowRight size={18} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
