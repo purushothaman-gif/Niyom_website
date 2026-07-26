@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWClient, NWClientBankAccount } from './types';
 import { fmt, fmtDate, VERIFICATION_LABELS, VERIFICATION_COLORS } from './utils';
-import { Search, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus } from 'lucide-react';
+import { Search, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog } from 'lucide-react';
 
 interface Props { employee: NWEmployee; onNavigate: (page: any, params?: any) => void; }
 
@@ -67,6 +67,11 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [editDupWarnings, setEditDupWarnings] = useState<Record<'pan' | 'phone' | 'email', string | null>>({ pan: null, phone: null, email: null });
   const dupTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Admin-only "Reassign" — move a client to another owning employee (RM)
+  const [reassignClient, setReassignClient] = useState<NWClient | null>(null);
+  const [reassignToId, setReassignToId] = useState('');
+  const [reassignReason, setReassignReason] = useState('');
+  const [reassignSaving, setReassignSaving] = useState(false);
   // Admin-only "Modify Mapping" (Direct -> DSA) correction
   const [mapClient, setMapClient] = useState<NWClient | null>(null);
   const [dsaList, setDsaList] = useState<{ id: string; dsa_code: string; full_name: string }[]>([]);
@@ -171,6 +176,30 @@ export default function ManageClients({ employee, onNavigate }: Props) {
     if (error) { showToast(error.message, false); return; }
     setDeleteClient(null);
     showToast('Client deleted.');
+    load();
+  };
+
+  // --- Reassign: move a client to a different owning employee (admin only) ---
+  // Delegates to the nw_reassign_client RPC (admin-gated, audits + notifies the
+  // new owner, and keeps any linked lead's owner in sync).
+  const openReassign = (c: NWClient) => {
+    setReassignClient(c);
+    setReassignToId('');
+    setReassignReason('');
+  };
+
+  const confirmReassign = async () => {
+    if (!reassignClient || !reassignToId) return;
+    setReassignSaving(true);
+    const { error } = await supabase.rpc('nw_reassign_client', {
+      p_client_id: reassignClient.id,
+      p_to_employee: reassignToId,
+      p_reason: reassignReason.trim(),
+    });
+    setReassignSaving(false);
+    if (error) { showToast(error.message, false); return; }
+    setReassignClient(null);
+    showToast('Client reassigned.');
     load();
   };
 
@@ -485,6 +514,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                         ? <button onClick={() => handleResetClientPassword(c)} className="p-1.5 rounded-lg transition-colors" title="Send Password Reset Email" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--success)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><ShieldCheck className="w-4 h-4" /></button>
                         : <button onClick={() => { setLoginClient(c); setLoginPassword(''); setShowLoginPw(false); }} className="p-1.5 rounded-lg transition-colors" title="Enable Client Login" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--warning)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><KeyRound className="w-4 h-4" /></button>
                       }
+                      {isAdmin && <button onClick={() => openReassign(c)} className="p-1.5 rounded-lg transition-colors" title="Reassign to Employee" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'rgb(var(--info-soft-rgb))')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><UserCog className="w-4 h-4" /></button>}
                       {isAdmin && c.sourced_via === 'direct' && <button onClick={() => openModifyMapping(c)} className="p-1.5 rounded-lg transition-colors" title="Modify Mapping (Direct → DSA)" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Handshake className="w-4 h-4" /></button>}
                       {isAdmin && <button onClick={() => setDeleteClient(c)} className="p-1.5 rounded-lg transition-colors" title="Delete" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Trash2 className="w-4 h-4" /></button>}
                     </div>
@@ -686,6 +716,46 @@ export default function ManageClients({ employee, onNavigate }: Props) {
       )}
 
       {/* Modify Mapping Modal — Direct → DSA correction (admin only) */}
+      {reassignClient && (
+        <Modal title={`Reassign Client — ${reassignClient.full_name}`} onClose={() => setReassignClient(null)}>
+          <div className="p-6 space-y-5">
+            <div className="p-4 rounded-xl" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2 text-xs flex-wrap" style={{ color: 'var(--text-secondary)' }}>
+                <span className="font-semibold text-text-primary">Current owner:</span>
+                <span className="px-2 py-0.5 rounded-lg" style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                  {(reassignClient.employee as any)?.full_name || 'Admin'}
+                </span>
+              </div>
+              <p className="text-xs mt-2" style={{ color: 'var(--text-faint)' }}>
+                Moves the client to a new owning employee (RM). The new owner is notified, and any linked lead is kept in sync. No other client records change.
+              </p>
+            </div>
+
+            <InlineField label="Assign To">
+              <select value={reassignToId} onChange={e => setReassignToId(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl text-sm text-text-primary outline-none" style={inputStyle}>
+                <option value="">— Select an employee —</option>
+                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.full_name} ({emp.employee_code})</option>)}
+              </select>
+            </InlineField>
+
+            <InlineField label="Reason (optional)">
+              <textarea value={reassignReason} onChange={e => setReassignReason(e.target.value)} rows={2}
+                placeholder="Why this reassignment?"
+                className="w-full px-3 py-2 rounded-xl text-sm text-text-primary outline-none resize-none" style={inputStyle} />
+            </InlineField>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setReassignClient(null)} className="px-4 py-2 rounded-xl text-sm" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
+              <button onClick={confirmReassign} disabled={reassignSaving || !reassignToId}
+                className="px-5 py-2 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                {reassignSaving ? 'Reassigning...' : 'Reassign Client'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {mapClient && (
         <Modal title={`Modify Mapping — ${mapClient.full_name}`} onClose={() => setMapClient(null)}>
           <div className="p-6 space-y-5">
