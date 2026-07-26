@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowLeftRight, Download, Search } from 'lucide-react';
 import { fmt, fmtDate } from '../../../crm/utils';
+import { LogoLoader } from '../../../components/LogoLoader';
 import type { NWClient } from '../../../crm/types';
 import { Card } from '../../components/Card';
 import { KpiStat } from '../../components/KpiStat';
@@ -35,7 +36,7 @@ export function TransactionsPage({ clientId, client }: { clientId: string; clien
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+        <LogoLoader size={48} />
       </div>
     );
   }

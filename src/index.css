@@ -549,3 +549,56 @@ input[type='range'] {
   .hb-bloom { animation: none; }
   .reveal { opacity: 1; transform: none; transition: none; }
 }
+
+/* -----------------------------------------------------------------------------
+ * Niyom logo loader — the brand mark centred inside a rotating gold arc that
+ * echoes the logo's own ring. Used by <LogoLoader> (components/LogoLoader.tsx).
+ * The mark "breathes" while the arc sweeps; reduced-motion keeps a soft pulse
+ * only. Colours ride the accent token so the loader stays on-brand in both
+ * themes.
+ * -------------------------------------------------------------------------- */
+@keyframes niyomArcSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes niyomArcDraw {
+  0%   { stroke-dashoffset: 265; }   /* ~92% hidden — a short leading arc   */
+  50%  { stroke-dashoffset: 100; }   /* sweeps open                         */
+  100% { stroke-dashoffset: 265; }   /* closes again for a living, non-flat */
+}
+
+@keyframes niyomBreathe {
+  0%, 100% { transform: scale(0.94); opacity: 0.82; }
+  50%      { transform: scale(1);    opacity: 1;    }
+}
+
+@keyframes niyomGlow {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 0.55; }
+}
+
+.niyom-loader__glow {
+  animation: niyomGlow 2.4s ease-in-out infinite;
+}
+.niyom-loader__mark {
+  transform-origin: center;
+  animation: niyomBreathe 2.4s ease-in-out infinite;
+}
+.niyom-loader__ring {
+  transform-origin: center;
+  animation: niyomArcSpin 1.15s linear infinite;
+}
+.niyom-loader__arc {
+  stroke-dasharray: 289;             /* 2πr, r ≈ 46 in a 100-unit viewBox   */
+  stroke-dashoffset: 200;
+  animation: niyomArcDraw 2.4s ease-in-out infinite;
+}
+.niyom-loader__label {
+  animation: niyomGlow 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .niyom-loader__ring,
+  .niyom-loader__arc { animation: none; }
+  .niyom-loader__mark { animation: niyomGlow 2.4s ease-in-out infinite; }
+}

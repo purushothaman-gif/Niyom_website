@@ -8,6 +8,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import { fmtDate } from '../../../crm/utils';
+import { LogoLoader } from '../../../components/LogoLoader';
 import type { NWClient } from '../../../crm/types';
 import { ThemeToggle } from '../../../theme/ThemeToggle';
 import { Card } from '../../components/Card';
@@ -239,7 +240,7 @@ function BankSection({ clientId, client }: { clientId: string; client: NWClient 
     <SectionCard title="Bank Accounts" icon={Banknote} footer={ADVISOR_NOTE}>
       {loading ? (
         <div className="flex justify-center py-8">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+          <LogoLoader size={40} />
         </div>
       ) : error ? (
         <EmptyState icon={Banknote} title={error} compact />
