@@ -228,11 +228,6 @@ export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
             <p className="text-xl text-text-secondary max-w-3xl mx-auto">
               Product distribution and information services to support your investment journey
             </p>
-            <div className="mt-4 bg-warning/10 border border-warning/40 rounded-lg p-3 max-w-2xl mx-auto">
-              <p className="text-sm text-text-primary font-semibold">
-                We are not SEBI Registered Investment Advisers. Information provided is for educational purposes only and does not constitute investment advice.
-              </p>
-            </div>
           </div>
 
           <div className="flex flex-wrap justify-center gap-3 mb-12">
@@ -321,6 +316,12 @@ export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
           </Reveal>
         </div>
       </section>
+
+      <div className="px-6 pb-8">
+        <p className="max-w-3xl mx-auto text-center text-xs text-text-muted leading-relaxed">
+          We are not SEBI Registered Investment Advisers. Information provided is for educational purposes only and does not constitute investment advice.
+        </p>
+      </div>
 
       <footer className="bg-black text-white py-12 px-6 border-t border-accent-soft/20">
         <div className="max-w-7xl mx-auto text-center">
