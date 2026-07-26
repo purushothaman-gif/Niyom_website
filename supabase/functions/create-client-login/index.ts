@@ -7,6 +7,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+// Client password policy — returns null if OK. Mirrors src/lib/passwordPolicy.ts.
+function passwordError(pw: unknown): string | null {
+  if (typeof pw !== "string" || pw.length < 8) return "Password must be at least 8 characters.";
+  if (pw.length > 72) return "Password must be 72 characters or fewer.";
+  if (!/[A-Z]/.test(pw)) return "Password must include an uppercase letter.";
+  if (!/[a-z]/.test(pw)) return "Password must include a lowercase letter.";
+  if (!/[0-9]/.test(pw)) return "Password must include a number.";
+  if (!/[^A-Za-z0-9]/.test(pw)) return "Password must include a symbol.";
+  return null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -52,8 +63,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    if (initial_password.length < 8) {
-      return new Response(JSON.stringify({ error: "Password must be at least 8 characters" }), {
+    // Client password policy (mirrors src/lib/passwordPolicy.ts and
+    // reset-password-with-otp; kept inline since edge fns can't import src/).
+    const pwErr = passwordError(initial_password);
+    if (pwErr) {
+      return new Response(JSON.stringify({ error: pwErr }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

@@ -51,6 +51,7 @@ function passwordError(pw) {
   if (!/[a-z]/.test(pw)) return 'Password must include a lowercase letter.';
   if (!/[A-Z]/.test(pw)) return 'Password must include an uppercase letter.';
   if (!/[0-9]/.test(pw)) return 'Password must include a number.';
+  if (!/[^A-Za-z0-9]/.test(pw)) return 'Password must include a symbol.';
   return null;
 }
 
@@ -114,13 +115,14 @@ test('hashOTP changes with email and with pepper (binding)', async () => {
 });
 
 test('password policy accepts strong and rejects weak passwords', () => {
-  assert.equal(passwordError('Abcdef12'), null);
-  assert.equal(passwordError('GoodPass99'), null);
+  assert.equal(passwordError('Abcdef1!'), null);
+  assert.equal(passwordError('GoodPass99$'), null);
   assert.match(passwordError('short1A'), /at least 8/);
-  assert.match(passwordError('alllowercase1'), /uppercase/);
-  assert.match(passwordError('ALLUPPERCASE1'), /lowercase/);
-  assert.match(passwordError('NoNumbersHere'), /number/);
-  assert.match(passwordError('A1' + 'x'.repeat(80)), /72 characters/);
+  assert.match(passwordError('alllowercase1!'), /uppercase/);
+  assert.match(passwordError('ALLUPPERCASE1!'), /lowercase/);
+  assert.match(passwordError('NoNumbersHere!'), /number/);
+  assert.match(passwordError('NoSymbols123'), /symbol/);
+  assert.match(passwordError('A1!' + 'x'.repeat(80)), /72 characters/);
 });
 
 test('VALID OTP verifies and then resets, consuming the OTP', async () => {
@@ -131,7 +133,7 @@ test('VALID OTP verifies and then resets, consuming the OTP', async () => {
   const v = await evaluate(row, otp, email, 'verify');
   assert.equal(v.outcome, 'verified');
 
-  const r = await evaluate(row, otp, email, 'reset', 'NewPass123');
+  const r = await evaluate(row, otp, email, 'reset', 'NewPass123!');
   assert.equal(r.outcome, 'reset');
   assert.equal(r.row.used, true);
 });
@@ -171,7 +173,7 @@ test('REUSING a consumed OTP fails', async () => {
   const email = 'staff@niyomwealth.com';
   const otp = '444444';
   const used = makeRow(email, await hashOTP(otp, email), { used: true });
-  const r = await evaluate(used, otp, email, 'reset', 'NewPass123');
+  const r = await evaluate(used, otp, email, 'reset', 'NewPass123!');
   assert.equal(r.outcome, 'no_otp');
 });
 
