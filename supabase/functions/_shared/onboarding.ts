@@ -145,3 +145,15 @@ export async function checkOtp(
   await db.from("nw_otps").delete().eq("phone", phone);
   return { ok: true };
 }
+
+// True when a client with this PAN already exists in our records. Both PAN-verify
+// endpoints call this FIRST so an already-registered PAN never hits the paid
+// Cashfree verify. PAN is stored uppercase on nw_clients.
+export async function panAlreadyRegistered(db: SupabaseClient, pan: string): Promise<boolean> {
+  const { data } = await db
+    .from("nw_clients")
+    .select("id")
+    .eq("pan", pan.trim().toUpperCase())
+    .limit(1);
+  return !!(data && data.length > 0);
+}

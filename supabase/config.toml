@@ -455,6 +455,12 @@ verify_jwt = false
 [functions.public-pan-verify]
 verify_jwt = false
 
+# Anonymous PAN verify for the FIRST step of website self-signup (no account yet).
+# Public verify_jwt: the visitor is unauthenticated; abuse is bounded by an
+# internal already-registered short-circuit + a per-IP throttle inside the fn.
+[functions.public-onboard-pan-verify]
+verify_jwt = false
+
 [functions.public-onboard-record-doc]
 verify_jwt = false
 
