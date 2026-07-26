@@ -335,8 +335,9 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     return data.path;
   };
 
+  // Empty string (not null) when there's no demat — the column is NOT NULL DEFAULT ''.
   const depository = !form.demat_account.trim()
-    ? null
+    ? ''
     : form.demat_account.toUpperCase().startsWith("IN")
       ? "NSDL"
       : "CDSL";
