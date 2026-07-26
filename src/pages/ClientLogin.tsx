@@ -7,6 +7,8 @@ import { HeroBackground } from '../components/HeroBackground';
 interface Props {
   onLogin: (clientId: string, passwordChanged: boolean) => void;
   onInvestNow?: () => void;
+  /** Open directly on the email-OTP sign-in (returning applicants have no password yet). */
+  startOtp?: boolean;
 }
 
 type View = 'login' | 'forgot' | 'reset_sent' | 'otp_login';
@@ -47,8 +49,8 @@ function clearRateLimit() {
   sessionStorage.removeItem('client_login_rl');
 }
 
-export default function ClientLogin({ onLogin, onInvestNow }: Props) {
-  const [view, setView] = useState<View>('login');
+export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: Props) {
+  const [view, setView] = useState<View>(startOtp ? 'otp_login' : 'login');
   const [pan, setPan] = useState('');
   const [password, setPassword] = useState('');
   const [resetPan, setResetPan] = useState('');

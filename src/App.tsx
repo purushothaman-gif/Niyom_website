@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
-import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
 import { ScrollToTop } from './components/ScrollToTop';
@@ -63,6 +63,7 @@ function PublicPage({ route }: { route: PublicRoute }) {
  */
 function ClientLoginRoute() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { loading } = useAuth();
   const [clientPortalId, setClientPortalId] = useState<string | null>(() => {
     try {
@@ -140,12 +141,20 @@ function ClientLoginRoute() {
     return <ClientPortal clientId={clientPortalId} onLogout={handleClientLogout} />;
   }
 
-  return <ClientLogin onLogin={handleClientLogin} onInvestNow={() => navigate('/onboarding')} />;
+  return (
+    <ClientLogin
+      onLogin={handleClientLogin}
+      onInvestNow={() => navigate('/onboarding')}
+      startOtp={searchParams.get('method') === 'otp'}
+    />
+  );
 }
 
 function OnboardingRoute() {
   const navigate = useNavigate();
-  return <PublicOnboarding onBack={() => navigate('/client-login')} />;
+  // Send returning applicants straight to the email-OTP sign-in (they have no
+  // password yet), not the default password view.
+  return <PublicOnboarding onBack={() => navigate('/client-login?method=otp')} />;
 }
 
 /** Public, unauthenticated secure link: /deal/<token>. */
