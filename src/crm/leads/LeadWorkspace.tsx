@@ -5,7 +5,7 @@ import {
   ArrowLeft, Phone, MessageCircle, Mail, Pencil, UserPlus, StickyNote,
   CalendarClock, Upload, FileText, Activity as ActivityIcon,
   ShieldCheck, Lock, Building2, Briefcase, MapPin, History,
-  CheckCircle2, Download, AlertCircle,
+  CheckCircle2, Download, AlertCircle, Trash2,
 } from 'lucide-react';
 import {
   NWLead, NWLeadActivity, NWLeadNote, NWLeadFollowup, NWLeadCommunication,
@@ -57,6 +57,19 @@ export default function LeadWorkspace({ employee, lead: initialLead, onBack, onE
   const [statusSaving, setStatusSaving] = useState(false);
   const [toast, setToast] = useState('');
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2500); };
+
+  // Admin-only hard delete (via nw_delete_lead RPC; child rows cascade).
+  const [delModal, setDelModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deleteLead = async () => {
+    setDeleting(true);
+    const { error } = await supabase.rpc('nw_delete_lead', { p_lead_id: lead.id });
+    setDeleting(false);
+    if (error) { setDelModal(false); flash(error.message || 'Could not delete the lead.'); return; }
+    setDelModal(false);
+    onChanged();
+    onBack();
+  };
 
   const locked = lead.is_locked;
   const converted = lead.status === 'Closed - Converted' || !!lead.converted_client_id;
@@ -160,8 +173,34 @@ export default function LeadWorkspace({ employee, lead: initialLead, onBack, onE
               <UserPlus className="w-4 h-4" /> Assign
             </GhostButton>
           )}
+          {isAdmin && (
+            <GhostButton onClick={() => setDelModal(true)} className="!py-2 !px-3.5 flex items-center gap-2"
+              style={{ background: 'rgba(239,68,68,0.08)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.25)' }}>
+              <Trash2 className="w-4 h-4" /> Delete
+            </GhostButton>
+          )}
         </div>
       </div>
+
+      {/* Admin delete confirmation */}
+      <Modal open={delModal} onClose={() => !deleting && setDelModal(false)} title="Delete lead?">
+        <div className="space-y-4">
+          <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--danger)' }} />
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              This permanently deletes <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{lead.lead_name}</span>
+              {' '}(<span className="font-mono">{lead.lead_code}</span>) and all its activity, notes, follow-ups, communications and documents. This cannot be undone.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <GhostButton onClick={() => setDelModal(false)} disabled={deleting} className="!py-2 !px-4">Cancel</GhostButton>
+            <PrimaryButton onClick={deleteLead} disabled={deleting} className="!py-2 !px-4 flex items-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)' }}>
+              <Trash2 className="w-4 h-4" /> {deleting ? 'Deleting…' : 'Delete lead'}
+            </PrimaryButton>
+          </div>
+        </div>
+      </Modal>
 
       {(locked || converted) && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm" style={{ background: 'rgba(5,150,105,0.08)', border: '1px solid rgba(5,150,105,0.25)', color: 'rgb(5,150,105)' }}>
