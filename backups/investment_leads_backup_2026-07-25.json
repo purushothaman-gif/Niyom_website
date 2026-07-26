@@ -1,0 +1,49 @@
+{
+  "table": "investment_leads",
+  "exported_at": "2026-07-25",
+  "note": "Backup taken before dropping the investment_leads table and removing the public 'Invest Now' lead forms. All rows were internal test submissions.",
+  "rows": [
+    {
+      "id": "dca20218-8714-4d5c-a751-cee4af134df1",
+      "product_type": "mutual-funds",
+      "full_name": "purushothaman",
+      "email": "appupurushothaman@gmail.com",
+      "phone": "8754433113",
+      "investment_amount": "₹10-25 Lakhs",
+      "investment_horizon": "1-3 years",
+      "risk_profile": "Aggressive",
+      "additional_notes": "",
+      "status": "new",
+      "created_at": "2026-02-22T20:39:26.183874+00:00",
+      "updated_at": "2026-02-22T20:39:26.183874+00:00"
+    },
+    {
+      "id": "d85e00d0-e612-46cd-a6f0-ac8699b80f12",
+      "product_type": "mutual-funds",
+      "full_name": "PURUSHOTHAMAN S",
+      "email": "appupurushothaman@gmail.com",
+      "phone": "8754433113",
+      "investment_amount": "₹10-25 Lakhs",
+      "investment_horizon": "1-3 years",
+      "risk_profile": "Aggressive",
+      "additional_notes": "",
+      "status": "new",
+      "created_at": "2026-02-23T07:05:47.28103+00:00",
+      "updated_at": "2026-02-23T07:05:47.28103+00:00"
+    },
+    {
+      "id": "6ed3bd9f-9622-4ddb-beb8-b2076b64d19b",
+      "product_type": "mutual-funds",
+      "full_name": "PURUSHOTHAMAN S",
+      "email": "purushothaman@niyomwealth.com",
+      "phone": "8939200110",
+      "investment_amount": "₹1-5 Lakhs",
+      "investment_horizon": "Less than 1 year",
+      "risk_profile": "Conservative",
+      "additional_notes": "",
+      "status": "new",
+      "created_at": "2026-06-03T09:34:02.817+00:00",
+      "updated_at": "2026-06-03T09:34:02.817+00:00"
+    }
+  ]
+}

@@ -432,6 +432,13 @@ verify_jwt = false
 [functions.mf-detail]
 verify_jwt = false
 
+# --- Gold/silver price refresh for the public Learning page. Public verify_jwt:
+#     the live-refresh path is triggered by pg_cron (commodity-price-refresh) with
+#     no session; the injectable manual-write path is guarded in-function by the
+#     service-role key. See 20260726030000_schedule_commodity_price_refresh.sql. ---
+[functions.update-commodity-prices]
+verify_jwt = false
+
 # --- Conversion-first public onboarding. start/send-otp/verify-otp are fully
 #     anonymous (no session yet). pan-verify/record-doc/submit run public but
 #     require the client's own bearer token and verify record ownership inside
