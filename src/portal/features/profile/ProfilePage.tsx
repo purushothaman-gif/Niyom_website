@@ -16,6 +16,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { StatusPill } from '../../components/StatusPill';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { maskAccount } from '../../services/ProfileService';
+import { canActivateMoreProducts } from '../onboarding/onboardingSteps';
 
 type Tab = 'personal' | 'bank' | 'demat' | 'kyc' | 'settings';
 
@@ -30,6 +31,7 @@ interface Props {
   client: NWClient | null;
   clientId: string;
   onChangePassword: () => void;
+  onActivateProducts: () => void;
 }
 
 /** Label/value line used across the read-only sections. */
@@ -64,9 +66,10 @@ const ADVISOR_NOTE = (
   </p>
 );
 
-export function ProfilePage({ client, clientId, onChangePassword }: Props) {
+export function ProfilePage({ client, clientId, onChangePassword, onActivateProducts }: Props) {
   const [tab, setTab] = useState<Tab>('personal');
   const status = client?.verification_status ?? 'pending';
+  const canActivate = canActivateMoreProducts(client);
 
   return (
     <div className="space-y-5">
@@ -119,7 +122,7 @@ export function ProfilePage({ client, clientId, onChangePassword }: Props) {
       {tab === 'bank' && <BankSection clientId={clientId} client={client} />}
 
       {tab === 'demat' && (
-        <SectionCard title="Demat Account" icon={Landmark} footer={ADVISOR_NOTE}>
+        <SectionCard title="Demat Account" icon={Landmark} footer={client?.demat_account ? ADVISOR_NOTE : undefined}>
           {client?.demat_account ? (
             <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <InfoRow label="Demat A/C" value={maskAccount(client.demat_account)} mono />
@@ -127,7 +130,16 @@ export function ProfilePage({ client, clientId, onChangePassword }: Props) {
               <InfoRow label="Depository" value={client.depository} />
             </dl>
           ) : (
-            <EmptyState icon={Landmark} title="No demat account on file." hint="Not required for mutual fund investments." compact />
+            <EmptyState icon={Landmark} title="No demat account on file." hint="Required only for Bonds & Unlisted Shares." compact />
+          )}
+          {canActivate && (
+            <button
+              onClick={onActivateProducts}
+              className="press mt-4 flex w-full items-center justify-center gap-2 rounded-token-md py-3 text-sm font-bold text-text-on-accent"
+              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+            >
+              Activate Bonds &amp; Unlisted Shares
+            </button>
           )}
         </SectionCard>
       )}

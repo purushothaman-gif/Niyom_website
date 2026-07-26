@@ -65,4 +65,24 @@ export const OnboardingService = {
     });
     return ok ? { ok: true } : { ok: false, error: data.error };
   },
+
+  /**
+   * Post-onboarding — an active client activates Bonds / Unlisted Shares by
+   * supplying their demat (BO ID) + DP name. The CML must be uploaded first
+   * (via uploadDoc('CML', ...)); this records the products and notifies the RM.
+   */
+  async activateProducts(
+    clientId: string,
+    products: string[],
+    dematAccount: string,
+    dpName: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const { ok, data } = await authedFn('public-request-product-activation', {
+      client_id: clientId,
+      products,
+      demat_account: dematAccount,
+      dp_name: dpName,
+    });
+    return ok ? { ok: true } : { ok: false, error: data.error };
+  },
 };

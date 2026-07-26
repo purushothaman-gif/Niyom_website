@@ -14,13 +14,15 @@ import { MarketUpdatesCard } from './sections/MarketUpdatesCard';
 import { NoticesCard } from './sections/NoticesCard';
 import { SupportCard } from './sections/SupportCard';
 import { OnboardingChecklistCard } from '../onboarding/OnboardingChecklistCard';
-import { onboardingIncomplete } from '../onboarding/onboardingSteps';
+import { ActivateProductsCard } from './sections/ActivateProductsCard';
+import { onboardingIncomplete, canActivateMoreProducts } from '../onboarding/onboardingSteps';
 
 interface DashboardPageProps {
   client: NWClient | null;
   data: DashboardData;
   refreshedAt: Date | null;
   onNavigate: (view: PortalView) => void;
+  onActivateProducts: () => void;
 }
 
 function greeting(): string {
@@ -30,7 +32,7 @@ function greeting(): string {
   return 'Good evening';
 }
 
-export function DashboardPage({ client, data, refreshedAt, onNavigate }: DashboardPageProps) {
+export function DashboardPage({ client, data, refreshedAt, onNavigate, onActivateProducts }: DashboardPageProps) {
   const firstName = client?.full_name?.split(' ')[0] || 'Investor';
 
   return (
@@ -54,6 +56,11 @@ export function DashboardPage({ client, data, refreshedAt, onNavigate }: Dashboa
       {/* Onboarding checklist — only while the account is still being activated */}
       {onboardingIncomplete(client) && (
         <OnboardingChecklistCard client={client} onNavigate={onNavigate} />
+      )}
+
+      {/* Post-onboarding: prompt to enable Bonds / Unlisted Shares (demat + CML) */}
+      {canActivateMoreProducts(client) && (
+        <ActivateProductsCard client={client} onActivate={onActivateProducts} />
       )}
 
       {/* Row 1 — Net worth hero */}
