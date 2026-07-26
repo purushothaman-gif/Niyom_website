@@ -128,6 +128,9 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     setPrefs(p => (p.includes(value) ? p.filter(x => x !== value) : [...p, value]));
   // Demat is mandatory only when a CML product (Bonds / Unlisted Shares) is chosen.
   const dematRequired = prefs.some(p => CML_PRODUCTS.has(p));
+  // The CML document is only required for CML products; drop it otherwise so
+  // Mutual Funds / FD / Insurance clients aren't asked for a Demat proof.
+  const requiredDocTypes = CLIENT_DOC_TYPES.filter(d => d.type !== 'CML' || dematRequired);
 
   const [dsaMode, setDsaMode] = useState<'new' | 'existing' | ''>('');
   const [existingDSAs, setExistingDSAs] = useState<NWDSA[]>([]);
@@ -242,7 +245,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     setDocFiles(prev => [...prev.filter(d => d.type !== type), { type, file }]);
   };
 
-  const missingDocs = CLIENT_DOC_TYPES.filter(d => !docFiles.find(f => f.type === d.type));
+  const missingDocs = requiredDocTypes.filter(d => !docFiles.find(f => f.type === d.type));
   const missingDsaDocs = DSA_DOC_TYPES.filter(d => {
     if (d.type === 'dsa_pan') return !dsaDocs.pan;
     return !dsaDocs.bank;
@@ -883,10 +886,12 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
               <Upload className="w-4 h-4" style={{ color: 'var(--accent)' }} /> KYC Documents
             </h3>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              All four documents are <span style={{ color: 'var(--accent)' }}>mandatory</span>. Files are securely stored.
+              {dematRequired
+                ? <>All three documents are <span style={{ color: 'var(--accent)' }}>mandatory</span> for the selected products. Files are securely stored.</>
+                : <>Both documents are <span style={{ color: 'var(--accent)' }}>mandatory</span>. CML is needed only for Bonds / Unlisted Shares. Files are securely stored.</>}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {CLIENT_DOC_TYPES.map(({ type, label }) => {
+              {requiredDocTypes.map(({ type, label }) => {
                 const existing = docFiles.find(d => d.type === type);
                 return (
                   <label key={type} className="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all"
@@ -1015,7 +1020,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--accent)' }}>Documents</p>
                 <div className="flex flex-wrap gap-2">
-                  {CLIENT_DOC_TYPES.map(({ type, label }) => {
+                  {requiredDocTypes.map(({ type, label }) => {
                     const uploaded = docFiles.find(d => d.type === type);
                     return (
                       <span key={type} className="text-xs px-2.5 py-1 rounded-lg flex items-center gap-1"
