@@ -3,7 +3,6 @@
 // -record-doc / -submit. Kept small and dependency-light (Deno + supabase-js).
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { emailFooterHtml, emailFooterText, NOTICE_AUTOMATED } from "./email_footer.ts";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -119,73 +118,6 @@ async function deliverOtpEmail(email: string, code: string): Promise<void> {
     if (!res.ok) console.error(`[Resend OTP] status=${res.status} body=${(await res.text()).slice(0, 300)}`);
   } catch (e) {
     console.error("[Resend OTP] send failed:", (e as any)?.message);
-  }
-}
-
-// One-time welcome email sent after the client's first successful OTP verify.
-// Tells a self-onboarded (direct) client how to sign back in — their credential
-// is mobile → email OTP (no PAN, no password until an RM provisions one), which
-// the login page's default PAN+password view doesn't make obvious. Best-effort:
-// callers wrap this in try/catch so a mail failure never blocks verification.
-export async function deliverWelcomeEmail(
-  email: string | null,
-  fullName: string | null,
-  clientCode: string | null,
-): Promise<void> {
-  const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-  if (!RESEND_API_KEY || !email) return;
-
-  const name = (fullName || "").trim() || "there";
-  const year = new Date().getFullYear();
-  const loginUrl = "https://niyomwealth.com/client-login";
-
-  const subject = "Welcome to Niyom Wealth — how to sign in";
-  const text = `Hi ${name},
-
-Your Niyom Wealth account${clientCode ? ` (${clientCode})` : ""} is ready.
-
-How to sign in next time:
-1. Go to ${loginUrl}
-2. Tap "Already started your application?"
-3. Enter your registered mobile number
-4. Enter the 6-digit code we email you
-
-No password needed. Finish your KYC in the portal to activate investing.
-
-Niyom Wealth Distribution LLP
-
-${emailFooterText({ year, ref: clientCode || undefined, notice: NOTICE_AUTOMATED })}`;
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
-<body style="font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.7;margin:0;padding:0;background:#f6f6f6;">
-  <div style="max-width:560px;margin:0 auto;padding:28px 24px;background:#ffffff;">
-    <div style="font-size:20px;font-weight:700;color:#111;margin-bottom:20px;border-bottom:2px solid #D4AF37;padding-bottom:14px;">Niyom Wealth</div>
-    <p style="margin:0 0 14px;">Hi ${name},</p>
-    <p style="margin:0 0 14px;">Your Niyom Wealth account${clientCode ? ` (<strong>${clientCode}</strong>)` : ""} is ready. Here's how to sign in whenever you come back:</p>
-    <ol style="margin:0 0 16px;padding-left:20px;color:#333;">
-      <li style="margin:0 0 6px;">Go to <a href="${loginUrl}" style="color:#B8961E;font-weight:600;">niyomwealth.com/client-login</a></li>
-      <li style="margin:0 0 6px;">Tap <strong>"Already started your application?"</strong></li>
-      <li style="margin:0 0 6px;">Enter your registered <strong>mobile number</strong></li>
-      <li style="margin:0 0 6px;">Enter the 6-digit code we email you</li>
-    </ol>
-    <div style="background:#FFF9EC;border:1px solid #D4AF37;border-radius:8px;padding:12px 16px;margin:0 0 16px;color:#555;font-size:13px;">
-      No password needed — you sign in with a one-time code sent to your email.
-    </div>
-    <p style="margin:0 0 14px;color:#555;font-size:13px;">Finish your KYC in the portal to activate investing.</p>
-    <p style="margin:18px 0 0;color:#111;font-weight:600;">Niyom Wealth Distribution LLP</p>
-    ${emailFooterHtml({ year, ref: clientCode || undefined, notice: NOTICE_AUTOMATED })}
-  </div>
-</body></html>`;
-
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: "Niyom Wealth <support@niyomwealth.com>", to: [email], subject, html, text }),
-    });
-    if (!res.ok) console.error(`[Resend Welcome] status=${res.status} body=${(await res.text()).slice(0, 300)}`);
-  } catch (e) {
-    console.error("[Resend Welcome] send failed:", (e as any)?.message);
   }
 }
 

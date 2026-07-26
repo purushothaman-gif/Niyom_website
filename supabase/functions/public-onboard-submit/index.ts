@@ -50,11 +50,18 @@ Deno.serve(async (req: Request) => {
     const db = serviceClient();
     const { data: client } = await db
       .from("nw_clients")
-      .select("id, full_name, client_code, employee_id, pan_verified, client_auth_user_id")
+      .select("id, full_name, client_code, employee_id, pan, pan_verified, onboarding_status, client_auth_user_id")
       .eq("id", client_id)
       .maybeSingle();
     if (!client || client.client_auth_user_id !== user.id) return json({ error: "Unauthorized" }, 403);
     if (!client.pan_verified) return json({ error: "Please verify your PAN before submitting." }, 400);
+
+    // Idempotency: once KYC has been submitted (or the account is active) the
+    // login has already been provisioned. Re-running must NOT reset a password
+    // the client may have since changed, so return the current state as a no-op.
+    if (["kyc_under_review", "kyc_submitted", "active"].includes(client.onboarding_status)) {
+      return json({ success: true, onboarding_status: client.onboarding_status }, 200);
+    }
 
     const cmlRequired = prefs.some((p) => CML_PRODUCTS.has(p));
 
@@ -65,6 +72,27 @@ Deno.serve(async (req: Request) => {
       verification_status: "partial",
       kyc_submitted_at: new Date().toISOString(),
     }).eq("id", client_id);
+
+    // Provision a real PAN-based login now that KYC is in and the PAN is
+    // verified/stored: Login ID = PAN, temporary password = PAN, and force a
+    // change on first login (client_password_changed=false → the portal routes
+    // them through ClientChangePassword, exactly like an RM-provisioned client).
+    // Mirrors create-client-login's password-set on an existing auth user. Done
+    // before the RM notify so a mail failure isn't mistaken for a provisioning
+    // failure and a retry can't double-notify (the guard above blocks re-entry).
+    if (client.client_auth_user_id && client.pan) {
+      const { data: authUser } = await db.auth.admin.getUserById(client.client_auth_user_id);
+      const { error: pwErr } = await db.auth.admin.updateUserById(client.client_auth_user_id, {
+        password: client.pan,
+        email_confirm: true,
+        user_metadata: { ...(authUser?.user?.user_metadata ?? {}), pan: client.pan, is_client: true },
+      });
+      if (pwErr) {
+        console.error("Credential provisioning failed:", pwErr.message);
+        return json({ error: "Could not finish setting up your login. Please try again." }, 500);
+      }
+      await db.from("nw_clients").update({ client_password_changed: false }).eq("id", client_id);
+    }
 
     await db.from("nw_activity_logs").insert([{
       employee_id: client.employee_id,

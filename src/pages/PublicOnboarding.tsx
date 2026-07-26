@@ -54,7 +54,7 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 }
 
 export default function PublicOnboarding({ onBack }: Props) {
-  const [view, setView] = useState<'form' | 'otp' | 'success'>('form');
+  const [view, setView] = useState<'form' | 'otp'>('form');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -125,10 +125,7 @@ export default function PublicOnboarding({ onBack }: Props) {
       sessionStorage.setItem('nw_portal_pw_ok', '1');
     } catch {}
     setBusy(false);
-    // Show the return-login instructions before entering the portal. The live
-    // session + sessionStorage pointers are already set, so the portal is one
-    // click away via onBack() (→ /client-login, which mounts it on the session).
-    setView('success');
+    onBack(); // navigates to /client-login, which now mounts the portal with a live session
   };
 
   return (
@@ -154,23 +151,20 @@ export default function PublicOnboarding({ onBack }: Props) {
             <Sparkles className="w-3.5 h-3.5" /> Open Your Free Account
           </div>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
-            {view === 'form' ? 'Start in 30 seconds' : view === 'otp' ? 'Verify your email' : "You're all set"}
+            {view === 'form' ? 'Start in 30 seconds' : 'Verify your email'}
           </h1>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             {view === 'form'
               ? 'No documents needed to begin. Complete KYC later — about 5 minutes in total.'
-              : view === 'otp'
-                ? <>We sent a 6-digit code to <span style={{ color: 'var(--text-primary)' }}>{emailMasked || 'your email'}</span>.</>
-                : 'Your free account is ready. Here’s how to sign in whenever you come back.'}
+              : <>We sent a 6-digit code to <span style={{ color: 'var(--text-primary)' }}>{emailMasked || 'your email'}</span>.</>}
           </p>
         </div>
 
         {/* Progress: 2 dots */}
         <div className="flex items-center justify-center gap-2">
           {['Create', 'Verify'].map((s, i) => {
-            const stepIndex = view === 'form' ? 0 : view === 'otp' ? 1 : 2;
-            const active = stepIndex === i;
-            const done = stepIndex > i;
+            const active = (view === 'form' ? 0 : 1) === i;
+            const done = (view === 'otp') && i === 0;
             return (
               <div key={s} className="flex items-center gap-2">
                 <div className="flex items-center gap-1.5">
@@ -218,7 +212,7 @@ export default function PublicOnboarding({ onBack }: Props) {
                 {busy ? 'Creating your account…' : <>Create Free Account <ArrowRight className="w-4 h-4" /></>}
               </button>
             </>
-          ) : view === 'otp' ? (
+          ) : (
             <>
               <Field icon={ShieldCheck} label="Enter 6-Digit OTP">
                 <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -239,47 +233,6 @@ export default function PublicOnboarding({ onBack }: Props) {
                   <RotateCcw className="w-3.5 h-3.5" /> {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
                 </button>
               </div>
-            </>
-          ) : (
-            <>
-              <div className="flex flex-col items-center text-center gap-2">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid var(--success)' }}>
-                  <CheckCircle2 className="w-6 h-6" style={{ color: 'var(--success)' }} />
-                </div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Account verified</p>
-              </div>
-
-              {/* How to sign in next time — a self-onboarded client's credential
-                  is mobile → email OTP (no PAN, no password), so spell it out. */}
-              <div className="rounded-xl p-4 space-y-3" style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
-                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>Signing in next time</p>
-                <ol className="space-y-2">
-                  {[
-                    <>Go to <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>niyomwealth.com/client-login</span></>,
-                    <>Tap <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>“Already started your application?”</span></>,
-                    <>Enter your registered <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>mobile number</span></>,
-                    <>Enter the 6-digit code we email you</>,
-                  ].map((step, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-sm" style={{ color: 'var(--text-muted)' }}>
-                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5"
-                        style={{ background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }}>{i + 1}</span>
-                      <span className="leading-relaxed">{step}</span>
-                    </li>
-                  ))}
-                </ol>
-                <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
-                  <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--accent)' }} /> No password needed — you sign in with a one-time emailed code.
-                </p>
-              </div>
-
-              <button onClick={onBack}
-                className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 press transition-opacity"
-                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))', color: 'var(--text-on-accent)' }}>
-                Continue to my portal <ArrowRight className="w-4 h-4" />
-              </button>
-              <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-                We’ve also emailed these instructions to you.
-              </p>
             </>
           )}
         </div>
@@ -302,8 +255,7 @@ export default function PublicOnboarding({ onBack }: Props) {
           </button>
         )}
 
-        {/* Trust footer — hidden on the success view (its copy is pre-signup). */}
-        {view !== 'success' && (
+        {/* Trust footer */}
         <div className="space-y-2.5">
           {[
             { icon: CheckCircle2, text: 'Your account is created instantly — start exploring right away.' },
@@ -316,7 +268,6 @@ export default function PublicOnboarding({ onBack }: Props) {
             </div>
           ))}
         </div>
-        )}
       </div>
     </div>
   );

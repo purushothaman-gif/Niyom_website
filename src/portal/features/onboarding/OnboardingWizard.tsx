@@ -111,6 +111,18 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
     setSubmitted(true);
   };
 
+  // End the current (OTP) session and return to the PAN/password login, where
+  // the client signs in with PAN + PAN and is routed through the forced
+  // password-change screen. Hard navigation so the OTP session is fully dropped.
+  const reLoginToSetPassword = async () => {
+    try { await supabase.auth.signOut(); } catch { /* ignore */ }
+    try {
+      sessionStorage.removeItem('nw_portal_client');
+      sessionStorage.removeItem('nw_portal_pw_ok');
+    } catch { /* ignore */ }
+    window.location.href = '/client-login';
+  };
+
   const stepOptions = (['pan', 'products', 'documents', 'review'] as StepKey[]).map((k) => ({ value: k, label: STEP_LABELS[k] }));
 
   // ── Terminal states ────────────────────────────────────────────────────
@@ -127,8 +139,41 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
     );
   }
   if (submitted) {
+    const loginPan = (client?.pan || pan || '').toUpperCase();
+    // Show the one-time credentials only until the client sets their own
+    // password (client_password_changed flips to true after ClientChangePassword).
+    const showCredentials = client?.client_password_changed === false && !!loginPan;
     return (
       <div className="mx-auto max-w-lg space-y-4">
+        {showCredentials && (
+          <Card className="animate-fadeInUp">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-accent" />
+              <h3 className="text-sm font-bold text-text-primary">Your login details</h3>
+            </div>
+            <p className="mt-1 text-xs text-text-muted">
+              You're all set. Sign in with the details below — you'll set your own password on your first login.
+            </p>
+            <div className="mt-3 space-y-2">
+              {[
+                { label: 'Login ID (PAN)', value: loginPan },
+                { label: 'Temporary password', value: loginPan },
+              ].map((row) => (
+                <div key={row.label} className="flex items-center justify-between gap-3 rounded-token-md border border-border bg-bg-raised px-3.5 py-2.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">{row.label}</span>
+                  <span className="font-mono text-sm font-bold tracking-wider text-text-primary">{row.value}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={reLoginToSetPassword}
+              className="press mt-4 flex w-full items-center justify-center gap-2 rounded-token-md py-3 text-sm font-bold text-text-on-accent"
+              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+            >
+              Re-login now to set your new password <ArrowRight className="h-4 w-4" />
+            </button>
+          </Card>
+        )}
         <StatusScreen
           icon={Clock}
           tone="warning"
