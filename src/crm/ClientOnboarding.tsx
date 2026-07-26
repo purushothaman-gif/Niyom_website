@@ -12,9 +12,11 @@ interface Props {
   pageParams?: Record<string, string>;
 }
 
-// Steps differ based on sourced_via: Direct = 5 steps, DSA = 6 steps (extra DSA step before Demat & Bank)
-const DIRECT_STEPS = ['Source', 'Basic Info', 'Demat & Bank', 'Products', 'Documents', 'Review'];
-const DSA_STEPS    = ['Source', 'DSA Details', 'Basic Info', 'Demat & Bank', 'Products', 'Documents', 'Review'];
+// Steps differ based on sourced_via: Direct = 5 steps, DSA = 6 steps (extra DSA step before Basic Info)
+// Products comes BEFORE Demat & Bank because the chosen products decide whether
+// demat details are mandatory (Bonds / Unlisted Shares need a demat + CML).
+const DIRECT_STEPS = ['Source', 'Basic Info', 'Products', 'Demat & Bank', 'Documents', 'Review'];
+const DSA_STEPS    = ['Source', 'DSA Details', 'Basic Info', 'Products', 'Demat & Bank', 'Documents', 'Review'];
 
 // Investment products the client wants access to. Values MUST match the portal
 // self-service wizard (src/portal/features/onboarding/onboardingSteps.ts) and the
@@ -124,6 +126,8 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
   const [prefs, setPrefs] = useState<string[]>([]);
   const togglePref = (value: string) =>
     setPrefs(p => (p.includes(value) ? p.filter(x => x !== value) : [...p, value]));
+  // Demat is mandatory only when a CML product (Bonds / Unlisted Shares) is chosen.
+  const dematRequired = prefs.some(p => CML_PRODUCTS.has(p));
 
   const [dsaMode, setDsaMode] = useState<'new' | 'existing' | ''>('');
   const [existingDSAs, setExistingDSAs] = useState<NWDSA[]>([]);
@@ -285,8 +289,9 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
   };
 
   const validateDematBank = () => {
-    if (!form.demat_account.trim()) { setError('Demat account number is required.'); return false; }
-    if (!form.dp_name.trim())       { setError('DP Name is required.'); return false; }
+    // Demat is required only for CML products (Bonds / Unlisted Shares).
+    if (dematRequired && !form.demat_account.trim()) { setError('Demat account number is required for Bonds / Unlisted Shares.'); return false; }
+    if (dematRequired && !form.dp_name.trim())       { setError('DP Name is required for Bonds / Unlisted Shares.'); return false; }
     if (!form.bank_account.trim())  { setError('Bank account number is required.'); return false; }
     if (!form.bank_ifsc.trim())     { setError('IFSC code is required.'); return false; }
     if (!form.bank_name.trim())     { setError('Bank name is required.'); return false; }
@@ -327,10 +332,11 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     return data.path;
   };
 
-  const depository =
-  form.demat_account?.toUpperCase().startsWith("IN")
-    ? "NSDL"
-    : "CDSL";
+  const depository = !form.demat_account.trim()
+    ? null
+    : form.demat_account.toUpperCase().startsWith("IN")
+      ? "NSDL"
+      : "CDSL";
 
   const handleSubmit = async () => {
     if (missingDocs.length > 0) {
@@ -808,11 +814,16 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
             <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
               <Building2 className="w-4 h-4" style={{ color: 'var(--accent)' }} /> Demat & Bank Details
             </h3>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {dematRequired
+                ? 'Demat details are required — the selected products (Bonds / Unlisted Shares) need a demat account.'
+                : 'Demat details are optional for the selected products — add them if the client has a demat account.'}
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Demat Account No." required>
+              <Field label="Demat Account No." required={dematRequired}>
                 <Input value={form.demat_account} onChange={e => set('demat_account', e.target.value)} placeholder="1234567890123456" />
               </Field>
-              <Field label="DP Name" required>
+              <Field label="DP Name" required={dematRequired}>
                 <Input value={form.dp_name} onChange={e => set('dp_name', e.target.value)} placeholder="HDFC Securities" />
               </Field>
               <Field label="Bank Account No." required>
