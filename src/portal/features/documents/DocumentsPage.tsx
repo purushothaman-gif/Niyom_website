@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Download, FileText, FolderClosed, Loader2 } from 'lucide-react';
 import { fmtDate } from '../../../crm/utils';
+import { LogoLoader } from '../../../components/LogoLoader';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
 import { StatusPill } from '../../components/StatusPill';
@@ -64,7 +65,7 @@ export function DocumentsPage({ clientId }: { clientId: string }) {
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+        <LogoLoader size={48} />
       </div>
     );
   }

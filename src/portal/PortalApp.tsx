@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { LogoLoader } from '../components/LogoLoader';
 import { PortalShell } from './layout/PortalShell';
 import { VIEW_TITLES } from './layout/navigation';
 import { usePortalRouter } from './routing/usePortalRouter';
@@ -156,10 +157,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
 function LoadingState() {
   return (
     <div className="flex min-h-[50vh] items-center justify-center">
-      <div
-        className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
-        style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
-      />
+      <LogoLoader size={52} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { ThemeProvider } from './theme/ThemeContext';
 import { ScrollToTop } from './components/ScrollToTop';
 import { Seo } from './components/Seo';
 import { NotFound } from './components/NotFound';
+import { LogoLoader } from './components/LogoLoader';
 import { PUBLIC_ROUTES, type PublicRoute } from './routes/publicRoutes';
 
 // Authenticated / utility surfaces are code-split so the public marketing bundle
@@ -21,12 +22,8 @@ const PublicDebitNoteView = lazy(() => import('./pages/PublicDebitNoteView'));
 
 function LoadingScreen() {
   // Theme-aware (not white) so lazy sub-app loads don't flash a jarring white
-  // screen on a dark theme.
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-bg-base">
-      <div className="text-text-muted">Loading...</div>
-    </div>
-  );
+  // screen on a dark theme. Uses the brand loader (mark + rotating gold arc).
+  return <LogoLoader fullscreen label="Loading…" />;
 }
 
 /** Renders a public page from the route config plus its per-page <Seo>. */

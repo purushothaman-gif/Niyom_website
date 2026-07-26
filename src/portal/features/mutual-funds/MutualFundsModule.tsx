@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, Clock, Lock, ArrowRight } from 'lucide-react';
 import type { NWHolding } from '../../../crm/types';
+import { LogoLoader } from '../../../components/LogoLoader';
 import type { PortalView } from '../../layout/navigation';
 import { Segmented } from '../../components/Segmented';
 import { useFundCatalog } from '../../hooks/useFundCatalog';
@@ -83,10 +84,7 @@ export function MutualFundsModule({
   if (loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
-        <div
-          className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
-          style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
-        />
+        <LogoLoader size={52} />
       </div>
     );
   }
