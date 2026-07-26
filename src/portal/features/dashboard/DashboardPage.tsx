@@ -97,7 +97,7 @@ export function DashboardPage({ client, data, refreshedAt, onNavigate, onActivat
       </div>
 
       {/* Row 7 — Support */}
-      <SupportCard />
+      <SupportCard onNavigate={onNavigate} />
 
       <p className="py-2 text-center text-xs text-border-strong">
         Niyom Wealth Distribution · Confidential · For your eyes only

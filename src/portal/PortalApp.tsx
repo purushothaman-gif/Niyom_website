@@ -64,7 +64,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
     if (view === 'transactions') return <TransactionsPage clientId={clientId} client={client} />;
     if (view === 'documents') return <DocumentsPage clientId={clientId} />;
     if (view === 'notifications') return <NotificationsPage clientId={clientId} />;
-    if (view === 'support') return <SupportPage />;
+    if (view === 'support') return <SupportPage clientId={clientId} />;
 
     // Snapshot-backed views (need the client record / holdings).
     const snapshotView =
