@@ -584,7 +584,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
 
           <div className="text-center text-text-muted pt-8 border-t border-gray-800">
             <p className="text-sm">&copy; 2025 Niyom Wealth Distribution LLP. All rights reserved.</p>
-            <p className="text-xs mt-3 text-yellow-400 font-semibold">
+            <p className="text-xs mt-3 text-text-muted">
               SEBI Disclaimer: We are not SEBI Registered Investment Advisers.
             </p>
             <p className="text-xs mt-2 text-text-muted">

@@ -152,7 +152,7 @@ export function PublicPageChrome({
 
       <footer className="bg-bg-elevated border-t border-border-subtle px-5 sm:px-6 py-8">
         <div className="max-w-7xl mx-auto text-center">
-          <p className="text-xs text-warning font-semibold">
+          <p className="text-xs text-text-muted">
             SEBI Disclaimer: We are not SEBI Registered Investment Advisers.
           </p>
           <p className="text-xs mt-2 text-text-muted max-w-3xl mx-auto leading-relaxed">
