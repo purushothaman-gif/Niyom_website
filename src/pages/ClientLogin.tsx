@@ -415,14 +415,20 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
               </div>
 
               {/* Return path for clients still completing KYC (no password yet). */}
-              <div className="text-center">
-                <button type="button" onClick={() => { setView('otp_login'); setError(''); setOtpStage('phone'); setOtpPhone(''); setOtpCode(''); }}
-                  className="text-xs font-medium transition-colors" style={{ color: 'var(--text-muted)' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
-                  Already started? Continue with email OTP →
-                </button>
-              </div>
+              <button type="button" onClick={() => { setView('otp_login'); setError(''); setOtpStage('phone'); setOtpPhone(''); setOtpCode(''); }}
+                className="group w-full flex items-center gap-3 p-4 rounded-xl text-left transition-all"
+                style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.1)'; e.currentTarget.style.borderColor = 'var(--accent)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.06)'; e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.25)'; }}>
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(var(--accent-rgb),0.12)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
+                  <ShieldCheck className="w-4.5 h-4.5" style={{ color: 'var(--accent)' }} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Already started your application?</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Continue with a one-time code emailed to you — no password needed.</p>
+                </div>
+                <ArrowRight className="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-hover:translate-x-1" style={{ color: 'var(--accent)' }} />
+              </button>
 
               <div className="text-center">
                 <a href="/" className="inline-flex items-center gap-1.5 text-xs transition-colors" style={{ color: 'var(--border-stronger)' }}
