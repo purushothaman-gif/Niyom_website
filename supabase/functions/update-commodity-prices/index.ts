@@ -19,7 +19,15 @@ import { createClient } from "npm:@supabase/supabase-js@2";
  *                                          Without a key, clears any placeholder
  *                                          rows and reports that the key is unset.
  * POST { commodity, price, price_date }  → manual single upsert (source 'manual').
+ *                                          Requires `Authorization: Bearer <service
+ *                                          role key>` — this is the only injectable
+ *                                          write path and must stay staff-only.
  * GET                                    → latest reading per commodity.
+ *
+ * Deployed with verify_jwt = false so pg_cron can trigger the live-refresh path
+ * without a JWT (see supabase/config.toml). The live path only pulls from
+ * metalpriceapi and writes computed spot, so it is safe to leave open; the manual
+ * path is guarded in-function below.
  */
 
 const corsHeaders = {
@@ -58,8 +66,14 @@ Deno.serve(async (req: Request) => {
     if (req.method === "POST") {
       const body = await req.json().catch(() => ({}));
 
-      // Manual single entry.
+      // Manual single entry. Guarded: only a caller presenting the service-role
+      // key may inject prices (verify_jwt is off for the cron live-refresh path).
       if (body?.commodity || body?.price || body?.price_date) {
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+        const auth = req.headers.get("Authorization") ?? "";
+        if (!serviceKey || auth !== `Bearer ${serviceKey}`) {
+          return json({ error: "Unauthorized: manual price entry requires the service role key" }, 401);
+        }
         const { commodity, price, price_date } = body;
         if (!commodity || price == null || !price_date) {
           return json({ error: "commodity, price and price_date are required" }, 400);
