@@ -148,7 +148,10 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
 
     // Scope
     if (filters.scope === 'assigned') q = q.eq('owner_employee_id', employee.id);
-    else if (filters.scope === 'self_generated') q = q.eq('created_by_employee_id', employee.id).eq('lead_origin', 'employee_manual');
+    // "Self-Generated" = the employee's own manual entries OR public-website
+    // self-signups (RLS still limits non-admins to leads they can see).
+    else if (filters.scope === 'self_generated')
+      q = q.or(`and(created_by_employee_id.eq.${employee.id},lead_origin.eq.employee_manual),lead_origin.eq.website_signup`);
     else if (filters.scope === 'pool') q = q.is('owner_employee_id', null);
     if (isAdmin && filters.owner_employee_id) q = q.eq('owner_employee_id', filters.owner_employee_id);
 
