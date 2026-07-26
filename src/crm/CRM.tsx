@@ -22,6 +22,7 @@ import Employees from './Employees';
 import Settings from './Settings';
 import DealConfirmation from './DealConfirmation';
 import TransferQueue from './TransferQueue';
+import SupportTickets from './SupportTickets';
 
 export default function CRM() {
   const [employee, setEmployee] = useState<NWEmployee | null>(null);
@@ -178,6 +179,7 @@ export default function CRM() {
       case 'employees': return isAdmin ? <Employees employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
       case 'deal_confirmation': return <DealConfirmation employee={employee} />;
       case 'transfer_queue': return isAdmin ? <TransferQueue employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
+      case 'support_tickets': return <SupportTickets employee={employee} onNavigate={navigate} />;
       case 'settings': return <Settings employee={employee} />;
       default: return <Dashboard employee={employee} onNavigate={navigate} />;
     }

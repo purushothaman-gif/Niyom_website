@@ -5,7 +5,7 @@ import {
   LayoutDashboard, UserPlus, Users, PieChart, ArrowLeftRight,
   FileText, UserCog, Settings, LogOut, Bell, ChevronRight, X, Home,
   FolderOpen, Shield, BarChart3, Wallet, Handshake, ClipboardList,
-  Send, Target, Landmark,
+  Send, Target, Landmark, LifeBuoy,
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
@@ -26,6 +26,7 @@ const NAV = [
   { key: 'clients' as CRMPage,          label: 'Manage Clients',    icon: Users },
   { key: 'portfolio' as CRMPage,        label: 'Portfolio',         icon: PieChart },
   { key: 'transactions' as CRMPage,     label: 'Transactions',      icon: ArrowLeftRight },
+  { key: 'support_tickets' as CRMPage,  label: 'Support Tickets',   icon: LifeBuoy },
   { key: 'reports' as CRMPage,          label: 'Reports',           icon: FileText },
   { key: 'bonds' as CRMPage,            label: 'Bond Creation',     icon: Landmark },
   { key: 'mis' as CRMPage,             label: 'MIS Report',        icon: BarChart3 },
@@ -71,6 +72,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
     supabase.from('nw_alerts').update({ read: true }).eq('id', a.id).then(() => {});
     setShowAlerts(false);
     if (a.action_url && a.action_url.includes('/leads')) onNavigate('leads' as CRMPage);
+    else if (a.action_url && a.action_url.includes('/support-tickets')) onNavigate('support_tickets' as CRMPage);
     else if (a.action_url && a.action_url.includes('/clients')) onNavigate('clients' as CRMPage);
   };
 
