@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Check,
   ChevronDown,
   Headphones,
   Mail,
@@ -12,11 +13,11 @@ import { Card } from '../../components/Card';
 import { timeAgo } from '../../../crm/utils';
 import { SupportService, type SupportTicket, type TicketStatus } from '../../services/SupportService';
 import { RaiseTicketModal } from './RaiseTicketModal';
-import { SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_PHONE_HREF, SUPPORT_WHATSAPP_HREF } from './contact';
+import { SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_PHONE_HREF, SUPPORT_WHATSAPP_HREF, copyText } from './contact';
 
-const CONTACTS: Array<{ icon: LucideIcon; label: string; value: string; href: string }> = [
+const CONTACTS: Array<{ icon: LucideIcon; label: string; value: string; href: string; copy?: string }> = [
   { icon: Phone, label: 'Call us', value: SUPPORT_PHONE, href: SUPPORT_PHONE_HREF },
-  { icon: Mail, label: 'Email', value: SUPPORT_EMAIL, href: `mailto:${SUPPORT_EMAIL}` },
+  { icon: Mail, label: 'Email', value: SUPPORT_EMAIL, href: `mailto:${SUPPORT_EMAIL}`, copy: SUPPORT_EMAIL },
   { icon: MessageSquare, label: 'WhatsApp', value: 'Chat with us', href: SUPPORT_WHATSAPP_HREF },
 ];
 
@@ -88,6 +89,17 @@ export function SupportPage({ clientId }: { clientId: string }) {
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(true);
+  const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
+
+  // Copy a contact value to the clipboard (the mailto/tel still fires natively
+  // for anyone with a handler); guarantees a visible action on every click.
+  const handleContactCopy = (label: string, value: string) => {
+    void copyText(value).then((ok) => {
+      if (!ok) return;
+      setCopiedLabel(label);
+      setTimeout(() => setCopiedLabel((l) => (l === label ? null : l)), 1800);
+    });
+  };
 
   const loadTickets = useCallback(async () => {
     setLoadingTickets(true);
@@ -131,23 +143,29 @@ export function SupportPage({ clientId }: { clientId: string }) {
 
       {/* Contact methods */}
       <div className="grid gap-4 sm:grid-cols-3">
-        {CONTACTS.map((c) => (
-          <a
-            key={c.label}
-            href={c.href}
-            target={c.href.startsWith('http') ? '_blank' : undefined}
-            rel="noopener"
-            className="lift flex items-center gap-3 rounded-token-xl border border-border bg-bg-elevated p-4 shadow-token-card transition-colors hover:border-accent/40"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-token-lg bg-accent/10">
-              <c.icon className="h-5 w-5 text-accent" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[11px] uppercase tracking-wide text-text-faint">{c.label}</p>
-              <p className="truncate text-sm font-semibold text-text-primary">{c.value}</p>
-            </div>
-          </a>
-        ))}
+        {CONTACTS.map((c) => {
+          const copied = copiedLabel === c.label;
+          return (
+            <a
+              key={c.label}
+              href={c.href}
+              target={c.href.startsWith('http') ? '_blank' : undefined}
+              rel="noopener"
+              onClick={c.copy ? () => handleContactCopy(c.label, c.copy!) : undefined}
+              className="lift flex items-center gap-3 rounded-token-xl border border-border bg-bg-elevated p-4 shadow-token-card transition-colors hover:border-accent/40"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-token-lg bg-accent/10">
+                {copied ? <Check className="h-5 w-5 text-success" /> : <c.icon className="h-5 w-5 text-accent" />}
+              </span>
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-wide text-text-faint">{c.label}</p>
+                <p className="truncate text-sm font-semibold text-text-primary">
+                  {copied ? 'Copied to clipboard' : c.value}
+                </p>
+              </div>
+            </a>
+          );
+        })}
       </div>
 
       {/* Your tickets */}

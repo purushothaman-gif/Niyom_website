@@ -1,7 +1,8 @@
-import { Headphones, Mail, MessageSquare, Phone } from 'lucide-react';
+import { useState } from 'react';
+import { Check, Headphones, Mail, MessageSquare, Phone } from 'lucide-react';
 import { Card } from '../../../components/Card';
 import type { PortalView } from '../../../layout/navigation';
-import { SUPPORT_PHONE_HREF, SUPPORT_EMAIL } from '../../support/contact';
+import { SUPPORT_PHONE_HREF, SUPPORT_EMAIL, copyText } from '../../support/contact';
 
 /**
  * Relationship-manager / support strip. Call/Email reach the NIYOM support desk;
@@ -9,6 +10,18 @@ import { SUPPORT_PHONE_HREF, SUPPORT_EMAIL } from '../../support/contact';
  * nw_support_tickets for the client's relationship team to action.
  */
 export function SupportCard({ onNavigate }: { onNavigate: (view: PortalView) => void }) {
+  const [emailCopied, setEmailCopied] = useState(false);
+
+  // mailto opens the mail app where one exists; copying guarantees the click
+  // always does something visible (browsers without a mail handler no-op mailto).
+  const onEmailClick = () => {
+    void copyText(SUPPORT_EMAIL).then((ok) => {
+      if (!ok) return;
+      setEmailCopied(true);
+      setTimeout(() => setEmailCopied(false), 1800);
+    });
+  };
+
   return (
     <Card className="animate-fadeInUp animate-delay-500">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -32,9 +45,12 @@ export function SupportCard({ onNavigate }: { onNavigate: (view: PortalView) => 
           </a>
           <a
             href={`mailto:${SUPPORT_EMAIL}`}
+            onClick={onEmailClick}
+            title={SUPPORT_EMAIL}
             className="flex items-center gap-2 rounded-token-md border border-border bg-bg-surface px-3 py-2 text-xs font-semibold text-text-primary transition-colors hover:border-accent/40 hover:text-accent"
           >
-            <Mail className="h-3.5 w-3.5" /> Email
+            {emailCopied ? <Check className="h-3.5 w-3.5 text-success" /> : <Mail className="h-3.5 w-3.5" />}
+            {emailCopied ? 'Copied!' : 'Email'}
           </a>
           <button
             type="button"

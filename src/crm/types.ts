@@ -303,4 +303,5 @@ export type CRMPage =
   | 'employees'
   | 'deal_confirmation'
   | 'transfer_queue'
+  | 'support_tickets'
   | 'settings';
