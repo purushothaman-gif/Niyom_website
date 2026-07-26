@@ -38,20 +38,35 @@ export interface NewTicketInput {
 }
 
 export const SupportService = {
-  /** Raise a new ticket for the signed-in client. Returns the created row. */
+  /**
+   * Raise a new ticket for the signed-in client. Goes through the
+   * `raise-support-ticket` edge function so the assigned RM is emailed
+   * server-side (the function also inserts the row, firing the in-app CRM
+   * alert). Returns the created row.
+   */
   async createTicket(clientId: string, input: NewTicketInput): Promise<SupportTicket> {
-    const { data, error } = await supabase
-      .from('nw_support_tickets')
-      .insert({
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token;
+    const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/raise-support-ticket`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token ?? anon}`,
+        Apikey: anon,
+      },
+      body: JSON.stringify({
         client_id: clientId,
         category: input.category,
         subject: input.subject.trim(),
         message: input.message.trim(),
-      })
-      .select('*')
-      .single();
-    if (error) throw new Error(error.message);
-    return data as SupportTicket;
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body?.ticket) {
+      throw new Error(body?.error || 'Could not raise your ticket. Please try again.');
+    }
+    return body.ticket as SupportTicket;
   },
 
   /** List the client's own tickets, newest first. */

@@ -473,6 +473,12 @@ verify_jwt = false
 [functions.public-request-product-activation]
 verify_jwt = false
 
+# Client-portal "Raise a Ticket". Public verify_jwt: runs with the client's own
+# bearer token and verifies ownership + is_client inside the function; inserts
+# the ticket (fires the RM in-app alert trigger) and emails the assigned RM.
+[functions.raise-support-ticket]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
