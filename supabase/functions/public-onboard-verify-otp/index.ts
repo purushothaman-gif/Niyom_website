@@ -1,12 +1,14 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   corsHeaders, json, serviceClient,
-  normalizePhone, isValidPhone, checkOtp, deliverWelcomeEmail,
+  normalizePhone, isValidPhone, isValidEmail, checkOtp,
 } from "../_shared/onboarding.ts";
 
-// Verifies a mobile OTP and returns a magic-link token the client exchanges for
+// Verifies an email OTP and returns a magic-link token the client exchanges for
 // a live Supabase session (no password on the wire). Serves both first-time
-// verification (Step 1) and return-login. Public (verify_jwt = false).
+// verification (Step 1, keyed by phone) and return-login (keyed by email). The
+// OTP itself is always stored against the client's phone in nw_otps. Public
+// (verify_jwt = false).
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -15,25 +17,29 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const phone = normalizePhone(body.phone || "");
+    const email = (body.email || "").trim().toLowerCase();
+    const phoneIn = normalizePhone(body.phone || "");
     const otp = (body.otp || "").trim();
-    if (!isValidPhone(phone) || !otp) {
-      return json({ error: "Enter the 6-digit code sent to your mobile." }, 400);
+    const byEmail = isValidEmail(email);
+    if ((!byEmail && !isValidPhone(phoneIn)) || !otp) {
+      return json({ error: "Enter the 6-digit code sent to your email." }, 400);
     }
 
     const db = serviceClient();
 
-    const { data: client } = await db
+    const lookup = db
       .from("nw_clients")
-      .select("id, full_name, email, client_code, onboarding_status, phone_verified, client_password_changed")
-      .eq("phone", phone)
-      .eq("client_login_enabled", true)
-      .maybeSingle();
+      .select("id, full_name, email, phone, onboarding_status, phone_verified, client_password_changed")
+      .eq("client_login_enabled", true);
+    const { data: client } = await (byEmail
+      ? lookup.eq("email", email)
+      : lookup.eq("phone", phoneIn)).maybeSingle();
 
-    if (!client || !client.email) {
-      return json({ error: "No account found for this mobile number." }, 404);
+    if (!client || !client.email || !client.phone) {
+      return json({ error: "No account found for these details." }, 404);
     }
 
+    const phone = normalizePhone(client.phone);
     const result = await checkOtp(db, phone, otp);
     if (!result.ok) return json({ error: result.error }, 400);
 
@@ -64,14 +70,6 @@ Deno.serve(async (req: Request) => {
           owner_employee_id: null, // admin pool — awaiting assignment
           converted_client_id: client.id,
         }]);
-      }
-
-      // Welcome email with return-login instructions (best-effort — a mail
-      // failure must never block sign-in). Sent once, on first verify only.
-      try {
-        await deliverWelcomeEmail(client.email, client.full_name, client.client_code);
-      } catch (e) {
-        console.error("Welcome email failed (non-fatal):", (e as any)?.message);
       }
     }
 

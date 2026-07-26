@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { clientSupabase as supabase } from '../lib/supabase';
-import { Lock, Eye, EyeOff, ArrowRight, ChevronLeft, AlertTriangle, CreditCard, Mail, Home, TrendingUp, Sparkles, Check, Phone, ShieldCheck, RotateCcw } from 'lucide-react';
+import { Lock, Eye, EyeOff, ArrowRight, ChevronLeft, AlertTriangle, CreditCard, Mail, Home, TrendingUp, Sparkles, Check, ShieldCheck, RotateCcw } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
 
@@ -57,9 +57,9 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
   const [error, setError] = useState('');
   const [lockoutMsg, setLockoutMsg] = useState('');
   const lockoutTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Mobile-OTP return login (for clients still completing KYC — no password yet)
-  const [otpStage, setOtpStage] = useState<'phone' | 'code'>('phone');
-  const [otpPhone, setOtpPhone] = useState('');
+  // Email-OTP return login (for clients still completing KYC — no password yet)
+  const [otpStage, setOtpStage] = useState<'email' | 'code'>('email');
+  const [otpEmail, setOtpEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpMasked, setOtpMasked] = useState('');
   const [otpResendIn, setOtpResendIn] = useState(0);
@@ -173,7 +173,7 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
     setView('reset_sent');
   };
 
-  // ── Mobile-OTP return login ────────────────────────────────────────────
+  // ── Email-OTP return login ─────────────────────────────────────────────
   const callPublicFn = async (name: string, payload: unknown) => {
     const url = import.meta.env.VITE_SUPABASE_URL;
     const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -196,10 +196,10 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const phone = otpPhone.replace(/\D/g, '').slice(-10);
-    if (!/^[6-9]\d{9}$/.test(phone)) { setError('Enter a valid 10-digit mobile number.'); return; }
+    const email = otpEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Enter a valid email address.'); return; }
     setLoading(true);
-    const { ok, data } = await callPublicFn('public-onboard-send-otp', { phone });
+    const { ok, data } = await callPublicFn('public-onboard-send-otp', { email });
     setLoading(false);
     if (!ok) { setError(data?.error || 'Could not send the code.'); return; }
     setOtpMasked(data?.email_masked || 'your registered email');
@@ -210,15 +210,18 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
   const handleVerifyOtpLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const phone = otpPhone.replace(/\D/g, '').slice(-10);
+    const email = otpEmail.trim().toLowerCase();
     if (!/^\d{6}$/.test(otpCode)) { setError('Enter the 6-digit code sent to your email.'); return; }
     setLoading(true);
-    const { ok, data } = await callPublicFn('public-onboard-verify-otp', { phone, otp: otpCode });
+    const { ok, data } = await callPublicFn('public-onboard-verify-otp', { email, otp: otpCode });
     if (!ok || !data?.token_hash) { setLoading(false); setError(data?.error || 'Verification failed.'); return; }
     const { error: sessErr } = await supabase.auth.verifyOtp({ token_hash: data.token_hash, type: 'email' });
     setLoading(false);
     if (sessErr) { setError('Could not sign you in. Please try again.'); return; }
-    onLogin(data.client_id, true);
+    // Honour the server's password_changed flag: a client who has completed
+    // onboarding (temp PAN password provisioned) is still routed through the
+    // forced password-change screen instead of bypassing it.
+    onLogin(data.client_id, data.password_changed !== false);
   };
 
   return (
@@ -415,7 +418,7 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
               </div>
 
               {/* Return path for clients still completing KYC (no password yet). */}
-              <button type="button" onClick={() => { setView('otp_login'); setError(''); setOtpStage('phone'); setOtpPhone(''); setOtpCode(''); }}
+              <button type="button" onClick={() => { setView('otp_login'); setError(''); setOtpStage('email'); setOtpEmail(''); setOtpCode(''); }}
                 className="group w-full flex items-center gap-3 p-4 rounded-xl text-left transition-all"
                 style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.1)'; e.currentTarget.style.borderColor = 'var(--accent)'; }}
@@ -517,10 +520,10 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
                   <ChevronLeft className="w-3.5 h-3.5" /> Back to Login
                 </button>
                 <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--accent)' }}>Continue Your Application</p>
-                <h1 className="text-3xl font-bold text-text-primary">{otpStage === 'phone' ? 'Sign in with OTP' : 'Enter your OTP'}</h1>
+                <h1 className="text-3xl font-bold text-text-primary">{otpStage === 'email' ? 'Sign in with OTP' : 'Enter your OTP'}</h1>
                 <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-                  {otpStage === 'phone'
-                    ? "Enter your registered mobile — we'll email you a code. No password needed."
+                  {otpStage === 'email'
+                    ? "Enter your registered email — we'll send you a code. No password needed."
                     : <>We sent a 6-digit code to <span className="text-text-primary">{otpMasked || 'your email'}</span>.</>}
                 </p>
               </div>
@@ -532,22 +535,22 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
                 </div>
               )}
 
-              {otpStage === 'phone' ? (
+              {otpStage === 'email' ? (
                 <form onSubmit={handleSendOtp} className="space-y-5">
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Mobile Number</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Email Address</label>
                     <div className="relative">
-                      <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
-                      <input type="tel" inputMode="numeric" value={otpPhone} maxLength={10}
-                        onChange={e => setOtpPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                        placeholder="9876543210" autoFocus
-                        className="w-full py-3 rounded-xl text-sm text-text-primary outline-none transition-all tracking-widest"
+                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
+                      <input type="email" inputMode="email" value={otpEmail}
+                        onChange={e => setOtpEmail(e.target.value)}
+                        placeholder="you@example.com" autoFocus
+                        className="w-full py-3 rounded-xl text-sm text-text-primary outline-none transition-all"
                         style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', paddingLeft: '2.75rem' }}
                         onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
                         onBlur={e => (e.target.style.borderColor = 'var(--border)')} />
                     </div>
                   </div>
-                  <button type="submit" disabled={loading || otpPhone.length !== 10}
+                  <button type="submit" disabled={loading || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(otpEmail.trim())}
                     className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent disabled:opacity-50 flex items-center justify-center gap-2"
                     style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
                     {loading ? 'Sending...' : <><span>Send OTP</span><ArrowRight className="w-4 h-4" /></>}
@@ -572,8 +575,8 @@ export default function ClientLogin({ onLogin, onInvestNow }: Props) {
                     {loading ? 'Verifying...' : <><span>Verify &amp; Continue</span><ArrowRight className="w-4 h-4" /></>}
                   </button>
                   <div className="flex items-center justify-between text-xs">
-                    <button type="button" onClick={() => { setOtpStage('phone'); setOtpCode(''); setError(''); }} className="flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
-                      <ChevronLeft className="w-3.5 h-3.5" /> Change number
+                    <button type="button" onClick={() => { setOtpStage('email'); setOtpCode(''); setError(''); }} className="flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
+                      <ChevronLeft className="w-3.5 h-3.5" /> Change email
                     </button>
                     <button type="button" onClick={() => { if (otpResendIn === 0) handleSendOtp({ preventDefault() {} } as React.FormEvent); }} disabled={otpResendIn > 0}
                       className="flex items-center gap-1 disabled:opacity-50" style={{ color: 'var(--accent)' }}>
