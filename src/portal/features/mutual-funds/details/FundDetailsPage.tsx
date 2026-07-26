@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarClock, TrendingUp } from 'lucide-react';
+import { ArrowLeft, CalendarClock, TrendingUp, Clock, Lock } from 'lucide-react';
 import { fmt, fmtDate } from '../../../../crm/utils';
 import { Card } from '../../../components/Card';
 import { MockBadge } from '../../../components/StatusPill';
@@ -12,9 +12,11 @@ interface Props {
   scheme: FundScheme;
   onBack: () => void;
   onInvest: (type: OrderType) => void;
+  /** When set, ordering is blocked; the CTAs reflect why (see MutualFundsModule). */
+  gate?: 'onboarding' | 'coming_soon' | null;
 }
 
-export function FundDetailsPage({ scheme, onBack, onInvest }: Props) {
+export function FundDetailsPage({ scheme, onBack, onInvest, gate }: Props) {
   const facts: Array<{ label: string; value: string }> = [
     { label: 'Category', value: `${scheme.category} · ${scheme.subCategory}` },
     { label: 'Fund Manager', value: scheme.fundManager },
@@ -87,21 +89,38 @@ export function FundDetailsPage({ scheme, onBack, onInvest }: Props) {
 
       {/* Sticky-ish invest CTAs */}
       <div className="sticky bottom-4 z-10 flex gap-3 rounded-token-xl border border-border bg-bg-elevated/95 p-3 shadow-token-lg backdrop-blur">
-        <button
-          type="button"
-          onClick={() => onInvest('sip')}
-          className="flex flex-1 items-center justify-center gap-2 rounded-token-md border border-accent/30 bg-accent/10 py-3 text-sm font-bold text-accent transition-colors hover:bg-accent/15"
-        >
-          <CalendarClock className="h-4 w-4" /> Start SIP
-        </button>
-        <button
-          type="button"
-          onClick={() => onInvest('lumpsum')}
-          className="flex-1 rounded-token-md py-3 text-sm font-bold text-on-accent transition-opacity hover:opacity-90"
-          style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
-        >
-          Invest Lumpsum
-        </button>
+        {gate === 'coming_soon' ? (
+          <div className="flex flex-1 cursor-not-allowed items-center justify-center gap-2 rounded-token-md border border-border bg-bg-base py-3 text-sm font-bold text-text-secondary">
+            <Clock className="h-4 w-4" /> Investing launches soon
+          </div>
+        ) : gate === 'onboarding' ? (
+          <button
+            type="button"
+            onClick={() => onInvest('lumpsum')}
+            className="flex flex-1 items-center justify-center gap-2 rounded-token-md py-3 text-sm font-bold text-on-accent transition-opacity hover:opacity-90"
+            style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+          >
+            <Lock className="h-4 w-4" /> Complete onboarding to invest
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => onInvest('sip')}
+              className="flex flex-1 items-center justify-center gap-2 rounded-token-md border border-accent/30 bg-accent/10 py-3 text-sm font-bold text-accent transition-colors hover:bg-accent/15"
+            >
+              <CalendarClock className="h-4 w-4" /> Start SIP
+            </button>
+            <button
+              type="button"
+              onClick={() => onInvest('lumpsum')}
+              className="flex-1 rounded-token-md py-3 text-sm font-bold text-on-accent transition-opacity hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+            >
+              Invest Lumpsum
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

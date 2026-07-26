@@ -55,6 +55,8 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
           clientId={clientId}
           holdings={snapshot.holdings}
           holdingsLoading={loading && !hasData}
+          onboardingComplete={client?.onboarding_status === 'active'}
+          onNavigate={navigate}
         />
       );
     if (view === 'transactions') return <TransactionsPage clientId={clientId} client={client} />;
