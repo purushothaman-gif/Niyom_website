@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   corsHeaders, json, serviceClient,
-  normalizePhone, isValidPhone, checkOtp,
+  normalizePhone, isValidPhone, checkOtp, deliverWelcomeEmail,
 } from "../_shared/onboarding.ts";
 
 // Verifies a mobile OTP and returns a magic-link token the client exchanges for
@@ -25,7 +25,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: client } = await db
       .from("nw_clients")
-      .select("id, full_name, email, onboarding_status, phone_verified, client_password_changed")
+      .select("id, full_name, email, client_code, onboarding_status, phone_verified, client_password_changed")
       .eq("phone", phone)
       .eq("client_login_enabled", true)
       .maybeSingle();
@@ -64,6 +64,14 @@ Deno.serve(async (req: Request) => {
           owner_employee_id: null, // admin pool — awaiting assignment
           converted_client_id: client.id,
         }]);
+      }
+
+      // Welcome email with return-login instructions (best-effort — a mail
+      // failure must never block sign-in). Sent once, on first verify only.
+      try {
+        await deliverWelcomeEmail(client.email, client.full_name, client.client_code);
+      } catch (e) {
+        console.error("Welcome email failed (non-fatal):", (e as any)?.message);
       }
     }
 
