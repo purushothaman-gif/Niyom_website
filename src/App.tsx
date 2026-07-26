@@ -125,6 +125,8 @@ function ClientLoginRoute() {
     import('./lib/supabase').then(({ clientSupabase }) => clientSupabase.auth.signOut());
     setClientPortalId(null);
     setClientPasswordChanged(false);
+    // Send the signed-out client to the public home page, not back to the login form.
+    navigate('/');
   };
 
   if (loading) return <LoadingScreen />;
