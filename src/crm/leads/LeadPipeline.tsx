@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { LogoLoader } from '../../components/LogoLoader';
 import { supabase } from '../../lib/supabase';
 import { NWEmployee } from '../types';
-import { RefreshCw, GripVertical } from 'lucide-react';
+import { GripVertical } from 'lucide-react';
 import { NWLead, LeadStatus } from './leadTypes';
 import { LEAD_STATUSES, statusRgb } from './leadConstants';
 import { ScoreBadge, PriorityBadge } from './leadUi';
@@ -58,7 +59,7 @@ export default function LeadPipeline({ employee, refreshKey, onOpen }: Props) {
   };
 
   if (loading) {
-    return <div className="flex justify-center py-20"><RefreshCw className="w-6 h-6 animate-spin" style={{ color: 'var(--accent)' }} /></div>;
+    return <div className="flex justify-center py-20"><LogoLoader size={48} /></div>;
   }
 
   return (

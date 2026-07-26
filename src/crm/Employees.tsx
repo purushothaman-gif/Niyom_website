@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee } from './types';
 import { fmtDate } from './utils';
@@ -160,7 +161,7 @@ export default function Employees({ employee }: Props) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="text-center py-12"><div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin mx-auto" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} /></td></tr>
+                <tr><td colSpan={6} className="text-center py-12"><LogoLoader size={40} /></td></tr>
               ) : employees.map(e => (
                 <tr key={e.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
                   <td className="px-5 py-3.5">

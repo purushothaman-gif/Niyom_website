@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  LifeBuoy, Search, RefreshCw, X, Mail, Phone, User, Clock, Loader2, Inbox,
+  LifeBuoy, Search, RefreshCw, X, Mail, Phone, User, Clock, Inbox,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { LogoLoader } from '../components/LogoLoader';
 import { NWEmployee } from './types';
 import { fmtDate, timeAgo } from './utils';
 
@@ -173,8 +174,8 @@ export default function SupportTickets({ employee }: Props) {
       {/* List */}
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         {loading ? (
-          <div className="flex items-center justify-center py-16" style={{ color: 'var(--text-muted)' }}>
-            <Loader2 className="w-5 h-5 animate-spin" />
+          <div className="flex items-center justify-center py-16">
+            <LogoLoader size={48} />
           </div>
         ) : visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-center" style={{ color: 'var(--text-muted)' }}>

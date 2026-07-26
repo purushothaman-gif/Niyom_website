@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWClient, NWClientBankAccount } from './types';
 import {
@@ -453,7 +454,7 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
 
             {loading ? (
               <div className="flex items-center justify-center py-16">
-                <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+                <LogoLoader size={48} />
               </div>
             ) : visibleDocs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3">

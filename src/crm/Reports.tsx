@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWHolding, NWTransaction, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_CHART_COLORS, TXN_LABELS, TXN_COLORS } from './utils';
@@ -163,7 +164,7 @@ export default function Reports({ employee }: Props) {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} /></div>
+        <div className="flex justify-center py-16"><LogoLoader size={48} /></div>
       ) : (
         <>
           {mode === 'portfolio' && (

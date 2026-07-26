@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWClient, NWClientBankAccount } from './types';
 import { fmt, fmtDate, VERIFICATION_LABELS, VERIFICATION_COLORS } from './utils';
@@ -487,7 +488,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-12"><div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin mx-auto" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} /></td></tr>
+                <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-12"><LogoLoader size={40} /></td></tr>
               ) : clients.length === 0 ? (
                 <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>No clients found</td></tr>
               ) : clients.map(c => (

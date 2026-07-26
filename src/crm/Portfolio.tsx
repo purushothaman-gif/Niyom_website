@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWHolding, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, PRODUCT_CHART_COLORS } from './utils';
@@ -1038,7 +1039,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="text-center py-12"><div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin mx-auto" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} /></td></tr>
+                <tr><td colSpan={8} className="text-center py-12"><LogoLoader size={40} /></td></tr>
               ) : holdings.length === 0 ? (
                 <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>No holdings found</td></tr>
               ) : (() => {

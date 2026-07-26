@@ -2,6 +2,7 @@
 // schedule. Pending bonds can be mastered on demand.
 
 import { useEffect, useState } from 'react';
+import { LogoLoader } from '../../components/LogoLoader';
 import { ArrowLeft, Loader2, Sparkles, Percent, ImageDown, ReceiptText, Megaphone, Minus, Plus, Pencil, Lock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
@@ -83,7 +84,7 @@ export default function BondProfile({ bondId, isAdmin, employee, onBack }: Props
     }
   }, [b?.id]);
 
-  if (isLoading) return <div className="flex items-center justify-center py-24"><Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--accent)' }} /></div>;
+  if (isLoading) return <div className="flex items-center justify-center py-24"><LogoLoader size={48} /></div>;
   if (!b) return (
     <div className="text-center py-24">
       <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Bond not found.</p>

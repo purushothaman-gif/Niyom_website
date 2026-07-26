@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { BarChart3, RefreshCw, Search, ArrowUpDown, AlertCircle, Plus, Check, GitCompare, Building2, X, Wallet } from 'lucide-react';
 import { PublicPageChrome } from './shared/PublicPageChrome';
 import { mfSource, type MutualFund, type MfSortKey, type MfSchemeHit } from './shared/mfSource';
@@ -268,8 +269,8 @@ export default function MFResearch({ onBack }: MFResearchProps) {
       )}
 
       {loading ? (
-        <div className="rounded-2xl p-10 text-center text-text-muted" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
-          <RefreshCw className="w-6 h-6 mx-auto mb-3 animate-spin text-accent-soft" /> Loading funds…
+        <div className="rounded-2xl p-10" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+          <LogoLoader size={44} label="Loading funds…" />
         </div>
       ) : visible.length === 0 ? (
         <div className="rounded-2xl p-16 text-center" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>

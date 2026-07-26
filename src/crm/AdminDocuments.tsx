@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWClient } from './types';
 import { DOC_FOLDERS, DocFolderKey, buildFileName, validateFile } from './Documents';
@@ -391,7 +392,7 @@ export default function AdminDocuments({ employee }: Props) {
 
           {loading ? (
             <div className="flex items-center justify-center py-16">
-              <div className="w-6 h-6 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+              <LogoLoader size={48} />
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center py-16 gap-3">

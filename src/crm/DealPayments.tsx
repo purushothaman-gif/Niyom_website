@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee } from './types';
 import {
@@ -753,8 +754,8 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-            <Loader2 className="w-5 h-5 animate-spin inline-block mr-2" /> Loading payments…
+          <div className="p-8">
+            <LogoLoader size={44} label="Loading payments…" />
           </div>
         ) : payments.length === 0 ? (
           <div className="p-10 text-center">
