@@ -14,7 +14,7 @@
  * Every request carries the caller's Supabase session JWT; the proxy verifies
  * it before touching BSE, so only signed-in NIYOM users can transact.
  */
-import { supabase } from '../../../lib/supabase';
+import { clientSupabase as supabase } from '../../../lib/supabase';
 import type {
   FundScheme,
   OrderRequest,

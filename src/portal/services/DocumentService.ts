@@ -5,7 +5,7 @@
  * `crm-documents` storage bucket and are fetched via short-lived signed URLs —
  * never public URLs — matching the CRM's handling.
  */
-import { supabase } from '../../lib/supabase';
+import { clientSupabase as supabase } from '../../lib/supabase';
 import type { ClientDocument } from '../types/activity';
 
 const BUCKET = 'crm-documents';

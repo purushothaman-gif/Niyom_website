@@ -7,7 +7,7 @@
  * This keeps the data source swappable: when holdings/transactions eventually
  * flow from a BSE-backed sync, only this file changes.
  */
-import { supabase } from '../../lib/supabase';
+import { clientSupabase as supabase } from '../../lib/supabase';
 import type { NWClient, NWHolding, NWTransaction } from '../../crm/types';
 
 export interface ClientWealthSnapshot {

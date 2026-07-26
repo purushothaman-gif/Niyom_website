@@ -4,7 +4,7 @@ import {
   ArrowLeft, ArrowRight, Upload, Loader2, Clock, Sparkles, PartyPopper,
   type LucideIcon,
 } from 'lucide-react';
-import { supabase } from '../../../lib/supabase';
+import { clientSupabase as supabase } from '../../../lib/supabase';
 import type { NWClient } from '../../../crm/types';
 import type { PortalView } from '../../layout/navigation';
 import { Card } from '../../components/Card';

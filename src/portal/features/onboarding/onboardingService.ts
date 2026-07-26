@@ -3,7 +3,7 @@
  * Edge functions run public (verify_jwt=false) but require the client's own
  * bearer token and verify record ownership server-side.
  */
-import { supabase } from '../../../lib/supabase';
+import { clientSupabase as supabase } from '../../../lib/supabase';
 
 const BUCKET = 'crm-documents';
 

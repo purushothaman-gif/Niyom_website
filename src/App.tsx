@@ -85,8 +85,8 @@ function ClientLoginRoute() {
   useEffect(() => {
     if (!clientPortalId) return;
     let cancelled = false;
-    import('./lib/supabase').then(({ supabase }) =>
-      supabase.auth.getSession().then(({ data }) => {
+    import('./lib/supabase').then(({ clientSupabase }) =>
+      clientSupabase.auth.getSession().then(({ data }) => {
         if (cancelled || data.session) return;
         try {
           sessionStorage.removeItem('nw_portal_client');
@@ -123,8 +123,8 @@ function ClientLoginRoute() {
       sessionStorage.removeItem('nw_portal_client');
       sessionStorage.removeItem('nw_portal_pw_ok');
     } catch {}
-    // End the Supabase auth session too, so logout is complete (not just UI state).
-    import('./lib/supabase').then(({ supabase }) => supabase.auth.signOut());
+    // End the client Supabase auth session too, so logout is complete (not just UI state).
+    import('./lib/supabase').then(({ clientSupabase }) => clientSupabase.auth.signOut());
     setClientPortalId(null);
     setClientPasswordChanged(false);
   };
