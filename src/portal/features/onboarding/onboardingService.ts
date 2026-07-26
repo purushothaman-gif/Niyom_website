@@ -37,8 +37,13 @@ export const OnboardingService = {
     file: File,
   ): Promise<{ ok: boolean; error?: string }> {
     const ext = file.name.slice(file.name.lastIndexOf('.'));
+    // Unique path (timestamp) → always a fresh object, so upsert is unnecessary.
+    // upsert:true would additionally require UPDATE permission on storage.objects,
+    // which onboarding clients don't have (that's employee/admin-only) — causing
+    // a "new row violates row-level security policy" error. A plain INSERT is
+    // covered by the "Authenticated users can upload to crm-documents" policy.
     const path = `clients/${clientCode}/ONBOARD_KYC/${docType}_${Date.now()}${ext}`;
-    const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true });
+    const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false });
     if (upErr) return { ok: false, error: upErr.message };
 
     const { ok, data } = await authedFn('public-onboard-record-doc', {
