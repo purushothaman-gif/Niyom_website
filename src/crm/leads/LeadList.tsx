@@ -131,8 +131,9 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
   }, [isAdmin]);
 
   const buildQuery = useCallback((forCount: boolean) => {
-    let q = supabase.from('nw_leads').select(forCount ? 'id' : LEAD_SELECT,
-      forCount ? { count: 'exact', head: true } : { count: 'exact' });
+    let q = supabase.from('nw_leads').select(
+      forCount ? 'id' : LEAD_SELECT,
+      forCount ? { count: 'exact', head: true } : undefined);
 
     if (!filters.include_archived) q = q.eq('is_archived', false);
     if (filters.status) q = q.eq('status', filters.status);
@@ -164,12 +165,10 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
 
   const load = useCallback(async () => {
     setLoading(true);
-    const q = buildQuery(false)
+    const { data } = await buildQuery(false)
       .order(sortField, { ascending: sortDir === 'asc' })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-    const { data, count } = await q;
     setLeads((data as unknown as NWLead[]) || []);
-    setTotal(count ?? 0);
     setSelected(new Set());
     setAllMatching(null);
     setLoading(false);
@@ -177,20 +176,34 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
 
   useEffect(() => { load(); }, [load, refreshKey]);
 
-  // KPI strip — independent lightweight counts.
+  // Total of the filtered set — recomputed ONLY when filters change (buildQuery),
+  // not on page/sort change, so paging no longer re-counts 29k rows every click.
+  // Kept exact: it drives pagination and "select all N matching".
   useEffect(() => {
-    (async () => {
-      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-      const [t, today, pool, conv] = await Promise.all([
-        supabase.from('nw_leads').select('id', { count: 'exact', head: true }).eq('is_archived', false),
-        supabase.from('nw_leads').select('id', { count: 'exact', head: true }).gte('created_at', todayStart.toISOString()),
-        isAdmin ? supabase.from('nw_leads').select('id', { count: 'exact', head: true }).is('owner_employee_id', null).eq('is_archived', false)
-                : Promise.resolve({ count: 0 } as any),
-        supabase.from('nw_leads').select('id', { count: 'exact', head: true }).eq('status', 'Closed - Converted'),
-      ]);
-      setStats({ total: t.count ?? 0, today: today.count ?? 0, pool: pool.count ?? 0, converted: conv.count ?? 0 });
-    })();
-  }, [isAdmin, refreshKey]);
+    let cancelled = false;
+    buildQuery(true).then(({ count }) => { if (!cancelled) setTotal(count ?? 0); });
+    return () => { cancelled = true; };
+  }, [buildQuery, refreshKey]);
+
+  // KPI strip — one RLS-preserving RPC computes all four counts in a single scan
+  // (was four separate COUNT(*) queries). `todayStart` is browser-local midnight,
+  // passed in so the "today" window matches the user's day, not the DB timezone.
+  useEffect(() => {
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    let cancelled = false;
+    supabase.rpc('nw_lead_kpi_counts', { p_today_start: todayStart.toISOString() })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const r = (data as { total: number; today: number; pool: number; converted: number }[] | null)?.[0];
+        if (r) setStats({
+          total: Number(r.total) || 0,
+          today: Number(r.today) || 0,
+          pool: Number(r.pool) || 0,
+          converted: Number(r.converted) || 0,
+        });
+      });
+    return () => { cancelled = true; };
+  }, [refreshKey]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const activeFilterCount = useMemo(() =>
