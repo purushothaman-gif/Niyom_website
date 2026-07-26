@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWDSA, CRMPage } from './types';
-import { User, Building2, Upload, FileText, CheckCircle2, AlertCircle, ChevronRight, Users, Handshake, UserCheck, UserPlus } from 'lucide-react';
+import { User, Building2, Upload, FileText, CheckCircle2, AlertCircle, ChevronRight, Users, Handshake, UserCheck, UserPlus, Sparkles } from 'lucide-react';
 
 interface Props {
   employee: NWEmployee;
@@ -12,9 +12,22 @@ interface Props {
   pageParams?: Record<string, string>;
 }
 
-// Steps differ based on sourced_via: Direct = 4 steps, DSA = 5 steps (extra DSA step before Demat & Bank)
-const DIRECT_STEPS = ['Source', 'Basic Info', 'Demat & Bank', 'Documents', 'Review'];
-const DSA_STEPS    = ['Source', 'DSA Details', 'Basic Info', 'Demat & Bank', 'Documents', 'Review'];
+// Steps differ based on sourced_via: Direct = 5 steps, DSA = 6 steps (extra DSA step before Demat & Bank)
+const DIRECT_STEPS = ['Source', 'Basic Info', 'Demat & Bank', 'Products', 'Documents', 'Review'];
+const DSA_STEPS    = ['Source', 'DSA Details', 'Basic Info', 'Demat & Bank', 'Products', 'Documents', 'Review'];
+
+// Investment products the client wants access to. Values MUST match the portal
+// self-service wizard (src/portal/features/onboarding/onboardingSteps.ts) and the
+// public-onboard-submit edge function's VALID_PREFS set.
+const PRODUCTS = [
+  { value: 'mutual_funds', label: 'Mutual Funds' },
+  { value: 'bonds', label: 'Bonds' },
+  { value: 'fixed_deposits', label: 'Fixed Deposits' },
+  { value: 'insurance', label: 'Insurance' },
+  { value: 'unlisted_shares', label: 'Unlisted Shares' },
+] as const;
+// Products that mandate a CML (Demat proof). Mirrors the self-service wizard.
+const CML_PRODUCTS = new Set<string>(['bonds', 'unlisted_shares']);
 
 const CLIENT_DOC_TYPES = [
   { type: 'PAN Card',      label: 'PAN Card' },
@@ -106,6 +119,11 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     bank_account: '', bank_ifsc: '', bank_name: '',
     notes: '',
   });
+
+  // Products the client wants access to (mirrors the self-service portal wizard).
+  const [prefs, setPrefs] = useState<string[]>([]);
+  const togglePref = (value: string) =>
+    setPrefs(p => (p.includes(value) ? p.filter(x => x !== value) : [...p, value]));
 
   const [dsaMode, setDsaMode] = useState<'new' | 'existing' | ''>('');
   const [existingDSAs, setExistingDSAs] = useState<NWDSA[]>([]);
@@ -275,6 +293,11 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     setError(''); return true;
   };
 
+  const validateProducts = () => {
+    if (prefs.length === 0) { setError('Select at least one product the client wants access to.'); return false; }
+    setError(''); return true;
+  };
+
   // Map step index to logical step name
   const stepName = STEPS[step];
 
@@ -293,6 +316,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
       }
     }
     if (stepName === 'Demat & Bank' && !validateDematBank()) return;
+    if (stepName === 'Products' && !validateProducts()) return;
     setError('');
     setStep(s => s + 1);
   };
@@ -376,6 +400,9 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
         bank_ifsc: form.bank_ifsc.toUpperCase(),
         bank_name: form.bank_name,
         notes: form.notes,
+        // Products the client wants access to (chosen in the Products step).
+        investment_preferences: prefs,
+        cml_required: prefs.some(p => CML_PRODUCTS.has(p)),
         verification_status: 'pending',
         sourced_via: sourcedVia || 'direct',
         dsa_id: dsaId,
@@ -804,6 +831,40 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
           </div>
         )}
 
+        {/* Step: Products */}
+        {stepName === 'Products' && (
+          <div className="space-y-5">
+            <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
+              <Sparkles className="w-4 h-4" style={{ color: 'var(--accent)' }} /> Products
+            </h3>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              Select the products this client wants access to. Choose at least one — Bonds &amp; Unlisted Shares additionally need a Demat proof (CML).
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {PRODUCTS.map(({ value, label }) => {
+                const on = prefs.includes(value);
+                const needsCml = CML_PRODUCTS.has(value);
+                return (
+                  <button key={value} type="button" onClick={() => togglePref(value)}
+                    className="flex items-center justify-between p-3.5 rounded-xl text-left transition-all"
+                    style={{
+                      background: on ? 'rgba(var(--accent-rgb),0.08)' : 'var(--bg-base)',
+                      border: `2px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                    }}>
+                    <div>
+                      <p className="text-sm font-bold" style={{ color: on ? 'var(--accent)' : 'var(--text-primary)' }}>{label}</p>
+                      {needsCml && <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>Requires Demat proof (CML)</p>}
+                    </div>
+                    {on
+                      ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+                      : <span className="w-5 h-5 rounded-full flex-shrink-0" style={{ border: '1px solid var(--border)' }} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Step: Documents */}
         {stepName === 'Documents' && (
           <div className="space-y-5">
@@ -886,6 +947,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
                 { title: 'Personal', rows: [['Name', form.full_name], ['PAN', form.pan], ['DOB', form.dob], ['Mobile', form.phone], ['Email', form.email]] },
                 { title: 'Address', rows: [['Address', form.address], ['City', form.city], ['State', form.state], ['Pincode', form.pincode]] },
                 { title: 'Demat & Bank', rows: [['Demat A/C', form.demat_account], ['DP Name', form.dp_name], ['Bank A/C', form.bank_account], ['IFSC', form.bank_ifsc], ['Bank', form.bank_name]] },
+                { title: 'Products', rows: [['Selected', prefs.map(v => PRODUCTS.find(p => p.value === v)?.label).filter(Boolean).join(', ')]] },
               ].map(section => (
                 <div key={section.title}>
                   <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--accent)' }}>{section.title}</p>

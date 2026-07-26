@@ -13,7 +13,7 @@ import { StatusPill } from '../../components/StatusPill';
 import { OnboardingService } from './onboardingService';
 import { PRODUCTS, cmlRequiredFor, kycUnderReview } from './onboardingSteps';
 
-type StepKey = 'pan' | 'products' | 'documents' | 'review';
+type StepKey = 'pan' | 'products' | 'details' | 'documents' | 'review';
 type DocType = 'PAN' | 'CML' | 'BANK';
 
 interface Props {
@@ -23,13 +23,28 @@ interface Props {
   onNavigate: (view: PortalView) => void;
 }
 
-const STEP_LABELS: Record<StepKey, string> = { pan: 'PAN', products: 'Products', documents: 'Documents', review: 'Review' };
+const STEP_LABELS: Record<StepKey, string> = { pan: 'PAN', products: 'Products', details: 'Details', documents: 'Documents', review: 'Review' };
 
 export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Props) {
   const [pan, setPan] = useState((client?.pan || '').toUpperCase());
   const [panVerified, setPanVerified] = useState(!!client?.pan_verified);
   const [panName, setPanName] = useState(client?.pan_name || '');
   const [prefs, setPrefs] = useState<string[]>(client?.investment_preferences || []);
+
+  // KYC detail fields — required so an RM can raise a Deal Confirmation (which
+  // snapshots the client's address, bank and demat details). DOB is optional;
+  // demat is required only for products that need a CML (Bonds / Unlisted).
+  const [dob, setDob] = useState(client?.dob || '');
+  const [address, setAddress] = useState(client?.address || '');
+  const [city, setCity] = useState(client?.city || '');
+  const [stateName, setStateName] = useState(client?.state || '');
+  const [pincode, setPincode] = useState((client as any)?.pincode || '');
+  const [bankName, setBankName] = useState(client?.bank_name || '');
+  const [bankAccount, setBankAccount] = useState(client?.bank_account || '');
+  const [bankIfsc, setBankIfsc] = useState(client?.bank_ifsc || '');
+  const [demat, setDemat] = useState(client?.demat_account || '');
+  const [dpName, setDpName] = useState(client?.dp_name || '');
+
   const [uploaded, setUploaded] = useState<Record<DocType, boolean>>({
     PAN: !!client?.pan_doc_uploaded,
     BANK: !!client?.bank_verified,
@@ -43,7 +58,21 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
   const docsComplete = uploaded.PAN && uploaded.BANK;
   const cmlPending = cmlRequired && !uploaded.CML;
 
-  const initialStep: StepKey = !panVerified ? 'pan' : prefs.length === 0 ? 'products' : !docsComplete ? 'documents' : 'review';
+  // Address + bank are always required; demat only when a CML product is chosen.
+  const dematComplete = !cmlRequired || (!!demat.trim() && !!dpName.trim());
+  const detailsComplete =
+    !!address.trim() && !!city.trim() && !!stateName.trim() && pincode.trim().length === 6 &&
+    !!bankName.trim() && !!bankAccount.trim() && !!bankIfsc.trim() && dematComplete;
+
+  const initialStep: StepKey = !panVerified
+    ? 'pan'
+    : prefs.length === 0
+      ? 'products'
+      : !detailsComplete
+        ? 'details'
+        : !docsComplete
+          ? 'documents'
+          : 'review';
   const [step, setStep] = useState<StepKey>(initialStep);
 
   const [busy, setBusy] = useState(false);
@@ -85,6 +114,35 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
       onRefresh();
     } catch { /* non-fatal — prefs still held in wizard state */ }
     setBusy(false);
+    setStep('details');
+  };
+
+  const saveDetailsAndNext = async () => {
+    setError('');
+    if (!address.trim() || !city.trim() || !stateName.trim()) return setError('Please enter your full address, city and state.');
+    if (pincode.trim().length !== 6) return setError('Enter a valid 6-digit pincode.');
+    if (!bankName.trim() || !bankAccount.trim() || !bankIfsc.trim()) return setError('Please enter your bank name, account number and IFSC.');
+    if (cmlRequired && (!demat.trim() || !dpName.trim())) return setError('Demat account number and DP name are required for Bonds / Unlisted Shares.');
+    // Persist so a later resume restores everything and the RM can raise a deal.
+    setBusy(true);
+    try {
+      const depository = demat.trim().toUpperCase().startsWith('IN') ? 'NSDL' : 'CDSL';
+      await supabase.from('nw_clients').update({
+        dob: dob || null,
+        address: address.trim(),
+        city: city.trim(),
+        state: stateName.trim(),
+        pincode: pincode.trim(),
+        bank_name: bankName.trim(),
+        bank_account: bankAccount.trim(),
+        bank_ifsc: bankIfsc.trim().toUpperCase(),
+        demat_account: demat.trim(),
+        dp_name: dpName.trim(),
+        depository: demat.trim() ? depository : null,
+      }).eq('id', clientId);
+      onRefresh();
+    } catch { /* non-fatal — values still held in wizard state */ }
+    setBusy(false);
     setStep('documents');
   };
 
@@ -102,6 +160,7 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
   const submit = async () => {
     setError('');
     if (!panVerified) return setError('Please verify your PAN first.');
+    if (!detailsComplete) return setError('Please complete your address, bank and demat details.');
     if (!docsComplete) return setError('Please upload all required documents.');
     setBusy(true);
     const r = await OnboardingService.submit(clientId, prefs);
@@ -123,7 +182,7 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
     window.location.href = '/client-login';
   };
 
-  const stepOptions = (['pan', 'products', 'documents', 'review'] as StepKey[]).map((k) => ({ value: k, label: STEP_LABELS[k] }));
+  const stepOptions = (['pan', 'products', 'details', 'documents', 'review'] as StepKey[]).map((k) => ({ value: k, label: STEP_LABELS[k] }));
 
   // ── Terminal states ────────────────────────────────────────────────────
   if (client?.onboarding_status === 'active') {
@@ -287,6 +346,82 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
           </div>
         )}
 
+        {/* ── Details ── */}
+        {step === 'details' && (
+          <div className="space-y-5">
+            <StepTitle icon={Landmark} title="Your address, bank & demat details"
+              hint="We need these to activate your account and process your investments." />
+
+            <div className="space-y-4">
+              <WizardField label="Date of Birth" optional>
+                <WizardInput type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
+              </WizardField>
+
+              <WizardField label="Address" required>
+                <textarea
+                  value={address} onChange={(e) => setAddress(e.target.value)} rows={2} placeholder="Flat / house, street, area…"
+                  className="w-full resize-none rounded-token-md border border-border bg-bg-base px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-accent"
+                />
+              </WizardField>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <WizardField label="City" required>
+                  <WizardInput value={city} onChange={(e) => setCity(e.target.value)} placeholder="Mumbai" />
+                </WizardField>
+                <WizardField label="State" required>
+                  <WizardInput value={stateName} onChange={(e) => setStateName(e.target.value)} placeholder="Maharashtra" />
+                </WizardField>
+                <WizardField label="Pincode" required>
+                  <WizardInput value={pincode} inputMode="numeric" maxLength={6}
+                    onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="400001" />
+                </WizardField>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <p className="mb-3 text-xs font-bold uppercase tracking-wider text-accent">Bank Details</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <WizardField label="Bank Name" required>
+                    <WizardInput value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="HDFC Bank" />
+                  </WizardField>
+                  <WizardField label="Account Number" required>
+                    <WizardInput value={bankAccount} onChange={(e) => setBankAccount(e.target.value.replace(/\D/g, '').slice(0, 20))}
+                      inputMode="numeric" placeholder="123456789012" />
+                  </WizardField>
+                  <WizardField label="IFSC Code" required>
+                    <WizardInput value={bankIfsc} onChange={(e) => setBankIfsc(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11))}
+                      placeholder="HDFC0001234" />
+                  </WizardField>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-accent">Demat Details</p>
+                  <StatusPill tone={cmlRequired ? 'accent' : 'muted'}>{cmlRequired ? 'Required' : 'Optional'}</StatusPill>
+                </div>
+                <p className="mb-3 text-xs text-text-muted">
+                  {cmlRequired
+                    ? 'Required for Bonds & Unlisted Shares.'
+                    : 'Optional for Mutual Funds, FDs & Insurance — add it if you have a demat account.'}
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <WizardField label="Demat Account No." required={cmlRequired}>
+                    <WizardInput value={demat} onChange={(e) => setDemat(e.target.value.replace(/[^0-9A-Za-z]/g, '').slice(0, 16))}
+                      placeholder="1234567890123456" />
+                  </WizardField>
+                  <WizardField label="DP Name" required={cmlRequired}>
+                    <WizardInput value={dpName} onChange={(e) => setDpName(e.target.value)} placeholder="HDFC Securities" />
+                  </WizardField>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between">
+              <BackButton onClick={() => setStep('products')} />
+              <PrimaryButton onClick={saveDetailsAndNext} busy={busy} icon={ArrowRight}>Continue</PrimaryButton>
+            </div>
+          </div>
+        )}
+
         {/* ── Documents ── */}
         {step === 'documents' && (
           <div className="space-y-5">
@@ -306,7 +441,7 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
               </p>
             )}
             <div className="flex justify-between">
-              <BackButton onClick={() => setStep('products')} />
+              <BackButton onClick={() => setStep('details')} />
               <NextButton onClick={() => setStep('review')} disabled={!docsComplete} />
             </div>
           </div>
@@ -323,6 +458,23 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
               value={prefs.length ? prefs.map((v) => PRODUCTS.find((p) => p.value === v)?.label).join(', ') : '—'}
               onEdit={() => setStep('products')}
             />
+            <ReviewRow
+              label="Address"
+              value={[address, city, stateName, pincode].filter(Boolean).join(', ') || '—'}
+              onEdit={() => setStep('details')}
+            />
+            <ReviewRow
+              label="Bank"
+              value={bankName || bankAccount ? `${bankName} · ${bankAccount} · ${bankIfsc}` : '—'}
+              onEdit={() => setStep('details')}
+            />
+            {(cmlRequired || demat) && (
+              <ReviewRow
+                label="Demat"
+                value={demat ? `${demat}${dpName ? ' · ' + dpName : ''}` : '—'}
+                onEdit={() => setStep('details')}
+              />
+            )}
             <div className="rounded-token-md border border-border">
               <div className="flex items-center justify-between px-4 py-2.5">
                 <p className="text-xs font-medium text-text-secondary">Documents</p>
@@ -347,7 +499,7 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
             </p>
             <div className="flex justify-between">
               <BackButton onClick={() => setStep('documents')} />
-              <PrimaryButton onClick={submit} busy={busy} icon={ShieldCheck} disabled={!panVerified || !docsComplete}>
+              <PrimaryButton onClick={submit} busy={busy} icon={ShieldCheck} disabled={!panVerified || !detailsComplete || !docsComplete}>
                 Submit for Review
               </PrimaryButton>
             </div>
@@ -421,6 +573,29 @@ function UploadRow({ icon: Icon, label, required, optional, hint, done, busy, on
       {busy ? <Loader2 className="h-4 w-4 animate-spin text-text-muted" /> : <Upload className="h-4 w-4 text-text-muted" />}
       <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => onFile(e.target.files?.[0] || null)} />
     </label>
+  );
+}
+
+function WizardField({ label, required, optional, children }:
+  { label: string; required?: boolean; optional?: boolean; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted">
+        {label}
+        {required && <span className="ml-0.5 text-accent">*</span>}
+        {optional && <span className="ml-1 normal-case tracking-normal text-text-faint">(optional)</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function WizardInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className="w-full rounded-token-md border border-border bg-bg-base px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-accent"
+    />
   );
 }
 
