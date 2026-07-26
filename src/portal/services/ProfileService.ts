@@ -5,7 +5,7 @@
  * client's registered bank accounts (nw_client_bank_accounts). Personal / demat
  * / KYC fields already live on the NWClient carried by the snapshot.
  */
-import { supabase } from '../../lib/supabase';
+import { clientSupabase as supabase } from '../../lib/supabase';
 import type { NWClientBankAccount } from '../../crm/types';
 
 export const ProfileService = {

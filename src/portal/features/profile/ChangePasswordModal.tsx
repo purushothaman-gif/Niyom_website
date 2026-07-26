@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Eye, EyeOff, KeyRound, X } from 'lucide-react';
-import { supabase } from '../../../lib/supabase';
+import { clientSupabase as supabase } from '../../../lib/supabase';
 
 interface ChangePasswordModalProps {
   clientId: string;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { clientSupabase as supabase } from '../lib/supabase';
 import { TrendingUp, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 

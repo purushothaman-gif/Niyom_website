@@ -3,7 +3,7 @@ import {
   User, Phone, Mail, ShieldCheck, ArrowLeft, ArrowRight, CheckCircle2,
   AlertCircle, Clock, Sparkles, RotateCcw, Home, type LucideIcon,
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { clientSupabase as supabase } from '../lib/supabase';
 import { ThemeToggle } from '../theme/ThemeToggle';
 
 interface Props {

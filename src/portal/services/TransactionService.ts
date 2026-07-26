@@ -4,7 +4,7 @@
  * Fetches the client's full transaction history (the snapshot only carries the
  * latest few for the dashboard) and provides pure filter/summary/group helpers.
  */
-import { supabase } from '../../lib/supabase';
+import { clientSupabase as supabase } from '../../lib/supabase';
 import type { NWTransaction, ProductType } from '../../crm/types';
 import { PRODUCT_LABELS, PRODUCT_CHART_COLORS } from '../../crm/utils';
 import type { TransactionRow, TxnFilter, TxnSummary } from '../types/activity';
