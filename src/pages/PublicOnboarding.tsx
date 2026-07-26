@@ -237,6 +237,24 @@ export default function PublicOnboarding({ onBack }: Props) {
           )}
         </div>
 
+        {/* Already-started return path — routes to /client-login where the email-OTP sign-in lives. */}
+        {view === 'form' && (
+          <button onClick={onBack}
+            className="group w-full flex items-center gap-3 p-4 rounded-xl text-left transition-all"
+            style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.1)'; e.currentTarget.style.borderColor = 'var(--accent)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.06)'; e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.25)'; }}>
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(var(--accent-rgb),0.12)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
+              <ShieldCheck className="w-4.5 h-4.5" style={{ color: 'var(--accent)' }} />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Already started your application?</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Sign in with a one-time code emailed to you — no password needed.</p>
+            </div>
+            <ArrowRight className="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-hover:translate-x-1" style={{ color: 'var(--accent)' }} />
+          </button>
+        )}
+
         {/* Trust footer */}
         <div className="space-y-2.5">
           {[
