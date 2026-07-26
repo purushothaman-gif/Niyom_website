@@ -4,6 +4,7 @@ import {
   AlertCircle, Clock, Sparkles, RotateCcw, Home, type LucideIcon,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { ThemeToggle } from '../theme/ThemeToggle';
 
 interface Props {
   onBack: () => void;
@@ -138,6 +139,7 @@ export default function PublicOnboarding({ onBack }: Props) {
           <Home className="w-4 h-4" /> Home
         </a>
         <div className="flex-1" />
+        <ThemeToggle variant="icon" />
         <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-8 w-auto object-contain" />
       </div>
 
@@ -195,7 +197,7 @@ export default function PublicOnboarding({ onBack }: Props) {
           {view === 'form' ? (
             <>
               <Field icon={User} label="Full Name">
-                <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="As per your PAN" autoFocus />
+                <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Your full Name" autoFocus />
               </Field>
               <Field icon={Phone} label="Mobile Number">
                 <Input type="tel" inputMode="numeric" value={phone} maxLength={10}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { TrendingUp, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { ThemeToggle } from '../theme/ThemeToggle';
 
 interface Props {
   clientId: string;
@@ -36,6 +37,9 @@ export default function ClientChangePassword({ clientId, onComplete }: Props) {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8" style={{ background: 'var(--bg-base)' }}>
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeToggle variant="icon" />
+      </div>
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
           <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
