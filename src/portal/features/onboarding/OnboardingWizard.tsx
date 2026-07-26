@@ -138,7 +138,8 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
         bank_ifsc: bankIfsc.trim().toUpperCase(),
         demat_account: demat.trim(),
         dp_name: dpName.trim(),
-        depository: demat.trim() ? depository : null,
+        // Empty string (not null) when there's no demat — the column is NOT NULL DEFAULT ''.
+        depository: demat.trim() ? depository : '',
       }).eq('id', clientId);
       onRefresh();
     } catch { /* non-fatal — values still held in wizard state */ }
