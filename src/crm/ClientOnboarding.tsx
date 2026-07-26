@@ -67,12 +67,19 @@ function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   );
 }
 
-function DupWarn({ msg }: { msg: string | null }) {
+function DupWarn({ msg, block }: { msg: string | null; block?: boolean }) {
   if (!msg) return null;
+  // `block` renders a hard (danger) style used where the duplicate stops the flow
+  // — e.g. a PAN that already belongs to an existing client.
+  const color = block ? 'var(--danger)' : 'rgb(var(--warning-soft-rgb))';
+  const bg = block ? 'rgba(var(--danger-rgb),0.08)' : 'rgba(251,191,36,0.07)';
+  const border = block ? 'rgba(var(--danger-rgb),0.3)' : 'rgba(251,191,36,0.25)';
   return (
-    <div className="mt-1.5 flex items-start gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.25)' }}>
-      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'rgb(var(--warning-soft-rgb))' }} />
-      <p className="text-xs" style={{ color: 'rgb(var(--warning-soft-rgb))' }}>{msg}</p>
+    <div className="mt-1.5 flex items-start gap-2 px-3 py-2 rounded-lg" style={{ background: bg, border: `1px solid ${border}` }}>
+      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color }} />
+      <p className="text-xs" style={{ color }}>
+        {msg}{block ? ' — this PAN is already registered. Enter a different PAN to continue.' : ''}
+      </p>
     </div>
   );
 }
@@ -150,10 +157,10 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     setPanVerifying(false);
   };
 
-  const checkDuplicate = useCallback(async (field: 'pan' | 'phone' | 'email', value: string) => {
+  const checkDuplicate = useCallback(async (field: 'pan' | 'phone' | 'email', value: string): Promise<string | null> => {
     if (!value || value.length < 3) {
       setDupWarnings(w => ({ ...w, [field]: null }));
-      return;
+      return null;
     }
     const col = field === 'phone' ? 'phone' : field;
     const { data } = await supabase
@@ -164,10 +171,12 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     if (data && data.length > 0) {
       const match = data[0] as any;
       const empName = match.employee?.full_name || 'Admin';
-      setDupWarnings(w => ({ ...w, [field]: `Client "${match.full_name}" already exists under ${empName}` }));
-    } else {
-      setDupWarnings(w => ({ ...w, [field]: null }));
+      const msg = `Client "${match.full_name}" already exists under ${empName}`;
+      setDupWarnings(w => ({ ...w, [field]: msg }));
+      return msg;
     }
+    setDupWarnings(w => ({ ...w, [field]: null }));
+    return null;
   }, []);
 
   const onFieldChange = (field: 'pan' | 'phone' | 'email', value: string) => {
@@ -269,10 +278,20 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
   // Map step index to logical step name
   const stepName = STEPS[step];
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (stepName === 'Source' && !validateSource()) return;
     if (stepName === 'DSA Details' && !validateDsaForm()) return;
-    if (stepName === 'Basic Info' && !validateStep0Client()) return;
+    if (stepName === 'Basic Info') {
+      if (!validateStep0Client()) return;
+      // A client with this PAN cannot be onboarded twice. Re-check on the way out
+      // (covers the debounced check not having fired yet, or a pasted PAN) and
+      // block progression until the RM enters a PAN not already in our records.
+      const panDup = await checkDuplicate('pan', form.pan.toUpperCase());
+      if (panDup) {
+        setError('A client with this PAN already exists. Change the PAN to one not already in our records to continue.');
+        return;
+      }
+    }
     if (stepName === 'Demat & Bank' && !validateDematBank()) return;
     setError('');
     setStep(s => s + 1);
@@ -713,7 +732,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
               </Field>
               <Field label="PAN Number" required>
                 <Input value={form.pan} onChange={e => { onFieldChange('pan', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)); setPanVerifiedName(null); setPanVerifyErr(''); }} placeholder="ABCDE1234F" maxLength={10} />
-                <DupWarn msg={dupWarnings.pan} />
+                <DupWarn msg={dupWarnings.pan} block />
                 <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                   <button type="button" onClick={handleVerifyPan}
                     disabled={panVerifying || !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan)}
@@ -951,7 +970,8 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
         </button>
         {step < STEPS.length - 1 ? (
           <button onClick={handleNext}
-            className="px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent flex items-center gap-2"
+            disabled={stepName === 'Basic Info' && !!dupWarnings.pan}
+            className="px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
             Next <ChevronRight className="w-4 h-4" />
           </button>
