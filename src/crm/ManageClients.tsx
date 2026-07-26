@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWClient, NWClientBankAccount } from './types';
 import { fmt, fmtDate, VERIFICATION_LABELS, VERIFICATION_COLORS } from './utils';
+import { passwordChecks, isPasswordStrong } from '../lib/passwordPolicy';
 import { Search, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog } from 'lucide-react';
 
 interface Props { employee: NWEmployee; onNavigate: (page: any, params?: any) => void; }
@@ -362,7 +363,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   };
 
   const handleEnableLogin = async () => {
-    if (!loginClient || loginPassword.length < 8) return;
+    if (!loginClient || !isPasswordStrong(loginPassword)) return;
     setLoginSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -664,7 +665,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                   type={showLoginPw ? 'text' : 'password'}
                   value={loginPassword}
                   onChange={e => setLoginPassword(e.target.value)}
-                  placeholder="Min 8 characters"
+                  placeholder="Create a strong password"
                   className="w-full px-3.5 py-2.5 rounded-xl text-sm text-text-primary outline-none"
                   style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', paddingRight: '2.75rem' }}
                   onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
@@ -675,9 +676,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                 </button>
               </div>
               <div className="mt-2 space-y-1">
-                {[
-                  { text: 'At least 8 characters', met: loginPassword.length >= 8 },
-                ].map(r => (
+                {passwordChecks(loginPassword).map(r => (
                   <p key={r.text} className="text-xs flex items-center gap-1.5" style={{ color: r.met ? 'var(--success)' : 'var(--text-faint)' }}>
                     <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: r.met ? 'var(--success)' : 'var(--text-faint)' }} />
                     {r.text}
@@ -688,7 +687,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
 
             <div className="flex justify-end gap-3 pt-2">
               <button onClick={() => setLoginClient(null)} className="px-4 py-2 rounded-xl text-sm" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
-              <button onClick={handleEnableLogin} disabled={loginSaving || loginPassword.length < 8}
+              <button onClick={handleEnableLogin} disabled={loginSaving || !isPasswordStrong(loginPassword)}
                 className="px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50 flex items-center gap-2"
                 style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
                 {loginSaving ? 'Enabling...' : <><KeyRound className="w-3.5 h-3.5" /> Enable Login</>}

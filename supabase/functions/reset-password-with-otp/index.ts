@@ -55,6 +55,7 @@ function passwordError(pw: string): string | null {
   if (!/[a-z]/.test(pw)) return "Password must include a lowercase letter.";
   if (!/[A-Z]/.test(pw)) return "Password must include an uppercase letter.";
   if (!/[0-9]/.test(pw)) return "Password must include a number.";
+  if (!/[^A-Za-z0-9]/.test(pw)) return "Password must include a symbol.";
   return null;
 }
 

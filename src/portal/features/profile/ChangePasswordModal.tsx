@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Eye, EyeOff, KeyRound, X } from 'lucide-react';
 import { clientSupabase as supabase } from '../../../lib/supabase';
+import { passwordChecks, passwordError, isPasswordStrong } from '../../../lib/passwordPolicy';
 
 interface ChangePasswordModalProps {
   clientId: string;
@@ -22,7 +23,8 @@ export function ChangePasswordModal({ clientId, onClose }: ChangePasswordModalPr
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    if (form.next.length < 8) return setError('New password must be at least 8 characters.');
+    const pwErr = passwordError(form.next);
+    if (pwErr) return setError(pwErr);
     if (form.next !== form.confirm) return setError('Passwords do not match.');
     setLoading(true);
 
@@ -58,7 +60,7 @@ export function ChangePasswordModal({ clientId, onClose }: ChangePasswordModalPr
   };
 
   const rules = [
-    { text: 'At least 8 characters', met: form.next.length >= 8 },
+    ...passwordChecks(form.next),
     { text: 'Passwords match', met: form.next === form.confirm && form.confirm.length > 0 },
   ];
 
@@ -144,7 +146,7 @@ export function ChangePasswordModal({ clientId, onClose }: ChangePasswordModalPr
             </button>
             <button
               type="submit"
-              disabled={loading || form.next.length < 8 || form.next !== form.confirm}
+              disabled={loading || !isPasswordStrong(form.next) || form.next !== form.confirm}
               className="rounded-token-md px-5 py-2.5 text-sm font-bold text-on-accent disabled:opacity-50"
               style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
             >

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { clientSupabase as supabase } from '../lib/supabase';
 import { TrendingUp, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
+import { passwordChecks, passwordError } from '../lib/passwordPolicy';
 
 interface Props {
   clientId: string;
@@ -17,7 +18,8 @@ export default function ClientChangePassword({ clientId, onComplete }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
+    const policyErr = passwordError(password);
+    if (policyErr) { setError(policyErr); return; }
     if (password !== confirm) { setError('Passwords do not match.'); return; }
     setError('');
     setLoading(true);
@@ -75,7 +77,7 @@ export default function ClientChangePassword({ clientId, onComplete }: Props) {
                   required
                   value={f.val}
                   onChange={e => f.set(e.target.value)}
-                  placeholder="Min 8 characters"
+                  placeholder="Create a strong password"
                   className="w-full py-3 rounded-xl text-sm text-text-primary outline-none transition-all"
                   style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', paddingLeft: '2.75rem', paddingRight: '2.75rem' }}
                   onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
@@ -91,7 +93,7 @@ export default function ClientChangePassword({ clientId, onComplete }: Props) {
           ))}
           <div className="space-y-2">
             {[
-              { text: 'At least 8 characters', met: password.length >= 8 },
+              ...passwordChecks(password),
               { text: 'Passwords must match', met: password === confirm && confirm.length > 0 },
             ].map(r => (
               <p key={r.text} className="text-xs flex items-center gap-1.5" style={{ color: r.met ? 'var(--success)' : 'var(--text-secondary)' }}>

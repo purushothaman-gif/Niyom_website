@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { passwordError, isPasswordStrong } from '../lib/passwordPolicy';
 import { NWEmployee, NWDSA, CRMPage } from './types';
 import { User, Building2, Upload, FileText, CheckCircle2, AlertCircle, ChevronRight, Users, Handshake, UserCheck, UserPlus, Sparkles } from 'lucide-react';
 
@@ -1024,11 +1025,11 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
                         type="password"
                         value={clientInitialPassword}
                         onChange={e => setClientInitialPassword(e.target.value)}
-                        placeholder="Min 8 characters"
+                        placeholder="Create a strong password"
                       />
                     </Field>
-                    {clientInitialPassword.length > 0 && clientInitialPassword.length < 8 && (
-                      <p className="text-xs" style={{ color: 'var(--danger)' }}>Password must be at least 8 characters.</p>
+                    {clientInitialPassword.length > 0 && passwordError(clientInitialPassword) && (
+                      <p className="text-xs" style={{ color: 'var(--danger)' }}>{passwordError(clientInitialPassword)}</p>
                     )}
                     <div className="p-3 rounded-xl text-xs" style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)', color: 'var(--text-muted)' }}>
                       Login ID: <span className="font-mono font-bold text-text-primary">{form.pan.toUpperCase() || 'PAN'}</span> &nbsp;&middot;&nbsp; Email: <span className="text-text-primary">{form.email || '—'}</span>
@@ -1074,7 +1075,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
             Next <ChevronRight className="w-4 h-4" />
           </button>
         ) : (
-          <button onClick={handleSubmit} disabled={saving || missingDocs.length > 0 || clientLoginEnabled === null || (clientLoginEnabled === true && clientInitialPassword.trim().length < 8)}
+          <button onClick={handleSubmit} disabled={saving || missingDocs.length > 0 || clientLoginEnabled === null || (clientLoginEnabled === true && !isPasswordStrong(clientInitialPassword.trim()))}
             className="px-6 py-2.5 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50"
             style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
             {saving ? 'Saving...' : 'Complete Onboarding'}
