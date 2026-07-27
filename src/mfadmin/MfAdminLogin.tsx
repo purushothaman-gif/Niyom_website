@@ -26,6 +26,7 @@ import {
 import { supabase } from '../lib/supabase';
 import type { NWEmployee } from '../crm/types';
 import {
+  employeeIsPrivileged,
   evaluateMfaGate,
   isMfaUnavailable,
   listVerifiedTotpFactors,
@@ -136,6 +137,14 @@ export default function MfAdminLogin({ onLogin }: Props) {
         return;
       }
 
+      // Authorization: MF Admin is restricted to admin / super_admin. A plain
+      // employee is refused here — before the MFA gate — the same way !emp is.
+      if (!employeeIsPrivileged(emp)) {
+        await supabase.auth.signOut();
+        setError('The MF Admin console is restricted to administrators.');
+        return;
+      }
+
       // Second factor for privileged roles.
       let gate: Awaited<ReturnType<typeof evaluateMfaGate>>;
       try {
@@ -205,7 +214,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
           <img src="/niyomlogo.png" alt="Niyom Wealth" className="mx-auto h-12 w-auto object-contain" />
           <h1 className="mt-4 font-display text-2xl font-bold text-text-primary">MF Admin Console</h1>
           <p className="mt-1 text-sm text-text-secondary">
-            NIYOM Wealth · BSE StAR MF Operations
+            NIYOM Wealth · Mutual Fund Operations
           </p>
         </div>
 
