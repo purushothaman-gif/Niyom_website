@@ -1,10 +1,10 @@
-import { useEffect, useState, type ElementType } from 'react';
+import { useEffect, useId, useState, type ElementType } from 'react';
 import {
   GraduationCap, ChevronDown, TrendingUp, Landmark, PiggyBank, Shield, Building2,
   Sparkles, Coins, Repeat, Scale, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 import { PublicPageChrome } from './shared/PublicPageChrome';
-import { commoditySource, type Commodity, type CommoditySnapshot } from './shared/commoditySource';
+import { commoditySource, type Commodity, type CommodityPrice, type CommoditySnapshot } from './shared/commoditySource';
 
 /**
  * Public education centre. Static, curated learning content plus a live
@@ -126,22 +126,48 @@ function AccordionItem({ module, open, onToggle }: { module: Module; open: boole
 // Commodity widget
 // ---------------------------------------------------------------------------
 
-function Sparkline({ series }: { series: number[] }) {
+/** Date-aware 1-month price chart: line + area fill, with dated x-axis ticks. */
+function PriceChart({ series }: { series: CommodityPrice[] }) {
+  const gid = useId();
   if (series.length < 2) return null;
-  const min = Math.min(...series);
-  const max = Math.max(...series);
+
+  const prices = series.map((s) => s.price);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
   const span = max - min || 1;
-  const w = 120;
-  const h = 36;
-  const pts = series
-    .map((v, i) => `${(i / (series.length - 1)) * w},${h - ((v - min) / span) * h}`)
-    .join(' ');
-  const up = series[series.length - 1] >= series[0];
+  const w = 240;
+  const h = 64;
+  const padY = 6;
+  const x = (i: number) => (i / (series.length - 1)) * w;
+  const y = (v: number) => padY + (1 - (v - min) / span) * (h - padY * 2);
+
+  const line = series.map((s, i) => `${x(i)},${y(s.price)}`).join(' ');
+  const area = `0,${h} ${line} ${w},${h}`;
+  const up = prices[prices.length - 1] >= prices[0];
   const color = up ? 'rgb(var(--success-soft-rgb))' : 'rgb(var(--danger-soft-rgb))';
+
+  const fmtDay = (d: string) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  // Up to three dated ticks across the window: first, middle, last (deduped).
+  const idxs = Array.from(new Set([0, Math.floor((series.length - 1) / 2), series.length - 1]));
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-9" preserveAspectRatio="none" aria-hidden="true">
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <div>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height: 64 }} preserveAspectRatio="none" role="img" aria-label="Last one-month price movement">
+        <defs>
+          <linearGradient id={`grad-${gid}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polygon points={area} fill={`url(#grad-${gid})`} />
+        <polyline points={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <div className="flex justify-between mt-1.5 text-[10px] text-text-faint">
+        {idxs.map((i, k) => (
+          <span key={i} className={k === 1 ? 'text-center' : k === 2 ? 'text-right' : ''}>{fmtDay(series[i].price_date)}</span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -169,7 +195,14 @@ function CommodityCard({ label, unit, snapshot }: { label: string; unit: string;
           ) : (
             <div className="text-xs text-text-muted mb-3">as of {new Date(snapshot!.latest!.price_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>
           )}
-          <Sparkline series={snapshot!.series.map((s) => s.price)} />
+          {snapshot!.series.length > 1 && (
+            <>
+              <div className="flex items-center justify-between text-[11px] text-text-muted mb-1">
+                <span>1-month movement</span>
+              </div>
+              <PriceChart series={snapshot!.series} />
+            </>
+          )}
         </>
       ) : (
         <div className="text-sm text-text-muted py-4">Price data unavailable.</div>
