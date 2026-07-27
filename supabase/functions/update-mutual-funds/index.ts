@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { computeAll, parseDate, isoDate, type NavPoint } from "../_shared/mfReturns.ts";
+import { computeAll, downsampleNav, parseDate, isoDate, type NavPoint } from "../_shared/mfReturns.ts";
 
 /**
  * update-mutual-funds
@@ -102,7 +102,7 @@ const TARGETS: { match: string; category: "Equity" | "Debt" | "Hybrid"; risk: st
 
 interface SchemeListEntry { schemeCode: number; schemeName: string; }
 interface SchemeDetail {
-  meta: { scheme_name: string; scheme_category?: string; fund_house?: string };
+  meta: { scheme_name: string; scheme_category?: string; scheme_type?: string; fund_house?: string };
   data: NavPoint[];
 }
 
@@ -169,7 +169,7 @@ Deno.serve(async (req: Request) => {
         const first = detail.data[detail.data.length - 1];
         const launch_date = first ? isoDate(parseDate(first.date)) : null;
 
-        return {
+        const row = {
           fund_name: detail.meta.scheme_name.replace(/\s*-\s*(direct|regular|growth).*$/i, "").trim(),
           fund_code: String(t.code),
           category: t.category,
@@ -189,12 +189,36 @@ Deno.serve(async (req: Request) => {
           min_investment: 500,
           updated_at: new Date().toISOString(),
         };
+
+        // Pre-warm the mf-detail cache from the SAME fetch — the detail modal
+        // reads this table keyed by fund_code, so building the payload here (the
+        // exact shape mf-detail returns) means the nightly refresh warms every
+        // curated fund without any extra mfapi.in calls.
+        const cache = {
+          scheme_code: String(t.code),
+          payload: {
+            success: true,
+            meta: {
+              scheme_name: detail.meta.scheme_name,
+              scheme_category: detail.meta.scheme_category ?? null,
+              scheme_type: detail.meta.scheme_type ?? null,
+              fund_house: detail.meta.fund_house ?? null,
+              launch_date,
+            },
+            metrics,
+            navHistory: downsampleNav(detail.data, 220),
+          },
+          last_synced_at: new Date().toISOString(),
+        };
+
+        return { row, cache };
       }),
     );
 
-    const funds = details.filter((f): f is NonNullable<typeof f> => f !== null);
-    if (funds.length === 0) throw new Error("No fund data could be computed from mfapi.in");
+    const ok = details.filter((d): d is NonNullable<typeof d> => d !== null);
+    if (ok.length === 0) throw new Error("No fund data could be computed from mfapi.in");
 
+    const funds = ok.map((d) => d.row);
     const { error } = await supabase.from("mutual_funds").upsert(funds, { onConflict: "fund_code" });
     if (error) throw error;
 
@@ -202,7 +226,19 @@ Deno.serve(async (req: Request) => {
     // real AMFI scheme codes are purely numeric).
     await supabase.from("mutual_funds").delete().like("fund_code", "%-%");
 
-    return json({ success: true, updated: funds.length, skipped: TARGETS.length - funds.length });
+    // Pre-warm the detail cache (best-effort — a cache write failure must never
+    // fail the primary table refresh).
+    let warmed = 0;
+    try {
+      const { error: cacheErr } = await supabase
+        .from("mf_detail_cache")
+        .upsert(ok.map((d) => d.cache), { onConflict: "scheme_code" });
+      if (!cacheErr) warmed = ok.length;
+    } catch {
+      // swallow — cache pre-warm is non-critical
+    }
+
+    return json({ success: true, updated: funds.length, warmed, skipped: TARGETS.length - funds.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return json({ success: false, error: message }, 500);
