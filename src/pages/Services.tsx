@@ -3,6 +3,7 @@ import { ArrowLeft, TrendingUp, Target, Shield, Users, Award, Zap, Menu, X } fro
 import { Logo } from '../components/Logo';
 import { HeroBackground } from '../components/HeroBackground';
 import { Reveal } from '../components/Reveal';
+import { ThemeToggle } from '../theme/ThemeToggle';
 
 interface ServicesProps {
   onBack: () => void;
@@ -14,6 +15,16 @@ interface ServicesProps {
 type ServiceTab = 'investment' | 'financial' | 'risk' | 'wealth' | 'tax' | 'alternative';
 
 const SERVICE_TABS: ServiceTab[] = ['investment', 'financial', 'risk', 'wealth', 'tax', 'alternative'];
+
+/** Short tab labels — full titles are too long for a mobile pill row. */
+const TAB_LABELS: Record<ServiceTab, string> = {
+  investment: 'Investments',
+  financial: 'Information',
+  risk: 'Insurance',
+  wealth: 'Documentation',
+  tax: 'Tax',
+  alternative: 'Alternatives',
+};
 
 export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
   const [activeTab, setActiveTab] = useState<ServiceTab>(
@@ -155,20 +166,22 @@ export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
 
   return (
     <div className="min-h-screen bg-bg-base">
-      <nav className="bg-black text-white py-5 px-6 shadow-lg sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
+      <nav className="bg-black text-white py-4 sm:py-5 px-5 sm:px-6 shadow-lg sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto flex justify-between items-center gap-3">
           <button
             onClick={onBack}
-            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+            className="flex items-center gap-2 sm:gap-3 min-w-0 hover:opacity-80 transition-opacity"
           >
-            <Logo size="md" />
-            <div className="text-left">
-              <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-body)', letterSpacing: '0.1em' }}>NIYOM WEALTH</h1>
-              <p className="text-accent-soft text-xs tracking-widest">DISTRIBUTION LLP</p>
+            <Logo size="sm" className="sm:hidden" />
+            <Logo size="md" className="hidden sm:block" />
+            <div className="text-left min-w-0">
+              <h1 className="text-lg sm:text-2xl font-bold tracking-tight truncate" style={{ fontFamily: 'var(--font-body)', letterSpacing: '0.1em' }}>NIYOM WEALTH</h1>
+              <p className="text-accent-soft text-[10px] sm:text-xs tracking-widest">DISTRIBUTION LLP</p>
             </div>
           </button>
 
           <div className="hidden md:flex items-center gap-4">
+            <ThemeToggle variant="icon" />
             <button
               onClick={onBack}
               className="text-white hover:text-accent-soft transition-colors flex items-center gap-2 font-medium"
@@ -184,12 +197,16 @@ export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
             </button>
           </div>
 
-          <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden text-white hover:text-accent-soft transition-colors"
-          >
-            {isMobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
-          </button>
+          <div className="md:hidden flex items-center gap-1 flex-shrink-0">
+            <ThemeToggle variant="icon" />
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="text-white hover:text-accent-soft transition-colors p-1"
+              aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+            >
+              {isMobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
+            </button>
+          </div>
         </div>
 
         {isMobileMenuOpen && (
@@ -219,31 +236,34 @@ export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
         )}
       </nav>
 
-      <section className="py-16 px-6 bg-gradient-to-b from-bg-raised to-bg-base">
+      <section className="py-10 sm:py-16 px-5 sm:px-6 bg-gradient-to-b from-bg-raised to-bg-base">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-5xl font-bold text-text-primary mb-4" style={{ fontFamily: 'var(--font-display)' }}>
+          <div className="text-center mb-8 sm:mb-12">
+            <h2 className="text-4xl sm:text-5xl font-bold text-text-primary mb-3 sm:mb-4" style={{ fontFamily: 'var(--font-display)' }}>
               Our <span className="text-accent">Services</span>
             </h2>
-            <p className="text-xl text-text-secondary max-w-3xl mx-auto">
+            <p className="text-base sm:text-xl text-text-secondary max-w-3xl mx-auto">
               Product distribution and information services to support your investment journey
             </p>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-3 mb-12">
+          {/* Tab strip — a horizontal scroll row of labelled pills on mobile
+              (icon-only tabs left visitors guessing), wrapping centred from sm up. */}
+          <div className="flex sm:flex-wrap sm:justify-center gap-2.5 sm:gap-3 mb-8 sm:mb-12 overflow-x-auto sm:overflow-visible -mx-5 px-5 sm:mx-0 sm:px-0 pb-1 sm:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {services.map(service => {
               const ServiceIcon = service.icon;
               return (
                 <button
                   key={service.id}
                   onClick={() => setActiveTab(service.id)}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all duration-300 ${
+                  className={`flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold text-sm sm:text-base whitespace-nowrap flex-shrink-0 transition-all duration-300 ${
                     activeTab === service.id
                       ? 'bg-accent text-on-accent shadow-lg'
                       : 'bg-bg-elevated text-text-secondary hover:bg-bg-raised border-2 border-border'
                   }`}
                 >
-                  <ServiceIcon size={20} />
+                  <ServiceIcon size={18} className="flex-shrink-0" />
+                  <span className="sm:hidden">{TAB_LABELS[service.id]}</span>
                   <span className="hidden sm:inline">{service.title}</span>
                 </button>
               );
@@ -251,34 +271,34 @@ export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
           </div>
 
           <Reveal key={activeTab} className="bg-bg-elevated rounded-2xl shadow-2xl overflow-hidden border-t-4 border-accent">
-            <div data-theme="dark" className="h-80 overflow-hidden relative">
+            <div data-theme="dark" className="h-52 sm:h-80 overflow-hidden relative">
               <HeroBackground />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-              <div className="absolute bottom-0 left-0 right-0 p-8 text-white">
-                <div className="flex items-center gap-4 mb-3">
-                  <Icon className="w-12 h-12 text-accent-soft" />
-                  <div>
-                    <h3 className="text-4xl font-bold" style={{ fontFamily: 'var(--font-display)' }}>
+              <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-8 text-white">
+                <div className="flex items-center gap-3 sm:gap-4 mb-3">
+                  <Icon className="w-9 h-9 sm:w-12 sm:h-12 text-accent-soft flex-shrink-0" />
+                  <div className="min-w-0">
+                    <h3 className="text-2xl sm:text-4xl font-bold leading-tight" style={{ fontFamily: 'var(--font-display)' }}>
                       {activeService.title}
                     </h3>
-                    <p className="text-accent-soft text-lg font-medium">{activeService.subtitle}</p>
+                    <p className="text-accent-soft text-sm sm:text-lg font-medium">{activeService.subtitle}</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="p-8 md:p-12">
-              <p className="text-text-secondary text-lg leading-relaxed mb-10 bg-bg-base p-6 rounded-lg border-l-4 border-accent">
+            <div className="p-5 sm:p-8 md:p-12">
+              <p className="text-text-secondary text-base sm:text-lg leading-relaxed mb-8 sm:mb-10 bg-bg-base p-5 sm:p-6 rounded-lg border-l-4 border-accent">
                 {activeService.description}
               </p>
 
-              <div className="grid md:grid-cols-2 gap-10">
+              <div className="grid md:grid-cols-2 gap-8 md:gap-10">
                 <div>
-                  <h4 className="text-2xl font-bold text-text-primary mb-6 flex items-center gap-2" style={{ fontFamily: 'var(--font-display)' }}>
-                    <div className="w-2 h-8 bg-accent"></div>
+                  <h4 className="text-xl sm:text-2xl font-bold text-text-primary mb-4 sm:mb-6 flex items-center gap-2" style={{ fontFamily: 'var(--font-display)' }}>
+                    <div className="w-2 h-7 sm:h-8 bg-accent"></div>
                     What It Is
                   </h4>
-                  <ul className="space-y-4">
+                  <ul className="space-y-3.5 sm:space-y-4">
                     {activeService.whatItIs.map((item, index) => (
                       <li key={index} className="flex gap-3 text-text-secondary leading-relaxed">
                         <span className="text-accent font-bold text-lg mt-1">•</span>
@@ -289,11 +309,11 @@ export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
                 </div>
 
                 <div>
-                  <h4 className="text-2xl font-bold text-text-primary mb-6 flex items-center gap-2" style={{ fontFamily: 'var(--font-display)' }}>
-                    <div className="w-2 h-8 bg-accent"></div>
+                  <h4 className="text-xl sm:text-2xl font-bold text-text-primary mb-4 sm:mb-6 flex items-center gap-2" style={{ fontFamily: 'var(--font-display)' }}>
+                    <div className="w-2 h-7 sm:h-8 bg-accent"></div>
                     How Niyom Wealth Helps
                   </h4>
-                  <ul className="space-y-4">
+                  <ul className="space-y-3.5 sm:space-y-4">
                     {activeService.howWeHelp.map((item, index) => (
                       <li key={index} className="flex gap-3 text-text-secondary leading-relaxed">
                         <span className="text-accent font-bold text-lg mt-1">•</span>
@@ -304,10 +324,10 @@ export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
                 </div>
               </div>
 
-              <div className="mt-12 text-center">
+              <div className="mt-10 sm:mt-12 text-center">
                 <button
                   onClick={onGetStarted}
-                  className="bg-accent hover:bg-accent-strong text-on-accent font-bold py-4 px-10 rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl text-lg"
+                  className="w-full sm:w-auto bg-accent hover:bg-accent-strong text-on-accent font-bold py-4 px-10 rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl text-lg"
                 >
                   Get Started Today
                 </button>
@@ -317,13 +337,13 @@ export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
         </div>
       </section>
 
-      <div className="px-6 pb-8">
+      <div className="px-5 sm:px-6 pb-8">
         <p className="max-w-3xl mx-auto text-center text-xs text-text-muted leading-relaxed">
           We are not SEBI Registered Investment Advisers. Information provided is for educational purposes only and does not constitute investment advice.
         </p>
       </div>
 
-      <footer className="bg-black text-white py-12 px-6 border-t border-accent-soft/20">
+      <footer className="bg-black text-white py-10 sm:py-12 px-5 sm:px-6 border-t border-accent-soft/20">
         <div className="max-w-7xl mx-auto text-center">
           <div className="flex items-center justify-center gap-3 mb-4">
             <Logo size="sm" />
