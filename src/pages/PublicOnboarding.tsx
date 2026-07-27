@@ -4,7 +4,7 @@ import {
   AlertCircle, Clock, Sparkles, RotateCcw, Home, CreditCard, type LucideIcon,
 } from 'lucide-react';
 import { clientSupabase as supabase } from '../lib/supabase';
-import { ThemeToggle } from '../theme/ThemeToggle';
+import { BrandFilm } from '../components/BrandFilm';
 
 interface Props {
   onBack: () => void;
@@ -148,7 +148,31 @@ export default function PublicOnboarding({ onBack }: Props) {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg-base)' }}>
+    // Pinned dark: the left panel is an inherently dark cinematic film, so the
+    // whole page commits to one cohesive dark experience (premium split-signup)
+    // rather than a dark panel beside a light form reading as two screens.
+    <div data-theme="dark" className="min-h-screen lg:grid lg:grid-cols-2" style={{ background: 'var(--bg-base)' }}>
+      {/* Left — cinematic brand film. Hidden on mobile (form-first); pins the
+          dark token set so the gold-on-black cards read regardless of theme.
+          A gold hairline + soft shadow make the seam an intentional divider. */}
+      <div
+        data-theme="dark"
+        className="hidden lg:block relative lg:sticky lg:top-0 lg:h-screen overflow-hidden"
+        style={{
+          background: '#071524',
+          borderRight: '1px solid rgba(216,189,134,0.14)',
+          boxShadow: '1px 0 48px rgba(0,0,0,0.45)',
+        }}
+      >
+        <BrandFilm variant="onboarding" mode="sequence" fill />
+      </div>
+
+      {/* Right — nav + signup form. A faint warm glow from the top gives the
+          form side depth so it reads as the same canvas as the film panel. */}
+      <div
+        className="min-h-screen"
+        style={{ background: 'radial-gradient(110% 70% at 50% -5%, rgba(200,164,93,0.06), transparent 60%)' }}
+      >
       {/* Top nav */}
       <div className="sticky top-0 z-10 px-6 py-4 flex items-center gap-4"
         style={{ background: 'var(--header-bg)', borderBottom: '1px solid var(--border-subtle)', backdropFilter: 'blur(8px)' }}>
@@ -158,7 +182,6 @@ export default function PublicOnboarding({ onBack }: Props) {
           <Home className="w-4 h-4" /> Home
         </a>
         <div className="flex-1" />
-        <ThemeToggle variant="icon" />
         <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-8 w-auto object-contain" />
       </div>
 
@@ -315,6 +338,7 @@ export default function PublicOnboarding({ onBack }: Props) {
             </div>
           ))}
         </div>
+      </div>
       </div>
     </div>
   );

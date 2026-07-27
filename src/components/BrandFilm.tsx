@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Film, Volume2, VolumeX } from 'lucide-react';
+import { ArrowRight, Volume2, VolumeX } from 'lucide-react';
 
 /**
  * BrandFilm — the premium cinematic brand-film for the landing hero.
@@ -41,9 +41,13 @@ type Scene = {
   hold: number;
   /** Closing CTA card gets the button + wordmark treatment. */
   cta?: boolean;
+  /** Branded close card — gold wordmark + tagline, no button. */
+  wordmark?: boolean;
+  /** Feature the Niyom logo image above the card (branded finale). */
+  logo?: boolean;
 };
 
-const SCENES: Scene[] = [
+const HERO_SCENES: Scene[] = [
   {
     kicker: 'Retirement',
     title: 'FINANCIAL FREEDOM',
@@ -95,16 +99,81 @@ const SCENES: Scene[] = [
   },
 ];
 
+/**
+ * Onboarding variant — a welcoming, conversion-focused sequence shown on the
+ * /onboarding split panel while the visitor fills in the form on the right.
+ * Longer Title-Case headlines (wrap to 2–3 lines); the finale features the logo.
+ */
+const ONBOARDING_SCENES: Scene[] = [
+  {
+    kicker: 'Welcome',
+    title: 'Your Journey to Financial Freedom Begins Here.',
+    vo: "Let's build a future you'll always be proud of.",
+    glow: 'radial-gradient(74% 64% at 50% 38%, rgba(216,189,134,0.20), transparent 72%)',
+    hold: 4600,
+  },
+  {
+    kicker: 'Today Matters',
+    title: 'Every Great Future Starts with One Decision.',
+    vo: 'The first step is often the most important.',
+    glow: 'radial-gradient(75% 65% at 42% 34%, rgba(240,200,120,0.22), transparent 74%)',
+    hold: 4600,
+  },
+  {
+    kicker: 'Dream Bigger',
+    title: 'Small Steps Create Extraordinary Futures.',
+    vo: 'Start today and let time work in your favour.',
+    glow: 'radial-gradient(72% 62% at 58% 36%, rgba(216,189,134,0.22), transparent 72%)',
+    hold: 4600,
+  },
+  {
+    kicker: 'Your Family',
+    title: 'Deserves a Future Filled with Confidence.',
+    vo: 'Plan wisely today for the moments that matter tomorrow.',
+    glow: 'radial-gradient(70% 60% at 50% 40%, rgba(200,164,93,0.20), transparent 72%)',
+    hold: 4600,
+  },
+  {
+    kicker: "You're Ready",
+    title: 'Your Future Is Waiting for You.',
+    vo: 'Complete your account and begin your wealth journey.',
+    glow: 'radial-gradient(80% 68% at 50% 36%, rgba(240,206,140,0.24), transparent 74%)',
+    hold: 4400,
+  },
+  {
+    kicker: 'One Last Step',
+    title: "Let's Build Something Extraordinary Together.",
+    vo: 'Welcome to a lifetime of smarter investing.',
+    glow: 'radial-gradient(78% 66% at 50% 40%, rgba(216,189,134,0.26), transparent 74%)',
+    hold: 5200,
+    logo: true,
+  },
+];
+
 /** Faint film-grain via inline SVG turbulence (data-URI, no network). */
 const GRAIN =
   "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/></svg>\")";
 
-export function BrandFilm({ className = '' }: { className?: string }) {
+export function BrandFilm({
+  className = '',
+  variant = 'hero',
+  mode = 'auto',
+  fill = false,
+}: {
+  className?: string;
+  /** Scene set / styling context. */
+  variant?: 'hero' | 'onboarding';
+  /** 'sequence' forces the title-cards and skips the video probe. */
+  mode?: 'auto' | 'sequence';
+  /** Full-bleed layout that fills its parent (no max-width, no rounded card). */
+  fill?: boolean;
+}) {
+  const scenes = variant === 'onboarding' ? ONBOARDING_SCENES : HERO_SCENES;
   const reduced = prefersReduced();
   const [mounted, setMounted] = useState(false);
   const [hasVideo, setHasVideo] = useState(false);
-  // On reduced-motion, park on the closing CTA card and never advance.
-  const [i, setI] = useState(() => (reduced ? SCENES.length - 1 : 0));
+  // On reduced-motion, park on the closing card and never advance.
+  const [i, setI] = useState(() => (reduced ? scenes.length - 1 : 0));
   const iRef = useRef(i);
   iRef.current = i;
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -127,7 +196,9 @@ export function BrandFilm({ className = '' }: { className?: string }) {
 
   // Probe for a dropped-in film export. HEAD avoids downloading; a missing
   // file simply keeps the CSS sequence (and logs nothing user-facing).
+  // Skipped entirely in forced-sequence mode (e.g. onboarding).
   useEffect(() => {
+    if (mode === 'sequence') return;
     let alive = true;
     fetch('/brand-film.mp4', { method: 'HEAD' })
       .then(r => {
@@ -139,7 +210,7 @@ export function BrandFilm({ className = '' }: { className?: string }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [mode]);
 
   // Nudge muted autoplay once the video mounts (some engines defer the
   // autoplay attribute until an explicit play() call).
@@ -155,9 +226,9 @@ export function BrandFilm({ className = '' }: { className?: string }) {
     let timer: number;
     const schedule = () => {
       timer = window.setTimeout(() => {
-        setI(prev => (prev + 1) % SCENES.length);
+        setI(prev => (prev + 1) % scenes.length);
         schedule();
-      }, SCENES[iRef.current].hold);
+      }, scenes[iRef.current].hold);
     };
     schedule();
     return () => window.clearTimeout(timer);
@@ -173,10 +244,10 @@ export function BrandFilm({ className = '' }: { className?: string }) {
     [mounted]
   );
 
-  const scene = SCENES[i];
+  const scene = scenes[i];
 
   return (
-    <div className={`relative w-full max-w-[540px] mx-auto ${className}`}>
+    <div className={`relative w-full ${fill ? 'h-full' : 'max-w-[540px] mx-auto'} ${className}`}>
       {/* Ambient glow behind the frame */}
       <div
         className="absolute -inset-6 -z-10"
@@ -191,14 +262,24 @@ export function BrandFilm({ className = '' }: { className?: string }) {
       <div
         role="img"
         aria-label="NIYOM Wealth brand film — Build Wealth with Confidence"
-        className={`relative overflow-hidden rounded-3xl ${
-          hasVideo ? 'aspect-video' : 'aspect-[4/5] sm:aspect-[16/10]'
-        }`}
+        className={
+          fill
+            ? 'absolute inset-0 overflow-hidden'
+            : `relative overflow-hidden rounded-3xl ${
+                hasVideo ? 'aspect-video' : 'aspect-[4/5] sm:aspect-[16/10]'
+              }`
+        }
         style={{
-          background: 'linear-gradient(160deg, #0a1a30 0%, #05101f 55%, #030a15 100%)',
-          border: '1px solid rgba(200,164,93,0.28)',
-          boxShadow:
-            '0 34px 90px rgba(2,8,20,0.6), inset 0 1px 0 rgba(255,255,255,0.05)',
+          // In `fill` (onboarding side panel) sit on the page's deep navy so
+          // the two halves read as one screen; the framed card keeps its
+          // slightly richer cinematic gradient.
+          background: fill
+            ? 'linear-gradient(160deg, #081a30 0%, #071524 55%, #040d1a 100%)'
+            : 'linear-gradient(160deg, #0a1a30 0%, #05101f 55%, #030a15 100%)',
+          border: fill ? 'none' : '1px solid rgba(200,164,93,0.28)',
+          boxShadow: fill
+            ? 'none'
+            : '0 34px 90px rgba(2,8,20,0.6), inset 0 1px 0 rgba(255,255,255,0.05)',
           ...enter,
         }}
       >
@@ -249,14 +330,45 @@ export function BrandFilm({ className = '' }: { className?: string }) {
             {/* Card content */}
             <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
               <div key={`card-${i}`} style={{ animation: reduced ? undefined : 'bf-card 800ms cubic-bezier(0.16,1,0.3,1) both' }}>
-                <p
-                  className="text-[10px] sm:text-[11px] uppercase tracking-[0.34em] mb-4"
-                  style={{ color: 'rgba(216,189,134,0.72)' }}
-                >
-                  {scene.kicker}
-                </p>
+                {scene.logo && (
+                  <img
+                    src="/niyomlogo.png"
+                    alt="Niyom Wealth"
+                    className="mx-auto mb-5 h-14 w-14 sm:h-16 sm:w-16 rounded-full"
+                  />
+                )}
+                {!scene.wordmark && (
+                  <p
+                    className="text-[10px] sm:text-[11px] uppercase tracking-[0.34em] mb-4"
+                    style={{ color: 'rgba(216,189,134,0.72)' }}
+                  >
+                    {scene.kicker}
+                  </p>
+                )}
 
-                {scene.cta ? (
+                {scene.wordmark ? (
+                  <>
+                    <h3
+                      className="font-bold tracking-tight"
+                      style={{
+                        fontFamily: 'var(--font-display)',
+                        fontSize: 'clamp(1.7rem, 4.6vw, 2.6rem)',
+                        background: 'linear-gradient(90deg, #b8934a, #f0d59a 55%, #d8bd86)',
+                        WebkitBackgroundClip: 'text',
+                        backgroundClip: 'text',
+                        color: 'transparent',
+                        letterSpacing: '0.02em',
+                      }}
+                    >
+                      NIYOM WEALTH
+                    </h3>
+                    <div
+                      className="mx-auto my-4 h-px w-16"
+                      style={{ background: 'linear-gradient(90deg, transparent, rgba(216,189,134,0.6), transparent)' }}
+                    />
+                    <p className="text-sm sm:text-base tracking-wide text-gray-300">{scene.title}</p>
+                  </>
+                ) : scene.cta ? (
                   <>
                     <p
                       className="text-[11px] uppercase tracking-[0.28em] text-gray-400 mb-3"
@@ -336,9 +448,15 @@ export function BrandFilm({ className = '' }: { className?: string }) {
             fallback only — real footage carries its own framing and grade. */}
         {!hasVideo && (
           <>
-            {/* Letterbox bars */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-[7%]" style={{ background: '#02060d' }} />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[7%]" style={{ background: '#02060d' }} />
+            {/* Letterbox bars — only for the framed card. In `fill` mode the
+                panel is a full-height side panel, where black bars would read
+                as a mismatched "clipped" strip next to the form. */}
+            {!fill && (
+              <>
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-[7%]" style={{ background: '#02060d' }} />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[7%]" style={{ background: '#02060d' }} />
+              </>
+            )}
 
             {/* Film grain */}
             <div
@@ -346,18 +464,9 @@ export function BrandFilm({ className = '' }: { className?: string }) {
               style={{ backgroundImage: GRAIN, backgroundSize: '140px 140px', opacity: 0.12 }}
             />
 
-            {/* Top-left wordmark + film tag */}
-            <div className="pointer-events-none absolute left-4 top-[calc(7%+0.65rem)] flex items-center gap-2">
-              <span
-                className="text-[10px] font-semibold uppercase tracking-[0.24em]"
-                style={{ color: 'rgba(216,189,134,0.85)', fontFamily: 'var(--font-display)' }}
-              >
-                NIYOM WEALTH
-              </span>
-            </div>
-            <div className="pointer-events-none absolute right-4 top-[calc(7%+0.55rem)] flex items-center gap-1.5 text-[9px] uppercase tracking-[0.18em] text-gray-400">
-              <Film size={11} style={{ color: 'rgba(216,189,134,0.7)' }} />
-              Brand Film
+            {/* Top-left brand logo (real circular mark, persistent on every card) */}
+            <div className={`pointer-events-none absolute flex items-center ${fill ? 'left-6 top-6' : 'left-4 top-[calc(7%+0.55rem)]'}`}>
+              <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-8 w-8 rounded-full" />
             </div>
           </>
         )}
@@ -365,7 +474,7 @@ export function BrandFilm({ className = '' }: { className?: string }) {
         {/* Bottom progress dots (hidden in video mode) */}
         {!hasVideo && (
           <div className="absolute inset-x-0 bottom-[calc(7%+0.7rem)] flex items-center justify-center gap-1.5">
-            {SCENES.map((_, idx) => (
+            {scenes.map((_, idx) => (
               <span
                 key={idx}
                 className="h-[3px] rounded-full transition-all duration-500"
