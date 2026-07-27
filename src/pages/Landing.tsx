@@ -4,7 +4,7 @@ import { Logo } from '../components/Logo';
 import { RegulatoryInfo } from '../components/RegulatoryInfo';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
-import { HeroShowcase } from '../components/HeroShowcase';
+import { BrandFilm } from '../components/BrandFilm';
 import { Reveal } from '../components/Reveal';
 
 interface LandingProps {
@@ -330,7 +330,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               floating chips self-hide below md to avoid horizontal overflow),
               so phones get the branded panel instead of an empty navy void. */}
           <div className="block px-2 sm:px-0 mt-2 md:mt-0">
-            <HeroShowcase />
+            <BrandFilm />
           </div>
         </div>
       </section>
