@@ -2,6 +2,7 @@ import { useEffect, type ReactNode, type ElementType } from 'react';
 import { ArrowLeft, Home } from 'lucide-react';
 import { Logo } from '../../components/Logo';
 import { ThemeToggle } from '../../theme/ThemeToggle';
+import { HeroBackground } from '../../components/HeroBackground';
 
 /**
  * Shared chrome for the public marketing pages (Learning, News, MF Research,
@@ -102,18 +103,14 @@ export function PublicPageChrome({
         </nav>
       </header>
 
-      {/* Hero band — inherently dark navy with the animated grid texture. */}
+      {/* Hero band — inherently dark navy with the animated financial-network
+          backdrop (same `HeroBackground` as the CRM Overview banner), so the
+          public pages carry the same "tech" identity into their hero. */}
       <section
         data-theme="dark"
         className="relative text-white overflow-hidden px-5 sm:px-6 pt-10 pb-12 sm:pt-14 sm:pb-16"
-        style={{ background: 'linear-gradient(150deg, #071524 0%, #0b2244 55%, #10284D 100%)' }}
       >
-        <div className="absolute inset-0 hb-grid opacity-60" aria-hidden="true" />
-        <div
-          className="absolute -right-24 -top-24 w-80 h-80 rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(200,164,93,0.16), transparent 70%)', filter: 'blur(12px)' }}
-          aria-hidden="true"
-        />
+        <HeroBackground />
         <div className="relative max-w-7xl mx-auto">
           <button
             onClick={onBack}
