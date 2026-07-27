@@ -7,6 +7,7 @@ export interface NWEmployee {
   phone: string;
   role: 'super_admin' | 'admin' | 'employee'; // authorization only — never shown to clients
   designation: string | null;                 // display-only job title (Designated Partner, etc.)
+  avatar_url: string | null;                   // profile photo (public URL in employee-avatars bucket); null → initials
   status: 'active' | 'inactive';
   password_changed: boolean;
   joining_date: string;
