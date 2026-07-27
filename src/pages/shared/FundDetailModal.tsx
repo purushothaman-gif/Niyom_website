@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LogoLoader } from '../../components/LogoLoader';
-import { X, AlertCircle, TrendingUp, Building2, CalendarDays, Wallet } from 'lucide-react';
+import { X, AlertCircle, TrendingUp, Building2, CalendarDays, Wallet, RefreshCw } from 'lucide-react';
 import { mfSource, type MfDetail } from './mfSource';
 import { NavChart } from './NavChart';
 import { fmtPct, returnColor, fmtNav, fmtDate, RiskBadge } from './mfFormat';
@@ -41,20 +41,39 @@ export function FundDetailModal({ seed, onClose }: FundDetailModalProps) {
   const [detail, setDetail] = useState<MfDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Bumped by the "Try again" button to re-run the fetch effect.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setError(null);
-    mfSource
-      .detail(seed.scheme_code)
-      .then((d) => alive && setDetail(d))
-      .catch(() => alive && setError('Unable to load this fund right now. Please try again shortly.'))
-      .finally(() => alive && setLoading(false));
+    // mfapi.in cold fetches for funds with long daily NAV histories (liquid
+    // funds carry 10+ years ≈ 4,500 points) are slow and occasionally fail on
+    // the first hit, then succeed once the upstream cache is warm. Retry once
+    // automatically so a transient cold miss doesn't surface as a hard error.
+    (async () => {
+      for (let tries = 0; tries < 2 && alive; tries++) {
+        try {
+          const d = await mfSource.detail(seed.scheme_code);
+          if (alive) {
+            setDetail(d);
+            setLoading(false);
+          }
+          return;
+        } catch {
+          if (tries === 0) await new Promise((r) => setTimeout(r, 900));
+        }
+      }
+      if (alive) {
+        setError('Unable to load this fund right now. Please try again shortly.');
+        setLoading(false);
+      }
+    })();
     return () => {
       alive = false;
     };
-  }, [seed.scheme_code]);
+  }, [seed.scheme_code, attempt]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -116,10 +135,19 @@ export function FundDetailModal({ seed, onClose }: FundDetailModalProps) {
             </div>
           ) : error ? (
             <div
-              className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm"
+              className="rounded-xl px-4 py-4 text-sm"
               style={{ background: 'rgba(var(--danger-soft-rgb),0.12)', color: 'rgb(var(--danger-soft-rgb))', border: '1px solid rgba(var(--danger-soft-rgb),0.3)' }}
             >
-              <AlertCircle size={16} /> {error}
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} className="flex-shrink-0" /> {error}
+              </div>
+              <button
+                onClick={() => setAttempt((a) => a + 1)}
+                className="press mt-3 inline-flex items-center gap-1.5 font-semibold rounded-lg px-3 py-1.5"
+                style={{ background: 'rgb(var(--danger-soft-rgb))', color: 'var(--bg-elevated)' }}
+              >
+                <RefreshCw size={14} /> Try again
+              </button>
             </div>
           ) : metrics ? (
             <>
