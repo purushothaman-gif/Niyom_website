@@ -466,7 +466,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               </div>
               <a
                 href="mailto:support@niyomwealth.com"
-                className="text-accent-soft hover:text-text-primary text-xl font-medium transition-colors duration-300 block break-words"
+                className="text-accent-soft hover:text-text-primary text-base sm:text-lg font-medium transition-colors duration-300 block whitespace-nowrap"
               >
                 support@niyomwealth.com
               </a>
@@ -525,80 +525,86 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
         </div>
       </section>
 
-      <footer className="bg-black text-white py-10 sm:py-12 px-5 sm:px-6 border-t border-accent-soft/20">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-3 gap-8 mb-8">
-            <div className="flex flex-col items-center md:items-start gap-3">
-              <Logo size="sm" />
-              <div>
-                <h2 className="text-xl font-bold" style={{ fontFamily: 'var(--font-body)', letterSpacing: '0.1em' }}>NIYOM WEALTH</h2>
-                <p className="text-text-muted text-sm mt-1">Distribution LLP</p>
+      <footer className="text-text-secondary" style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
+        <div className="max-w-7xl mx-auto px-5 sm:px-6 py-14 sm:py-16">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8">
+            {/* Brand + address + social */}
+            <div className="lg:col-span-5">
+              <div className="flex items-center gap-3">
+                <Logo size="sm" />
+                <div>
+                  <h2 className="text-lg font-bold text-text-primary" style={{ fontFamily: 'var(--font-display)', letterSpacing: '0.08em' }}>NIYOM WEALTH</h2>
+                  <p className="text-text-muted text-xs tracking-widest">DISTRIBUTION LLP</p>
+                </div>
+              </div>
+              <p className="mt-5 text-sm leading-relaxed max-w-sm" style={{ color: 'var(--text-muted)' }}>
+                Your trusted partner for wealth distribution — mutual funds, bonds, unlisted shares, insurance and more.
+              </p>
+              <div className="flex items-center gap-3 mt-6">
+                <a href="https://www.linkedin.com/company/niyom-wealth/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn"
+                  className="w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-300 hover:scale-110"
+                  style={{ background: 'rgba(200,164,93,0.12)', border: '1px solid rgba(200,164,93,0.3)' }}>
+                  <Linkedin size={18} className="text-accent-soft" />
+                </a>
+                <a href="https://www.instagram.com/niyom_wealth?igsh=MXRvaXB2ejJ0Z2h1cA==" target="_blank" rel="noopener noreferrer" aria-label="Instagram"
+                  className="w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-300 hover:scale-110"
+                  style={{ background: 'rgba(200,164,93,0.12)', border: '1px solid rgba(200,164,93,0.3)' }}>
+                  <Instagram size={18} className="text-accent-soft" />
+                </a>
+              </div>
+              <div className="mt-7">
+                <p className="text-xs font-semibold uppercase tracking-widest text-text-primary mb-2">Registered Office</p>
+                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                  No 126, 1st Floor, Poonamallee High Rd, Varalakshmi Nagar,<br />
+                  Sentamil Nagar, Maduravoyal, Chennai, Tamil Nadu 600095
+                </p>
               </div>
             </div>
 
-            <div className="text-center md:text-left">
-              <h3 className="text-lg font-semibold text-accent-soft mb-4">Legal</h3>
-              <div className="flex flex-col space-y-2">
-                <button
-                  onClick={() => onNavigate('privacy')}
-                  className="text-text-muted hover:text-accent-soft transition-colors text-left"
-                >
-                  Privacy Policy
-                </button>
-                <button
-                  onClick={() => onNavigate('terms')}
-                  className="text-text-muted hover:text-accent-soft transition-colors text-left"
-                >
-                  Terms of Use
-                </button>
-                <button
-                  onClick={() => onNavigate('risk')}
-                  className="text-text-muted hover:text-accent-soft transition-colors text-left"
-                >
-                  Risk Disclosure
-                </button>
-                <button
-                  onClick={() => onNavigate('disclaimer')}
-                  className="text-text-muted hover:text-accent-soft transition-colors text-left"
-                >
-                  Disclaimer
-                </button>
-              </div>
+            {/* Explore */}
+            <div className="lg:col-span-2">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-text-primary mb-4">Explore</h3>
+              <ul className="space-y-2.5 text-sm">
+                <li><button onClick={() => onViewServices()} className="hover:text-accent-soft transition-colors text-left">Services</button></li>
+                <li><button onClick={() => onViewLearning()} className="hover:text-accent-soft transition-colors text-left">Learning</button></li>
+                <li><button onClick={() => onViewNews()} className="hover:text-accent-soft transition-colors text-left">News</button></li>
+                <li><button onClick={() => onViewMFResearch()} className="hover:text-accent-soft transition-colors text-left">MF Research</button></li>
+                <li><button onClick={() => onViewCalculator()} className="hover:text-accent-soft transition-colors text-left">Calculator</button></li>
+              </ul>
             </div>
 
-            <div className="text-center md:text-left">
-              <h3 className="text-lg font-semibold text-accent-soft mb-4">Connect With Us</h3>
-              <div className="flex flex-col space-y-3">
-                <a
-                  href="https://www.linkedin.com/company/niyom-wealth/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-text-muted hover:text-accent-soft transition-colors justify-center md:justify-start group"
-                >
-                  <Linkedin size={20} className="group-hover:scale-110 transition-transform duration-300" />
-                  <span>LinkedIn</span>
-                </a>
-                <a
-                  href="https://www.instagram.com/niyom_wealth?igsh=MXRvaXB2ejJ0Z2h1cA=="
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-text-muted hover:text-accent-soft transition-colors justify-center md:justify-start group"
-                >
-                  <Instagram size={20} className="group-hover:scale-110 transition-transform duration-300" />
-                  <span>Instagram</span>
-                </a>
-              </div>
+            {/* Legal */}
+            <div className="lg:col-span-2">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-text-primary mb-4">Legal</h3>
+              <ul className="space-y-2.5 text-sm">
+                <li><button onClick={() => onNavigate('privacy')} className="hover:text-accent-soft transition-colors text-left">Privacy Policy</button></li>
+                <li><button onClick={() => onNavigate('terms')} className="hover:text-accent-soft transition-colors text-left">Terms of Use</button></li>
+                <li><button onClick={() => onNavigate('risk')} className="hover:text-accent-soft transition-colors text-left">Risk Disclosure</button></li>
+                <li><button onClick={() => onNavigate('disclaimer')} className="hover:text-accent-soft transition-colors text-left">Disclaimer</button></li>
+              </ul>
+            </div>
+
+            {/* Reach us */}
+            <div className="lg:col-span-3">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-text-primary mb-4">Reach Us</h3>
+              <ul className="space-y-3 text-sm">
+                <li><a href="tel:+918939433113" className="flex items-center gap-2.5 hover:text-accent-soft transition-colors"><Phone size={16} className="text-accent-soft flex-shrink-0" />+91 8939433113</a></li>
+                <li><a href="mailto:support@niyomwealth.com" className="flex items-center gap-2.5 hover:text-accent-soft transition-colors"><Mail size={16} className="text-accent-soft flex-shrink-0" />support@niyomwealth.com</a></li>
+                <li><a href="https://wa.me/918939433113?text=Hello,%20I%20wish%20to%20get%20in%20touch%20with%20you" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 hover:text-accent-soft transition-colors"><MessageCircle size={16} className="text-accent-soft flex-shrink-0" />WhatsApp Chat</a></li>
+              </ul>
             </div>
           </div>
 
-          <RegulatoryInfo />
+          <div className="mt-12 pt-8" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+            <RegulatoryInfo />
+          </div>
 
-          <div className="text-center text-text-muted pt-8 border-t border-gray-800">
-            <p className="text-sm">&copy; 2025 Niyom Wealth Distribution LLP. All rights reserved.</p>
-            <p className="text-xs mt-3 text-text-muted">
+          <div className="mt-8 pt-6 text-center" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+            <p className="text-sm text-text-muted">&copy; 2025 Niyom Wealth Distribution LLP. All rights reserved.</p>
+            <p className="text-xs mt-3 font-semibold text-text-secondary">
               SEBI Disclaimer: We are not SEBI Registered Investment Advisers.
             </p>
-            <p className="text-xs mt-2 text-text-muted">
+            <p className="text-xs mt-2 max-w-4xl mx-auto leading-relaxed" style={{ color: 'var(--text-faint)' }}>
               Investments in securities market are subject to market risks. Read all scheme related documents carefully before investing. We do not provide personalized investment advice. All information provided is for educational and informational purposes only. Please consult a qualified financial advisor before making investment decisions.
             </p>
           </div>
