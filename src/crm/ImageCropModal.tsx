@@ -26,7 +26,9 @@ export default function ImageCropModal({ file, onCancel, onApply, busy }: Props)
   const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [loadError, setLoadError] = useState(false);
   const drag = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   // Load the file into an object URL.
   useEffect(() => {
@@ -73,7 +75,8 @@ export default function ImageCropModal({ file, onCancel, onApply, busy }: Props)
   const onPointerUp = () => { drag.current = null; };
 
   const handleApply = () => {
-    if (!nat) return;
+    const img = imgRef.current;
+    if (!nat || !img) return;
     const canvas = document.createElement('canvas');
     canvas.width = OUTPUT;
     canvas.height = OUTPUT;
@@ -82,16 +85,14 @@ export default function ImageCropModal({ file, onCancel, onApply, busy }: Props)
     // white backdrop so JPEG output has no black transparency
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, OUTPUT, OUTPUT);
-    // Map the visible viewport square back into source-image pixels.
+    // Map the visible viewport square back into source-image pixels, then draw
+    // from the already-loaded preview <img> (drawImage samples its intrinsic
+    // resolution, so quality is preserved and there's no second image load).
     const sx = -offset.x / eff;
     const sy = -offset.y / eff;
     const sSize = VIEWPORT / eff;
-    const img = new Image();
-    img.onload = () => {
-      ctx.drawImage(img, sx, sy, sSize, sSize, 0, 0, OUTPUT, OUTPUT);
-      canvas.toBlob(b => { if (b) onApply(b); }, 'image/jpeg', 0.9);
-    };
-    img.src = src;
+    ctx.drawImage(img, sx, sy, sSize, sSize, 0, 0, OUTPUT, OUTPUT);
+    canvas.toBlob(b => { if (b) onApply(b); }, 'image/jpeg', 0.9);
   };
 
   return (
@@ -103,46 +104,62 @@ export default function ImageCropModal({ file, onCancel, onApply, busy }: Props)
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Crop viewport */}
-          <div className="mx-auto relative select-none" style={{ width: VIEWPORT, height: VIEWPORT }}>
-            <div
-              className="absolute inset-0 overflow-hidden rounded-xl cursor-grab active:cursor-grabbing touch-none"
-              style={{ border: '1px solid var(--border)' }}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
-            >
-              {src && (
-                <img
-                  src={src}
-                  alt="crop"
-                  draggable={false}
-                  onLoad={onImgLoad}
-                  style={{ position: 'absolute', left: offset.x, top: offset.y, width: dw, height: dh, maxWidth: 'none' }}
-                />
-              )}
+          {loadError ? (
+            /* Undecodable format (e.g. HEIC from an iPhone) — Chrome can't preview it. */
+            <div className="text-center py-6 space-y-2">
+              <p className="text-sm font-semibold text-c-red">This image can’t be previewed</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                The format may be unsupported (e.g. HEIC from an iPhone). Please choose a JPG or PNG.
+              </p>
             </div>
-            {/* Circular guide so admins frame a round avatar */}
-            <div className="absolute inset-0 pointer-events-none rounded-full" style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.35)', border: '2px solid rgba(255,255,255,0.6)' }} />
-          </div>
+          ) : (
+            <>
+              {/* Crop viewport */}
+              <div className="mx-auto relative select-none" style={{ width: VIEWPORT, height: VIEWPORT }}>
+                <div
+                  className="absolute inset-0 overflow-hidden rounded-xl cursor-grab active:cursor-grabbing touch-none"
+                  style={{ border: '1px solid var(--border)' }}
+                  onPointerDown={onPointerDown}
+                  onPointerMove={onPointerMove}
+                  onPointerUp={onPointerUp}
+                  onPointerCancel={onPointerUp}
+                >
+                  {src && (
+                    <img
+                      ref={imgRef}
+                      src={src}
+                      alt="crop"
+                      draggable={false}
+                      onLoad={onImgLoad}
+                      onError={() => setLoadError(true)}
+                      style={{ position: 'absolute', left: offset.x, top: offset.y, width: dw, height: dh, maxWidth: 'none' }}
+                    />
+                  )}
+                </div>
+                {/* Circular guide so admins frame a round avatar */}
+                <div className="absolute inset-0 pointer-events-none rounded-full" style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.35)', border: '2px solid rgba(255,255,255,0.6)' }} />
+              </div>
 
-          {/* Zoom */}
-          <div className="flex items-center gap-3">
-            <ZoomIn className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-faint)' }} />
-            <input
-              type="range" min={1} max={MAX_ZOOM} step={0.01} value={zoom}
-              onChange={e => setZoom(parseFloat(e.target.value))}
-              className="w-full" style={{ accentColor: 'var(--accent)' }}
-            />
-          </div>
-          <p className="text-xs text-center" style={{ color: 'var(--text-faint)' }}>Drag to reposition · slide to zoom</p>
+              {/* Zoom */}
+              <div className="flex items-center gap-3">
+                <ZoomIn className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-faint)' }} />
+                <input
+                  type="range" min={1} max={MAX_ZOOM} step={0.01} value={zoom}
+                  onChange={e => setZoom(parseFloat(e.target.value))}
+                  className="w-full" style={{ accentColor: 'var(--accent)' }}
+                />
+              </div>
+              <p className="text-xs text-center" style={{ color: 'var(--text-faint)' }}>Drag to reposition · slide to zoom</p>
+            </>
+          )}
 
           <div className="flex justify-end gap-3 pt-1">
-            <button onClick={onCancel} disabled={busy} className="px-4 py-2 rounded-xl text-sm disabled:opacity-50" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
-            <button onClick={handleApply} disabled={busy || !nat} className="px-5 py-2 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
-              {busy ? 'Uploading…' : 'Apply & upload'}
-            </button>
+            <button onClick={onCancel} disabled={busy} className="px-4 py-2 rounded-xl text-sm disabled:opacity-50" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>{loadError ? 'Close' : 'Cancel'}</button>
+            {!loadError && (
+              <button onClick={handleApply} disabled={busy || !nat} className="px-5 py-2 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                {busy ? 'Uploading…' : 'Apply & upload'}
+              </button>
+            )}
           </div>
         </div>
       </div>
