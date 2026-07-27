@@ -106,12 +106,19 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               </button>
             </div>
 
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden text-white hover:text-accent-soft transition-colors"
-            >
-              {isMobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
-            </button>
+            {/* Mobile top-bar controls — the theme toggle must live here (not
+                only in the hidden md:flex desktop cluster) or phones lose the
+                day/night switch entirely. */}
+            <div className="md:hidden flex items-center gap-1">
+              <ThemeToggle variant="icon" />
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="text-white hover:text-accent-soft transition-colors p-1"
+                aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+              >
+                {isMobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
+              </button>
+            </div>
           </div>
 
           <div className="hidden md:flex items-center justify-center gap-8 px-6 pb-4 border-t border-accent-soft/20">
