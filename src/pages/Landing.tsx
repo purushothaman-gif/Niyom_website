@@ -436,46 +436,49 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
           <div className="w-24 h-1 bg-accent-soft mx-auto mb-10 sm:mb-16"></div>
 
           <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-5 sm:gap-8">
-            <div className={`bg-gradient-to-br from-black to-gray-900 rounded-xl p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300 group ${isLoaded ? 'animate-fadeInUp animate-delay-100' : 'opacity-0'}`}>
+            <div className={`lift group bg-bg-elevated rounded-xl border border-border-subtle p-6 sm:p-8 ${isLoaded ? 'animate-fadeInUp animate-delay-100' : 'opacity-0'}`} style={{ boxShadow: 'var(--shadow-card)' }}>
               <div className="flex items-center gap-4 mb-4">
-                <div className="bg-accent-soft p-4 rounded-full group-hover:scale-110 transition-transform duration-300">
-                  <Phone className="w-8 h-8 text-black" />
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300"
+                  style={{ background: 'rgba(200,164,93,0.12)', border: '1px solid rgba(200,164,93,0.35)' }}>
+                  <Phone className="w-7 h-7 text-accent-soft" />
                 </div>
-                <h4 className="text-2xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>
+                <h4 className="text-2xl font-bold text-text-primary" style={{ fontFamily: 'var(--font-display)' }}>
                   Phone
                 </h4>
               </div>
               <a
                 href="tel:+918939433113"
-                className="text-accent-soft hover:text-white text-xl font-medium transition-colors duration-300 block"
+                className="text-accent-soft hover:text-text-primary text-xl font-medium transition-colors duration-300 block"
               >
                 +91 8939433113
               </a>
             </div>
 
-            <div className={`bg-gradient-to-br from-black to-gray-900 rounded-xl p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300 group ${isLoaded ? 'animate-fadeInUp animate-delay-300' : 'opacity-0'}`}>
+            <div className={`lift group bg-bg-elevated rounded-xl border border-border-subtle p-6 sm:p-8 ${isLoaded ? 'animate-fadeInUp animate-delay-300' : 'opacity-0'}`} style={{ boxShadow: 'var(--shadow-card)' }}>
               <div className="flex items-center gap-4 mb-4">
-                <div className="bg-accent-soft p-4 rounded-full group-hover:scale-110 transition-transform duration-300">
-                  <Mail className="w-8 h-8 text-black" />
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300"
+                  style={{ background: 'rgba(200,164,93,0.12)', border: '1px solid rgba(200,164,93,0.35)' }}>
+                  <Mail className="w-7 h-7 text-accent-soft" />
                 </div>
-                <h4 className="text-2xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>
+                <h4 className="text-2xl font-bold text-text-primary" style={{ fontFamily: 'var(--font-display)' }}>
                   Email
                 </h4>
               </div>
               <a
                 href="mailto:support@niyomwealth.com"
-                className="text-accent-soft hover:text-white text-xl font-medium transition-colors duration-300 block break-words"
+                className="text-accent-soft hover:text-text-primary text-xl font-medium transition-colors duration-300 block break-words"
               >
                 support@niyomwealth.com
               </a>
             </div>
 
-            <div className={`bg-gradient-to-br from-black to-gray-900 rounded-xl p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300 group ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`}>
+            <div className={`lift group bg-bg-elevated rounded-xl border border-border-subtle p-6 sm:p-8 ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`} style={{ boxShadow: 'var(--shadow-card)' }}>
               <div className="flex items-center gap-4 mb-4">
-                <div className="bg-accent-soft p-4 rounded-full group-hover:scale-110 transition-transform duration-300">
-                  <MessageCircle className="w-8 h-8 text-black" />
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300"
+                  style={{ background: 'rgba(200,164,93,0.12)', border: '1px solid rgba(200,164,93,0.35)' }}>
+                  <MessageCircle className="w-7 h-7 text-accent-soft" />
                 </div>
-                <h4 className="text-2xl font-bold text-white" style={{ fontFamily: 'var(--font-display)' }}>
+                <h4 className="text-2xl font-bold text-text-primary" style={{ fontFamily: 'var(--font-display)' }}>
                   WhatsApp
                 </h4>
               </div>
@@ -483,27 +486,28 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                 href="https://wa.me/918939433113?text=Hello,%20I%20wish%20to%20get%20in%20touch%20with%20you"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-accent-soft hover:text-white text-xl font-medium transition-colors duration-300 block"
+                className="text-accent-soft hover:text-text-primary text-xl font-medium transition-colors duration-300 block"
               >
                 +91 8939433113
               </a>
             </div>
           </div>
 
-          <div className={`lift mt-8 bg-gradient-to-br from-black to-gray-900 rounded-xl p-6 sm:p-8 shadow-xl ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`}>
+          <div className={`lift mt-6 sm:mt-8 bg-bg-elevated rounded-xl border border-border-subtle p-6 sm:p-8 ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`} style={{ boxShadow: 'var(--shadow-card)' }}>
             <div className="flex items-start gap-4">
-              <div className="bg-accent-soft p-4 rounded-full shrink-0">
-                <MapPin className="w-8 h-8 text-black" />
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+                style={{ background: 'rgba(200,164,93,0.12)', border: '1px solid rgba(200,164,93,0.35)' }}>
+                <MapPin className="w-7 h-7 text-accent-soft" />
               </div>
               <div>
-                <h4 className="text-2xl font-bold text-white mb-2" style={{ fontFamily: 'var(--font-display)' }}>
+                <h4 className="text-2xl font-bold text-text-primary mb-2" style={{ fontFamily: 'var(--font-display)' }}>
                   Our Office
                 </h4>
                 <a
                   href="https://www.google.com/maps/search/?api=1&query=No+126+Poonamallee+High+Road+Maduravoyal+Chennai+600095"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-accent-soft hover:text-white text-lg leading-relaxed transition-colors duration-300 block"
+                  className="text-accent-soft hover:text-text-primary text-lg leading-relaxed transition-colors duration-300 block"
                 >
                   No 126, 1st Floor, Poonamallee High Rd, Varalakshmi Nagar,<br />
                   Sentamil Nagar, Maduravoyal, Chennai,<br />
