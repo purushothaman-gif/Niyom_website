@@ -1,4 +1,4 @@
-import { ArrowRight, Shield, Target, Zap, TrendingUp, Users, Award, Instagram, Linkedin, ChevronRight, Phone, Mail, MessageCircle, Menu, X, ChevronDown, MapPin, ShieldCheck, Search, Eye, Handshake } from 'lucide-react';
+import { ArrowRight, Shield, Target, Zap, TrendingUp, Users, Award, Instagram, Linkedin, ChevronRight, Phone, Mail, MessageCircle, Menu, X, ChevronDown, ShieldCheck, Search, Eye, Handshake } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Logo } from '../components/Logo';
 import { RegulatoryInfo } from '../components/RegulatoryInfo';
@@ -428,104 +428,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
         </div>
       </section>
 
-      <section id="contact" className="py-14 sm:py-20 px-5 sm:px-6 bg-bg-base">
-        <div className="max-w-4xl mx-auto">
-          <h3 className="text-3xl sm:text-4xl font-bold text-center text-text-primary mb-4" style={{ fontFamily: 'var(--font-display)' }}>
-            Get in Touch
-          </h3>
-          <div className="w-24 h-1 bg-accent-soft mx-auto mb-10 sm:mb-16"></div>
-
-          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-5 sm:gap-8">
-            <div className={`lift group bg-bg-elevated rounded-xl border border-border-subtle p-6 sm:p-8 ${isLoaded ? 'animate-fadeInUp animate-delay-100' : 'opacity-0'}`} style={{ boxShadow: 'var(--shadow-card)' }}>
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300"
-                  style={{ background: 'rgba(200,164,93,0.12)', border: '1px solid rgba(200,164,93,0.35)' }}>
-                  <Phone className="w-7 h-7 text-accent-soft" />
-                </div>
-                <h4 className="text-2xl font-bold text-text-primary" style={{ fontFamily: 'var(--font-display)' }}>
-                  Phone
-                </h4>
-              </div>
-              <a
-                href="tel:+918939433113"
-                className="text-accent-soft hover:text-text-primary text-xl font-medium transition-colors duration-300 block"
-              >
-                +91 8939433113
-              </a>
-            </div>
-
-            <div className={`lift group bg-bg-elevated rounded-xl border border-border-subtle p-6 sm:p-8 ${isLoaded ? 'animate-fadeInUp animate-delay-300' : 'opacity-0'}`} style={{ boxShadow: 'var(--shadow-card)' }}>
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300"
-                  style={{ background: 'rgba(200,164,93,0.12)', border: '1px solid rgba(200,164,93,0.35)' }}>
-                  <Mail className="w-7 h-7 text-accent-soft" />
-                </div>
-                <h4 className="text-2xl font-bold text-text-primary" style={{ fontFamily: 'var(--font-display)' }}>
-                  Email
-                </h4>
-              </div>
-              <a
-                href="mailto:support@niyomwealth.com"
-                className="text-accent-soft hover:text-text-primary text-base sm:text-lg font-medium transition-colors duration-300 block whitespace-nowrap"
-              >
-                support@niyomwealth.com
-              </a>
-            </div>
-
-            <div className={`lift group bg-bg-elevated rounded-xl border border-border-subtle p-6 sm:p-8 ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`} style={{ boxShadow: 'var(--shadow-card)' }}>
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300"
-                  style={{ background: 'rgba(200,164,93,0.12)', border: '1px solid rgba(200,164,93,0.35)' }}>
-                  <MessageCircle className="w-7 h-7 text-accent-soft" />
-                </div>
-                <h4 className="text-2xl font-bold text-text-primary" style={{ fontFamily: 'var(--font-display)' }}>
-                  WhatsApp
-                </h4>
-              </div>
-              <a
-                href="https://wa.me/918939433113?text=Hello,%20I%20wish%20to%20get%20in%20touch%20with%20you"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent-soft hover:text-text-primary text-xl font-medium transition-colors duration-300 block"
-              >
-                +91 8939433113
-              </a>
-            </div>
-          </div>
-
-          <div className={`lift mt-6 sm:mt-8 bg-bg-elevated rounded-xl border border-border-subtle p-6 sm:p-8 ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`} style={{ boxShadow: 'var(--shadow-card)' }}>
-            <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
-                style={{ background: 'rgba(200,164,93,0.12)', border: '1px solid rgba(200,164,93,0.35)' }}>
-                <MapPin className="w-7 h-7 text-accent-soft" />
-              </div>
-              <div>
-                <h4 className="text-2xl font-bold text-text-primary mb-2" style={{ fontFamily: 'var(--font-display)' }}>
-                  Our Office
-                </h4>
-                <a
-                  href="https://www.google.com/maps/search/?api=1&query=No+126+Poonamallee+High+Road+Maduravoyal+Chennai+600095"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent-soft hover:text-text-primary text-lg leading-relaxed transition-colors duration-300 block"
-                >
-                  No 126, 1st Floor, Poonamallee High Rd, Varalakshmi Nagar,<br />
-                  Sentamil Nagar, Maduravoyal, Chennai,<br />
-                  Greater Chennai, Tamil Nadu 600095
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-12 text-center">
-            <p className="text-text-secondary text-lg leading-relaxed max-w-2xl mx-auto">
-              We're here to answer your questions and help you achieve your financial goals. Reach out to us via phone, email, or WhatsApp, and our team will get back to you promptly.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <footer className="text-text-secondary" style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
+      <footer id="contact" className="text-text-secondary" style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
         <div className="max-w-7xl mx-auto px-5 sm:px-6 py-14 sm:py-16">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8">
             {/* Brand + address + social */}
