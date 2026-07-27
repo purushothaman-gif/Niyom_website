@@ -3,6 +3,7 @@ import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee } from './types';
 import { EmployeeAvatar } from './EmployeeAvatar';
+import ImageCropModal from './ImageCropModal';
 import { fmtDate } from './utils';
 import { Plus, X, Pencil, Users, UserCheck, UserX, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react';
 
@@ -35,6 +36,7 @@ export default function Employees({ employee }: Props) {
   const [showPw, setShowPw] = useState(false);
   const [editAvatar, setEditAvatar] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [addForm, setAddForm] = useState({ full_name: '', email: '', password: '', role: 'employee', designation: 'Relationship Manager', employee_code: '' });
@@ -92,14 +94,12 @@ export default function Employees({ employee }: Props) {
     load();
   };
 
-  const handlePhoto = async (file: File) => {
+  // Called with the cropped square (JPEG) blob from the crop modal.
+  const handleCroppedUpload = async (blob: Blob) => {
     if (!editEmp) return;
-    if (!file.type.startsWith('image/')) { showToast('Please choose an image file.', false); return; }
-    if (file.size > 5 * 1024 * 1024) { showToast('Image must be under 5 MB.', false); return; }
     setUploadingPhoto(true);
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-    const path = `avatars/${editEmp.id}.${ext}`;
-    const { error: upErr } = await supabase.storage.from('employee-avatars').upload(path, file, { upsert: true, contentType: file.type });
+    const path = `avatars/${editEmp.id}.jpg`; // fixed ext → upsert always overwrites, no orphans
+    const { error: upErr } = await supabase.storage.from('employee-avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
     if (upErr) { setUploadingPhoto(false); showToast(upErr.message, false); return; }
     const { data } = supabase.storage.from('employee-avatars').getPublicUrl(path);
     const publicUrl = `${data.publicUrl}?v=${Date.now()}`; // cache-bust so a re-upload shows immediately
@@ -108,6 +108,7 @@ export default function Employees({ employee }: Props) {
     if (dbErr) { showToast(dbErr.message, false); return; }
     setEditAvatar(publicUrl);
     setEmployees(prev => prev.map(x => (x.id === editEmp.id ? { ...x, avatar_url: publicUrl } : x)));
+    setCropFile(null);
     showToast('Photo updated.');
   };
 
@@ -301,7 +302,14 @@ export default function Employees({ employee }: Props) {
                 badgeStyle={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)' }} textClassName="text-lg" />
               <div className="flex flex-col gap-2">
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
-                  onChange={ev => { const f = ev.target.files?.[0]; if (f) handlePhoto(f); ev.target.value = ''; }} />
+                  onChange={ev => {
+                    const f = ev.target.files?.[0];
+                    ev.target.value = '';
+                    if (!f) return;
+                    if (!f.type.startsWith('image/')) { showToast('Please choose an image file.', false); return; }
+                    if (f.size > 10 * 1024 * 1024) { showToast('Image must be under 10 MB.', false); return; }
+                    setCropFile(f); // open the crop step before uploading
+                  }} />
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}
                     className="px-3 py-1.5 rounded-xl text-xs font-bold text-on-accent disabled:opacity-50"
@@ -354,6 +362,16 @@ export default function Employees({ employee }: Props) {
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Crop step — shown after picking a file, before upload */}
+      {cropFile && (
+        <ImageCropModal
+          file={cropFile}
+          busy={uploadingPhoto}
+          onCancel={() => setCropFile(null)}
+          onApply={handleCroppedUpload}
+        />
       )}
     </div>
   );
