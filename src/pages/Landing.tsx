@@ -430,9 +430,9 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
 
       <footer id="contact" className="text-text-secondary" style={{ background: 'var(--bg-elevated)', borderTop: '1px solid var(--border)' }}>
         <div className="max-w-7xl mx-auto px-5 sm:px-6 py-14 sm:py-16">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-8">
+          <div className="grid grid-cols-2 lg:grid-cols-12 gap-x-6 gap-y-10 lg:gap-8">
             {/* Brand + address + social */}
-            <div className="lg:col-span-5">
+            <div className="col-span-2 lg:col-span-5">
               <div className="flex items-center gap-3">
                 <Logo size="sm" />
                 <div>
@@ -488,7 +488,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             </div>
 
             {/* Reach us */}
-            <div className="lg:col-span-3">
+            <div className="col-span-2 lg:col-span-3">
               <h3 className="text-xs font-semibold uppercase tracking-widest text-text-primary mb-4">Reach Us</h3>
               <ul className="space-y-3 text-sm">
                 <li><a href="tel:+918939433113" className="flex items-center gap-2.5 hover:text-accent-soft transition-colors"><Phone size={16} className="text-accent-soft flex-shrink-0" />+91 8939433113</a></li>
