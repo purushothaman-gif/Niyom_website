@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee } from './types';
+import { EmployeeAvatar } from './EmployeeAvatar';
 import { fmtDate } from './utils';
 import { Plus, X, Pencil, Users, UserCheck, UserX, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react';
 
@@ -32,6 +33,9 @@ export default function Employees({ employee }: Props) {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [editAvatar, setEditAvatar] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [addForm, setAddForm] = useState({ full_name: '', email: '', password: '', role: 'employee', designation: 'Relationship Manager', employee_code: '' });
   const [editForm, setEditForm] = useState({ full_name: '', phone: '', role: 'employee', designation: 'Relationship Manager', status: 'active' });
@@ -86,6 +90,36 @@ export default function Employees({ employee }: Props) {
     setEditEmp(null);
     showToast('Employee updated.');
     load();
+  };
+
+  const handlePhoto = async (file: File) => {
+    if (!editEmp) return;
+    if (!file.type.startsWith('image/')) { showToast('Please choose an image file.', false); return; }
+    if (file.size > 5 * 1024 * 1024) { showToast('Image must be under 5 MB.', false); return; }
+    setUploadingPhoto(true);
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `avatars/${editEmp.id}.${ext}`;
+    const { error: upErr } = await supabase.storage.from('employee-avatars').upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) { setUploadingPhoto(false); showToast(upErr.message, false); return; }
+    const { data } = supabase.storage.from('employee-avatars').getPublicUrl(path);
+    const publicUrl = `${data.publicUrl}?v=${Date.now()}`; // cache-bust so a re-upload shows immediately
+    const { error: dbErr } = await supabase.from('nw_employees').update({ avatar_url: publicUrl, updated_at: new Date().toISOString() }).eq('id', editEmp.id);
+    setUploadingPhoto(false);
+    if (dbErr) { showToast(dbErr.message, false); return; }
+    setEditAvatar(publicUrl);
+    setEmployees(prev => prev.map(x => (x.id === editEmp.id ? { ...x, avatar_url: publicUrl } : x)));
+    showToast('Photo updated.');
+  };
+
+  const handleRemovePhoto = async () => {
+    if (!editEmp) return;
+    setUploadingPhoto(true);
+    const { error } = await supabase.from('nw_employees').update({ avatar_url: null, updated_at: new Date().toISOString() }).eq('id', editEmp.id);
+    setUploadingPhoto(false);
+    if (error) { showToast(error.message, false); return; }
+    setEditAvatar(null);
+    setEmployees(prev => prev.map(x => (x.id === editEmp.id ? { ...x, avatar_url: null } : x)));
+    showToast('Photo removed.');
   };
 
   const toggleStatus = async (emp: NWEmployee) => {
@@ -166,9 +200,8 @@ export default function Employees({ employee }: Props) {
                 <tr key={e.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)' }}>
-                        {e.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-                      </div>
+                      <EmployeeAvatar name={e.full_name} url={e.avatar_url} size={36} rounded="xl"
+                        badgeStyle={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)' }} />
                       <div>
                         <p className="text-sm font-medium text-text-primary">{e.full_name}</p>
                         <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{e.email}</p>
@@ -188,7 +221,7 @@ export default function Employees({ employee }: Props) {
                   <td className="px-5 py-3.5">
                     {e.id !== employee.id && (
                       <div className="flex items-center gap-1">
-                        <button onClick={() => { setEditEmp(e); setEditForm({ full_name: e.full_name, phone: e.phone || '', role: e.role, designation: e.designation ?? 'Relationship Manager', status: e.status }); }}
+                        <button onClick={() => { setEditEmp(e); setEditAvatar(e.avatar_url); setEditForm({ full_name: e.full_name, phone: e.phone || '', role: e.role, designation: e.designation ?? 'Relationship Manager', status: e.status }); }}
                           className="p-1.5 rounded-lg" style={{ color: 'var(--text-faint)' }}
                           onMouseEnter={ev => (ev.currentTarget.style.color = 'rgb(var(--info-soft-rgb))')} onMouseLeave={ev => (ev.currentTarget.style.color = 'var(--text-faint)')}>
                           <Pencil className="w-4 h-4" />
@@ -262,6 +295,30 @@ export default function Employees({ employee }: Props) {
       {editEmp && (
         <Modal title={`Edit — ${editEmp.full_name}`} onClose={() => setEditEmp(null)}>
           <div className="p-6 space-y-4">
+            {/* Profile photo */}
+            <div className="flex items-center gap-4">
+              <EmployeeAvatar name={editForm.full_name || editEmp.full_name} url={editAvatar} size={64} rounded="xl"
+                badgeStyle={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)' }} textClassName="text-lg" />
+              <div className="flex flex-col gap-2">
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+                  onChange={ev => { const f = ev.target.files?.[0]; if (f) handlePhoto(f); ev.target.value = ''; }} />
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-on-accent disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                    {uploadingPhoto ? 'Uploading…' : editAvatar ? 'Change photo' : 'Upload photo'}
+                  </button>
+                  {editAvatar && (
+                    <button type="button" onClick={handleRemovePhoto} disabled={uploadingPhoto}
+                      className="px-3 py-1.5 rounded-xl text-xs disabled:opacity-50"
+                      style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs" style={{ color: 'var(--text-faint)' }}>JPG or PNG, up to 5 MB. Saved immediately.</p>
+              </div>
+            </div>
             {[['Full Name', 'full_name', 'text'], ['Phone', 'phone', 'tel']].map(([label, key, type]) => (
               <div key={key}>
                 <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>{label}</label>

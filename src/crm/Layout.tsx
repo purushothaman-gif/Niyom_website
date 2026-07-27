@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
+import { EmployeeAvatar } from './EmployeeAvatar';
 
 interface Props {
   children: React.ReactNode;
@@ -125,10 +126,8 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
       {/* Employee card */}
       <div className="px-3 pb-4" style={{ borderTop: '1px solid rgba(var(--accent-soft-rgb),0.1)' }}>
         <div className="mt-4 p-3 rounded-xl flex items-center gap-3" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0"
-            style={{ background: 'rgba(var(--accent-soft-rgb),0.15)', color: 'var(--accent-soft)' }}>
-            {employee.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-          </div>
+          <EmployeeAvatar name={employee.full_name} url={employee.avatar_url} size={36} rounded="xl"
+            badgeStyle={{ background: 'rgba(var(--accent-soft-rgb),0.15)', color: 'var(--accent-soft)' }} />
           <div className="flex-1 overflow-hidden min-w-0">
             <p className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{employee.full_name}</p>
             <p className="text-xs truncate" style={{ color: 'var(--text-faint)' }}>{employee.employee_code}</p>
@@ -215,10 +214,8 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
 
             {/* Role badge */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-              <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold"
-                style={{ background: 'rgba(var(--accent-soft-rgb),0.15)', color: 'var(--accent-soft)' }}>
-                {employee.full_name[0].toUpperCase()}
-              </div>
+              <EmployeeAvatar name={employee.full_name} url={employee.avatar_url} size={24} rounded="lg"
+                badgeStyle={{ background: 'rgba(var(--accent-soft-rgb),0.15)', color: 'var(--accent-soft)' }} />
               <div className="hidden md:block">
                 <p className="text-xs font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>{employee.full_name.split(' ')[0]}</p>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>{employee.designation ?? 'Relationship Manager'}</p>

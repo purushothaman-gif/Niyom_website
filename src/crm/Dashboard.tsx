@@ -7,6 +7,7 @@ import { Users, TrendingUp, ArrowLeftRight, UserCheck, ArrowRight, Activity, Bar
 import { CRMPage } from './types';
 import { Counter } from '../components/Reveal';
 import { HeroBackground } from '../components/HeroBackground';
+import { EmployeeAvatar } from './EmployeeAvatar';
 
 interface Props { employee: NWEmployee; onNavigate: (page: CRMPage) => void; }
 
@@ -22,6 +23,7 @@ interface EmployeeStat {
   id: string;
   full_name: string;
   employee_code: string;
+  avatar_url: string | null;
   clientCount: number;
   portfolioValue: number;
   verifiedCount: number;
@@ -78,7 +80,7 @@ export default function Dashboard({ employee, onNavigate }: Props) {
       if (isAdmin) {
         const { data: empData, count } = await supabase
           .from('nw_employees')
-          .select('id, full_name, employee_code', { count: 'exact' })
+          .select('id, full_name, employee_code, avatar_url', { count: 'exact' })
           .eq('status', 'active');
 
         empCount = count || 0;
@@ -87,10 +89,10 @@ export default function Dashboard({ employee, onNavigate }: Props) {
         if (empData) {
           const statsMap: Record<string, EmployeeStat> = {};
           for (const e of empData) {
-            statsMap[e.id] = { id: e.id, full_name: e.full_name, employee_code: e.employee_code, clientCount: 0, portfolioValue: 0, verifiedCount: 0 };
+            statsMap[e.id] = { id: e.id, full_name: e.full_name, employee_code: e.employee_code, avatar_url: (e as any).avatar_url ?? null, clientCount: 0, portfolioValue: 0, verifiedCount: 0 };
           }
           // Bucket 'unassigned' for clients with no employee
-          statsMap['__unassigned__'] = { id: '__unassigned__', full_name: 'Unassigned', employee_code: '—', clientCount: 0, portfolioValue: 0, verifiedCount: 0 };
+          statsMap['__unassigned__'] = { id: '__unassigned__', full_name: 'Unassigned', employee_code: '—', avatar_url: null, clientCount: 0, portfolioValue: 0, verifiedCount: 0 };
 
           for (const c of allClients) {
             const key = c.employee_id && statsMap[c.employee_id] ? c.employee_id : '__unassigned__';
@@ -193,10 +195,8 @@ export default function Dashboard({ employee, onNavigate }: Props) {
                     <tr key={es.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                            style={{ background: i === 0 ? 'rgba(var(--accent-rgb),0.15)' : 'rgba(var(--hover-bg-rgb),0.05)', color: i === 0 ? 'var(--accent)' : 'var(--text-muted)' }}>
-                            {es.full_name.charAt(0).toUpperCase()}
-                          </div>
+                          <EmployeeAvatar name={es.full_name} url={es.avatar_url} size={28} rounded="full"
+                            badgeStyle={{ background: i === 0 ? 'rgba(var(--accent-rgb),0.15)' : 'rgba(var(--hover-bg-rgb),0.05)', color: i === 0 ? 'var(--accent)' : 'var(--text-muted)' }} />
                           <span className="text-sm font-medium text-text-primary">{es.full_name}</span>
                         </div>
                       </td>
