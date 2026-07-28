@@ -36,6 +36,12 @@ function sanitize(deal: Record<string, any>) {
     snap_dp_name: deal.snap_dp_name,
     snap_demat_account: deal.snap_demat_account,
     snap_depository: deal.snap_depository,
+    // Client bank snapshot — needed only to print the "remit to" account on a
+    // SELL deal note (Niyom pays the client). This is the client's own bank,
+    // shown to the client on their own secure-token page.
+    snap_bank_name: deal.snap_bank_name,
+    snap_bank_account: deal.snap_bank_account,
+    snap_bank_ifsc: deal.snap_bank_ifsc,
     acceptance_status: deal.acceptance_status,
     // masked email for display ("jo****@gmail.com")
     client_email_masked: maskEmail(deal.snap_email || ""),

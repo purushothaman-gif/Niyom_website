@@ -3,7 +3,7 @@ import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWTransaction, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, TXN_LABELS, TXN_COLORS } from './utils';
-import { Plus, X, Pencil, Trash2, Upload, FileText, ExternalLink, Search, ChevronDown, ChevronRight, Percent, TrendingUp, Shield } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, FileText, ExternalLink, Search, ChevronDown, ChevronRight, Percent, TrendingUp, Shield } from 'lucide-react';
 
 interface Props { employee: NWEmployee; onNavigate?: (page: string, params?: Record<string, string>) => void; }
 
@@ -169,7 +169,7 @@ const DSA_PRICE_TYPES: ProductType[] = ['unlisted_share', 'secondary_bond', 'pri
 interface TxnForm {
   client_id: string; txn_type: string; product_type: ProductType;
   product_name: string; quantity: string; per_unit_price: string;
-  consolidated_amount: string; txn_date: string; notes: string; docFile: File | null;
+  consolidated_amount: string; txn_date: string; notes: string;
   dsa_price: string; client_price: string;
   landing_cost: string; insurance_revenue: string; trail_percent: string; trail_start_date: string;
   isin: string; face_value: string; coupon_rate: string; interest_payout_date: string;
@@ -182,7 +182,7 @@ interface TxnForm {
 const emptyForm = (): TxnForm => ({
   client_id: '', txn_type: 'buy', product_type: 'unlisted_share',
   product_name: '', quantity: '', per_unit_price: '', consolidated_amount: '',
-  txn_date: new Date().toISOString().split('T')[0], notes: '', docFile: null,
+  txn_date: new Date().toISOString().split('T')[0], notes: '',
   dsa_price: '', client_price: '',
   landing_cost: '', insurance_revenue: '', trail_percent: '', trail_start_date: '',
   isin: '', face_value: '', coupon_rate: '', interest_payout_date: '', payout_frequency: 'annual', issuer_name: '',
@@ -331,6 +331,51 @@ async function reverseTransactionFromHolding(txn: Record<string, any>): Promise<
   return true;
 }
 
+// Look up the holding a transaction would net against (same client + product).
+// Used before booking a SELL to decide whether to offer a holding reduction.
+async function findMatchingHolding(txn: Record<string, any>) {
+  const { data } = await supabase
+    .from('nw_holdings')
+    .select('*')
+    .eq('client_id', txn.client_id)
+    .eq('product_name', txn.product_name)
+    .eq('product_type', txn.product_type)
+    .maybeSingle();
+  return data || null;
+}
+
+// Reduce a client's holding when they SELL shares/bonds back to us (disposal).
+// Unlike a buy, a sell removes units from the portfolio: subtract the sold
+// quantity and its cost basis (avg_cost × soldQty) so the remaining avg_cost is
+// preserved; delete the holding when nothing is left. Recomputes portfolio_value.
+// Only ever called after the operator approves (approval-if-held per the spec).
+async function reduceHoldingForSell(txn: Record<string, any>) {
+  const soldQty = txn.quantity || 0;
+  const existing = await findMatchingHolding(txn);
+  if (!existing || soldQty <= 0) return;
+
+  const avgCost = existing.avg_cost
+    || (existing.quantity ? (existing.invested_amount || 0) / existing.quantity : 0);
+  const newQty = (existing.quantity || 0) - soldQty;
+
+  if (newQty <= 0) {
+    await supabase.from('nw_holdings').delete().eq('id', existing.id);
+  } else {
+    const newInvested = avgCost * newQty;
+    await supabase.from('nw_holdings').update({
+      quantity: newQty,
+      invested_amount: newInvested,
+      avg_cost: avgCost,
+      current_value: newInvested,
+      updated_at: new Date().toISOString(),
+    }).eq('id', existing.id);
+  }
+
+  const { data: allHoldings } = await supabase.from('nw_holdings').select('current_value').eq('client_id', txn.client_id);
+  const total = (allHoldings || []).reduce((s: number, h: any) => s + (h.current_value || 0), 0);
+  await supabase.from('nw_clients').update({ portfolio_value: total }).eq('id', txn.client_id);
+}
+
 export default function Transactions({ employee, onNavigate }: Props) {
   const [txns, setTxns] = useState<NWTransaction[]>([]);
   const [clients, setClients] = useState<NWClient[]>([]);
@@ -347,6 +392,10 @@ export default function Transactions({ employee, onNavigate }: Props) {
   const [form, setForm] = useState<TxnForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // SELL disposal approval — when booking a sell for a client who already holds
+  // the security, we ask the operator whether to reduce the portfolio holding.
+  const [sellApproval, setSellApproval] = useState<{ payload: Record<string, any>; holding: any } | null>(null);
 
   // Book-from-deal picker
   const [eligibleDeals, setEligibleDeals] = useState<EligibleDeal[]>([]);
@@ -411,6 +460,11 @@ export default function Transactions({ employee, onNavigate }: Props) {
   const setF = (k: keyof TxnForm, v: any) => {
     setForm(prev => {
       const next = { ...prev, [k]: v };
+      // Client Price defaults to the same value as Per Unit Price. Keep mirroring
+      // until the operator manually diverges the client price from the unit price.
+      if (k === 'per_unit_price' && (prev.client_price === '' || prev.client_price === prev.per_unit_price)) {
+        next.client_price = v;
+      }
       const qty = parseFloat(next.quantity) || 0;
       if (next.product_type === 'unlisted_share') {
         const price = parseFloat(next.per_unit_price) || 0;
@@ -493,7 +547,7 @@ export default function Transactions({ employee, onNavigate }: Props) {
       product_name: t.product_name, quantity: t.quantity?.toString() || '',
       per_unit_price: t.per_unit_price?.toString() || '',
       consolidated_amount: t.consolidated_amount.toString(),
-      txn_date: t.txn_date, notes: t.notes || '', docFile: null,
+      txn_date: t.txn_date, notes: t.notes || '',
       dsa_price: (t as any).dsa_price?.toString() || '', client_price: (t as any).client_price?.toString() || '',
       landing_cost: (t as any).landing_cost?.toString() || '', insurance_revenue: (t as any).insurance_revenue?.toString() || '',
       trail_percent: (t as any).trail_percent?.toString() || '', trail_start_date: (t as any).trail_start_date || '',
@@ -588,6 +642,26 @@ export default function Transactions({ employee, onNavigate }: Props) {
       });
     }
 
+    // SELL disposal: if this is a NEW sell and the client already holds this
+    // security, pause and ask the operator whether to reduce the holding. If they
+    // hold nothing, just book it (no holding to touch). Buys and edits are
+    // unaffected and commit straight through.
+    if (!editTxn && payload.txn_type === 'sell') {
+      const holding = await findMatchingHolding(payload);
+      if (holding) {
+        setSaving(false);
+        setSellApproval({ payload, holding });
+        return;
+      }
+    }
+
+    await commitSave(payload, false);
+  };
+
+  // Performs the actual DB write + holding sync. Split out of handleSave so the
+  // SELL approval dialog can call it with the operator's reduce decision.
+  const commitSave = async (payload: Record<string, any>, reduceSellHolding: boolean) => {
+    setError(''); setSaving(true);
     let txnId: string;
     if (editTxn) {
       // A transferred transaction only allows the revenue-basis fields, the date
@@ -636,20 +710,18 @@ export default function Transactions({ employee, onNavigate }: Props) {
         description: `${TXN_LABELS[form.txn_type]} ${form.product_name} — ${fmt(parseFloat(form.consolidated_amount))}`,
       }]);
     }
-    if (form.docFile) {
-      const path = `transactions/${txnId}/${Date.now()}_${form.docFile.name}`;
-      const { data: upData } = await supabase.storage.from('crm-documents').upload(path, form.docFile, { upsert: true });
-      if (upData) {
-        await supabase.from('nw_txn_documents').insert([{ txn_id: txnId, file_name: form.docFile.name, file_url: upData.path, uploaded_by: employee.id }]);
+
+    // Auto-sync to portfolio holdings (only for new transactions, not edits).
+    // syncTransactionToHolding handles buys (no-op for sells). A sell reduces the
+    // holding only when the operator approved it in the disposal dialog.
+    if (!editTxn) {
+      await syncTransactionToHolding(payload);
+      if (payload.txn_type === 'sell' && reduceSellHolding) {
+        await reduceHoldingForSell(payload);
       }
     }
 
-    // Auto-sync to portfolio holdings (only for new transactions, not edits)
-    if (!editTxn) {
-      await syncTransactionToHolding(payload);
-    }
-
-    setSaving(false); setShowAdd(false); setEditTxn(null); loadTxns();
+    setSaving(false); setShowAdd(false); setEditTxn(null); setSellApproval(null); loadTxns();
   };
 
   const handleDelete = async () => {
@@ -819,10 +891,17 @@ export default function Transactions({ employee, onNavigate }: Props) {
         <div className="grid grid-cols-2 gap-4 rounded-xl p-4" style={{ background: 'rgba(16,185,129,0.04)', border: '1px solid rgba(16,185,129,0.15)' }}>
           <div className="col-span-2">
             <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--success)' }}>MIS Revenue</p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>Revenue = (Avg Cost − Landing Cost) × Quantity</p>
+            {/* Direction-aware: on a SELL the client sells to us, so revenue is our
+                resale/exit value (Landing Cost) minus the price we pay the client. */}
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>
+              {form.txn_type === 'sell'
+                ? 'Revenue = (Landing Cost − Price) × Quantity'
+                : 'Revenue = (Price − Landing Cost) × Quantity'}
+            </p>
           </div>
           <Field label="Landing Cost / Unit (₹)" span2>
-            <I type="number" value={form.landing_cost} onChange={e => setF('landing_cost', e.target.value)} placeholder="Internal acquisition cost per unit" />
+            <I type="number" value={form.landing_cost} onChange={e => setF('landing_cost', e.target.value)}
+              placeholder={form.txn_type === 'sell' ? 'Internal resale / exit value per unit' : 'Internal acquisition cost per unit'} />
           </Field>
         </div>
       )}
@@ -910,15 +989,6 @@ export default function Transactions({ employee, onNavigate }: Props) {
         <Field label="Notes">
           <textarea value={form.notes} onChange={e => setF('notes', e.target.value)} rows={2} placeholder="Optional notes..."
             className="w-full px-3 py-2.5 rounded-xl text-sm text-text-primary outline-none resize-none" style={iS} />
-        </Field>
-        <Field label="Deal Confirmation Document">
-          <label className="flex items-center gap-3 p-3 rounded-xl cursor-pointer" style={iS}>
-            <Upload className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-faint)' }} />
-            <span className="text-sm" style={{ color: form.docFile ? 'var(--accent)' : 'var(--text-faint)' }}>
-              {form.docFile ? form.docFile.name : 'Upload deal confirmation (PDF/Image)'}
-            </span>
-            <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setF('docFile', e.target.files?.[0] || null)} />
-          </label>
         </Field>
       </div>
       <div className="flex justify-end gap-3 pt-1">
@@ -1154,6 +1224,58 @@ export default function Transactions({ employee, onNavigate }: Props) {
               <button onClick={() => setDeleteTxn(null)} className="px-4 py-2 rounded-xl text-sm" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
               <button onClick={handleDelete} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-bold text-text-primary disabled:opacity-50" style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)' }}>
                 {saving ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* SELL disposal — the client is selling to us and already holds this
+          security. Ask whether to reduce their portfolio holding. */}
+      {sellApproval && (
+        <Modal title="Reduce Client Holding?" onClose={() => setSellApproval(null)}>
+          <div className="p-6 space-y-4">
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              This is a <span className="font-bold text-text-primary">SELL</span> and the client
+              currently holds{' '}
+              <span className="font-bold text-text-primary">
+                {Number(sellApproval.holding.quantity || 0).toLocaleString('en-IN')}
+              </span>{' '}
+              unit(s) of <span className="font-semibold text-text-primary">{sellApproval.payload.product_name}</span>.
+            </p>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              Reduce their portfolio by the{' '}
+              <span className="font-bold text-text-primary">
+                {Number(sellApproval.payload.quantity || 0).toLocaleString('en-IN')}
+              </span>{' '}
+              unit(s) being sold? The holding is deleted if nothing remains. The transaction
+              is booked either way.
+            </p>
+            {error && <div className="p-3 rounded-xl text-sm text-c-red" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>{error}</div>}
+            <div className="flex justify-end gap-3 flex-wrap">
+              <button
+                onClick={() => setSellApproval(null)}
+                disabled={saving}
+                className="px-4 py-2 rounded-xl text-sm disabled:opacity-50"
+                style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { const p = sellApproval.payload; commitSave(p, false); }}
+                disabled={saving}
+                className="px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+                style={{ background: 'var(--bg-raised)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+              >
+                Save Without Reducing
+              </button>
+              <button
+                onClick={() => { const p = sellApproval.payload; commitSave(p, true); }}
+                disabled={saving}
+                className="px-5 py-2 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+              >
+                {saving ? 'Saving...' : 'Reduce Holding & Save'}
               </button>
             </div>
           </div>

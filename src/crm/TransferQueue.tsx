@@ -78,7 +78,6 @@ interface LedgerRow {
   amount_inr: number;
   utr_number: string | null;
   cheque_number: string | null;
-  transaction_reference: string | null;
 }
 
 // Short-label map for payment_mode (used only in the ledger table).
@@ -291,7 +290,7 @@ export default function TransferQueue({ employee }: Props) {
 
     const [ledgerRes, depRes] = await Promise.all([
       supabase.from('nw_deal_payments')
-        .select('id, payment_number, payment_date, payment_mode, amount_inr, utr_number, cheque_number, transaction_reference')
+        .select('id, payment_number, payment_date, payment_mode, amount_inr, utr_number, cheque_number')
         .eq('deal_confirmation_id', d.deal_id)
         .eq('status', 'active')
         .order('payment_date', { ascending: true }),
@@ -467,7 +466,11 @@ export default function TransferQueue({ employee }: Props) {
   if (view === 'preview' && preview) {
     const demat        = parseDemat(preview.snap_demat_account, depository);
     const outstanding  = Number(preview.outstanding_amount);
-    const isSettled    = Math.abs(outstanding) <= SETTLEMENT_TOLERANCE;
+    // SELL: the client is selling to us, so money flows Niyom → client — there is
+    // no client payment to collect. Such deals are transfer-eligible without the
+    // settlement gate (mirrors the view + nw_transfer_deal RPC bypass).
+    const isSell       = (preview.transaction_type || '').trim().toLowerCase() === 'sell';
+    const isSettled    = isSell || Math.abs(outstanding) <= SETTLEMENT_TOLERANCE;
     const isExact      = outstanding === 0;
 
     return (
@@ -541,7 +544,23 @@ export default function TransferQueue({ employee }: Props) {
         </Section>
 
         {/* --- Section 5: Payment Details --- */}
-        <Section title="Payment Details">
+        <Section title={isSell ? 'Payment Details (Remitted to Client)' : 'Payment Details'}>
+          {isSell ? (
+            <div className="flex items-center gap-3 rounded-xl px-5 py-4"
+              style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.30)' }}>
+              <Info className="w-8 h-8 shrink-0" style={{ color: 'var(--success)' }} />
+              <div>
+                <p className="text-lg font-black uppercase tracking-wider" style={{ color: 'var(--success)' }}>
+                  No Client Payment Required
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                  This is a SELL — the client is selling to Niyom, so {inr(preview.settlement_amount)} is
+                  remitted to the client. No settlement gate applies.
+                </p>
+              </div>
+            </div>
+          ) : (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <SummaryTile label="Total Settlement Amount" value={inr(preview.settlement_amount)}   strong />
             <SummaryTile label="Total Amount Paid"        value={inr(preview.total_paid_amount)}  strong tone="success" />
@@ -619,7 +638,7 @@ export default function TransferQueue({ employee }: Props) {
                   </thead>
                   <tbody>
                     {ledger.map(p => {
-                      const ref = p.utr_number || p.cheque_number || p.transaction_reference || '—';
+                      const ref = p.utr_number || p.cheque_number || '—';
                       return (
                         <tr key={p.id} style={{ borderTop: '1px solid var(--border)' }}>
                           <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap"
@@ -648,6 +667,8 @@ export default function TransferQueue({ employee }: Props) {
               </div>
             )}
           </div>
+          </>
+          )}
         </Section>
 
         {/* --- Approve action bar (sticky) --- */}

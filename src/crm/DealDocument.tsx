@@ -24,7 +24,34 @@ export interface DealDocumentData {
   snap_dp_name: string;
   snap_demat_account: string;
   snap_depository: string;
+  // Client bank snapshot — only needed to print the "remit to" account on a
+  // SELL (where Niyom pays the client). Optional so buy-only callers are unaffected.
+  snap_bank_name?: string;
+  snap_bank_account?: string;
+  snap_bank_ifsc?: string;
 }
+
+// Niyom is the fixed counterparty on every deal note. On a BUY the client buys
+// from us (Niyom = Seller); on a SELL the client sells to us (Niyom = Buyer).
+// The party columns below swap by direction, but Niyom's identity is constant.
+const NIYOM_PARTY = {
+  clientName: 'NIYOM WEALTH DISTRIBUTION LLP',
+  pan: 'AAZFN2255K',
+  dpName: 'Chola Securities',
+  dpId: 'IN300572',
+  clientId: '10158746',
+  depository: 'NSDL',
+} as const;
+
+// Niyom's collection account — printed when the client is the buyer (BUY),
+// i.e. the client pays into this account.
+const NIYOM_BANK = {
+  bankName: 'IDFC FIRST BANK',
+  accountName: 'NIYOM WEALTH DISTRIBUTION LLP',
+  accountNumber: '89394331135',
+  ifsc: 'IDFB0080131',
+  branch: 'Anna Nagar West Branch',
+} as const;
 
 function fmt(n: number) {
   return '₹' + (n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -52,8 +79,32 @@ interface Props {
 }
 
 export default function DealDocument({ deal, signatureDataUrl, acceptedDate, pdfElementId = 'deal-confirmation-pdf-content', showConfirmation = true }: Props) {
+  // SELL reverses the parties: the client sells to us, so the client is the
+  // Seller and Niyom is the Buyer, and the money is remitted TO the client.
+  const isSell = (deal.transaction_type || '').trim().toLowerCase() === 'sell';
   const dpId = (deal.snap_demat_account || '').slice(0, 8);
   const clientIdDP = (deal.snap_demat_account || '').slice(-8);
+
+  // Party column data. `clientParty` is always the client's snapshot; `niyomParty`
+  // is always Niyom. Which one sits under "Buyer" vs "Seller" flips on SELL.
+  const clientParty = [
+    ['Client Name', deal.snap_client_name],
+    ['PAN Number', deal.snap_pan],
+    ['DP Name', deal.snap_dp_name],
+    ['DP ID', dpId],
+    ['Client ID', clientIdDP],
+    ['Depository', deal.snap_depository || '-'],
+  ] as const;
+  const niyomParty = [
+    ['Client Name', NIYOM_PARTY.clientName],
+    ['PAN Number', NIYOM_PARTY.pan],
+    ['DP Name', NIYOM_PARTY.dpName],
+    ['DP ID', NIYOM_PARTY.dpId],
+    ['Client ID', NIYOM_PARTY.clientId],
+    ['Depository', NIYOM_PARTY.depository],
+  ] as const;
+  const buyerParty = isSell ? niyomParty : clientParty;
+  const sellerParty = isSell ? clientParty : niyomParty;
   const headerDate = fmtDate(deal.deal_date);
   const createdAt = deal.created_at
     ? new Date(deal.created_at).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true })
@@ -160,27 +211,25 @@ export default function DealDocument({ deal, signatureDataUrl, acceptedDate, pdf
               </tr>
             </thead>
             <tbody>
-              {[
-                ['Client Name', deal.snap_client_name, 'Client Name', 'NIYOM WEALTH DISTRIBUTION LLP'],
-                ['PAN Number', deal.snap_pan, 'PAN Number', 'AAZFN2255K'],
-                ['DP Name', deal.snap_dp_name, 'DP Name', 'Chola Securities'],
-                ['DP ID', dpId, 'DP ID', 'IN300572'],
-                ['Client ID', clientIdDP, 'Client ID', '10158746'],
-                ['Depository', deal.snap_depository || '-', 'Depository', 'NSDL'],
-              ].map(([bl, bv, sl, sv], i) => (
-                <tr key={i}>
-                  <td style={{ ...cellStyle, fontWeight: 500, textAlign: 'center' }}>{bl}</td>
-                  <td style={{ ...cellStyle, textAlign: 'center' }}>{bv}</td>
-                  <td style={{ ...cellStyle, fontWeight: 500, textAlign: 'center' }}>{sl}</td>
-                  <td style={{ ...cellStyle, textAlign: 'center' }}>{sv}</td>
-                </tr>
-              ))}
+              {buyerParty.map(([bl, bv], i) => {
+                const [sl, sv] = sellerParty[i];
+                return (
+                  <tr key={i}>
+                    <td style={{ ...cellStyle, fontWeight: 500, textAlign: 'center' }}>{bl}</td>
+                    <td style={{ ...cellStyle, textAlign: 'center' }}>{bv}</td>
+                    <td style={{ ...cellStyle, fontWeight: 500, textAlign: 'center' }}>{sl}</td>
+                    <td style={{ ...cellStyle, textAlign: 'center' }}>{sv}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
 
         <div style={{ marginBottom: '14px' }}>
-          <p style={sectionTitleStyle}>Payment Details</p>
+          {/* BUY: client pays into Niyom's account. SELL: Niyom remits the
+              settlement to the client (Seller), so we print the client's bank. */}
+          <p style={sectionTitleStyle}>{isSell ? "Payment Details (Remitted to Seller's Account)" : 'Payment Details'}</p>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
             <table style={{ ...tableStyle, width: '60%' }}>
               <thead>
@@ -190,13 +239,21 @@ export default function DealDocument({ deal, signatureDataUrl, acceptedDate, pdf
                 </tr>
               </thead>
               <tbody>
-                {[
-                  ['Bank Name', 'IDFC FIRST BANK'],
-                  ['Account Name', 'NIYOM WEALTH DISTRIBUTION LLP'],
-                  ['Account Number', '89394331135'],
-                  ['IFSC Code', 'IDFB0080131'],
-                  ['Branch', 'Anna Nagar West Branch'],
-                ].map(([k, v]) => (
+                {(isSell
+                  ? [
+                      ['Bank Name', deal.snap_bank_name || '-'],
+                      ['Account Name', deal.snap_client_name || '-'],
+                      ['Account Number', deal.snap_bank_account || '-'],
+                      ['IFSC Code', deal.snap_bank_ifsc || '-'],
+                    ]
+                  : [
+                      ['Bank Name', NIYOM_BANK.bankName],
+                      ['Account Name', NIYOM_BANK.accountName],
+                      ['Account Number', NIYOM_BANK.accountNumber],
+                      ['IFSC Code', NIYOM_BANK.ifsc],
+                      ['Branch', NIYOM_BANK.branch],
+                    ]
+                ).map(([k, v]) => (
                   <tr key={k}>
                     <td style={{ ...cellStyle, fontWeight: 500, textAlign: 'center' }}>{k}</td>
                     <td style={{ ...cellStyle, textAlign: 'center' }}>{v}</td>

@@ -77,7 +77,6 @@ export interface ReceiptPaymentContext {
   utr_number?:         string | null;
   cheque_number?:      string | null;
   cheque_bank?:        string | null;
-  transaction_reference?: string | null;
   demand_draft_number?:   string | null;
   payment_date:        string;
   value_date?:         string | null;
@@ -115,7 +114,6 @@ function referenceCell(p: ReceiptPaymentContext): string {
   if (p.utr_number)            return `UTR: ${p.utr_number}`;
   if (p.cheque_number)         return `Cheque: ${p.cheque_number}${p.cheque_bank ? ` (${p.cheque_bank})` : ''}`;
   if (p.demand_draft_number)   return `DD: ${p.demand_draft_number}`;
-  if (p.transaction_reference) return `Txn Ref: ${p.transaction_reference}`;
   return '—';
 }
 
