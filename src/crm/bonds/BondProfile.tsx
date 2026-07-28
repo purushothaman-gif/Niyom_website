@@ -120,7 +120,9 @@ export default function BondProfile({ bondId, isAdmin, employee, onBack }: Props
   const doSaveFields = async () => { await setFields.mutateAsync({ id: b.id, isin: b.isin, fields: form, lock: true }); setEditOpen(false); await refetch(); };
   const faceAmt = b.face_value ? b.face_value * qty : null;
   const perUnit = (b.face_value && outputPrice) ? +(b.face_value * outputPrice / 100).toFixed(2) : null;
-  const investAmt = perUnit ? +(perUnit * qty).toFixed(2) : null;
+  const principalAmt = perUnit ? +(perUnit * qty).toFixed(2) : null;
+  const accruedAmt = (a?.ok && a.accrued_per_100 != null && faceAmt) ? +(a.accrued_per_100 * faceAmt / 100).toFixed(2) : 0;
+  const investAmt = principalAmt !== null ? +(principalAmt + accruedAmt).toFixed(2) : null;
 
   const q = Math.round(b.data_quality_score);
   const qrgb = q >= 90 ? '16,185,129' : q >= 60 ? '245,158,11' : '239,68,68';
@@ -271,7 +273,9 @@ export default function BondProfile({ bondId, isAdmin, employee, onBack }: Props
               </div>
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between"><span style={{ color: 'var(--text-faint)' }}>Face value</span><span style={{ color: 'var(--text-primary)' }}>{faceAmt ? `₹${faceAmt.toLocaleString('en-IN')}` : '—'}</span></div>
-                <div className="flex justify-between"><span style={{ color: 'var(--text-faint)' }}>Investment</span><span className="font-bold" style={{ color: 'var(--text-primary)' }}>{investAmt ? `₹${investAmt.toLocaleString('en-IN')}` : '—'}</span></div>
+                <div className="flex justify-between"><span style={{ color: 'var(--text-faint)' }}>Principal</span><span style={{ color: 'var(--text-primary)' }}>{principalAmt !== null ? `₹${principalAmt.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}</span></div>
+                <div className="flex justify-between"><span style={{ color: 'var(--text-faint)' }}>Accrued interest</span><span style={{ color: 'var(--text-primary)' }}>{a?.ok && a.accrued_per_100 != null ? `₹${accruedAmt.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}</span></div>
+                <div className="flex justify-between pt-1.5" style={{ borderTop: '1px solid var(--border-subtle)' }}><span style={{ color: 'var(--text-secondary)' }}>Investment <span style={{ color: 'var(--text-faint)' }}>(incl. accrued)</span></span><span className="font-bold" style={{ color: 'var(--text-primary)' }}>{investAmt !== null ? `₹${investAmt.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}</span></div>
                 <div className="flex justify-between"><span style={{ color: 'var(--text-faint)' }}>Annual income</span><span style={{ color: 'var(--text-primary)' }}>{(b.coupon_rate && faceAmt) ? `₹${(faceAmt * b.coupon_rate / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}</span></div>
               </div>
             </div>

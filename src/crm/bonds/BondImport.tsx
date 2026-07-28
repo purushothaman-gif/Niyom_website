@@ -6,7 +6,7 @@ import { useRef, useState } from 'react';
 import { ArrowLeft, UploadCloud, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { parsePriceFile } from './excelImport';
 import { ParsedImportRow, ImportRow, ImportSummary } from './bondTypes';
-import { useImportPrices, enrichPendingLoop, recomputeAllActive } from './bondClient';
+import { useImportPrices, enrichPendingLoop, remasterAllActive } from './bondClient';
 
 interface Props { onBack: () => void; onDone: () => void; }
 type Phase = 'select' | 'parsing' | 'preview' | 'done';
@@ -58,7 +58,7 @@ export default function BondImport({ onBack, onDone }: Props) {
           catch { setEnrich(e => e ? { ...e, running: false } : e); }
         }
         setRefresh({ running: true, done: 0, total: 0 });
-        try { const n = await recomputeAllActive((done, total) => setRefresh({ running: true, done, total })); setRefresh({ running: false, done: n, total: n }); }
+        try { const n = await remasterAllActive((done, total) => setRefresh({ running: true, done, total })); setRefresh({ running: false, done: n, total: n }); }
         catch { setRefresh(r => r ? { ...r, running: false } : r); }
       })();
     } catch (e) {
@@ -102,11 +102,11 @@ export default function BondImport({ onBack, onDone }: Props) {
             <div className="flex items-center justify-center gap-2 mb-1">
               {refresh.running && <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--accent)' }} />}
               <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {refresh.running ? 'Refreshing yields to today’s price…' : 'Yields refreshed'}
+                {refresh.running ? 'Applying your sheet’s details & yields…' : 'Details & yields updated'}
               </span>
             </div>
             <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
-              {refresh.done}{refresh.total ? ` of ${refresh.total}` : ''} bonds recomputed{refresh.running ? '' : ' ✓'}
+              {refresh.done}{refresh.total ? ` of ${refresh.total}` : ''} bonds re-mastered from the sheet{refresh.running ? '' : ' ✓'}
             </p>
           </div>
         )}
