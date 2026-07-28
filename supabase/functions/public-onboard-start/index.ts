@@ -54,16 +54,45 @@ Deno.serve(async (req: Request) => {
       }, 200);
     }
 
-    // Generate the client code under NIYOM-001.
+    // Marketing Tool referral attribution (optional).
+    //
+    // A signup arriving through an employee's referral link is owned by THAT
+    // employee instead of the NIYOM-001 house account. Resolution is entirely
+    // best-effort: no ref, an unknown ref, a deactivated link or any error at
+    // all leaves ownerEmployeeId at the default, which is byte-for-byte the
+    // behaviour this function had before referrals existed.
+    let ownerEmployeeId = NIYOM_DEFAULT_EMPLOYEE_ID;
+    let refCode: string | null = null;
+
+    if (typeof body.ref === "string" && body.ref.trim()) {
+      const candidate = body.ref.trim().slice(0, 64);
+      try {
+        const { data: link } = await db
+          .from("mkt_referral_links")
+          .select("employee_id")
+          .eq("ref_code", candidate)
+          .eq("active", true)
+          .maybeSingle();
+
+        if (link?.employee_id) {
+          ownerEmployeeId = link.employee_id;
+          refCode = candidate;
+        }
+      } catch (refErr) {
+        console.error("referral resolution failed, using default owner:", refErr);
+      }
+    }
+
+    // Generate the client code under the owning employee.
     const { data: clientCode, error: codeErr } = await db.rpc("nw2_generate_client_code", {
-      p_employee_id: NIYOM_DEFAULT_EMPLOYEE_ID,
+      p_employee_id: ownerEmployeeId,
     });
     if (codeErr) throw codeErr;
 
     // Create the client row (minimal — KYC fields fill in progressively).
     const { data: client, error: clientErr } = await db.from("nw_clients").insert([{
       client_code: clientCode,
-      employee_id: NIYOM_DEFAULT_EMPLOYEE_ID,
+      employee_id: ownerEmployeeId,
       full_name,
       email,
       phone,
@@ -116,12 +145,31 @@ Deno.serve(async (req: Request) => {
     await persistOtp(db, phone, code);
     await deliverOtp(phone, email, code);
 
+    // Record the attribution so verify-otp can assign the resulting lead and so
+    // the marketing analytics can join click -> lead -> client. Best-effort:
+    // a failure here must not cost the client their account.
+    if (refCode) {
+      try {
+        await db.from("mkt_lead_attributions").insert([{
+          client_id: client.id,
+          employee_id: ownerEmployeeId,
+          ref_code: refCode,
+          content_no: typeof body.cnt === "string" ? body.cnt.slice(0, 32) : null,
+          platform: typeof body.pl === "string" ? body.pl.slice(0, 32) : "",
+        }]);
+      } catch (attrErr) {
+        console.error("attribution insert failed (client already created):", attrErr);
+      }
+    }
+
     // Activity log for the RM (mirrors public-client-onboard).
     await db.from("nw_activity_logs").insert([{
-      employee_id: NIYOM_DEFAULT_EMPLOYEE_ID,
+      employee_id: ownerEmployeeId,
       client_id: client.id,
       action: "Client Self-Registered (Free Account)",
-      description: `${full_name} created a free account (${clientCode}) via the public portal. Mobile OTP sent; KYC pending.`,
+      description: `${full_name} created a free account (${clientCode}) via the public portal.`
+        + `${refCode ? ` Referred by this employee's link (${refCode}).` : ""}`
+        + ` Mobile OTP sent; KYC pending.`,
     }]);
 
     return json({

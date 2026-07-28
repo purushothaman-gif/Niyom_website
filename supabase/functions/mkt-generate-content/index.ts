@@ -118,6 +118,19 @@ You will be given previously used titles, headlines, topics and hashtags. Your o
 OUTPUT
 Return only JSON matching the provided schema. Write the "body" as the text that will be typeset onto the poster itself: short, punchy, at most about 45 words. The "caption" is the longer social post copy.`;
 
+// Structured-output schema.
+//
+// Deliberately conservative about which JSON Schema keywords it uses. The API's
+// structured-outputs support excludes array-length constraints (minItems /
+// maxItems) and string-length constraints, and because this function calls the
+// REST endpoint directly rather than through an SDK, nothing strips unsupported
+// keywords for us — an unsupported keyword is a 400, not a silent no-op. Counts
+// are therefore requested in the prompt and enforced by the lint pass instead.
+//
+// Nullability uses `anyOf` rather than a `type: [X, "null"]` array, since anyOf
+// is explicitly supported.
+const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: "null" }] });
+
 const DRAFT_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -127,44 +140,44 @@ const DRAFT_SCHEMA = {
     "slides", "video_script",
   ],
   properties: {
-    title: { type: "string", description: "Internal reference title, max 70 chars" },
-    headline: { type: "string", description: "The hero line typeset on the poster, max 110 chars" },
-    body: { type: "string", description: "Supporting copy for the poster, ~45 words max" },
+    title: { type: "string", description: "Internal reference title, max 70 characters" },
+    headline: { type: "string", description: "The hero line typeset on the poster, max 110 characters" },
+    body: { type: "string", description: "Supporting copy for the poster, about 45 words maximum" },
     caption: { type: "string", description: `Social post copy. Must contain ${REF_PLACEHOLDER} exactly once.` },
-    hashtags: { type: "array", minItems: 8, maxItems: 20, items: { type: "string" } },
+    hashtags: { type: "array", items: { type: "string" }, description: "Between 8 and 20 hashtags, without the # prefix" },
     cta: { type: "string", description: "Education-only call to action" },
-    seo_keywords: { type: "array", minItems: 5, maxItems: 10, items: { type: "string" } },
+    seo_keywords: { type: "array", items: { type: "string" }, description: "Between 5 and 10 keywords" },
     suggested_post_time: { type: "string", description: 'e.g. "19:30 IST, weekday evenings"' },
     platform_optimisation: {
       type: "object",
       additionalProperties: false,
       required: ["instagram", "facebook", "linkedin"],
       properties: {
-        instagram: { type: ["string", "null"] },
-        facebook: { type: ["string", "null"] },
-        linkedin: { type: ["string", "null"] },
+        instagram: nullable({ type: "string" }),
+        facebook: nullable({ type: "string" }),
+        linkedin: nullable({ type: "string" }),
       },
     },
-    slides: {
-      type: ["array", "null"],
+    slides: nullable({
+      type: "array",
       items: {
         type: "object", additionalProperties: false,
         required: ["heading", "body"],
         properties: { heading: { type: "string" }, body: { type: "string" } },
       },
-    },
-    video_script: {
-      type: ["array", "null"],
+    }),
+    video_script: nullable({
+      type: "array",
       items: {
         type: "object", additionalProperties: false,
         required: ["scene", "text", "duration_seconds"],
         properties: {
           scene: { type: "string" },
-          text: { type: "string", description: "On-screen text, max 10 words" },
+          text: { type: "string", description: "On-screen text, at most 10 words" },
           duration_seconds: { type: "number" },
         },
       },
-    },
+    }),
   },
 };
 
@@ -249,12 +262,24 @@ async function callAnthropic(apiKey: string, messages: { role: string; content: 
     },
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
-      max_tokens: 6000,
+      // max_tokens caps thinking AND response text together. Adaptive thinking
+      // is on by default on this model, so a budget sized only for the JSON
+      // would truncate mid-object once the model thinks — which surfaces as
+      // stop_reason "max_tokens" and loses the whole generation. A carousel
+      // draft with 10 slides plus a video script is the worst case; 16000
+      // leaves comfortable room for it alongside the reasoning.
+      max_tokens: 16000,
       system: SYSTEM_PROMPT,
       messages,
-      // Guarantees schema-valid JSON. Note: this model rejects non-default
-      // temperature/top_p, so neither is sent.
-      output_config: { format: { type: "json_schema", schema: DRAFT_SCHEMA } },
+      // Thinking is stated explicitly rather than relied on as a default, and
+      // its content is left omitted — nothing here surfaces reasoning to a UI.
+      thinking: { type: "adaptive" },
+      // Guarantees schema-valid JSON. Note: this model REJECTS non-default
+      // temperature / top_p / top_k with a 400, so none of them are sent.
+      output_config: {
+        effort: "medium",
+        format: { type: "json_schema", schema: DRAFT_SCHEMA },
+      },
     }),
   });
 
@@ -345,6 +370,19 @@ Deno.serve(async (req: Request) => {
         phrase: placeholderCount === 0 ? "(missing referral link placeholder)" : "(duplicate referral link placeholder)",
         label: "structure",
       });
+    }
+
+    // Array lengths are asked for in the schema descriptions rather than
+    // enforced by minItems/maxItems (unsupported by structured outputs), so
+    // they are checked here instead. Out-of-range counts are a flag, not a
+    // hard failure — the admin can add or trim tags by hand.
+    const hashtagCount = Array.isArray(draft.hashtags) ? draft.hashtags.length : 0;
+    if (hashtagCount < 8 || hashtagCount > 20) {
+      flags.push({ field: "hashtags", phrase: `(${hashtagCount} hashtags, expected 8-20)`, label: "structure" });
+    }
+    const keywordCount = Array.isArray(draft.seo_keywords) ? draft.seo_keywords.length : 0;
+    if (keywordCount < 5 || keywordCount > 10) {
+      flags.push({ field: "seo_keywords", phrase: `(${keywordCount} keywords, expected 5-10)`, label: "structure" });
     }
 
     // One corrective retry, quoting the exact violations.

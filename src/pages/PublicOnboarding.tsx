@@ -8,6 +8,35 @@ import { BrandFilm } from '../components/BrandFilm';
 
 interface Props {
   onBack: () => void;
+  /** Marketing Tool referral attribution, all optional (see readAttribution). */
+  refCode?: string | null;
+  contentNo?: string | null;
+  platform?: string | null;
+}
+
+/** sessionStorage key holding referral attribution across the pan→form→otp steps. */
+const REF_ATTR_KEY = 'nw_ref_attr';
+
+interface RefAttribution { ref: string; cnt?: string; pl?: string }
+
+/**
+ * Referral attribution for this signup, if any.
+ *
+ * The ref only appears in the URL on first landing, but the visitor then moves
+ * through three views and may reload, so it is stashed in sessionStorage and
+ * read back here. Everything about this is best-effort: no ref, an unreadable
+ * store, or a code the server does not recognise all fall back to the standard
+ * unattributed flow.
+ */
+function readAttribution(): RefAttribution | null {
+  try {
+    const raw = sessionStorage.getItem(REF_ATTR_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.ref ? parsed as RefAttribution : null;
+  } catch {
+    return null;
+  }
 }
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -53,7 +82,7 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
-export default function PublicOnboarding({ onBack }: Props) {
+export default function PublicOnboarding({ onBack, refCode, contentNo, platform }: Props) {
   const [view, setView] = useState<'pan' | 'form' | 'otp'>('pan');
   const [pan, setPan] = useState('');
   const [fullName, setFullName] = useState('');
@@ -67,6 +96,20 @@ export default function PublicOnboarding({ onBack }: Props) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+
+  // Persist referral attribution on arrival and record the click. Runs once,
+  // only when a ref is actually present, and never blocks or fails the page:
+  // this is marketing telemetry sitting in front of a signup funnel.
+  useEffect(() => {
+    if (!refCode) return;
+    const attr: RefAttribution = {
+      ref: refCode,
+      ...(contentNo ? { cnt: contentNo } : {}),
+      ...(platform ? { pl: platform } : {}),
+    };
+    try { sessionStorage.setItem(REF_ATTR_KEY, JSON.stringify(attr)); } catch { /* private mode */ }
+    callFn('mkt-track-click', attr).catch(() => { /* tracking is never load-bearing */ });
+  }, [refCode, contentNo, platform]);
 
   const startResendCooldown = () => {
     setResendIn(30);
@@ -107,8 +150,12 @@ export default function PublicOnboarding({ onBack }: Props) {
     setError('');
     if (!validForm) return setError('Please enter a valid 10-digit mobile and email.');
     setBusy(true);
+    const attr = readAttribution();
     const { ok, data } = await callFn('public-onboard-start', {
       full_name: fullName.trim(), pan, phone, email: email.trim().toLowerCase(),
+      // Optional referral attribution. The server resolves the code and falls
+      // back to the default owner if it is unknown or absent.
+      ...(attr ? { ref: attr.ref, cnt: attr.cnt, pl: attr.pl } : {}),
     });
     setBusy(false);
     if (!ok && !data?.already_exists) return setError(data?.error || 'Could not create your account. Please try again.');
