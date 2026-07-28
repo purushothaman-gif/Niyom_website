@@ -5,6 +5,10 @@
 // rather than read from CSS on purpose: assets are rasterised at fixed export
 // sizes, independent of whatever theme the admin happens to be viewing in.
 
+import { NIYOM_LOGO_DATA_URI } from './brandLogo';
+
+export { NIYOM_LOGO_DATA_URI };
+
 export const BRAND = {
   gold:      '#c8a45d',
   goldSoft:  '#d8bd86',
@@ -91,22 +95,41 @@ export const BRAND_NAME = 'NIYOM WEALTH';
 export const BRAND_TAGLINE = 'niyomwealth.com';
 
 /**
- * Logo as an inline vector so it never taints the canvas.
+ * Emblem edge length, in template units (multiplied by the per-format scale).
  *
- * Loading /niyomlogo.png into the SVG would either fail (relative URL inside a
- * data-URI document) or taint the canvas and make toBlob() throw. A drawn mark
- * sidesteps both. Returns SVG markup positioned at (x, y).
+ * Sized so the wordmark *inside* the emblem stays readable. At the earlier 34
+ * it was legible at full export size but turned to mush once a feed scaled a
+ * 1080px poster down to phone width. 72 is ~7% of the canvas edge, which is
+ * the range a social footer logo needs to stay recognisable after downscaling.
+ *
+ * Shared with the template footer so the reserved band and the emblem can't
+ * drift apart.
+ */
+export const LOGO_EMBLEM = 72;
+
+/**
+ * Brand lockup: the real NIYOM emblem plus the site line.
+ *
+ * The emblem is embedded as a data URI (see brandLogo.ts for why a file path
+ * cannot work here). It already contains the "NIYOM WEALTH" wordmark, so the
+ * lockup deliberately does not repeat it as text — only the domain sits
+ * alongside, vertically centred against the emblem.
+ *
+ * (x, y) is the top-left of the emblem. Returns SVG markup.
  */
 export function logoLockup(x: number, y: number, scale: number, palette: Palette): string {
-  const s = (n: number) => (n * scale).toFixed(2);
+  const size = LOGO_EMBLEM * scale;
+  const gap = 14 * scale;
+  const tagSize = 15 * scale;
   return `
     <g transform="translate(${x},${y})">
-      <path d="M0 ${s(30)} L0 ${s(4)} L${s(6)} ${s(4)} L${s(20)} ${s(22)} L${s(20)} ${s(4)} L${s(26)} ${s(4)} L${s(26)} ${s(30)} L${s(20)} ${s(30)} L${s(6)} ${s(12)} L${s(6)} ${s(30)} Z"
-            fill="${palette.accent}"/>
-      <text x="${s(36)}" y="${s(18)}" font-family="${FONT_SANS}" font-size="${s(15)}"
-            font-weight="700" letter-spacing="${s(1.6)}" fill="${palette.heading}">${BRAND_NAME}</text>
-      <text x="${s(36)}" y="${s(29)}" font-family="${FONT_SANS}" font-size="${s(10)}"
-            letter-spacing="${s(0.8)}" fill="${palette.footer}">${BRAND_TAGLINE}</text>
+      <image href="${NIYOM_LOGO_DATA_URI}" x="0" y="0"
+             width="${size.toFixed(2)}" height="${size.toFixed(2)}"
+             preserveAspectRatio="xMidYMid meet"/>
+      <text x="${(size + gap).toFixed(2)}" y="${(size / 2 + tagSize * 0.36).toFixed(2)}"
+            font-family="${FONT_SANS}" font-size="${tagSize.toFixed(2)}"
+            letter-spacing="${(0.8 * scale).toFixed(2)}"
+            fill="${palette.footer}">${BRAND_TAGLINE}</text>
     </g>`;
 }
 

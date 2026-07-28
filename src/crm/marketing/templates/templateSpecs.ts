@@ -15,7 +15,7 @@
 
 import { ASPECT_VARIANTS } from '../marketingConstants';
 import { AspectVariant } from '../marketingTypes';
-import { Palette, PALETTES, FONT_SANS, FONT_SERIF, esc, logoLockup } from './brandTokens';
+import { Palette, PALETTES, FONT_SANS, FONT_SERIF, esc, logoLockup, LOGO_EMBLEM } from './brandTokens';
 import { fitText, tspans } from './textFit';
 import { iconForCategory, iconSvg } from './financeIcons';
 
@@ -82,11 +82,14 @@ function backdrop(g: Geometry, p: Palette): string {
 
 function footer(g: Geometry, p: Palette, disclaimer: string): string {
   const y = g.h - g.margin;
-  const logoScale = g.scale * 1.05;
+  const emblem = LOGO_EMBLEM * g.scale;
+  // Disclaimer sits on the emblem's optical centre line rather than the very
+  // bottom edge, so the two read as one band.
+  const discSize = 16 * g.scale;
   return `
-    ${logoLockup(g.margin, y - 34 * logoScale, logoScale, p)}
-    <text x="${g.w - g.margin}" y="${y - 6 * g.scale}" text-anchor="end"
-          font-family="${FONT_SANS}" font-size="${(16 * g.scale).toFixed(1)}"
+    ${logoLockup(g.margin, y - emblem, g.scale, p)}
+    <text x="${g.w - g.margin}" y="${(y - emblem / 2 + discSize * 0.36).toFixed(1)}" text-anchor="end"
+          font-family="${FONT_SANS}" font-size="${discSize.toFixed(1)}"
           fill="${p.footer}">${esc(disclaimer)}</text>`;
 }
 
@@ -125,7 +128,9 @@ function wrapDoc(g: Geometry, inner: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${g.w}" height="${g.h}" viewBox="0 0 ${g.w} ${g.h}">${inner}</svg>`;
 }
 
-const FOOTER_BAND = 96;
+// Vertical space the brand footer occupies: the emblem plus breathing room
+// above it, so a centred content stack never crowds the logo.
+const FOOTER_BAND = LOGO_EMBLEM + 34;
 const CTA_BLOCK = 70;
 
 /**
@@ -162,7 +167,7 @@ const boldStatement: TemplateSpec = {
     const headTop = topY + chipH + 46 * g.scale;
 
     // Reserve room for body + CTA + footer, then let the headline own the rest.
-    const footerH = 96 * g.scale;
+    const footerH = FOOTER_BAND * g.scale;
     const ctaH = input.cta ? 70 * g.scale : 0;
     const bodyH = bodyText ? (g.isWide ? 96 : 150) * g.scale : 0;
     const headMax = g.h - headTop - bodyH - ctaH - footerH - g.margin;

@@ -285,6 +285,24 @@ async function callAnthropic(apiKey: string, messages: { role: string; content: 
 
   if (!res.ok) {
     const detail = await res.text();
+
+    // A 401 here is always the stored credential, never the caller — the admin
+    // reading this message has already authenticated against the CRM. Say so
+    // plainly instead of surfacing a raw API dump they can't act on.
+    if (res.status === 401) {
+      throw new Error(
+        "The Anthropic API key was rejected. The ANTHROPIC_API_KEY secret for this project " +
+        "is missing, revoked, or malformed — set a fresh key from console.anthropic.com and " +
+        "redeploy is not required (the function reads the secret on each run).",
+      );
+    }
+    if (res.status === 429) {
+      throw new Error("Anthropic rate limit reached. Wait a moment and generate again.");
+    }
+    if (res.status >= 500) {
+      throw new Error("Anthropic is temporarily unavailable. Try generating again shortly.");
+    }
+
     throw new Error(`Anthropic API ${res.status}: ${detail.slice(0, 500)}`);
   }
 
@@ -325,11 +343,44 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    // The raw secret goes straight into the x-api-key header, so paste
+    // artifacts fail as a bare "invalid x-api-key" with nothing to point at.
+    // Two are common enough to just absorb: surrounding whitespace (a trailing
+    // newline from a shell) and surrounding quotes (from a dashboard field or
+    // an over-quoted CLI call). Anything else is reported rather than guessed
+    // at — see the shape check below.
+    const apiKey = Deno.env.get("ANTHROPIC_API_KEY")
+      ?.trim()
+      .replace(/^(['"])([\s\S]*)\1$/, "$2")
+      .trim();
 
     if (!apiKey) {
       return json({
         error: "Content generation is not configured yet. An administrator needs to set the ANTHROPIC_API_KEY secret for this project.",
+      }, 503);
+    }
+
+    // Shape check only — an Anthropic API key starts with "sk-ant-". This
+    // catches the common mix-ups (a console/OAuth token, an admin key, or the
+    // whole "ANTHROPIC_API_KEY=sk-ant-..." string pasted as the value) and
+    // turns them into an actionable message instead of a bare 401 from the
+    // API. Nothing about the key itself is logged or returned.
+    // Shape check only. An Anthropic API key starts with "sk-ant-" and runs to
+    // roughly 100+ characters. Reporting the length and a couple of structural
+    // hints turns "invalid x-api-key" into something the admin can act on
+    // without anyone having to read the secret back. No part of the value
+    // itself is logged or returned.
+    if (!apiKey.startsWith("sk-ant-")) {
+      const hints: string[] = [`length ${apiKey.length}`];
+      if (apiKey.includes("=")) hints.push('contains "=" — the whole NAME=value line may have been stored');
+      if (/\s/.test(apiKey)) hints.push("contains a space or line break");
+      if (apiKey.startsWith("sk-")) hints.push('starts with "sk-" but not "sk-ant-" — may be another provider\'s key');
+
+      return json({
+        error: "The stored ANTHROPIC_API_KEY is not an Anthropic API key — it should begin " +
+          `with "sk-ant-" and be about 100 characters long. What is stored: ${hints.join("; ")}. ` +
+          "Set the secret to the key value on its own, with no surrounding quotes and no " +
+          "NAME= prefix.",
       }, 503);
     }
 

@@ -17,7 +17,7 @@
 
 import { ASPECT_VARIANTS } from '../marketingConstants';
 import { AspectVariant, VideoScene } from '../marketingTypes';
-import { FONT_SANS, Palette } from './brandTokens';
+import { FONT_SANS, Palette, NIYOM_LOGO_DATA_URI } from './brandTokens';
 import { paletteFor } from './TemplateRenderer';
 import { iconForCategory, IconDef } from './financeIcons';
 
@@ -65,6 +65,29 @@ export function isVideoSupported(): boolean {
 
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+
+// --- brand emblem ----------------------------------------------------------
+
+// Canvas drawImage needs a decoded bitmap, and every frame is drawn
+// synchronously, so the emblem is decoded once up front and cached. It comes
+// from a data URI, so drawing it never taints the canvas.
+let logoImage: HTMLImageElement | null = null;
+let logoLoad: Promise<HTMLImageElement | null> | null = null;
+
+export function loadBrandLogo(): Promise<HTMLImageElement | null> {
+  if (logoImage) return Promise.resolve(logoImage);
+  if (logoLoad) return logoLoad;
+
+  logoLoad = new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => { logoImage = img; resolve(img); };
+    // A missing emblem must not abort a render — the chrome falls back to the
+    // wordmark alone.
+    img.onerror = () => resolve(null);
+    img.src = NIYOM_LOGO_DATA_URI;
+  });
+  return logoLoad;
+}
 
 /** 0 -> 1 over the first `d` of the scene, 1 -> 0 over the last `d`. */
 function fade(t: number, d = 0.16): number {
@@ -154,31 +177,28 @@ function drawChrome(
   ctx.textBaseline = 'middle';
   ctx.fillText(label, margin + 18 * scale, margin + chipH / 2);
 
-  // Brand lockup
+  // Brand lockup — the real emblem, matching the poster templates. The emblem
+  // carries the wordmark, so only the domain sits beside it.
   const baseY = h - margin;
-  ctx.fillStyle = p.accent;
-  ctx.beginPath();
-  const s = scale * 1.05;
-  ctx.moveTo(margin, baseY - 4 * s);
-  ctx.lineTo(margin, baseY - 30 * s);
-  ctx.lineTo(margin + 6 * s, baseY - 30 * s);
-  ctx.lineTo(margin + 20 * s, baseY - 12 * s);
-  ctx.lineTo(margin + 20 * s, baseY - 30 * s);
-  ctx.lineTo(margin + 26 * s, baseY - 30 * s);
-  ctx.lineTo(margin + 26 * s, baseY - 4 * s);
-  ctx.lineTo(margin + 20 * s, baseY - 4 * s);
-  ctx.lineTo(margin + 6 * s, baseY - 22 * s);
-  ctx.lineTo(margin + 6 * s, baseY - 4 * s);
-  ctx.closePath();
-  ctx.fill();
-
+  const emblem = 34 * scale;
   ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = p.heading;
-  ctx.font = `700 ${15 * s}px ${FONT_SANS}`;
-  ctx.fillText('NIYOM WEALTH', margin + 36 * s, baseY - 16 * s);
+
+  if (logoImage) {
+    ctx.drawImage(logoImage, margin, baseY - emblem, emblem, emblem);
+  } else {
+    // Emblem not decoded yet — keep the brand present rather than blank.
+    ctx.fillStyle = p.heading;
+    ctx.font = `700 ${13 * scale}px ${FONT_SANS}`;
+    ctx.fillText('NIYOM WEALTH', margin, baseY - emblem * 0.35);
+  }
+
   ctx.fillStyle = p.footer;
-  ctx.font = `${10 * s}px ${FONT_SANS}`;
-  ctx.fillText('niyomwealth.com', margin + 36 * s, baseY - 5 * s);
+  ctx.font = `${11 * scale}px ${FONT_SANS}`;
+  ctx.fillText(
+    'niyomwealth.com',
+    margin + (logoImage ? emblem + 11 * scale : 0),
+    baseY - emblem / 2 + 4 * scale,
+  );
 
   // Disclaimer — required furniture on every asset.
   ctx.font = `${16 * scale}px ${FONT_SANS}`;
@@ -295,10 +315,11 @@ function drawOutro(
  *
  * `position` is 0..1 across the whole piece, including the closing CTA card.
  */
-export function renderVideoFrame(
+export async function renderVideoFrame(
   req: Omit<VideoRenderRequest, 'onProgress'>,
   position = 0.5,
-): { canvas: HTMLCanvasElement; width: number; height: number } {
+): Promise<{ canvas: HTMLCanvasElement; width: number; height: number }> {
+  await loadBrandLogo();
   const { width, height } = ASPECT_VARIANTS[req.variant];
   const palette = paletteFor(req.paletteId);
 
@@ -336,6 +357,10 @@ export async function renderVideo(req: VideoRenderRequest): Promise<RenderedVide
     throw new Error('This browser cannot record video. Chrome, Edge or Safari are supported.');
   }
   if (!req.scenes.length) throw new Error('There is no video script to render.');
+
+  // Decode the emblem before the first frame — every frame after this is drawn
+  // synchronously and cannot wait for it.
+  await loadBrandLogo();
 
   const { width, height } = ASPECT_VARIANTS[req.variant];
   const palette = paletteFor(req.paletteId);
