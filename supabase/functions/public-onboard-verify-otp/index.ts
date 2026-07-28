@@ -60,16 +60,50 @@ Deno.serve(async (req: Request) => {
         .eq("lead_origin", "website_signup")
         .maybeSingle();
       if (!existingLead) {
-        await db.from("nw_leads").insert([{
+        // Marketing Tool referral: if this signup came through an employee's
+        // referral link, the lead belongs to that employee rather than the
+        // admin pool. Wrapped so any failure falls through to the original
+        // unattributed insert — an attribution problem must never cost us a
+        // lead record.
+        let attribution: { id: string; employee_id: string; content_no: string | null } | null = null;
+        try {
+          const { data } = await db
+            .from("mkt_lead_attributions")
+            .select("id, employee_id, content_no")
+            .eq("client_id", client.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          attribution = data ?? null;
+        } catch (attrErr) {
+          console.error("attribution lookup failed; lead goes to admin pool:", attrErr);
+        }
+
+        const { data: lead } = await db.from("nw_leads").insert([{
           lead_name: client.full_name || "Website Signup",
           mobile: phone,
           email: client.email,
           lead_origin: "website_signup",
-          lead_source: "Website Sign-up",
+          lead_source: attribution ? "Referral" : "Website Sign-up",
+          campaign: attribution
+            ? (attribution.content_no ? `mkt:${attribution.content_no}` : "mkt:referral")
+            : "",
           status: "New",
-          owner_employee_id: null, // admin pool — awaiting assignment
+          // Attributed -> the referring employee owns it; otherwise the admin
+          // pool, exactly as before.
+          owner_employee_id: attribution?.employee_id ?? null,
           converted_client_id: client.id,
-        }]);
+        }]).select("id").single();
+
+        if (attribution && lead?.id) {
+          try {
+            await db.from("mkt_lead_attributions")
+              .update({ lead_id: lead.id })
+              .eq("id", attribution.id);
+          } catch (linkErr2) {
+            console.error("could not link attribution to lead:", linkErr2);
+          }
+        }
       }
     }
 

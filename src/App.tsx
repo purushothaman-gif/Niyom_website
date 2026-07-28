@@ -151,9 +151,19 @@ function ClientLoginRoute() {
 
 function OnboardingRoute() {
   const navigate = useNavigate();
-  // Send returning applicants straight to the email-OTP sign-in (they have no
-  // password yet), not the default password view.
-  return <PublicOnboarding onBack={() => navigate('/client-login?method=otp')} />;
+  const [searchParams] = useSearchParams();
+  // Marketing Tool referral attribution: ?ref=<employee code> identifies the
+  // employee whose post brought this visitor in, with ?cnt / ?pl naming the
+  // content and platform. All three are optional — without them the flow
+  // behaves exactly as it always has.
+  return (
+    <PublicOnboarding
+      onBack={() => navigate('/client-login?method=otp')}
+      refCode={searchParams.get('ref')}
+      contentNo={searchParams.get('cnt')}
+      platform={searchParams.get('pl')}
+    />
+  );
 }
 
 /** Public, unauthenticated secure link: /deal/<token>. */

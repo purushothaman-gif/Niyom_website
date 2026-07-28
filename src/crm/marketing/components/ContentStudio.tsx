@@ -5,7 +5,7 @@
 // employees until it is separately approved.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Sparkles, RefreshCw, Save, Wand2, ArrowLeft, Image as ImageIcon } from 'lucide-react';
+import { Sparkles, RefreshCw, Save, Wand2, ArrowLeft, Image as ImageIcon, Film } from 'lucide-react';
 import { NWEmployee } from '../../types';
 import {
   CONTENT_CATEGORIES, CONTENT_TYPES, PLATFORMS, VIDEO_DURATIONS,
@@ -17,6 +17,8 @@ import { useGenerateContent, useSaveDraft, useUploadAsset } from '../marketingCl
 import { PALETTES } from '../templates/brandTokens';
 import { suggestTemplate, TEMPLATES } from '../templates/templateSpecs';
 import { renderAll, releaseAssets, RenderedAsset } from '../templates/TemplateRenderer';
+import { isVideoSupported, renderVideo, RenderedVideo } from '../templates/VideoRenderer';
+import { DISCLAIMER_TEXT } from '../marketingConstants';
 import {
   Field, GhostButton, LintBadges, PrimaryButton, inputClass, inputStyle,
 } from './shared';
@@ -49,6 +51,12 @@ export default function ContentStudio({ employee, onBack, onSaved }: Props) {
   const [rendering, setRendering] = useState(false);
   const assetsRef = useRef<RenderedAsset[]>([]);
 
+  // --- video ---
+  const [video, setVideo] = useState<RenderedVideo | null>(null);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [recording, setRecording] = useState(false);
+  const videoRef = useRef<RenderedVideo | null>(null);
+
   const generate = useGenerateContent();
   const saveDraft = useSaveDraft();
   const uploadAsset = useUploadAsset();
@@ -56,11 +64,17 @@ export default function ContentStudio({ employee, onBack, onSaved }: Props) {
   const typeMeta = CONTENT_TYPES.find(t => t.id === contentType)!;
   const isDeck = typeMeta.slides;
   const isVideo = typeMeta.video;
+  // Codec + captureStream support varies by browser; checked once per mount.
+  const videoSupported = useMemo(() => isVideoSupported(), []);
 
   // Free previous object URLs whenever the rendered set is replaced or the
   // studio unmounts — these are full-size PNGs, they add up quickly.
   useEffect(() => { assetsRef.current = assets; }, [assets]);
-  useEffect(() => () => releaseAssets(assetsRef.current), []);
+  useEffect(() => { videoRef.current = video; }, [video]);
+  useEffect(() => () => {
+    releaseAssets(assetsRef.current);
+    if (videoRef.current) URL.revokeObjectURL(videoRef.current.previewUrl);
+  }, []);
 
   const findings = useMemo(
     () => draft ? lintContent({
@@ -114,6 +128,31 @@ export default function ContentStudio({ employee, onBack, onSaved }: Props) {
     }
   };
 
+  const handleRenderVideo = async () => {
+    if (!draft?.video_script?.length) return;
+    setRecording(true);
+    setVideoProgress(0);
+    setError(null);
+    try {
+      if (videoRef.current) URL.revokeObjectURL(videoRef.current.previewUrl);
+      const result = await renderVideo({
+        scenes: draft.video_script,
+        category,
+        headline: draft.headline,
+        cta: draft.cta,
+        paletteId,
+        variant: (VARIANTS_FOR_TYPE[contentType]?.[0] ?? 'square') as AspectVariant,
+        disclaimer: DISCLAIMER_TEXT,
+        onProgress: setVideoProgress,
+      });
+      setVideo(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Video rendering failed');
+    } finally {
+      setRecording(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!draft) return;
     setError(null);
@@ -148,6 +187,13 @@ export default function ContentStudio({ employee, onBack, onSaved }: Props) {
         await uploadAsset.mutateAsync({
           contentId: saved.id, variant: a.variant, blob: a.blob,
           width: a.width, height: a.height, kind: 'image',
+        });
+      }
+      if (video) {
+        await uploadAsset.mutateAsync({
+          contentId: saved.id, variant: 'video', blob: video.blob,
+          width: video.width, height: video.height, kind: 'video',
+          durationSeconds: video.durationSeconds,
         });
       }
       onSaved(saved);
@@ -394,6 +440,48 @@ export default function ContentStudio({ employee, onBack, onSaved }: Props) {
                         </p>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Video — only for the animated content types, and only when
+                    the generator actually produced a script. */}
+                {isVideo && draft.video_script && draft.video_script.length > 0 && (
+                  <div className="pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-2"
+                      style={{ color: 'var(--text-faint)' }}>
+                      Video · {draft.video_script.length} scenes
+                    </p>
+
+                    {!videoSupported ? (
+                      <p className="text-xs" style={{ color: '#f59e0b' }}>
+                        This browser cannot record video. Chrome, Edge or Safari are supported.
+                      </p>
+                    ) : (
+                      <>
+                        <GhostButton onClick={handleRenderVideo} disabled={recording}
+                          className="w-full flex items-center justify-center gap-2">
+                          {recording
+                            ? <><RefreshCw className="w-4 h-4 animate-spin" /> Recording… {Math.round(videoProgress * 100)}%</>
+                            : <><Film className="w-4 h-4" /> {video ? 'Re-record video' : 'Record video'}</>}
+                        </GhostButton>
+
+                        {recording && (
+                          <p className="text-xs mt-2" style={{ color: '#f59e0b' }}>
+                            Keep this tab in the foreground — browsers pause animation in background
+                            tabs, which would cut the recording short.
+                          </p>
+                        )}
+
+                        {video && !recording && (
+                          <div className="mt-3 rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                            <video src={video.previewUrl} controls className="w-full block" />
+                            <p className="text-xs px-2 py-1.5" style={{ color: 'var(--text-faint)' }}>
+                              {video.width}×{video.height} · {video.durationSeconds}s · {video.mimeType.split(';')[0]}
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
               </div>

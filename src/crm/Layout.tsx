@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { NWEmployee, NWAlert, CRMPage } from './types';
 import {
   LayoutDashboard, UserPlus, Users, PieChart, ArrowLeftRight,
-  FileText, UserCog, Settings, LogOut, Bell, ChevronRight, ChevronDown, X, Home,
+  FileText, UserCog, Settings, LogOut, Bell, ChevronRight, X, Home,
   FolderOpen, Shield, BarChart3, Wallet, Handshake, ClipboardList,
   Send, Target, Landmark, LifeBuoy, Megaphone, Sparkles,
 } from 'lucide-react';
@@ -26,57 +26,86 @@ interface NavItem {
   hideForAdmin?: boolean;
 }
 
-// A collapsible parent revealing sub-module items (e.g. Marketing Tool).
-interface NavGroup {
-  group: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  children: NavItem[];
+// The sidebar is grouped by the nature of the work: acquisition, servicing,
+// reporting, marketing, partners, records, administration. A section with a
+// null label renders its items without a heading (the Dashboard entry point).
+interface NavSection {
+  id: string;
+  label: string | null;
+  icon?: typeof LayoutDashboard;
+  items: NavItem[];
 }
 
-type NavEntry = NavItem | NavGroup;
-
-const isGroup = (e: NavEntry): e is NavGroup => 'children' in e;
-
-const NAV: NavEntry[] = [
-  { key: 'dashboard' as CRMPage,        label: 'Dashboard',         icon: LayoutDashboard },
-  { key: 'leads' as CRMPage,            label: 'Leads',             icon: Target },
-  { key: 'onboarding' as CRMPage,       label: 'Client Onboarding', icon: UserPlus },
-  { key: 'deal_confirmation' as CRMPage, label: 'Deal Confirmation', icon: ClipboardList },
-  { key: 'transfer_queue' as CRMPage,   label: 'Transfer Queue',    icon: Send, adminOnly: true },
-  { key: 'clients' as CRMPage,          label: 'Manage Clients',    icon: Users },
-  { key: 'portfolio' as CRMPage,        label: 'Portfolio',         icon: PieChart },
-  { key: 'transactions' as CRMPage,     label: 'Transactions',      icon: ArrowLeftRight },
-  { key: 'support_tickets' as CRMPage,  label: 'Support Tickets',   icon: LifeBuoy },
-  { key: 'reports' as CRMPage,          label: 'Reports',           icon: FileText },
+const NAV: NavSection[] = [
   {
-    group: 'marketing_tool', label: 'Marketing Tool', icon: Megaphone,
-    children: [
-      { key: 'bonds' as CRMPage,             label: 'Bond Creation',    icon: Landmark },
-      { key: 'marketing_content' as CRMPage, label: 'Content Creation', icon: Sparkles },
+    id: 'overview', label: null,
+    items: [
+      { key: 'dashboard' as CRMPage,         label: 'Dashboard',         icon: LayoutDashboard },
     ],
   },
-  { key: 'mis' as CRMPage,             label: 'MIS Report',        icon: BarChart3 },
-  { key: 'dsa_management' as CRMPage,   label: 'DSA Management',    icon: Handshake },
-  { key: 'dsa_payout' as CRMPage,      label: 'DSA Payout',        icon: Wallet },
-  { key: 'documents' as CRMPage,        label: 'Documents',         icon: FolderOpen, hideForAdmin: true },
-  { key: 'admin_documents' as CRMPage,  label: 'Document Vault',    icon: Shield, adminOnly: true },
-  { key: 'employees' as CRMPage,        label: 'Employees',         icon: UserCog, adminOnly: true },
-  { key: 'settings' as CRMPage,         label: 'Settings',          icon: Settings },
+  {
+    id: 'acquisition', label: 'Sales & Onboarding', icon: Target,
+    items: [
+      { key: 'leads' as CRMPage,             label: 'Leads',             icon: Target },
+      { key: 'onboarding' as CRMPage,        label: 'Client Onboarding', icon: UserPlus },
+      { key: 'deal_confirmation' as CRMPage, label: 'Deal Confirmation', icon: ClipboardList },
+      { key: 'transfer_queue' as CRMPage,    label: 'Transfer Queue',    icon: Send, adminOnly: true },
+    ],
+  },
+  {
+    id: 'servicing', label: 'Clients & Investments', icon: Users,
+    items: [
+      { key: 'clients' as CRMPage,           label: 'Manage Clients',    icon: Users },
+      { key: 'portfolio' as CRMPage,         label: 'Portfolio',         icon: PieChart },
+      { key: 'transactions' as CRMPage,      label: 'Transactions',      icon: ArrowLeftRight },
+      { key: 'support_tickets' as CRMPage,   label: 'Support Tickets',   icon: LifeBuoy },
+    ],
+  },
+  {
+    id: 'insights', label: 'Reports & Analytics', icon: BarChart3,
+    items: [
+      { key: 'reports' as CRMPage,           label: 'Reports',           icon: FileText },
+      { key: 'mis' as CRMPage,               label: 'MIS Report',        icon: BarChart3 },
+    ],
+  },
+  {
+    id: 'marketing', label: 'Marketing Tools', icon: Megaphone,
+    items: [
+      { key: 'bonds' as CRMPage,             label: 'Bond Creation',     icon: Landmark },
+      { key: 'marketing_content' as CRMPage, label: 'Content Creation',  icon: Sparkles },
+    ],
+  },
+  {
+    id: 'partners', label: 'Partners & Payouts', icon: Handshake,
+    items: [
+      { key: 'dsa_management' as CRMPage,    label: 'DSA Management',    icon: Handshake },
+      { key: 'dsa_payout' as CRMPage,        label: 'DSA Payout',        icon: Wallet },
+    ],
+  },
+  {
+    id: 'records', label: 'Documents', icon: FolderOpen,
+    items: [
+      { key: 'documents' as CRMPage,         label: 'Documents',         icon: FolderOpen, hideForAdmin: true },
+      { key: 'admin_documents' as CRMPage,   label: 'Document Vault',    icon: Shield, adminOnly: true },
+    ],
+  },
+  {
+    id: 'administration', label: 'Administration', icon: Settings,
+    items: [
+      { key: 'employees' as CRMPage,         label: 'Employees',         icon: UserCog, adminOnly: true },
+      { key: 'settings' as CRMPage,          label: 'Settings',          icon: Settings },
+    ],
+  },
 ];
 
 // Flat view of every navigable page — used for access filtering and the
-// topbar title lookup (group parents are not pages themselves).
-const NAV_FLAT: NavItem[] = NAV.flatMap(e => (isGroup(e) ? e.children : [e]));
+// topbar title lookup.
+const NAV_FLAT: NavItem[] = NAV.flatMap(s => s.items);
 
 export default function Layout({ children, page, onNavigate, employee }: Props) {
   const [alerts, setAlerts] = useState<NWAlert[]>([]);
   const [showAlerts, setShowAlerts] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  // Which collapsible nav group the user has toggled open. Lives here (not in
-  // SidebarContent — that inner component remounts every render). A group with
-  // the active page inside it is always held open regardless of this state.
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
   const unread = alerts.filter(a => !a.read).length;
@@ -112,14 +141,11 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
   };
 
   const canSee = (n: NavItem) => (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin);
-  // Filter leaf items by role; groups filter their children and disappear
-  // entirely if nothing inside them is visible.
-  const navEntries: NavEntry[] = NAV.flatMap<NavEntry>(e => {
-    if (isGroup(e)) {
-      const children = e.children.filter(canSee);
-      return children.length ? [{ ...e, children }] : [];
-    }
-    return canSee(e) ? [e] : [];
+  // Filter items by role; a section whose items are all hidden disappears along
+  // with its heading (e.g. Documents for an admin who only has the Vault).
+  const navSections: NavSection[] = NAV.flatMap(s => {
+    const items = s.items.filter(canSee);
+    return items.length ? [{ ...s, items }] : [];
   });
 
   const goHome = () => {
@@ -138,60 +164,37 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {navEntries.map(entry => {
-          if (isGroup(entry)) {
-            const { group, label, icon: Icon, children } = entry;
-            const childActive = children.some(c => c.key === page);
-            const open = openGroup === group || childActive;
-            return (
-              <div key={group}>
-                <button onClick={() => setOpenGroup(g => (g === group ? null : group))}
-                  className={`crm-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${childActive ? 'is-active' : ''}`}>
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate">{label}</span>
-                  <ChevronDown className={`w-3.5 h-3.5 ml-auto flex-shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
-                </button>
-                {open && (
-                  <div className="mt-0.5 space-y-0.5 pl-3 ml-3.5" style={{ borderLeft: '1px solid rgba(var(--accent-soft-rgb),0.15)' }}>
-                    {children.map(({ key, label: childLabel, icon: ChildIcon }) => {
-                      const active = page === key;
-                      return (
-                        <button key={key} onClick={() => {
-                          window.history.pushState({}, '', `/crm/${key}`);
-                          onNavigate(key);
-                          setMobileOpen(false);
-                        }}
-                          className={`crm-nav-item w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${active ? 'is-active' : ''}`}>
-                          <ChildIcon className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate">{childLabel}</span>
-                          {active && <ChevronRight className="w-3.5 h-3.5 ml-auto flex-shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          }
-          const { key, label, icon: Icon } = entry;
-          const active = page === key;
-          return (
-            <button key={key} onClick={() => {
-  window.history.pushState({}, '', `/crm/${key}`);
-  onNavigate(key);
-  setMobileOpen(false);
-}}
-              className={`crm-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${active ? 'is-active' : ''}`}>
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              <span className="truncate">{label}</span>
-              {active && <ChevronRight className="w-3.5 h-3.5 ml-auto flex-shrink-0" />}
-            </button>
-          );
-        })}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto">
+        {navSections.map((section, i) => (
+          <div key={section.id} className={i === 0 ? '' : 'mt-4'}>
+            {section.label && (
+              <p className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider select-none"
+                style={{ color: 'var(--text-faint)' }}>
+                {section.label}
+              </p>
+            )}
+            <div className="space-y-0.5">
+              {section.items.map(({ key, label, icon: Icon }) => {
+                const active = page === key;
+                return (
+                  <button key={key} onClick={() => {
+                    window.history.pushState({}, '', `/crm/${key}`);
+                    onNavigate(key);
+                    setMobileOpen(false);
+                  }}
+                    className={`crm-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${active ? 'is-active' : ''}`}>
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{label}</span>
+                    {active && <ChevronRight className="w-3.5 h-3.5 ml-auto flex-shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
 
         {/* Divider */}
-        <div className="my-2" style={{ borderTop: '1px solid rgba(var(--accent-soft-rgb),0.08)' }} />
+        <div className="my-3" style={{ borderTop: '1px solid rgba(var(--accent-soft-rgb),0.08)' }} />
 
         {/* Back to Home */}
         <button onClick={goHome}
