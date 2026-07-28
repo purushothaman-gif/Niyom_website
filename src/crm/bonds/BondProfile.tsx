@@ -54,6 +54,7 @@ function fmtDate(d: string | null | undefined): string {
 const S = (v: unknown) => { const s = String(v ?? '').trim(); return s || '—'; };
 const PCT = (v: number | null | undefined) => v === null || v === undefined ? '—' : `${Number(v).toFixed(4)}%`;
 const NUM = (v: number | null | undefined) => v === null || v === undefined ? '—' : Number(v).toLocaleString('en-IN', { maximumFractionDigits: 4 });
+const INRLAC = (v: number | null | undefined) => v === null || v === undefined ? '—' : v >= 1e7 ? `₹${(v / 1e7).toFixed(2)} Cr` : v >= 1e5 ? `₹${(v / 1e5).toFixed(2)} L` : `₹${Number(v).toLocaleString('en-IN')}`;
 
 export default function BondProfile({ bondId, isAdmin, employee, onBack }: Props) {
   const { data: b, isLoading, refetch } = useBond(bondId);
@@ -139,6 +140,7 @@ export default function BondProfile({ bondId, isAdmin, employee, onBack }: Props
       ['Day Count', S(b.day_count_convention)], ['Business-Day', S(b.business_day_convention)],
       ['Issue Date', fmtDate(b.issue_date)], ['Maturity', fmtDate(b.maturity_date)],
       ['Redemption', S(b.principal_repayment_structure)], ['Face Value', NUM(b.face_value)],
+      ['Min. Investment', INRLAC(b.min_investment)],
     ]},
     { title: 'Rating', rows: [
       ['Rating', S(b.rating)], ['Agency', S(b.rating_agency)], ['Rating Date', fmtDate(b.rating_date)],
