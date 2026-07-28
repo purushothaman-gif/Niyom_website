@@ -24,11 +24,32 @@
 */
 
 -- 1. Backfill -----------------------------------------------------------------
-UPDATE nw_deal_payments
-   SET utr_number = transaction_reference
- WHERE transaction_reference IS NOT NULL
-   AND transaction_reference <> ''
-   AND (utr_number IS NULL OR utr_number = '');
+-- The optimistic-lock trigger trg_nw_payment_bump_version enforces
+-- row_version growth and stamps updated_at = now() on every UPDATE. This is a
+-- data migration, not an application edit: bumping updated_at would falsely
+-- flag all already-generated receipts as "out of date". Disable that one
+-- trigger for the backfill so row_version and updated_at are left untouched.
+-- Guarded by a column-existence check so re-running this migration (after the
+-- column has already been dropped in step 3) is a harmless no-op.
+DO $backfill$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'nw_deal_payments'
+       AND column_name = 'transaction_reference'
+  ) THEN
+    ALTER TABLE nw_deal_payments DISABLE TRIGGER trg_nw_payment_bump_version;
+
+    UPDATE nw_deal_payments
+       SET utr_number = transaction_reference
+     WHERE transaction_reference IS NOT NULL
+       AND transaction_reference <> ''
+       AND (utr_number IS NULL OR utr_number = '');
+
+    ALTER TABLE nw_deal_payments ENABLE TRIGGER trg_nw_payment_bump_version;
+  END IF;
+END
+$backfill$;
 
 -- 2. Recreate the insert RPC without the retired columns ----------------------
 CREATE OR REPLACE FUNCTION nw_insert_payment(p_data jsonb)
