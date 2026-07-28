@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { NWEmployee } from './types';
 import { fmtDate } from './utils';
-import { User, Lock, Bell, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Smartphone } from 'lucide-react';
+import { User, Lock, Bell, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Smartphone, Camera } from 'lucide-react';
+import { EmployeeAvatar } from './EmployeeAvatar';
+import ImageCropModal from './ImageCropModal';
 import {
   listVerifiedTotpFactors, startTotpEnrollment, verifyTotpCode, cancelEnrollment,
   disableTotp, mfaErrorMessage, isMfaUnavailable, employeeIsPrivileged,
@@ -42,6 +44,13 @@ export default function Settings({ employee }: Props) {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+
+  // --- Own profile photo ---
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(employee.avatar_url);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const canEditPhoto = employee.role === 'admin' || employee.role === 'super_admin';
 
   // --- Two-factor (TOTP) ---
   // Opt-in: the login gate no longer forces enrolment, so this is the only place
@@ -84,6 +93,21 @@ export default function Settings({ employee }: Props) {
     const { error: err } = await supabase.from('nw_employees').update({ full_name: profile.full_name, phone: profile.phone }).eq('id', employee.id);
     setSaving(false);
     if (err) notify(err.message, true); else notify('Profile updated successfully.');
+  };
+
+  const handleCroppedAvatar = async (blob: Blob) => {
+    setUploadingPhoto(true);
+    const path = `avatars/${employee.id}.jpg`;
+    const { error: upErr } = await supabase.storage.from('employee-avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+    if (upErr) { setUploadingPhoto(false); notify(upErr.message, true); return; }
+    const { data } = supabase.storage.from('employee-avatars').getPublicUrl(path);
+    const publicUrl = `${data.publicUrl}?v=${Date.now()}`;
+    const { error: dbErr } = await supabase.from('nw_employees').update({ avatar_url: publicUrl, updated_at: new Date().toISOString() }).eq('id', employee.id);
+    setUploadingPhoto(false);
+    if (dbErr) { notify(dbErr.message, true); return; }
+    setAvatarUrl(publicUrl);
+    setCropFile(null);
+    notify('Profile photo updated. It will appear everywhere after your next page refresh.');
   };
 
   const savePassword = async (e: React.FormEvent) => {
@@ -154,8 +178,28 @@ export default function Settings({ employee }: Props) {
 
       {/* Badge */}
       <div className="rounded-2xl p-5 flex items-center gap-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold flex-shrink-0" style={{ background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
-          {employee.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+        <div className="relative flex-shrink-0">
+          <EmployeeAvatar name={employee.full_name} url={avatarUrl} size={56} rounded="xl"
+            badgeStyle={{ background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }} textClassName="text-lg" />
+          {canEditPhoto && (
+            <>
+              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden"
+                onChange={ev => {
+                  const f = ev.target.files?.[0];
+                  ev.target.value = '';
+                  if (!f) return;
+                  if (!f.type.startsWith('image/')) { notify('Please choose an image file.', true); return; }
+                  if (f.size > 10 * 1024 * 1024) { notify('Image must be under 10 MB.', true); return; }
+                  setCropFile(f);
+                }} />
+              <button type="button" onClick={() => avatarInputRef.current?.click()} disabled={uploadingPhoto}
+                title="Change photo"
+                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center disabled:opacity-50"
+                style={{ background: 'var(--accent)', color: 'var(--text-on-accent)', border: '2px solid var(--bg-elevated)' }}>
+                <Camera className="w-3 h-3" />
+              </button>
+            </>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-base font-bold text-text-primary truncate">{employee.full_name}</p>
@@ -414,6 +458,10 @@ export default function Settings({ employee }: Props) {
             <button onClick={() => notify('Notification preferences saved.')} className="px-6 py-2.5 rounded-xl text-sm font-bold text-on-accent" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>Save Preferences</button>
           </div>
         </div>
+      )}
+
+      {cropFile && (
+        <ImageCropModal file={cropFile} busy={uploadingPhoto} onCancel={() => setCropFile(null)} onApply={handleCroppedAvatar} />
       )}
     </div>
   );
