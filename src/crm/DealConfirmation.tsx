@@ -467,7 +467,12 @@ export default function DealConfirmation({ employee }: Props) {
 
     const payload: Record<string, any> = {
       client_id: form.client_id,
-      employee_id: employee.id,
+      // Own the deal by the client's relationship manager, not the logged-in
+      // user. When an admin books a deal for another RM's client, stamping
+      // employee.id here would hide the deal from that RM's CRM (the SELECT RLS
+      // policy scopes non-admins to their own employee_id). Fall back to the
+      // current user only if the client has no owner.
+      employee_id: selectedClient.employee_id || employee.id,
       status,
       deal_date: form.deal_date,
       transaction_type: form.transaction_type,
