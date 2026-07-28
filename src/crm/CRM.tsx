@@ -9,6 +9,7 @@ import Layout from './Layout';
 import Dashboard from './Dashboard';
 import Leads from './leads/Leads';
 import Bonds from './bonds/Bonds';
+import MarketingContent from './marketing/MarketingContent';
 import ClientOnboarding from './ClientOnboarding';
 import ManageClients from './ManageClients';
 import Portfolio from './Portfolio';
@@ -47,6 +48,7 @@ export default function CRM() {
     'transactions',
     'reports',
     'bonds',
+    'marketing_content',
     'mis',
     'dsa_management',
     'dsa_payout',
@@ -169,6 +171,9 @@ export default function CRM() {
       case 'transactions': return <Transactions employee={employee} onNavigate={navigate} />;
       case 'reports': return <Reports employee={employee} />;
       case 'bonds': return <Bonds employee={employee} onNavigate={navigate} pageParams={pageParams} />;
+      // Content Creation is visible to everyone — admins get the full studio,
+      // employees get the read-only approved-content gallery (branched inside).
+      case 'marketing_content': return <MarketingContent employee={employee} onNavigate={navigate} />;
       case 'documents': return <Documents employee={employee} initialClientId={pageParams.clientId} onBack={pageParams.clientId ? () => navigate('clients') : undefined} />;
       case 'admin_documents': return isAdmin ? <AdminDocuments employee={employee} /> : <Documents employee={employee} />;
       case 'mis': return <MIS employee={employee} />;

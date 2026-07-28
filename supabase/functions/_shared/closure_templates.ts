@@ -44,6 +44,10 @@ export interface ClosureContext {
   ledger:             LedgerRow[];
   transferredAt:      string;
   year:               number;
+  // SELL: the client sold to us, so money was remitted TO them (no payments
+  // collected). Flips the closing copy from "investment executed / received" to
+  // "sale executed / remitted".
+  isSell?:            boolean;
 }
 
 const inr = (n: number): string =>
@@ -68,7 +72,8 @@ export function pickCase(paymentCount: number, hadPriorReminder: boolean): Closu
 // -----------------------------------------------------------------------------
 // Subject
 // -----------------------------------------------------------------------------
-export function subjectFor(c: ClosureCase, confirmationNumber: string): string {
+export function subjectFor(c: ClosureCase, confirmationNumber: string, isSell = false): string {
+  if (isSell) return `Sale successfully executed – ${confirmationNumber}`;
   switch (c) {
     case "single":
       return `Investment successfully executed – ${confirmationNumber}`;
@@ -83,13 +88,20 @@ export function subjectFor(c: ClosureCase, confirmationNumber: string): string {
 // Plain-text body (for the client's email client's plain-text pane)
 // -----------------------------------------------------------------------------
 export function renderText(c: ClosureCase, ctx: ClosureContext): string {
-  const opener =
-    c === "single" ? "your investment has been successfully executed and settled in full."
+  const opener = ctx.isSell
+    ? "your sale has been successfully executed and the settlement amount has been remitted to your registered bank account."
+    : c === "single" ? "your investment has been successfully executed and settled in full."
     : c === "multi" ? "your investment has been successfully completed. All payments have been received."
     :                 "your investment has been successfully completed and the outstanding dues have been fully settled.";
 
+  // A sell has no client payments — show the amount remitted instead of the
+  // received/payment-count rows, and no payment ledger.
+  const amountLines = ctx.isSell
+    ? `Total Amount: ${inr(ctx.dealAmount)}\nAmount Remitted: ${inr(ctx.dealAmount)}`
+    : `Total Amount: ${inr(ctx.dealAmount)}\nTotal Received: ${inr(ctx.totalPaid)}\nPayments: ${ctx.paymentCount}`;
+
   const ledger =
-    c === "single"
+    ctx.isSell || c === "single"
       ? ""
       : `\n\nPayment Ledger:\n${renderLedgerText(ctx.ledger)}\n`;
 
@@ -99,9 +111,7 @@ We are pleased to confirm that ${opener}
 
 Deal Reference: ${ctx.confirmationNumber}
 Transaction Reference: ${ctx.transferReference}
-Total Amount: ${inr(ctx.dealAmount)}
-Total Received: ${inr(ctx.totalPaid)}
-Payments: ${ctx.paymentCount}
+${amountLines}
 Transaction Closed On: ${fmtDate(ctx.transferredAt)}${ledger}
 For your records, this transaction has been formally closed on our books.
 Should you have any questions, please reach out to your Relationship Manager.
@@ -124,17 +134,27 @@ function renderLedgerText(rows: LedgerRow[]): string {
 // HTML body
 // -----------------------------------------------------------------------------
 export function renderHtml(c: ClosureCase, ctx: ClosureContext): string {
-  const preheader =
-    c === "single" ? "Your investment has been successfully executed and settled in full."
+  const preheader = ctx.isSell
+    ? "Your sale has been executed and the settlement amount remitted."
+    : c === "single" ? "Your investment has been successfully executed and settled in full."
     : c === "multi" ? "All payments received. Your investment is now complete."
     :                 "Outstanding dues settled. Your investment is now complete.";
 
-  const opener =
-    c === "single" ? "your investment has been successfully executed and settled in full."
+  const opener = ctx.isSell
+    ? "your sale has been successfully executed and the settlement amount has been remitted to your registered bank account."
+    : c === "single" ? "your investment has been successfully executed and settled in full."
     : c === "multi" ? "your investment has been successfully completed. All payments have been received."
     :                 "your investment has been successfully completed and the outstanding dues have been fully settled.";
 
-  const ledgerBlock = c === "single" ? "" : renderLedgerHtml(ctx.ledger);
+  // A sell has no client payments — remitted amount, no ledger.
+  const amountRows = ctx.isSell
+    ? `${amountRow("Total Amount",      inr(ctx.dealAmount))}
+        ${amountRow("Amount Remitted",  inr(ctx.dealAmount))}`
+    : `${amountRow("Total Amount",      inr(ctx.dealAmount))}
+        ${amountRow("Total Received",   inr(ctx.totalPaid))}
+        ${amountRow("Payments",         String(ctx.paymentCount))}`;
+
+  const ledgerBlock = (ctx.isSell || c === "single") ? "" : renderLedgerHtml(ctx.ledger);
 
   const body = `
     <p style="font-size:15px;font-weight:600;color:#111;margin:0 0 16px;">Dear ${escapeHtml(ctx.clientName)},</p>
@@ -144,9 +164,7 @@ export function renderHtml(c: ClosureCase, ctx: ClosureContext): string {
       <tbody>
         ${amountRow("Deal Reference",         escapeHtml(ctx.confirmationNumber),  true)}
         ${amountRow("Transaction Reference",  escapeHtml(ctx.transferReference),   true)}
-        ${amountRow("Total Amount",           inr(ctx.dealAmount))}
-        ${amountRow("Total Received",         inr(ctx.totalPaid))}
-        ${amountRow("Payments",               String(ctx.paymentCount))}
+        ${amountRows}
         ${amountRow("Transaction Closed On",  fmtDate(ctx.transferredAt))}
       </tbody>
     </table>

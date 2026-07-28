@@ -3,9 +3,9 @@ import { supabase } from '../lib/supabase';
 import { NWEmployee, NWAlert, CRMPage } from './types';
 import {
   LayoutDashboard, UserPlus, Users, PieChart, ArrowLeftRight,
-  FileText, UserCog, Settings, LogOut, Bell, ChevronRight, X, Home,
+  FileText, UserCog, Settings, LogOut, Bell, ChevronRight, ChevronDown, X, Home,
   FolderOpen, Shield, BarChart3, Wallet, Handshake, ClipboardList,
-  Send, Target, Landmark, LifeBuoy,
+  Send, Target, Landmark, LifeBuoy, Megaphone, Sparkles,
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
@@ -18,7 +18,27 @@ interface Props {
   employee: NWEmployee;
 }
 
-const NAV = [
+interface NavItem {
+  key: CRMPage;
+  label: string;
+  icon: typeof LayoutDashboard;
+  adminOnly?: boolean;
+  hideForAdmin?: boolean;
+}
+
+// A collapsible parent revealing sub-module items (e.g. Marketing Tool).
+interface NavGroup {
+  group: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  children: NavItem[];
+}
+
+type NavEntry = NavItem | NavGroup;
+
+const isGroup = (e: NavEntry): e is NavGroup => 'children' in e;
+
+const NAV: NavEntry[] = [
   { key: 'dashboard' as CRMPage,        label: 'Dashboard',         icon: LayoutDashboard },
   { key: 'leads' as CRMPage,            label: 'Leads',             icon: Target },
   { key: 'onboarding' as CRMPage,       label: 'Client Onboarding', icon: UserPlus },
@@ -29,7 +49,13 @@ const NAV = [
   { key: 'transactions' as CRMPage,     label: 'Transactions',      icon: ArrowLeftRight },
   { key: 'support_tickets' as CRMPage,  label: 'Support Tickets',   icon: LifeBuoy },
   { key: 'reports' as CRMPage,          label: 'Reports',           icon: FileText },
-  { key: 'bonds' as CRMPage,            label: 'Bond Creation',     icon: Landmark },
+  {
+    group: 'marketing_tool', label: 'Marketing Tool', icon: Megaphone,
+    children: [
+      { key: 'bonds' as CRMPage,             label: 'Bond Creation',    icon: Landmark },
+      { key: 'marketing_content' as CRMPage, label: 'Content Creation', icon: Sparkles },
+    ],
+  },
   { key: 'mis' as CRMPage,             label: 'MIS Report',        icon: BarChart3 },
   { key: 'dsa_management' as CRMPage,   label: 'DSA Management',    icon: Handshake },
   { key: 'dsa_payout' as CRMPage,      label: 'DSA Payout',        icon: Wallet },
@@ -39,10 +65,18 @@ const NAV = [
   { key: 'settings' as CRMPage,         label: 'Settings',          icon: Settings },
 ];
 
+// Flat view of every navigable page — used for access filtering and the
+// topbar title lookup (group parents are not pages themselves).
+const NAV_FLAT: NavItem[] = NAV.flatMap(e => (isGroup(e) ? e.children : [e]));
+
 export default function Layout({ children, page, onNavigate, employee }: Props) {
   const [alerts, setAlerts] = useState<NWAlert[]>([]);
   const [showAlerts, setShowAlerts] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Which collapsible nav group the user has toggled open. Lives here (not in
+  // SidebarContent — that inner component remounts every render). A group with
+  // the active page inside it is always held open regardless of this state.
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
   const unread = alerts.filter(a => !a.read).length;
@@ -77,7 +111,16 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
     else if (a.action_url && a.action_url.includes('/clients')) onNavigate('clients' as CRMPage);
   };
 
-  const navItems = NAV.filter(n => (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin));
+  const canSee = (n: NavItem) => (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin);
+  // Filter leaf items by role; groups filter their children and disappear
+  // entirely if nothing inside them is visible.
+  const navEntries: NavEntry[] = NAV.flatMap<NavEntry>(e => {
+    if (isGroup(e)) {
+      const children = e.children.filter(canSee);
+      return children.length ? [{ ...e, children }] : [];
+    }
+    return canSee(e) ? [e] : [];
+  });
 
   const goHome = () => {
     window.location.href = '/';
@@ -96,7 +139,42 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ key, label, icon: Icon }) => {
+        {navEntries.map(entry => {
+          if (isGroup(entry)) {
+            const { group, label, icon: Icon, children } = entry;
+            const childActive = children.some(c => c.key === page);
+            const open = openGroup === group || childActive;
+            return (
+              <div key={group}>
+                <button onClick={() => setOpenGroup(g => (g === group ? null : group))}
+                  className={`crm-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${childActive ? 'is-active' : ''}`}>
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="truncate">{label}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 ml-auto flex-shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+                </button>
+                {open && (
+                  <div className="mt-0.5 space-y-0.5 pl-3 ml-3.5" style={{ borderLeft: '1px solid rgba(var(--accent-soft-rgb),0.15)' }}>
+                    {children.map(({ key, label: childLabel, icon: ChildIcon }) => {
+                      const active = page === key;
+                      return (
+                        <button key={key} onClick={() => {
+                          window.history.pushState({}, '', `/crm/${key}`);
+                          onNavigate(key);
+                          setMobileOpen(false);
+                        }}
+                          className={`crm-nav-item w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${active ? 'is-active' : ''}`}>
+                          <ChildIcon className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{childLabel}</span>
+                          {active && <ChevronRight className="w-3.5 h-3.5 ml-auto flex-shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          const { key, label, icon: Icon } = entry;
           const active = page === key;
           return (
             <button key={key} onClick={() => {
@@ -166,7 +244,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
             <div>
-              <p className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>{NAV.find(n => n.key === page)?.label || 'Dashboard'}</p>
+              <p className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>{NAV_FLAT.find(n => n.key === page)?.label || 'Dashboard'}</p>
               <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
             </div>
           </div>

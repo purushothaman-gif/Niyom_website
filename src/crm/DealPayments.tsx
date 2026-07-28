@@ -36,9 +36,11 @@ const MODE_LABEL: Record<PaymentMode, string> =
 
 interface DealBrief {
   id: string;
+  client_id: string;
   confirmation_number: string;
   snap_client_name: string;
   snap_pan: string;
+  snap_bank_name: string;
   settlement_amount: number;
   employee_id: string;
   // Extra fields needed for the receipt PDF
@@ -47,6 +49,12 @@ interface DealBrief {
   isin: string;
   quantity: number;
   rate_per_unit: number;
+}
+
+interface BankAccountOption {
+  bank_name: string;
+  account_number: string;
+  is_primary: boolean;
 }
 
 interface Summary {
@@ -71,7 +79,6 @@ interface PaymentRow {
   utr_number: string | null;
   cheque_number: string | null;
   cheque_bank: string | null;
-  transaction_reference: string | null;
   demand_draft_number: string | null;
   payment_date: string;
   value_date: string | null;
@@ -195,31 +202,27 @@ interface PaymentForm {
   paymentDate: string;
   valueDate: string;
   utrNumber: string;
-  transactionReference: string;
   chequeNumber: string;
   chequeBank: string;
   chequeDated: string;
   demandDraftNumber: string;
   receivedFromName: string;
   receivedFromBank: string;
-  receivedFromAccount: string;
   remarks: string;
 }
 
-const emptyForm = (defaultName: string): PaymentForm => ({
+const emptyForm = (defaultName: string, defaultBank = ''): PaymentForm => ({
   amount: '',
   paymentMode: '',
   paymentDate: new Date().toISOString().split('T')[0],
   valueDate: '',
   utrNumber: '',
-  transactionReference: '',
   chequeNumber: '',
   chequeBank: '',
   chequeDated: '',
   demandDraftNumber: '',
   receivedFromName: defaultName,
-  receivedFromBank: '',
-  receivedFromAccount: '',
+  receivedFromBank: defaultBank,
   remarks: '',
 });
 
@@ -235,7 +238,8 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [emailLog, setEmailLog] = useState<EmailLogRow[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<PaymentForm>(emptyForm(deal.snap_client_name));
+  const [bankAccounts, setBankAccounts] = useState<BankAccountOption[]>([]);
+  const [form, setForm] = useState<PaymentForm>(emptyForm(deal.snap_client_name, deal.snap_bank_name));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
@@ -251,12 +255,12 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [sumRes, payRes, emailRes] = await Promise.all([
+    const [sumRes, payRes, emailRes, bankRes] = await Promise.all([
       supabase.from('nw_deal_payment_summary')
         .select('deal_id, deal_amount, total_paid_amount, outstanding_amount, payment_status, payment_count, last_payment_at')
         .eq('deal_id', deal.id).maybeSingle(),
       supabase.from('nw_deal_payments')
-        .select('id, payment_number, receipt_number, amount, amount_inr, currency, direction, payment_mode, utr_number, cheque_number, cheque_bank, transaction_reference, demand_draft_number, payment_date, value_date, received_from_name, received_from_bank, remarks, status, receipt_pdf_path, receipt_generated_at, receipt_regen_count, updated_at, created_at')
+        .select('id, payment_number, receipt_number, amount, amount_inr, currency, direction, payment_mode, utr_number, cheque_number, cheque_bank, demand_draft_number, payment_date, value_date, received_from_name, received_from_bank, remarks, status, receipt_pdf_path, receipt_generated_at, receipt_regen_count, updated_at, created_at')
         .eq('deal_confirmation_id', deal.id)
         .order('created_at', { ascending: false }),
       supabase.from('nw_deal_email_log')
@@ -264,7 +268,14 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         .eq('deal_confirmation_id', deal.id)
         .in('email_type', ['payment_reminder','payment_partial','payment_final','payment_link'])
         .order('sent_at', { ascending: false }),
+      deal.client_id
+        ? supabase.from('nw_client_bank_accounts')
+            .select('bank_name, account_number, is_primary')
+            .eq('client_id', deal.client_id)
+            .order('is_primary', { ascending: false })
+        : Promise.resolve({ data: [] as BankAccountOption[] }),
     ]);
+    setBankAccounts((bankRes.data as BankAccountOption[]) ?? []);
     // If no payments yet, the view returns a row with zeros. Fall back to a
     // synthesised summary from the deal amount when maybeSingle returns null.
     setSummary(sumRes.data as Summary ?? {
@@ -279,7 +290,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
     setPayments((payRes.data as PaymentRow[]) ?? []);
     setEmailLog((emailRes.data as EmailLogRow[]) ?? []);
     setLoading(false);
-  }, [deal.id, deal.settlement_amount]);
+  }, [deal.id, deal.settlement_amount, deal.client_id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -315,14 +326,12 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
           paymentDate: form.paymentDate,
           valueDate: form.valueDate || undefined,
           utrNumber: form.utrNumber.trim() || undefined,
-          transactionReference: form.transactionReference.trim() || undefined,
           chequeNumber: form.chequeNumber.trim() || undefined,
           chequeBank: form.chequeBank.trim() || undefined,
           chequeDated: form.chequeDated || undefined,
           demandDraftNumber: form.demandDraftNumber.trim() || undefined,
           receivedFromName: form.receivedFromName.trim(),
           receivedFromBank: form.receivedFromBank.trim() || undefined,
-          receivedFromAccount: form.receivedFromAccount.trim() || undefined,
           remarks: form.remarks.trim() || undefined,
         },
       });
@@ -330,7 +339,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         throw new Error(data?.error || fnErr?.message || 'Could not record payment.');
       }
       showToast('Payment recorded successfully.');
-      setForm(emptyForm(deal.snap_client_name));
+      setForm(emptyForm(deal.snap_client_name, defaultBank));
       setShowForm(false);
       await load();
     } catch (err: any) {
@@ -373,7 +382,6 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
       utr_number:            p.utr_number,
       cheque_number:         p.cheque_number,
       cheque_bank:           p.cheque_bank,
-      transaction_reference: p.transaction_reference,
       demand_draft_number:   p.demand_draft_number,
       payment_date:          p.payment_date,
       value_date:            p.value_date,
@@ -510,6 +518,17 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
   const lastEmailedFor = (paymentId: string): EmailLogRow | null =>
     emailLog.find(e => e.payment_id === paymentId && e.status === 'sent') ?? null;
 
+  // Default payer bank = the client's PRIMARY account (falls back to the deal
+  // snapshot bank). When the client has more than one bank on file the form
+  // renders a dropdown instead of a free-text field.
+  const defaultBank = useMemo(() => {
+    if (bankAccounts.length) {
+      const primary = bankAccounts.find(b => b.is_primary) ?? bankAccounts[0];
+      return primary.bank_name || deal.snap_bank_name || '';
+    }
+    return deal.snap_bank_name || '';
+  }, [bankAccounts, deal.snap_bank_name]);
+
   const modeNeedsUtr = useMemo(() => {
     const m = form.paymentMode;
     return m === 'imps' || m === 'neft' || m === 'rtgs' || m === 'upi' || m === 'bank_transfer';
@@ -536,7 +555,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         <div className="flex-1" />
         {!showForm && summary && summary.payment_status !== 'fully_paid' && (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => { setForm(emptyForm(deal.snap_client_name, defaultBank)); setShowForm(true); }}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent"
             style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
           >
@@ -672,14 +691,9 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
 
             {/* Mode-specific instrument fields */}
             {modeNeedsUtr && (
-              <>
-                <Field label="UTR Number" hint="Unique Transaction Reference from the bank.">
-                  <Input value={form.utrNumber} onChange={e => set('utrNumber', e.target.value.trim())} placeholder="e.g. HDFCN12345678" />
-                </Field>
-                <Field label="Transaction Reference">
-                  <Input value={form.transactionReference} onChange={e => set('transactionReference', e.target.value)} placeholder="RRN / bank txn id" />
-                </Field>
-              </>
+              <Field label="UTR / Transaction Ref No" hint="Bank UTR / RRN / transaction reference.">
+                <Input value={form.utrNumber} onChange={e => set('utrNumber', e.target.value.trim())} placeholder="e.g. HDFCN12345678 / RRN" />
+              </Field>
             )}
             {modeIsCheque && (
               <>
@@ -703,11 +717,23 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
             <Field label="Received From (Name)">
               <Input value={form.receivedFromName} onChange={e => set('receivedFromName', e.target.value)} placeholder="Payer name" />
             </Field>
-            <Field label="Payer Bank">
-              <Input value={form.receivedFromBank} onChange={e => set('receivedFromBank', e.target.value)} placeholder="e.g. HDFC Bank" />
-            </Field>
-            <Field label="Payer Account (last few digits)">
-              <Input value={form.receivedFromAccount} onChange={e => set('receivedFromAccount', e.target.value)} placeholder="e.g. XXXX1234" />
+            <Field
+              label="Payer Bank"
+              hint={bankAccounts.length > 1 ? 'Defaults to the client’s primary bank; switch if paid from another.' : undefined}
+            >
+              {bankAccounts.length > 1 ? (
+                <Select value={form.receivedFromBank} onChange={e => set('receivedFromBank', e.target.value)}>
+                  {bankAccounts.map(b => (
+                    <option key={`${b.bank_name}-${b.account_number}`} value={b.bank_name}>
+                      {b.bank_name || 'Bank'}
+                      {b.account_number ? ` ••${b.account_number.slice(-4)}` : ''}
+                      {b.is_primary ? ' (Primary)' : ''}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <Input value={form.receivedFromBank} onChange={e => set('receivedFromBank', e.target.value)} placeholder="e.g. HDFC Bank" />
+              )}
             </Field>
           </div>
 
@@ -802,7 +828,6 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                         {p.utr_number ||
                           p.cheque_number ||
                           p.demand_draft_number ||
-                          p.transaction_reference ||
                           '—'}
                       </Td>
                       <Td>{p.received_from_name || '—'}</Td>

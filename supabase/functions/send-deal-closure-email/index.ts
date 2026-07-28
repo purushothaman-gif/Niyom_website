@@ -94,7 +94,7 @@ Deno.serve(async (req: Request) => {
     // --- Resolve deal ---------------------------------------------------
     const { data: deal } = await db
       .from("nw_deal_confirmations")
-      .select("id, employee_id, snap_client_name, snap_email, confirmation_number")
+      .select("id, employee_id, snap_client_name, snap_email, confirmation_number, transaction_type")
       .eq("id", dealId)
       .maybeSingle();
 
@@ -148,6 +148,9 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     const caseKind = pickCase(summary.payment_count, !!priorReminder);
+    // SELL: money flowed Niyom → client, so the closure copy reads "sale
+    // executed / remitted" instead of "investment / received".
+    const isSell = String(deal.transaction_type || "").trim().toLowerCase() === "sell";
 
     // --- Assemble context + render ------------------------------------
     const ctx: ClosureContext = {
@@ -161,9 +164,10 @@ Deno.serve(async (req: Request) => {
       ledger,
       transferredAt:      txn.transferred_at,
       year:               new Date().getFullYear(),
+      isSell,
     };
 
-    const subject = subjectFor(caseKind, deal.confirmation_number);
+    const subject = subjectFor(caseKind, deal.confirmation_number, isSell);
     const text    = renderText(caseKind, ctx);
     const html    = renderHtml(caseKind, ctx);
 

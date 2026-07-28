@@ -479,6 +479,25 @@ verify_jwt = false
 [functions.raise-support-ticket]
 verify_jwt = false
 
+# --- Marketing Tool / Content Creation -------------------------------------
+# mkt-generate-content is intentionally absent from this file: it keeps the
+# default verify_jwt = true and additionally re-checks admin role inside.
+
+# Referral-link click tracking. Public because the visitor has no session yet.
+# Stores no personal data: the IP is salted+hashed, writes are rate-limited per
+# IP, and the response is always { ok: true } so it cannot be used to probe
+# whether a referral code exists.
+[functions.mkt-track-click]
+verify_jwt = false
+
+# Content expiry sweep, invoked by pg_cron via pg_net (which cannot present a
+# JWT). Safe to leave open: the cron path only deletes content already past its
+# expires_at — work the schedule would do minutes later regardless. The admin
+# single-item delete path inside the same function requires an admin JWT of its
+# own and is unaffected by this setting.
+[functions.mkt-expire-content]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

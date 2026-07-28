@@ -628,9 +628,11 @@ export default function DealConfirmation({ employee }: Props) {
       <DealPayments
         deal={{
           id: previewDeal.id,
+          client_id: previewDeal.client_id,
           confirmation_number: previewDeal.confirmation_number,
           snap_client_name: previewDeal.snap_client_name,
           snap_pan: previewDeal.snap_pan,
+          snap_bank_name: previewDeal.snap_bank_name,
           settlement_amount: previewDeal.settlement_amount,
           employee_id: previewDeal.employee_id,
           deal_date: previewDeal.deal_date,
@@ -763,7 +765,11 @@ export default function DealConfirmation({ employee }: Props) {
         {/* Auto-filled client details */}
         {selectedClient && (
           <div className="rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>Buyer Details (Auto-filled)</p>
+            {/* On a SELL the client is the Seller (they sell to us); on a BUY
+                they are the Buyer. Keep the heading truthful either way. */}
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>
+              {form.transaction_type === 'Sell' ? 'Seller Details (Auto-filled)' : 'Buyer Details (Auto-filled)'}
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <ROField label="Client Name" value={selectedClient.full_name} />
               <ROField label="PAN Number" value={selectedClient.pan} />
