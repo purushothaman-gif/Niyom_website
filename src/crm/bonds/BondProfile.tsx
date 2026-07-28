@@ -78,7 +78,7 @@ export default function BondProfile({ bondId, isAdmin, employee, onBack }: Props
   // Default the quantity to the minimum lot, and seed the markup from any
   // admin-set default selling price so both roles start from it.
   useEffect(() => {
-    if (b?.min_investment && b?.face_value) setQty(Math.max(1, Math.ceil(Number(b.min_investment) / Number(b.face_value))));
+    if (b?.min_investment && b?.face_value) setQty(Math.max(1, Math.round(Number(b.min_investment) / Number(b.face_value))));
     if (b?.selling_price != null && b?.latest_price && Number(b.latest_price) > 0) {
       const m = (Number(b.selling_price) / Number(b.latest_price) - 1) * 100;
       if (m >= 0 && m < 100) setMarkup(+m.toFixed(2));
@@ -124,6 +124,14 @@ export default function BondProfile({ bondId, isAdmin, employee, onBack }: Props
   const principalAmt = perUnit ? +(perUnit * qty).toFixed(2) : null;
   const accruedAmt = (a?.ok && a.accrued_per_100 != null && faceAmt) ? +(a.accrued_per_100 * faceAmt / 100).toFixed(2) : 0;
   const investAmt = principalAmt !== null ? +(principalAmt + accruedAmt).toFixed(2) : null;
+
+  // Lot rule: the minimum investment (from the sheet's Quantum column) is also the
+  // step. Units move in whole lots of (min_investment / face_value) and can't go
+  // below one lot — e.g. a ₹5 L-multiple bond on ₹1 L face steps 5 → 10 → 15 units.
+  const lotUnits = (b.min_investment && b.face_value && Number(b.min_investment) > Number(b.face_value))
+    ? Math.max(1, Math.round(Number(b.min_investment) / Number(b.face_value))) : 1;
+  const lotAmt = b.face_value ? lotUnits * Number(b.face_value) : null;
+  const clampQty = (n: number) => Math.max(lotUnits, Math.round((Number(n) || lotUnits) / lotUnits) * lotUnits);
 
   const q = Math.round(b.data_quality_score);
   const qrgb = q >= 90 ? '16,185,129' : q >= 60 ? '245,158,11' : '239,68,68';
@@ -268,11 +276,14 @@ export default function BondProfile({ bondId, isAdmin, employee, onBack }: Props
             {/* Quantity → investment */}
             <div>
               <div className="flex items-center justify-between mb-2"><span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--text-faint)' }}>Quantity (units)</span></div>
-              <div className="flex items-center gap-2 mb-3">
-                <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}><Minus className="w-3.5 h-3.5" /></button>
-                <input type="number" min={1} value={qty} onChange={e => setQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))} className="flex-1 min-w-0 px-2 py-2 rounded-lg text-sm text-center font-bold outline-none" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
-                <button onClick={() => setQty(q => q + 1)} className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}><Plus className="w-3.5 h-3.5" /></button>
+              <div className="flex items-center gap-2 mb-2">
+                <button onClick={() => setQty(q => Math.max(lotUnits, q - lotUnits))} className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}><Minus className="w-3.5 h-3.5" /></button>
+                <input type="number" min={lotUnits} step={lotUnits} value={qty} onChange={e => setQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))} onBlur={e => setQty(clampQty(Number(e.target.value)))} className="flex-1 min-w-0 px-2 py-2 rounded-lg text-sm text-center font-bold outline-none" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
+                <button onClick={() => setQty(q => q + lotUnits)} className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}><Plus className="w-3.5 h-3.5" /></button>
               </div>
+              {lotUnits > 1 && lotAmt !== null && (
+                <p className="text-[10px] mb-2" style={{ color: 'var(--text-faint)' }}>Minimum {INRLAC(b.min_investment)} · in lots of {lotUnits} units ({INRLAC(lotAmt)})</p>
+              )}
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between"><span style={{ color: 'var(--text-faint)' }}>Face value</span><span style={{ color: 'var(--text-primary)' }}>{faceAmt ? `₹${faceAmt.toLocaleString('en-IN')}` : '—'}</span></div>
                 <div className="flex justify-between"><span style={{ color: 'var(--text-faint)' }}>Principal</span><span style={{ color: 'var(--text-primary)' }}>{principalAmt !== null ? `₹${principalAmt.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}</span></div>
