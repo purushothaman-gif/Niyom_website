@@ -71,10 +71,27 @@ export interface EnrichResult { isin: string; status: string; quality?: number; 
 export interface EnrichResponse { enriched: number; results: EnrichResult[] }
 
 // One enrichment batch (edge function loops internally, bounded by `limit`).
-export async function enrichBatch(params: { bond_ids?: string[]; isin?: string; limit?: number; recompute?: boolean }): Promise<EnrichResponse> {
+export async function enrichBatch(params: { bond_ids?: string[]; isin?: string; limit?: number; recompute?: boolean; remaster?: boolean }): Promise<EnrichResponse> {
   const { data, error } = await supabase.functions.invoke('bond-enrich', { body: params });
   if (error) throw error;
   return data as EnrichResponse;
+}
+
+// Re-master every ACTIVE bond from the uploaded SMC sheet (import_raw), overlaying it
+// over the stored master (sheet wins; scraper values fill gaps) and recomputing analytics.
+// No provider calls, so it's fast and rate-limit-free. Run after each sheet upload so the
+// dealer's own details — coupon, frequency, payment dates, redemption — become authoritative.
+export async function remasterAllActive(onProgress?: (done: number, total: number) => void, chunk = 30): Promise<number> {
+  const { data, error } = await supabase.from('bm_bonds_public').select('id').eq('active_status', 'active').limit(5000);
+  if (error) throw error;
+  const ids = ((data as { id: string }[]) ?? []).map(r => r.id);
+  let done = 0;
+  for (let i = 0; i < ids.length; i += chunk) {
+    const res = await enrichBatch({ remaster: true, bond_ids: ids.slice(i, i + chunk) });
+    done += res.enriched;
+    onProgress?.(done, ids.length);
+  }
+  return done;
 }
 
 // Recompute analytics (yields, cashflows, accrued) from the stored master + current

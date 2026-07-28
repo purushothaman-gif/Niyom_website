@@ -136,7 +136,9 @@ export async function generateMarketingImage(b: BondPublic, a: BondAnalytics | n
   const qty = opts.quantity && opts.quantity > 0 ? Math.floor(opts.quantity) : 1;
   const price = opts.sellingPricePer100 ?? b.selling_price ?? b.latest_price ?? null;
   const perUnit = price !== null ? +(face * price / 100).toFixed(2) : null;
-  const invest = perUnit !== null ? perUnit * qty : null;
+  const principal = perUnit !== null ? +(perUnit * qty).toFixed(2) : null;
+  const accrued = a?.accrued_per_100 != null ? +(a.accrued_per_100 * face * qty / 100).toFixed(2) : 0;
+  const invest = principal !== null ? +(principal + accrued).toFixed(2) : null;   // client pays principal + accrued
   const annual = b.coupon_rate ? +(face * qty * b.coupon_rate / 100).toFixed(2) : null;
 
   const minInv = b.min_investment ?? b.face_value;
@@ -161,7 +163,7 @@ export async function generateMarketingImage(b: BondPublic, a: BondAnalytics | n
     <div style="padding:22px 42px 8px;"><div style="background:linear-gradient(135deg,rgba(200,162,75,0.10),rgba(200,162,75,0.03));border:1px solid ${gold};border-radius:16px;padding:20px 6px;">
       <div style="font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:${gold};font-weight:800;margin:0 0 14px 16px;">Investment Summary</div>
       <div style="display:flex;align-items:stretch;">
-        ${cell('Total Investment', invest !== null ? inr(invest) : (price !== null ? `${inr(price)} /₹100` : 'On Request'), `${qty} unit${qty === 1 ? '' : 's'} · Face ${inrShort(face * qty)}`, 0)}
+        ${cell('Total Investment', invest !== null ? inr(invest) : (price !== null ? `${inr(price)} /₹100` : 'On Request'), accrued > 0 ? `${qty} unit${qty === 1 ? '' : 's'} · incl. accrued ${inr(accrued)}` : `${qty} unit${qty === 1 ? '' : 's'} · Face ${inrShort(face * qty)}`, 0)}
         ${cell('Annual Income', annual !== null ? inr(annual) : '—', b.coupon_rate ? `at ${coupon} coupon` : '', 1)}
         ${cell('Yield to Maturity', ytm, b.maturity_date ? `matures ${fdate(b.maturity_date)}` : '', 2)}
       </div>

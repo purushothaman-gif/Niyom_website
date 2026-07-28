@@ -117,14 +117,21 @@ export function extractExtras(wb: { SheetNames: string[]; Sheets: Record<string,
       const matCell = get('maturity');
       const maturityISO = typeof matCell === 'number' ? excelSerialToISO(matCell) : leadingDateISO(norm(matCell));
       const matText = typeof matCell === 'number' ? '' : norm(matCell);
-      const ip = norm(get('ipDates'));
+      // IP-dates cell can be an Excel serial number, ISO, a DD-MM list, or free
+      // text ("16TH OF EVERY MONTH"). Convert serials to ISO so a coupon day can
+      // be derived; keep textual forms as-is (anchorDay handles them downstream).
+      const ipCell = get('ipDates');
+      const ipIsSerial = typeof ipCell === 'number';
+      const ip = ipIsSerial ? (excelSerialToISO(ipCell) ?? '') : norm(ipCell);
       const { rating, agency } = splitRating(norm(get('rating')));
       const secType = norm(get('secType'));
       const reds = redemptionEvents(matText, maturityISO);
       out[isin] = {
         coupon_rate: ratePercent(get('coupon') as number),
         coupon_type: 'fixed',
-        coupon_frequency: freq(ip),
+        // A bare serial carries no recurrence info — leave frequency blank so the
+        // website value fills it, rather than emitting a wrong "annual" guess.
+        coupon_frequency: ipIsSerial ? '' : freq(ip),
         interest_payment_dates: ip === 'NA' ? '' : ip,
         maturity_date: maturityISO,
         face_value: indianAmount(norm(get('faceValue'))),

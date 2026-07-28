@@ -26,19 +26,20 @@ const QUALITY_FIELDS = [
 
 type Client = ReturnType<typeof createClient>;
 
-async function enrichOne(supabase: Client, bond: Record<string, unknown>, holidays: Set<string>) {
+async function enrichOne(supabase: Client, bond: Record<string, unknown>, holidays: Set<string>, skipProviders = false) {
   const isin = String(bond.isin);
   const bondId = String(bond.id);
-  await supabase.from("bm_bonds").update({ verification_status: "enriching" }).eq("id", bondId);
+  if (!skipProviders) await supabase.from("bm_bonds").update({ verification_status: "enriching" }).eq("id", bondId);
 
   // Locked fields must never be overwritten.
   const { data: prov } = await supabase.from("bm_field_provenance").select("field_name,is_locked").eq("bond_id", bondId);
   const locked = new Set((prov ?? []).filter((p: Record<string, unknown>) => p.is_locked).map((p: Record<string, unknown>) => String(p.field_name)));
 
-  // Query every enabled provider; merge by priority×confidence.
+  // Query every enabled provider; merge by priority×confidence. Skipped in remaster
+  // mode, where we re-merge the sheet over the already-stored master (no fetches).
   const merged: Record<string, { value: unknown; source: string; confidence: number; score: number }> = {};
   let redemption: { date: string; pct: number }[] | undefined;
-  for (const provider of providerRegistry.filter((p) => p.enabled)) {
+  if (!skipProviders) for (const provider of providerRegistry.filter((p) => p.enabled)) {
     const t0 = Date.now();
     let r; try { r = await provider.fetchByISIN(isin); } catch (e) { r = { ok: false, fields: {} as Record<string, Field>, error: String(e) }; }
     await supabase.from("bm_provider_log").insert({
@@ -55,20 +56,23 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
     if (r.redemption_schedule && r.redemption_schedule.length && !redemption && !locked.has("redemption_schedule")) redemption = r.redemption_schedule;
   }
 
-  // Excel fallback (LOWEST priority): fill only fields no provider covered, from
-  // the sheet's own columns stored at import time. Never wins over a provider.
+  // The uploaded SMC dealer sheet is the PRIMARY source: its per-bond fields win
+  // over the public scraper (which is stale/incomplete). The scraper only gap-fills
+  // fields the sheet doesn't carry (e.g. a missing maturity). Sheet values are
+  // stored at import time in import_raw.
   const raw = (bond.import_raw ?? {}) as Record<string, unknown>;
-  const FALLBACK = ["coupon_rate", "coupon_type", "coupon_frequency", "interest_payment_dates",
+  const SHEET_FIELDS = ["coupon_rate", "coupon_type", "coupon_frequency", "interest_payment_dates",
     "maturity_date", "face_value", "rating", "rating_agency", "seniority", "security_type",
     "tax_status", "principal_repayment_structure"];
-  for (const field of FALLBACK) {
+  for (const field of SHEET_FIELDS) {
     if (locked.has(field)) continue;
     const v = raw[field];
     if (v === null || v === undefined || v === "") continue;
-    const score = 10 * 35;                                    // priority 10 × confidence 35 — always below any provider
-    if (!merged[field] || score > merged[field].score) merged[field] = { value: v, source: "excel", confidence: 35, score };
+    const score = 95 * 90;                                    // priority 95 × confidence 90 — above the scraper (40×85)
+    if (!merged[field] || score > merged[field].score) merged[field] = { value: v, source: "excel", confidence: 90, score };
   }
-  if (!redemption && Array.isArray(raw.redemption_schedule) && (raw.redemption_schedule as unknown[]).length && !locked.has("redemption_schedule")) {
+  // Redemption schedule: prefer the sheet's when it carries one; else keep the scraper's.
+  if (Array.isArray(raw.redemption_schedule) && (raw.redemption_schedule as unknown[]).length && !locked.has("redemption_schedule")) {
     redemption = raw.redemption_schedule as { date: string; pct: number }[];
   }
 
@@ -223,6 +227,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const limit = Math.min(Number(body.limit) || 25, 100);
     const recompute = body.recompute === true;   // recompute analytics only, no provider calls
+    const remaster = body.remaster === true;      // re-merge the sheet over the stored master, then recompute (no provider calls)
     const stale = body.stale === true;            // only bonds whose price is newer than their analytics
 
     const { data: hol } = await supabase.from("bm_holiday_calendar").select("holiday_date");
@@ -254,7 +259,7 @@ Deno.serve(async (req) => {
     let query = supabase.from("bm_bonds").select("*");
     if (Array.isArray(body.bond_ids) && body.bond_ids.length) query = query.in("id", body.bond_ids);
     else if (body.isin) query = query.eq("isin", String(body.isin).toUpperCase());
-    else if (recompute) query = query.eq("active_status", "active").limit(limit);
+    else if (recompute || remaster) query = query.eq("active_status", "active").limit(limit);
     else query = query.eq("verification_status", "pending").limit(limit);
     const { data: bonds, error } = await query;
     if (error) throw error;
@@ -263,10 +268,11 @@ Deno.serve(async (req) => {
     for (const b of (bonds ?? [])) {
       const rec = b as Record<string, unknown>;
       try {
-        results.push(recompute ? await recomputeOne(supabase, rec, holidays) : await enrichOne(supabase, rec, holidays));
+        if (recompute) results.push(await recomputeOne(supabase, rec, holidays));
+        else results.push(await enrichOne(supabase, rec, holidays, remaster));   // remaster ⇒ skip provider fetches
       } catch (e) {
         results.push({ isin: String(rec.isin), status: "failed", error: String(e) });
-        if (!recompute) await supabase.from("bm_bonds").update({ verification_status: "failed" }).eq("id", rec.id);
+        if (!recompute && !remaster) await supabase.from("bm_bonds").update({ verification_status: "failed" }).eq("id", rec.id);
       }
     }
     return new Response(JSON.stringify({ enriched: results.length, recomputed: recompute ? results.length : undefined, results }), { headers: { ...cors, "Content-Type": "application/json" } });
