@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { clientSupabase as supabase } from '../lib/supabase';
-import { Lock, Eye, EyeOff, ArrowRight, ChevronLeft, AlertTriangle, CreditCard, Mail, Home, TrendingUp, Sparkles, Check, ShieldCheck, RotateCcw } from 'lucide-react';
+import { Lock, Eye, EyeOff, ArrowRight, ChevronLeft, AlertTriangle, CreditCard, Mail, Home, ShieldCheck, RotateCcw } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
 
@@ -368,55 +368,20 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
                 </button>
               </form>
 
-              {/* Invest Now — the acquisition card. Deliberately the ONLY solid
-                  gold surface on the page so a new visitor's eye lands here. */}
-              <div
-                className="relative overflow-hidden rounded-2xl p-5 animate-gold-shine"
-                style={{ background: 'linear-gradient(135deg, var(--accent-soft) 0%, var(--accent) 45%, var(--accent-strong) 100%)' }}
-              >
-                {/* soft light sweep, top-right */}
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full"
-                  style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.35), transparent)' }}
-                />
-
-                <div className="relative space-y-3">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-black/70" />
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-black/70">New to Niyom Wealth?</p>
-                  </div>
-
-                  <p className="text-xl font-bold leading-snug text-black" style={{ fontFamily: 'var(--font-display)' }}>
-                    Start your wealth journey today
-                  </p>
-
-                  <ul className="space-y-1.5">
-                    {[
-                      'Free account, 100% digital — ready in minutes',
-                      'Mutual funds, bonds & FDs in one premium portal',
-                      'A dedicated relationship manager, always',
-                    ].map((line) => (
-                      <li key={line} className="flex items-start gap-2 text-xs font-medium text-black/80">
-                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-black" strokeWidth={3} />
-                        {line}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <button
-                    onClick={() => onInvestNow?.()}
-                    className="lift press group flex w-full items-center justify-center gap-2 rounded-xl bg-black py-3.5 text-sm font-bold text-white transition-all hover:bg-gray-900"
-                  >
-                    <TrendingUp className="w-4 h-4 text-accent-soft" />
-                    Open Your Free Account
-                    <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-1" />
-                  </button>
-
-                  <p className="text-center text-[10px] font-medium text-black/60">
-                    Just name, mobile &amp; email &nbsp;·&nbsp; No account charges &nbsp;·&nbsp; Ready in 30 seconds
-                  </p>
+              {/* New to Niyom Wealth? — compact acquisition CTA. */}
+              <div className="flex items-center gap-3 rounded-xl p-4"
+                style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-text-primary">New to Niyom Wealth?</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Open a free account in minutes — just name, mobile &amp; email.</p>
                 </div>
+                <button
+                  onClick={() => onInvestNow?.()}
+                  className="group flex flex-shrink-0 items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold text-on-accent whitespace-nowrap transition-all"
+                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                  Sign up now
+                  <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-1" />
+                </button>
               </div>
 
               {/* Return path for clients still completing KYC (no password yet). */}
