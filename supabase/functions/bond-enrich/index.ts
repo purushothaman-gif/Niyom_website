@@ -62,7 +62,7 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
   // stored at import time in import_raw.
   const raw = (bond.import_raw ?? {}) as Record<string, unknown>;
   const SHEET_FIELDS = ["coupon_rate", "coupon_type", "coupon_frequency", "interest_payment_dates",
-    "maturity_date", "face_value", "rating", "rating_agency", "seniority", "security_type",
+    "maturity_date", "face_value", "min_investment", "rating", "rating_agency", "seniority", "security_type",
     "tax_status", "principal_repayment_structure"];
   for (const field of SHEET_FIELDS) {
     if (locked.has(field)) continue;

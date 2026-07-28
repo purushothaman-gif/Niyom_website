@@ -25,6 +25,21 @@ function indianAmount(text: string | number | null | undefined): number | null {
   if (/lac|lakh/.test(s)) return n * 1e5;
   return n;
 }
+// Minimum-investment quantum from the sheet's QUANTUM column. Handles "5 Lacs",
+// "5,00,000", "500000", "1 Cr", and bare "5"/"10" (a small bare number is read as
+// LACS, e.g. 5 → ₹5,00,000, since a sub-₹1000 minimum is never real for these bonds).
+function lacsAmount(v: string | number | null | undefined): number | null {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') { if (!Number.isFinite(v) || v <= 0) return null; return v < 1000 ? Math.round(v * 1e5) : v; }
+  const s = String(v).toLowerCase().trim();
+  if (!s || s === 'na') return null;
+  const m = s.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);   // strip Indian comma grouping, then read the number
+  if (!m) return null;
+  const n = parseFloat(m[1]); if (!Number.isFinite(n) || n <= 0) return null;
+  if (/\bcr\b|crore/.test(s)) return Math.round(n * 1e7);
+  if (/lac|lakh|\bl\b/.test(s)) return Math.round(n * 1e5);
+  return n < 1000 ? Math.round(n * 1e5) : Math.round(n);     // bare number → lacs if small, else rupees
+}
 function excelSerialToISO(serial: number): string | null {
   if (!Number.isFinite(serial) || serial <= 0) return null;
   const d = new Date(Math.round((serial - 25569) * 86400 * 1000));
@@ -86,7 +101,7 @@ function mapHeader(row: Row): Record<string, number> {
     else if (h.includes('maturity')) map.maturity = i;
     else if (h.includes('ip date') || h.includes('interest payment')) map.ipDates = i;
     else if (h.includes('face')) map.faceValue = i;
-    else if (h.includes('quantum') || h.includes('quantity')) map.quantum = i;
+    else if (h.includes('quantum') || (h.includes('min') && h.includes('invest'))) map.quantum = i;
   });
   return map;
 }
@@ -94,6 +109,7 @@ function mapHeader(row: Row): Record<string, number> {
 export interface ExcelExtra {
   coupon_rate?: number | null; coupon_type?: string; coupon_frequency?: string;
   interest_payment_dates?: string; maturity_date?: string | null; face_value?: number | null;
+  min_investment?: number | null;
   rating?: string; rating_agency?: string; seniority?: string; security_type?: string;
   tax_status?: string; principal_repayment_structure?: string;
   redemption_schedule?: { date: string; pct: number }[];
@@ -135,6 +151,7 @@ export function extractExtras(wb: { SheetNames: string[]; Sheets: Record<string,
         interest_payment_dates: ip === 'NA' ? '' : ip,
         maturity_date: maturityISO,
         face_value: indianAmount(norm(get('faceValue'))),
+        min_investment: lacsAmount(get('quantum')),
         rating, rating_agency: agency,
         seniority: /senior/i.test(secType) ? 'SENIOR' : (/subord|sub debt|subdebt/i.test(secType) ? 'SUBORDINATED' : ''),
         security_type: secType,
