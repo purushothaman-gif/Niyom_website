@@ -288,29 +288,14 @@ export function rasterizeArt(
  * (cx, cy) is the centre; `size` the emblem's edge length.
  */
 function drawEmblem(
-  ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, p: Palette, alpha: number,
+  ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, _p: Palette, alpha: number,
 ) {
   if (!logoImage) return;
   const r = size / 2;
   ctx.save();
   ctx.globalAlpha = alpha;
-
-  if (isDarkPalette(p)) {
-    const halo = ctx.createRadialGradient(cx, cy, r * 0.55, cx, cy, r * 1.55);
-    halo.addColorStop(0, hexToRgba(p.accent, 0.34));
-    halo.addColorStop(1, hexToRgba(p.accent, 0));
-    ctx.fillStyle = halo;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r * 1.55, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.beginPath();
-  ctx.arc(cx, cy, r + size * 0.02, 0, Math.PI * 2);
-  ctx.strokeStyle = hexToRgba(p.accent, isDarkPalette(p) ? 0.9 : 0.5);
-  ctx.lineWidth = size * (isDarkPalette(p) ? 0.033 : 0.02);
-  ctx.stroke();
-
+  // No halo, no ring — see emblemBacking() in brandTokens. The glow read as an
+  // artificial ring stuck around the logo.
   ctx.drawImage(logoImage, cx - r, cy - r, size, size);
   ctx.restore();
 }
