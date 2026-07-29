@@ -189,30 +189,20 @@ export function isDarkPalette(palette: Palette): boolean {
 }
 
 /**
- * Backing that lifts the emblem off a dark ground: a soft radial halo plus a
- * thin accent ring tracing the disc's edge. On light grounds the black disc
- * already carries its own contrast, so only a whisper of ring is added.
- * Coordinates are the emblem's centre.
+ * Emblem backing — intentionally nothing.
+ *
+ * An earlier version drew a radial halo and an accent ring behind the emblem to
+ * lift it off dark grounds. It read as an artificial glow stuck around the logo,
+ * which is worse than the problem it solved: the emblem is gold on black, and
+ * the gold ring and wordmark carry enough contrast on their own.
+ *
+ * Kept as a no-op function rather than deleted so both render paths (SVG lockup
+ * and canvas) keep one shared place to change if a backing is ever wanted.
  */
-export function emblemBacking(cx: number, cy: number, radius: number, palette: Palette, uid: string): string {
-  const dark = isDarkPalette(palette);
-  const x = cx.toFixed(1);
-  const y = cy.toFixed(1);
-
-  const halo = dark
-    ? `<defs>
-         <radialGradient id="${uid}halo" cx="0.5" cy="0.5" r="0.5">
-           <stop offset="55%" stop-color="${palette.accent}" stop-opacity="0.34"/>
-           <stop offset="100%" stop-color="${palette.accent}" stop-opacity="0"/>
-         </radialGradient>
-       </defs>
-       <circle cx="${x}" cy="${y}" r="${(radius * 1.55).toFixed(1)}" fill="url(#${uid}halo)"/>`
-    : '';
-
-  return `${halo}
-    <circle cx="${x}" cy="${y}" r="${(radius + 1.5).toFixed(1)}"
-            fill="none" stroke="${palette.accent}" stroke-width="${(dark ? 2.4 : 1.4).toFixed(1)}"
-            opacity="${dark ? 0.9 : 0.5}"/>`;
+export function emblemBacking(
+  _cx: number, _cy: number, _radius: number, _palette: Palette, _uid: string,
+): string {
+  return '';
 }
 
 /**

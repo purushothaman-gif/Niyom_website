@@ -67,38 +67,17 @@ function geometry(variant: AspectVariant): Geometry {
   };
 }
 
-/**
- * Background: gradient, corner wash, and a layer of quiet geometry.
- *
- * The geometry is the difference between "a poster" and "text on a coloured
- * rectangle". It stays under 10% opacity and well clear of the type — the job
- * is to give the eye something to land on in the empty regions, not to compete
- * with the headline. `seed` varies which arrangement appears so a feed of posts
- * does not repeat one background.
- */
-function backdrop(g: Geometry, p: Palette, seed = 0): string {
-  const dots: string[] = [];
-  const step = 26 * g.scale;
-  const cols = Math.ceil(g.w / step);
-  const rows = Math.ceil(g.h / step);
-  // Dot field in one corner, alternating side by seed.
-  const fromRight = seed % 2 === 0;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x = fromRight ? g.w - c * step - step * 0.5 : c * step + step * 0.5;
-      const y = g.h - r * step - step * 0.5;
-      // Triangular falloff so the field fades out rather than ending abruptly.
-      if (r + c > 7) continue;
-      const o = (0.16 * (8 - (r + c))) / 8;
-      dots.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(2.6 * g.scale).toFixed(1)}"
-        fill="${p.accent}" opacity="${o.toFixed(3)}"/>`);
-    }
-  }
-
-  const ringR = Math.min(g.w, g.h) * (seed % 3 === 0 ? 0.52 : 0.4);
-  const ringX = seed % 2 === 0 ? g.w * 0.12 : g.w * 0.9;
-  const ringY = g.h * (seed % 3 === 1 ? 0.14 : 0.86);
-
+/** Background: the palette gradient plus one wash per accent hue. */
+function backdrop(g: Geometry, p: Palette): string {
+  // Two washes and nothing else.
+  //
+  // This previously drew large arcs and a dot field whose position and size
+  // varied per headline. The intent was variety; the effect was stray marks
+  // that changed between posts for no reason a reader could perceive — it read
+  // as random rather than designed. A brand system wants the opposite: the same
+  // deliberate ground every time, with variety coming from the palette, the
+  // illustration and the copy. The panel and artwork carry the composition now,
+  // so the background's job is to stay out of the way.
   return `
     <defs>
       <linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
@@ -106,22 +85,17 @@ function backdrop(g: Geometry, p: Palette, seed = 0): string {
         <stop offset="100%" stop-color="${p.bgTo}"/>
       </linearGradient>
       <radialGradient id="wash" cx="0.85" cy="0.1" r="0.9">
-        <stop offset="0%" stop-color="${p.accent}" stop-opacity="0.18"/>
+        <stop offset="0%" stop-color="${p.accent}" stop-opacity="0.16"/>
         <stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
       </radialGradient>
       <radialGradient id="wash2" cx="0.08" cy="0.92" r="0.85">
-        <stop offset="0%" stop-color="${p.accent2}" stop-opacity="0.14"/>
+        <stop offset="0%" stop-color="${p.accent2}" stop-opacity="0.12"/>
         <stop offset="100%" stop-color="${p.accent2}" stop-opacity="0"/>
       </radialGradient>
     </defs>
     <rect width="${g.w}" height="${g.h}" fill="url(#bg)"/>
     <rect width="${g.w}" height="${g.h}" fill="url(#wash)"/>
-    <rect width="${g.w}" height="${g.h}" fill="url(#wash2)"/>
-    <circle cx="${ringX.toFixed(0)}" cy="${ringY.toFixed(0)}" r="${ringR.toFixed(0)}"
-            fill="none" stroke="${p.accent}" stroke-width="${(1.6 * g.scale).toFixed(1)}" opacity="0.09"/>
-    <circle cx="${ringX.toFixed(0)}" cy="${ringY.toFixed(0)}" r="${(ringR * 0.66).toFixed(0)}"
-            fill="none" stroke="${p.accent}" stroke-width="${(1.6 * g.scale).toFixed(1)}" opacity="0.06"/>
-    ${dots.join('')}`;
+    <rect width="${g.w}" height="${g.h}" fill="url(#wash2)"/>`;
 }
 
 function footer(g: Geometry, p: Palette, disclaimer: string): string {
@@ -167,20 +141,29 @@ function eyebrow(g: Geometry, p: Palette, text: string, y: number): string {
 /**
  * Closing call to action, under a short accent rule.
  *
- * Set at a real reading size rather than as a caption. At 22 it sat closer to
- * the disclaimer than to the body copy, which put the one line asking the
- * reader to do something at the bottom of the visual hierarchy.
+ * Fitted rather than drawn at a fixed size: as a single unwrapped line it would
+ * happily run under the illustration, which is the same collision the body copy
+ * had. `maxWidth` is the caller's measured clear width.
  */
-function ctaLine(g: Geometry, p: Palette, cta: string, y: number, x = g.margin): string {
+function ctaLine(
+  g: Geometry, p: Palette, cta: string, y: number, x = g.margin, maxWidth = g.contentW,
+): string {
   if (!cta) return '';
-  const size = 29 * g.scale;
+  const fitted = fitText(cta, {
+    maxWidth,
+    maxHeight: CTA_BLOCK * g.scale,
+    family: FONT_SANS, weight: 600,
+    maxFontSize: 29 * g.scale, minFontSize: 19 * g.scale,
+    lineHeightRatio: 1.25, maxLines: 2,
+  });
   return `
     <g>
       <rect x="${x.toFixed(1)}" y="${y}" width="${(64 * g.scale).toFixed(1)}" height="${(4 * g.scale).toFixed(1)}"
             rx="${(2 * g.scale).toFixed(1)}" fill="${p.accent}"/>
-      <text x="${x.toFixed(1)}" y="${(y + 44 * g.scale).toFixed(1)}"
-            font-family="${FONT_SANS}" font-size="${size.toFixed(1)}" font-weight="600"
-            fill="${p.heading}">${esc(cta)}</text>
+      <text font-family="${FONT_SANS}" font-size="${fitted.fontSize.toFixed(1)}" font-weight="600"
+            fill="${p.heading}">
+        ${tspans(fitted, x, y + 40 * g.scale, esc)}
+      </text>
     </g>`;
 }
 
@@ -277,9 +260,25 @@ const boldStatement: TemplateSpec = {
     const bodyH = bodyText ? (g.isWide ? 130 : 264) * g.scale : 0;
     const headMax = g.h - headTop - bodyH - ctaH - footerH - g.margin;
 
+    // Art geometry is resolved first, because the text column is derived from
+    // it. Guessing a fraction of the content width is what let body copy run
+    // under the illustration — this makes the gutter explicit and guaranteed.
+    const artFn = artForCategory(input.category, input.headline);
+    const artSize = (g.isWide ? 300 : 400) * g.scale;
+    const artX = g.w - g.margin - artSize * 0.98;
+    const artY = g.h - g.margin - FOOTER_BAND * g.scale - artSize * 0.98;
+
+    const pad = PANEL_PAD * g.scale;
+    const textX = g.margin + pad + 14 * g.scale;
+    const artGutter = 40 * g.scale;
+    // Widest a line may run before it would touch the illustration.
+    const clearW = artX - textX - artGutter;
+    // Full panel-inner width, for lines that sit above the art entirely.
+    const fullW = g.contentW - pad * 2 - 14 * g.scale;
+
     const head = fitText(heading, {
-      // Panel-inner width, not full content width — the type is inset now.
-      maxWidth: (g.contentW - PANEL_PAD * 2 * g.scale) * (g.isWide ? 0.7 : 0.98),
+      // The headline sits above the art band, so it gets the full inner width.
+      maxWidth: fullW * (g.isWide ? 0.72 : 1),
       maxHeight: headMax,
       family: FONT_SANS, weight: 800,
       maxFontSize: (g.isWide ? 74 : g.isTall ? 104 : 92) * g.scale,
@@ -290,9 +289,9 @@ const boldStatement: TemplateSpec = {
 
     const body = bodyText
       ? fitText(bodyText, {
-          // Narrower than the headline on purpose: the art occupies the right
-          // of this band, and body copy running under it was unreadable.
-          maxWidth: (g.contentW - PANEL_PAD * 2 * g.scale) * (g.isWide ? 0.58 : 0.54),
+          // Body and CTA share the band with the art, so they are capped at the
+          // measured clear width rather than a guessed fraction.
+          maxWidth: Math.max(clearW, fullW * 0.42),
           maxHeight: bodyH,
           family: FONT_SANS, weight: 400,
           maxFontSize: 40 * g.scale, minFontSize: 21 * g.scale,
@@ -313,17 +312,8 @@ const boldStatement: TemplateSpec = {
     const bodyTop = stackTop + head.height + gapHeadBody;
     const ctaY = bodyTop + (body ? body.height : 0) + gapBodyCta;
 
-    // A real composition rather than a line icon. Sized to read as artwork and
-    // parked bottom-right, clear of the left-aligned type stack and above the
-    // footer band.
-    const artFn = artForCategory(input.category, input.headline);
-    const artSize = (g.isWide ? 300 : 400) * g.scale;
-    // Anchored to the bottom-right corner rather than centred in the gap: a
-    // composition floating mid-frame reads as an afterthought, one sitting
-    // into the corner reads as part of the layout. It is allowed to run
-    // slightly past the margin so it feels placed rather than boxed.
-    const artX = g.w - g.margin - artSize * 0.98;
-    const artY = g.h - g.margin - FOOTER_BAND * g.scale - artSize * 0.98;
+    // Anchored to the bottom-right corner (geometry computed above, since the
+    // text column depends on it).
     const artMark = art(artFn, artX, artY, artSize, p, `bs${g.w}${g.h}`, 0.95);
     // A soft disc of the support hue gives the illustration a seat — art on a
     // shape reads as composed; art floating on the gradient reads as pasted.
@@ -348,15 +338,13 @@ const boldStatement: TemplateSpec = {
     // Panel behind the message. Spans the full content width so the
     // illustration overlaps its lower-right corner rather than sitting beside
     // it — that overlap is what gives the composition depth.
-    const pad = PANEL_PAD * g.scale;
     const panelX = g.margin;
     const panelY = stackTop - pad;
     const panelW = g.contentW;
     const panelH = blockH + pad * 2;
-    const textX = panelX + pad + 14 * g.scale;
 
     return wrapDoc(g, `
-      ${backdrop(g, p, input.headline.length)}
+      ${backdrop(g, p)}
       ${contentPanel(g, p, panelX, panelY, panelW, panelH, `bs${g.w}${g.h}`)}
       ${seat}
       ${artMark}
@@ -368,7 +356,7 @@ const boldStatement: TemplateSpec = {
       ${body ? `<text font-family="${FONT_SANS}" font-size="${body.fontSize.toFixed(1)}" font-weight="400" fill="${p.body}">
         ${tspans(body, textX, bodyTop + body.fontSize * 0.8, esc)}
       </text>` : ''}
-      ${ctaLine(g, p, input.cta, ctaY, textX)}
+      ${ctaLine(g, p, input.cta, ctaY, textX, clearW)}
       ${slideBadge}
       ${footer(g, p, input.disclaimer)}
     `);
