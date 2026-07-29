@@ -18,6 +18,7 @@ import { AspectVariant } from '../marketingTypes';
 import { Palette, PALETTES, FONT_SANS, FONT_SERIF, esc, logoLockup, LOGO_EMBLEM } from './brandTokens';
 import { fitText, tspans } from './textFit';
 import { iconForCategory, iconSvg } from './financeIcons';
+import { art, artForCategory } from './financeArt';
 
 export interface RenderInput {
   variant: AspectVariant;
@@ -64,7 +65,38 @@ function geometry(variant: AspectVariant): Geometry {
   };
 }
 
-function backdrop(g: Geometry, p: Palette): string {
+/**
+ * Background: gradient, corner wash, and a layer of quiet geometry.
+ *
+ * The geometry is the difference between "a poster" and "text on a coloured
+ * rectangle". It stays under 10% opacity and well clear of the type — the job
+ * is to give the eye something to land on in the empty regions, not to compete
+ * with the headline. `seed` varies which arrangement appears so a feed of posts
+ * does not repeat one background.
+ */
+function backdrop(g: Geometry, p: Palette, seed = 0): string {
+  const dots: string[] = [];
+  const step = 26 * g.scale;
+  const cols = Math.ceil(g.w / step);
+  const rows = Math.ceil(g.h / step);
+  // Dot field in one corner, alternating side by seed.
+  const fromRight = seed % 2 === 0;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = fromRight ? g.w - c * step - step * 0.5 : c * step + step * 0.5;
+      const y = g.h - r * step - step * 0.5;
+      // Triangular falloff so the field fades out rather than ending abruptly.
+      if (r + c > 7) continue;
+      const o = (0.16 * (8 - (r + c))) / 8;
+      dots.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(2.6 * g.scale).toFixed(1)}"
+        fill="${p.accent}" opacity="${o.toFixed(3)}"/>`);
+    }
+  }
+
+  const ringR = Math.min(g.w, g.h) * (seed % 3 === 0 ? 0.52 : 0.4);
+  const ringX = seed % 2 === 0 ? g.w * 0.12 : g.w * 0.9;
+  const ringY = g.h * (seed % 3 === 1 ? 0.14 : 0.86);
+
   return `
     <defs>
       <linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
@@ -77,7 +109,12 @@ function backdrop(g: Geometry, p: Palette): string {
       </radialGradient>
     </defs>
     <rect width="${g.w}" height="${g.h}" fill="url(#bg)"/>
-    <rect width="${g.w}" height="${g.h}" fill="url(#wash)"/>`;
+    <rect width="${g.w}" height="${g.h}" fill="url(#wash)"/>
+    <circle cx="${ringX.toFixed(0)}" cy="${ringY.toFixed(0)}" r="${ringR.toFixed(0)}"
+            fill="none" stroke="${p.accent}" stroke-width="${(1.6 * g.scale).toFixed(1)}" opacity="0.09"/>
+    <circle cx="${ringX.toFixed(0)}" cy="${ringY.toFixed(0)}" r="${(ringR * 0.66).toFixed(0)}"
+            fill="none" stroke="${p.accent}" stroke-width="${(1.6 * g.scale).toFixed(1)}" opacity="0.06"/>
+    ${dots.join('')}`;
 }
 
 function footer(g: Geometry, p: Palette, disclaimer: string): string {
@@ -93,34 +130,50 @@ function footer(g: Geometry, p: Palette, disclaimer: string): string {
           fill="${p.footer}">${esc(disclaimer)}</text>`;
 }
 
+/**
+ * Category chip. Carries the small line mark for its category — a chip with an
+ * icon reads as designed where a text-only pill reads as a form field, and it
+ * gives the category a visual identity the reader picks up faster than a word.
+ */
 function eyebrow(g: Geometry, p: Palette, text: string, y: number): string {
   const size = 20 * g.scale;
   const padX = 18 * g.scale;
   const padY = 11 * g.scale;
-  // Approximate chip width from the letter-spaced caps label.
-  const chipW = text.length * size * 0.72 + padX * 2;
+  const mark = 22 * g.scale;
+  const gap = 9 * g.scale;
+  const chipH = size + padY * 2;
+  // Approximate chip width from the letter-spaced caps label, plus the mark.
+  const chipW = text.length * size * 0.72 + padX * 2 + mark + gap;
   return `
     <g>
-      <rect x="${g.margin}" y="${y}" rx="${(size * 0.9).toFixed(1)}"
-            width="${chipW.toFixed(1)}" height="${(size + padY * 2).toFixed(1)}"
+      <rect x="${g.margin}" y="${y}" rx="${(chipH / 2).toFixed(1)}"
+            width="${chipW.toFixed(1)}" height="${chipH.toFixed(1)}"
             fill="${p.chipBg}"/>
-      <text x="${g.margin + padX}" y="${(y + padY + size * 0.78).toFixed(1)}"
+      ${iconSvg(iconForCategory(text), g.margin + padX, y + (chipH - mark) / 2, mark, p.chipText, 1.9)}
+      <text x="${(g.margin + padX + mark + gap).toFixed(1)}" y="${(y + padY + size * 0.78).toFixed(1)}"
             font-family="${FONT_SANS}" font-size="${size.toFixed(1)}" font-weight="600"
             letter-spacing="${(1.8 * g.scale).toFixed(2)}"
             fill="${p.chipText}">${esc(text.toUpperCase())}</text>
     </g>`;
 }
 
+/**
+ * Closing call to action, under a short accent rule.
+ *
+ * Set at a real reading size rather than as a caption. At 22 it sat closer to
+ * the disclaimer than to the body copy, which put the one line asking the
+ * reader to do something at the bottom of the visual hierarchy.
+ */
 function ctaLine(g: Geometry, p: Palette, cta: string, y: number): string {
   if (!cta) return '';
-  const size = 22 * g.scale;
+  const size = 29 * g.scale;
   return `
     <g>
-      <rect x="${g.margin}" y="${y}" width="${(52 * g.scale).toFixed(1)}" height="${(3 * g.scale).toFixed(1)}"
-            fill="${p.accent}"/>
-      <text x="${g.margin}" y="${(y + 34 * g.scale).toFixed(1)}"
-            font-family="${FONT_SANS}" font-size="${size.toFixed(1)}" font-weight="500"
-            fill="${p.body}">${esc(cta)}</text>
+      <rect x="${g.margin}" y="${y}" width="${(64 * g.scale).toFixed(1)}" height="${(4 * g.scale).toFixed(1)}"
+            rx="${(2 * g.scale).toFixed(1)}" fill="${p.accent}"/>
+      <text x="${g.margin}" y="${(y + 44 * g.scale).toFixed(1)}"
+            font-family="${FONT_SANS}" font-size="${size.toFixed(1)}" font-weight="600"
+            fill="${p.heading}">${esc(cta)}</text>
     </g>`;
 }
 
@@ -131,7 +184,7 @@ function wrapDoc(g: Geometry, inner: string): string {
 // Vertical space the brand footer occupies: the emblem plus breathing room
 // above it, so a centred content stack never crowds the logo.
 const FOOTER_BAND = LOGO_EMBLEM + 34;
-const CTA_BLOCK = 70;
+const CTA_BLOCK = 86;
 
 /**
  * Vertical offset that centres a content stack in the space between the eyebrow
@@ -169,7 +222,7 @@ const boldStatement: TemplateSpec = {
     // Reserve room for body + CTA + footer, then let the headline own the rest.
     const footerH = FOOTER_BAND * g.scale;
     const ctaH = input.cta ? 70 * g.scale : 0;
-    const bodyH = bodyText ? (g.isWide ? 96 : 150) * g.scale : 0;
+    const bodyH = bodyText ? (g.isWide ? 110 : 190) * g.scale : 0;
     const headMax = g.h - headTop - bodyH - ctaH - footerH - g.margin;
 
     const head = fitText(heading, {
@@ -184,10 +237,12 @@ const boldStatement: TemplateSpec = {
 
     const body = bodyText
       ? fitText(bodyText, {
-          maxWidth: g.contentW * (g.isWide ? 0.66 : 0.94),
+          // Narrower than the headline on purpose: the art occupies the right
+          // of this band, and body copy running under it was unreadable.
+          maxWidth: g.contentW * (g.isWide ? 0.6 : 0.55),
           maxHeight: bodyH,
           family: FONT_SANS, weight: 400,
-          maxFontSize: 30 * g.scale, minFontSize: 19 * g.scale,
+          maxFontSize: 40 * g.scale, minFontSize: 26 * g.scale,
           lineHeightRatio: 1.4, maxLines: g.isWide ? 2 : 4,
         })
       : null;
@@ -205,11 +260,18 @@ const boldStatement: TemplateSpec = {
     const bodyTop = stackTop + head.height + gapHeadBody;
     const ctaY = bodyTop + (body ? body.height : 0) + gapBodyCta;
 
-    const icon = iconForCategory(input.category);
-    const iconSize = 108 * g.scale;
-    const iconMark = g.isWide
-      ? iconSvg(icon, g.w - g.margin - iconSize, g.margin + 20 * g.scale, iconSize, p.accent, 1.5)
-      : iconSvg(icon, g.w - g.margin - iconSize, g.margin - 4 * g.scale, iconSize, p.accent, 1.5);
+    // A real composition rather than a line icon. Sized to read as artwork and
+    // parked bottom-right, clear of the left-aligned type stack and above the
+    // footer band.
+    const artFn = artForCategory(input.category, input.headline);
+    const artSize = (g.isWide ? 300 : 400) * g.scale;
+    // Anchored to the bottom-right corner rather than centred in the gap: a
+    // composition floating mid-frame reads as an afterthought, one sitting
+    // into the corner reads as part of the layout. It is allowed to run
+    // slightly past the margin so it feels placed rather than boxed.
+    const artX = g.w - g.margin - artSize * 0.98;
+    const artY = g.h - g.margin - FOOTER_BAND * g.scale - artSize * 0.98;
+    const artMark = art(artFn, artX, artY, artSize, p, `bs${g.w}${g.h}`, 0.95);
 
     const slideBadge = input.slide
       ? `<text x="${g.w - g.margin}" y="${(g.h - g.margin - 46 * g.scale).toFixed(1)}" text-anchor="end"
@@ -218,8 +280,8 @@ const boldStatement: TemplateSpec = {
       : '';
 
     return wrapDoc(g, `
-      ${backdrop(g, p)}
-      ${iconMark}
+      ${backdrop(g, p, input.headline.length)}
+      ${artMark}
       ${eyebrow(g, p, input.category, topY)}
       <text font-family="${FONT_SANS}" font-size="${head.fontSize.toFixed(1)}" font-weight="800"
             fill="${p.heading}" letter-spacing="${(-0.5 * g.scale).toFixed(2)}">

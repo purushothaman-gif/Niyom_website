@@ -73,6 +73,67 @@ export const PALETTES: Record<string, Palette> = {
     accent: BRAND.gold, footer: '#7f93a9',
     chipBg: 'rgba(216,189,134,0.18)', chipText: BRAND.goldSoft,
   },
+
+  // ---------------------------------------------------------------------
+  // Colourways beyond the house navy/gold.
+  //
+  // Four palettes from one hue family made every post look like the last
+  // one — in a feed that reads as repetition rather than consistency. These
+  // widen the range while keeping the same construction: a deep saturated
+  // ground, one confident accent, and enough contrast that white or near-
+  // white type sits cleanly on top. Brand recognition rides on the emblem
+  // and the typography, which do not change.
+  // ---------------------------------------------------------------------
+
+  tealDeep: {
+    id: 'tealDeep',
+    bgFrom: '#062a2e', bgTo: '#0c3f45',
+    heading: '#f2fbfa', body: '#b7d8d8',
+    accent: '#4fd1c5', footer: '#6f9d9d',
+    chipBg: 'rgba(79,209,197,0.18)', chipText: '#8fe4da',
+  },
+  plumRich: {
+    id: 'plumRich',
+    bgFrom: '#2a0f2e', bgTo: '#431a45',
+    heading: '#fdf3fb', body: '#dcc0da',
+    accent: '#e26fb0', footer: '#a077a0',
+    chipBg: 'rgba(226,111,176,0.18)', chipText: '#f3a5cf',
+  },
+  forestCalm: {
+    id: 'forestCalm',
+    bgFrom: '#0d2818', bgTo: '#153a24',
+    heading: '#f2fbf4', body: '#bcd8c4',
+    accent: '#7bc96f', footer: '#7d9d85',
+    chipBg: 'rgba(123,201,111,0.18)', chipText: '#a5dd9c',
+  },
+  sunsetWarm: {
+    id: 'sunsetWarm',
+    bgFrom: '#331408', bgTo: '#5a2410',
+    heading: '#fff6ef', body: '#e8c6b0',
+    accent: '#ff9f5a', footer: '#b0846a',
+    chipBg: 'rgba(255,159,90,0.18)', chipText: '#ffc194',
+  },
+  indigoNight: {
+    id: 'indigoNight',
+    bgFrom: '#141a3d', bgTo: '#232c5e',
+    heading: '#f3f4ff', body: '#c2c7ea',
+    accent: '#8b93f8', footer: '#8086ad',
+    chipBg: 'rgba(139,147,248,0.18)', chipText: '#b0b6fb',
+  },
+  sandWarm: {
+    id: 'sandWarm',
+    bgFrom: '#f5ede1', bgTo: '#e8dac6',
+    heading: '#3a2c1c', body: '#6b5940',
+    accent: '#c1663a', footer: '#9c876d',
+    chipBg: 'rgba(193,102,58,0.16)', chipText: '#a9542e',
+  },
+  slateMint: {
+    id: 'slateMint',
+    bgFrom: '#f4f7f6', bgTo: '#e3ebe8',
+    heading: '#16302a', body: '#41564f',
+    accent: '#0f8f79', footer: '#7c918b',
+    chipBg: 'rgba(15,143,121,0.14)', chipText: '#0c7a67',
+  },
 };
 
 /**
