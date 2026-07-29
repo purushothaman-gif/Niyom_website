@@ -15,8 +15,10 @@
 
 import { ASPECT_VARIANTS } from '../marketingConstants';
 import { AspectVariant } from '../marketingTypes';
-import { Palette, PALETTES, FONT_SANS, FONT_SERIF, esc, logoLockup, LOGO_EMBLEM } from './brandTokens';
-import { fitText, tspans } from './textFit';
+import {
+  Palette, PALETTES, FONT_SANS, FONT_SERIF, esc, logoLockup, LOGO_EMBLEM, isDarkPalette,
+} from './brandTokens';
+import { accentTspans, fitText, tspans } from './textFit';
 import { iconForCategory, iconSvg } from './financeIcons';
 import { art, artForCategory } from './financeArt';
 
@@ -107,9 +109,14 @@ function backdrop(g: Geometry, p: Palette, seed = 0): string {
         <stop offset="0%" stop-color="${p.accent}" stop-opacity="0.18"/>
         <stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
       </radialGradient>
+      <radialGradient id="wash2" cx="0.08" cy="0.92" r="0.85">
+        <stop offset="0%" stop-color="${p.accent2}" stop-opacity="0.14"/>
+        <stop offset="100%" stop-color="${p.accent2}" stop-opacity="0"/>
+      </radialGradient>
     </defs>
     <rect width="${g.w}" height="${g.h}" fill="url(#bg)"/>
     <rect width="${g.w}" height="${g.h}" fill="url(#wash)"/>
+    <rect width="${g.w}" height="${g.h}" fill="url(#wash2)"/>
     <circle cx="${ringX.toFixed(0)}" cy="${ringY.toFixed(0)}" r="${ringR.toFixed(0)}"
             fill="none" stroke="${p.accent}" stroke-width="${(1.6 * g.scale).toFixed(1)}" opacity="0.09"/>
     <circle cx="${ringX.toFixed(0)}" cy="${ringY.toFixed(0)}" r="${(ringR * 0.66).toFixed(0)}"
@@ -164,14 +171,14 @@ function eyebrow(g: Geometry, p: Palette, text: string, y: number): string {
  * the disclaimer than to the body copy, which put the one line asking the
  * reader to do something at the bottom of the visual hierarchy.
  */
-function ctaLine(g: Geometry, p: Palette, cta: string, y: number): string {
+function ctaLine(g: Geometry, p: Palette, cta: string, y: number, x = g.margin): string {
   if (!cta) return '';
   const size = 29 * g.scale;
   return `
     <g>
-      <rect x="${g.margin}" y="${y}" width="${(64 * g.scale).toFixed(1)}" height="${(4 * g.scale).toFixed(1)}"
+      <rect x="${x.toFixed(1)}" y="${y}" width="${(64 * g.scale).toFixed(1)}" height="${(4 * g.scale).toFixed(1)}"
             rx="${(2 * g.scale).toFixed(1)}" fill="${p.accent}"/>
-      <text x="${g.margin}" y="${(y + 44 * g.scale).toFixed(1)}"
+      <text x="${x.toFixed(1)}" y="${(y + 44 * g.scale).toFixed(1)}"
             font-family="${FONT_SANS}" font-size="${size.toFixed(1)}" font-weight="600"
             fill="${p.heading}">${esc(cta)}</text>
     </g>`;
@@ -179,6 +186,47 @@ function ctaLine(g: Geometry, p: Palette, cta: string, y: number): string {
 
 function wrapDoc(g: Geometry, inner: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${g.w}" height="${g.h}" viewBox="0 0 ${g.w} ${g.h}">${inner}</svg>`;
+}
+
+/** Inner padding between a content panel's edge and the type inside it. */
+const PANEL_PAD = 46;
+
+/**
+ * Rounded surface the message sits on, with a solid accent tab down its left
+ * edge.
+ *
+ * This is the structural difference between our output and the fintech
+ * marketing it is being measured against: those posts almost always seat the
+ * message on a card with a definite edge, rather than floating type over a
+ * gradient. The panel gives figure/ground separation, the tab gives a hard
+ * colour anchor, and letting the illustration overlap the panel's corner
+ * produces depth that a single flat layer cannot.
+ *
+ * Deliberately low-contrast — it should read as a surface, not as a box drawn
+ * around the text.
+ */
+function contentPanel(
+  g: Geometry, p: Palette, x: number, y: number, w: number, h: number, uid: string,
+): string {
+  const r = 34 * g.scale;
+  const tabW = 7 * g.scale;
+  const dark = isDarkPalette(p);
+  return `
+    <defs>
+      <!-- White at low alpha on dark grounds lifts the surface; at higher alpha
+           on light grounds it reads as a paper card. One colour, two roles. -->
+      <linearGradient id="pan${uid}" x1="0" y1="0" x2="0.4" y2="1">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="${dark ? 0.07 : 0.62}"/>
+        <stop offset="100%" stop-color="#ffffff" stop-opacity="${dark ? 0.02 : 0.28}"/>
+      </linearGradient>
+    </defs>
+    <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"
+          rx="${r.toFixed(1)}" fill="url(#pan${uid})"
+          stroke="${p.accent}" stroke-opacity="${dark ? 0.22 : 0.18}"
+          stroke-width="${(1.6 * g.scale).toFixed(1)}"/>
+    <path d="M${(x + r * 0.5).toFixed(1)} ${(y + r * 0.7).toFixed(1)}
+             L${(x + r * 0.5).toFixed(1)} ${(y + h - r * 0.7).toFixed(1)}"
+          stroke="${p.accent}" stroke-width="${tabW.toFixed(1)}" stroke-linecap="round"/>`;
 }
 
 // Vertical space the brand footer occupies: the emblem plus breathing room
@@ -226,7 +274,8 @@ const boldStatement: TemplateSpec = {
     const headMax = g.h - headTop - bodyH - ctaH - footerH - g.margin;
 
     const head = fitText(heading, {
-      maxWidth: g.contentW * (g.isWide ? 0.72 : 1),
+      // Panel-inner width, not full content width — the type is inset now.
+      maxWidth: (g.contentW - PANEL_PAD * 2 * g.scale) * (g.isWide ? 0.7 : 0.98),
       maxHeight: headMax,
       family: FONT_SANS, weight: 800,
       maxFontSize: (g.isWide ? 74 : g.isTall ? 104 : 92) * g.scale,
@@ -239,7 +288,7 @@ const boldStatement: TemplateSpec = {
       ? fitText(bodyText, {
           // Narrower than the headline on purpose: the art occupies the right
           // of this band, and body copy running under it was unreadable.
-          maxWidth: g.contentW * (g.isWide ? 0.6 : 0.55),
+          maxWidth: (g.contentW - PANEL_PAD * 2 * g.scale) * (g.isWide ? 0.58 : 0.54),
           maxHeight: bodyH,
           family: FONT_SANS, weight: 400,
           maxFontSize: 40 * g.scale, minFontSize: 26 * g.scale,
@@ -272,6 +321,19 @@ const boldStatement: TemplateSpec = {
     const artX = g.w - g.margin - artSize * 0.98;
     const artY = g.h - g.margin - FOOTER_BAND * g.scale - artSize * 0.98;
     const artMark = art(artFn, artX, artY, artSize, p, `bs${g.w}${g.h}`, 0.95);
+    // A soft disc of the support hue gives the illustration a seat — art on a
+    // shape reads as composed; art floating on the gradient reads as pasted.
+    const seatR = artSize * 0.54;
+    const seat = `
+      <defs>
+        <radialGradient id="seat${g.w}" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stop-color="${p.accent2}" stop-opacity="0.2"/>
+          <stop offset="78%" stop-color="${p.accent2}" stop-opacity="0.1"/>
+          <stop offset="100%" stop-color="${p.accent2}" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <circle cx="${(artX + artSize * 0.5).toFixed(1)}" cy="${(artY + artSize * 0.52).toFixed(1)}"
+              r="${seatR.toFixed(1)}" fill="url(#seat${g.w})"/>`;
 
     const slideBadge = input.slide
       ? `<text x="${g.w - g.margin}" y="${(g.h - g.margin - 46 * g.scale).toFixed(1)}" text-anchor="end"
@@ -279,18 +341,30 @@ const boldStatement: TemplateSpec = {
                fill="${p.footer}">${input.slide.index}/${input.slide.total}</text>`
       : '';
 
+    // Panel behind the message. Spans the full content width so the
+    // illustration overlaps its lower-right corner rather than sitting beside
+    // it — that overlap is what gives the composition depth.
+    const pad = PANEL_PAD * g.scale;
+    const panelX = g.margin;
+    const panelY = stackTop - pad;
+    const panelW = g.contentW;
+    const panelH = blockH + pad * 2;
+    const textX = panelX + pad + 14 * g.scale;
+
     return wrapDoc(g, `
       ${backdrop(g, p, input.headline.length)}
+      ${contentPanel(g, p, panelX, panelY, panelW, panelH, `bs${g.w}${g.h}`)}
+      ${seat}
       ${artMark}
       ${eyebrow(g, p, input.category, topY)}
       <text font-family="${FONT_SANS}" font-size="${head.fontSize.toFixed(1)}" font-weight="800"
             fill="${p.heading}" letter-spacing="${(-0.5 * g.scale).toFixed(2)}">
-        ${tspans(head, g.margin, headBaseline, esc)}
+        ${accentTspans(head, textX, headBaseline, esc, p.accent)}
       </text>
       ${body ? `<text font-family="${FONT_SANS}" font-size="${body.fontSize.toFixed(1)}" font-weight="400" fill="${p.body}">
-        ${tspans(body, g.margin, bodyTop + body.fontSize * 0.8, esc)}
+        ${tspans(body, textX, bodyTop + body.fontSize * 0.8, esc)}
       </text>` : ''}
-      ${ctaLine(g, p, input.cta, ctaY)}
+      ${ctaLine(g, p, input.cta, ctaY, textX)}
       ${slideBadge}
       ${footer(g, p, input.disclaimer)}
     `);
