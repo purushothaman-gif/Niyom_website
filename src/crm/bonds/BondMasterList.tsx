@@ -3,9 +3,24 @@
 import { useState } from 'react';
 import { LogoLoader } from '../../components/LogoLoader';
 import { useQueryClient } from '@tanstack/react-query';
-import { Search, UploadCloud, Loader2, ShieldCheck, ShieldAlert, Clock, Landmark, Sparkles, SlidersHorizontal, X } from 'lucide-react';
+import { Search, UploadCloud, Loader2, ShieldCheck, ShieldAlert, Clock, Landmark, Sparkles, SlidersHorizontal, X, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { useBonds, enrichPendingLoop } from './bondClient';
 import { BondPublic } from './bondTypes';
+
+// Sortable columns (order matches the table body cells).
+type SortType = 'text' | 'num' | 'date';
+const COLUMNS: { label: string; type: SortType; get: (b: BondPublic) => string | number | null }[] = [
+  { label: 'Bond', type: 'text', get: b => b.bond_name || b.issuer_name || '' },
+  { label: 'ISIN', type: 'text', get: b => b.isin || '' },
+  { label: 'Coupon', type: 'num', get: b => b.coupon_rate },
+  { label: 'Freq', type: 'text', get: b => b.coupon_frequency || '' },
+  { label: 'Maturity', type: 'date', get: b => b.maturity_date },
+  { label: 'Rating', type: 'text', get: b => b.rating || '' },
+  { label: 'Price', type: 'num', get: b => b.latest_price },
+  { label: 'Quality', type: 'num', get: b => b.data_quality_score },
+  { label: 'Status', type: 'text', get: b => b.verification_status || '' },
+  { label: 'Updated', type: 'date', get: b => b.price_updated_at || b.updated_at },
+];
 
 interface Props { isAdmin: boolean; onUpload: () => void; onVerify: () => void; onOpen: (id: string) => void; }
 
@@ -78,6 +93,32 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
     if (filters.updFrom) { const u = (b.price_updated_at || b.updated_at || '').slice(0, 10); if (!u || u < filters.updFrom) return false; }
     return true;
   });
+
+  // Column sort — click a header to toggle asc/desc (numbers/dates default high→low, text A→Z).
+  const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  const clickSort = (col: typeof COLUMNS[number]) => setSort(s =>
+    s && s.key === col.label
+      ? { key: col.label, dir: s.dir === 'asc' ? 'desc' : 'asc' }
+      : { key: col.label, dir: col.type === 'text' ? 'asc' : 'desc' });
+
+  const sorted = [...filtered];
+  if (sort) {
+    const col = COLUMNS.find(c => c.label === sort.key)!;
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    sorted.sort((a, b) => {
+      const va = col.get(a), vb = col.get(b);
+      const na = va === null || va === undefined || va === '';
+      const nb = vb === null || vb === undefined || vb === '';
+      if (na && nb) return 0;
+      if (na) return 1;            // nulls always last
+      if (nb) return -1;
+      let cmp = 0;
+      if (col.type === 'num') cmp = Number(va) - Number(vb);
+      else if (col.type === 'date') cmp = new Date(va as string).getTime() - new Date(vb as string).getTime();
+      else cmp = String(va).localeCompare(String(vb));
+      return cmp * dir;
+    });
+  }
 
   const masterPending = async () => {
     setMastering(0);
@@ -208,13 +249,25 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Bond', 'ISIN', 'Coupon', 'Freq', 'Maturity', 'Rating', 'Price', 'Quality', 'Status', 'Updated'].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--text-faint)' }}>{h}</th>
-                  ))}
+                  {COLUMNS.map(col => {
+                    const active = sort?.key === col.label;
+                    return (
+                      <th key={col.label} onClick={() => clickSort(col)}
+                        className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer select-none crm-row-hover"
+                        style={{ color: active ? 'var(--accent)' : 'var(--text-faint)' }}>
+                        <span className="inline-flex items-center gap-1">
+                          {col.label}
+                          {active
+                            ? (sort!.dir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+                            : <ArrowUpDown className="w-3 h-3" style={{ opacity: 0.3 }} />}
+                        </span>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((b: BondPublic) => (
+                {sorted.map((b: BondPublic) => (
                   <tr key={b.id} onClick={() => onOpen(b.id)} className="crm-row-hover cursor-pointer" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                     <td className="px-3 py-2.5 max-w-[280px]">
                       <p className="font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{b.bond_name || b.issuer_name || '—'}</p>
