@@ -9,6 +9,7 @@ import {
 import { ContentFilters, ContentStatus, ContentType, EMPTY_FILTERS, MktContent } from '../marketingTypes';
 import { useContentHistory, useContentList } from '../marketingClient';
 import { EmptyState, ExpiryCountdown, GhostButton, PrimaryButton, StatusPill, inputClass, inputStyle } from './shared';
+import CompanyLinkCard from './CompanyLinkCard';
 
 interface Props {
   onOpen: (content: MktContent) => void;
@@ -50,6 +51,8 @@ export default function ContentLibrary({ onOpen, onNew, onAnalytics }: Props) {
       </div>
 
       {/* filters */}
+      <CompanyLinkCard />
+
       <div className="rounded-2xl p-4 mb-5 space-y-3"
         style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
         <div className="relative">

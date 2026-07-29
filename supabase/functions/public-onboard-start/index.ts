@@ -69,14 +69,20 @@ Deno.serve(async (req: Request) => {
       try {
         const { data: link } = await db
           .from("mkt_referral_links")
-          .select("employee_id")
+          .select("employee_id, kind")
           .eq("ref_code", candidate)
           .eq("active", true)
           .maybeSingle();
 
-        if (link?.employee_id) {
-          ownerEmployeeId = link.employee_id;
+        // A recognised link is recorded whether or not it names an employee.
+        // The company link (kind 'company') deliberately has no employee_id:
+        // NIYOM's own social posts belong to the house, so ownership stays at
+        // the default while the code is still captured for attribution — which
+        // is what keeps company-channel reporting separate from any one
+        // person's numbers.
+        if (link) {
           refCode = candidate;
+          if (link.employee_id) ownerEmployeeId = link.employee_id;
         }
       } catch (refErr) {
         console.error("referral resolution failed, using default owner:", refErr);

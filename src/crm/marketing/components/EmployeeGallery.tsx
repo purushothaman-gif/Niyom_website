@@ -29,7 +29,7 @@ export default function EmployeeGallery({ employee }: Props) {
   const [platform, setPlatform] = useState('all');
 
   const { data: content = [], isLoading } = useApprovedGallery();
-  const { data: refLink } = useMyReferralLink();
+  const { data: refLink } = useMyReferralLink(employee.id);
   const { copied, copy } = useCopyFeedback();
 
   const refCode = refLink?.ref_code ?? '';
