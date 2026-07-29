@@ -270,7 +270,11 @@ const boldStatement: TemplateSpec = {
     // Reserve room for body + CTA + footer, then let the headline own the rest.
     const footerH = FOOTER_BAND * g.scale;
     const ctaH = input.cta ? 70 * g.scale : 0;
-    const bodyH = bodyText ? (g.isWide ? 110 : 190) * g.scale : 0;
+    // Generous: the body column is narrow (the illustration owns the right of
+    // this band), so the same word count needs more lines than a full-width
+    // column would. Too tight here and fitText falls through to ellipsising
+    // mid-sentence, which loses content the reader needed.
+    const bodyH = bodyText ? (g.isWide ? 130 : 264) * g.scale : 0;
     const headMax = g.h - headTop - bodyH - ctaH - footerH - g.margin;
 
     const head = fitText(heading, {
@@ -291,8 +295,8 @@ const boldStatement: TemplateSpec = {
           maxWidth: (g.contentW - PANEL_PAD * 2 * g.scale) * (g.isWide ? 0.58 : 0.54),
           maxHeight: bodyH,
           family: FONT_SANS, weight: 400,
-          maxFontSize: 40 * g.scale, minFontSize: 26 * g.scale,
-          lineHeightRatio: 1.4, maxLines: g.isWide ? 2 : 4,
+          maxFontSize: 40 * g.scale, minFontSize: 21 * g.scale,
+          lineHeightRatio: 1.36, maxLines: g.isWide ? 3 : 7,
         })
       : null;
 
