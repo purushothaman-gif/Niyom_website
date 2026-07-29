@@ -192,6 +192,18 @@ export function buildReferralUrl(refCode: string, contentNo?: string, platform?:
   return `${PUBLIC_SITE_ORIGIN}/onboarding?${params.toString()}`;
 }
 
+/**
+ * The company's onboarding URL — deliberately bare.
+ *
+ * NIYOM posts this from its own accounts, where a tracking parameter looks
+ * like a campaign link rather than the company's address. It needs no code:
+ * a visit arriving without one is resolved to the company link server-side,
+ * so clicks and signups still land on the company channel.
+ */
+export function buildCompanyUrl(): string {
+  return `${PUBLIC_SITE_ORIGIN}/onboarding`;
+}
+
 /** Swap the placeholder for the reading employee's own link. */
 export function applyReferralLink(
   caption: string,
