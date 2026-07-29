@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWHolding, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, PRODUCT_CHART_COLORS } from './utils';
-import { Plus, X, Pencil, Trash2, ChevronDown, Printer, TrendingUp, Percent, Shield } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, ChevronDown, Printer, TrendingUp, Percent, Shield, ArrowLeft, ArrowUp, ArrowDown, Search, Download } from 'lucide-react';
 
 interface Props {
   employee: NWEmployee;
@@ -21,6 +21,29 @@ const SCHEME_LABELS: Record<string, string> = { equity: 'Equity', debt: 'Debt', 
 const INS_TYPES = ['term', 'ulip', 'traditional', 'medical', 'vehicle'];
 const INS_LABELS: Record<string, string> = { term: 'Term Insurance', ulip: 'ULIP', traditional: 'Traditional Insurance', medical: 'Medical Insurance', vehicle: 'Vehicle Insurance' };
 const PREM_FREQ: Record<string, string> = { monthly: 'Monthly', quarterly: 'Quarterly', halfyearly: 'Half-Yearly', annual: 'Annual', single: 'Single Premium' };
+
+// --- Client-level roll-up (landing view) -------------------------------------
+type ClientView = 'clients' | 'detail';
+type ClientSortKey = 'name' | 'employee' | 'invested' | 'aum' | 'unlisted' | 'bonds' | 'mf' | 'pl';
+
+// Bonds column = primary + secondary only. fixed_deposit is a BOND_TYPE for
+// payout maths but is not a bond for AUM reporting, so it lands in the
+// unbucketed remainder (along with insurance) inside total AUM.
+const AUM_BOND_TYPES: ProductType[] = ['primary_bond', 'secondary_bond'];
+
+interface ClientRow {
+  id: string;
+  name: string;
+  code: string;
+  employeeName: string;
+  invested: number;
+  aum: number;
+  unlisted: number;
+  bonds: number;
+  mf: number;
+  pl: number;
+  plPct: number;
+}
 
 // Payout date label & placeholder depending on frequency
 function payoutDateLabel(freq: string): { label: string; placeholder: string; pattern: string; hint: string } {
@@ -249,6 +272,12 @@ export default function Portfolio({ employee, pageParams }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  // 'clients' = one row per client (the book); 'detail' = one client's full portfolio.
+  // clientFilter stays the single source of truth for *which* client is open.
+  const [view, setView] = useState<ClientView>('clients');
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<ClientSortKey>('aum');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Deep-link from Transactions' "Add Existing Business" button: open the Add
   // Holding form straight away. A holding is a portfolio-only record (no
@@ -267,6 +296,29 @@ export default function Portfolio({ employee, pageParams }: Props) {
     return next;
   });
 
+  // Drill-down: clientFilter drives loadHoldings(), so setting it refetches
+  // scoped to that one client automatically.
+  const openClient = (clientId: string) => {
+    setClientFilter(clientId);
+    setProductFilter('all');
+    setExpandedGroups(new Set());
+    setView('detail');
+  };
+
+  const backToClients = () => {
+    setClientFilter('all');
+    setProductFilter('all');
+    setExpandedGroups(new Set());
+    setView('clients');
+  };
+
+  const toggleSort = (key: ClientSortKey) => {
+    if (sortKey === key) { setSortDir(d => (d === 'asc' ? 'desc' : 'asc')); return; }
+    setSortKey(key);
+    // Text sorts read best A→Z; money sorts read best biggest-first.
+    setSortDir(key === 'name' || key === 'employee' ? 'asc' : 'desc');
+  };
+
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
   const isBond = BOND_TYPES.includes(form.product_type);
   const isMF = form.product_type === 'mutual_fund';
@@ -274,7 +326,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
   const isUnlisted = form.product_type === 'unlisted_share';
 
   useEffect(() => {
-    supabase.from('nw_clients').select('id, full_name, client_code, sourced_via, dsa_id, employee_id').then(({ data }) => setClients((data as NWClient[]) || []));
+    supabase.from('nw_clients').select('id, full_name, client_code, sourced_via, dsa_id, employee_id, employee:nw_employees(full_name, employee_code)').then(({ data }) => setClients((data as unknown as NWClient[]) || []));
     if (isAdmin) {
       supabase.from('nw_employees').select('id, full_name, employee_code').eq('status', 'active').order('full_name')
         .then(({ data }) => setEmpList((data as any[]) || []));
@@ -478,17 +530,35 @@ export default function Portfolio({ employee, pageParams }: Props) {
     loadHoldings();
   };
 
+  const clientMap = useMemo(() => new Map(clients.map(c => [c.id, c])), [clients]);
+
+  // Search applies on the client list only; on the detail view we are already
+  // scoped to one client.
+  const searchQ = view === 'clients' ? search.trim().toLowerCase() : '';
+  const matchesSearch = useCallback((name?: string, code?: string) =>
+    !searchQ || (name || '').toLowerCase().includes(searchQ) || (code || '').toLowerCase().includes(searchQ), [searchQ]);
+
+  // The search narrows the holdings that every total below derives from, so the
+  // KPI cards, the pie chart and the table always agree.
+  const scopedHoldings = useMemo(() => {
+    if (!searchQ) return holdings;
+    return holdings.filter(h => {
+      const c = clientMap.get(h.client_id);
+      return matchesSearch(c?.full_name, c?.client_code);
+    });
+  }, [holdings, clientMap, searchQ, matchesSearch]);
+
   // Chart data
   const chartData = PRODUCTS.map(p => ({
     label: PRODUCT_LABELS[p],
-    value: holdings.filter(h => h.product_type === p).reduce((s, h) => s + (h.current_value || 0), 0),
+    value: scopedHoldings.filter(h => h.product_type === p).reduce((s, h) => s + (h.current_value || 0), 0),
     color: PRODUCT_CHART_COLORS[p],
   })).filter(d => d.value > 0);
 
-  const totalValue = holdings.reduce((s, h) => s + (h.current_value || 0), 0);
-  const totalInvested = holdings.reduce((s, h) => s + (h.invested_amount || 0), 0);
+  const totalValue = scopedHoldings.reduce((s, h) => s + (h.current_value || 0), 0);
+  const totalInvested = scopedHoldings.reduce((s, h) => s + (h.invested_amount || 0), 0);
   const gainLoss = totalValue - totalInvested;
-  const annualInterest = holdings
+  const annualInterest = scopedHoldings
     .filter(h => BOND_TYPES.includes(h.product_type))
     .reduce((s, h) => {
       if (h.face_value && h.coupon_rate && h.quantity) {
@@ -496,6 +566,73 @@ export default function Portfolio({ employee, pageParams }: Props) {
       }
       return s + (h.interest_payout_amount || 0);
     }, 0);
+
+  // One row per client, including clients with no holdings (shown as zeros).
+  const clientRows = useMemo(() => {
+    const buckets = new Map<string, ClientRow>();
+    const blank = (id: string, name: string, code: string, emp?: string): ClientRow => ({
+      id, name, code: code || '—', employeeName: emp || 'Unassigned',
+      invested: 0, aum: 0, unlisted: 0, bonds: 0, mf: 0, pl: 0, plPct: 0,
+    });
+
+    // Seed from the client book so zero-holding clients still get a row.
+    // nw_clients RLS already limits employees to their own clients; these
+    // filters mirror the ones loadHoldings() applies so both halves agree.
+    for (const c of clients) {
+      if (!isAdmin && c.employee_id !== employee.id) continue;
+      if (isAdmin && empFilter !== 'all' && c.employee_id !== empFilter) continue;
+      if (!matchesSearch(c.full_name, c.client_code)) continue;
+      buckets.set(c.id, blank(c.id, c.full_name, c.client_code, c.employee?.full_name));
+    }
+
+    for (const h of scopedHoldings) {
+      let row = buckets.get(h.client_id);
+      if (!row) {
+        // Holding whose client the clients query didn't return — fall back to
+        // the join on the holding itself rather than dropping the money.
+        const c = clientMap.get(h.client_id);
+        const j = (h as any).client;
+        row = blank(h.client_id, c?.full_name || j?.full_name || 'Unknown Client', c?.client_code || j?.client_code || '', c?.employee?.full_name);
+        buckets.set(h.client_id, row);
+      }
+      const value = h.current_value || 0;
+      row.invested += h.invested_amount || 0;
+      row.aum += value;
+      if (h.product_type === 'unlisted_share') row.unlisted += value;
+      else if (AUM_BOND_TYPES.includes(h.product_type)) row.bonds += value;
+      else if (h.product_type === 'mutual_fund') row.mf += value;
+    }
+
+    const rows = [...buckets.values()].map(r => ({
+      ...r,
+      pl: r.aum - r.invested,
+      plPct: r.invested > 0 ? ((r.aum - r.invested) / r.invested) * 100 : 0,
+    }));
+
+    const dir = sortDir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      if (sortKey === 'name') return a.name.localeCompare(b.name) * dir;
+      if (sortKey === 'employee') return a.employeeName.localeCompare(b.employeeName) * dir;
+      return (a[sortKey] - b[sortKey]) * dir;
+    });
+    return rows;
+  }, [scopedHoldings, clients, clientMap, isAdmin, employee.id, empFilter, matchesSearch, sortKey, sortDir]);
+
+  const exportClientsCsv = () => {
+    const headers = ['Client Name', 'Client Code', 'Employee', 'Total Invested', 'Current AUM', 'Unlisted', 'Bonds', 'Mutual Fund', 'P&L', 'P&L %'];
+    const rows = clientRows.map(r => [
+      r.name, r.code, r.employeeName,
+      r.invested.toFixed(2), r.aum.toFixed(2), r.unlisted.toFixed(2), r.bonds.toFixed(2), r.mf.toFixed(2),
+      r.pl.toFixed(2), r.plPct.toFixed(2),
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${v ?? ''}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv,' + encodeURIComponent(csv);
+    a.download = 'client-portfolio-summary.csv';
+    a.click();
+  };
+
+  const detailClient = view === 'detail' ? clientMap.get(clientFilter) : undefined;
 
   const printPortfolio = () => {
     // Open window immediately (synchronous) to avoid popup blocker
@@ -933,28 +1070,53 @@ export default function Portfolio({ employee, pageParams }: Props) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--accent)' }}>Portfolio</p>
-          <h1 className="text-2xl font-bold text-text-primary">Portfolio Management</h1>
+        <div className="flex items-center gap-3">
+          {view === 'detail' && (
+            <button onClick={backToClients} className="p-2 rounded-xl flex-shrink-0" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }} title="Back to clients">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          <div>
+            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--accent)' }}>Portfolio</p>
+            <h1 className="text-2xl font-bold text-text-primary">
+              {view === 'detail' ? (detailClient?.full_name || 'Client Portfolio') : 'Portfolio Management'}
+            </h1>
+            {view === 'detail' && detailClient && (
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>
+                {detailClient.client_code}{detailClient.employee?.full_name ? ` · ${detailClient.employee.full_name}` : ''}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={printPortfolio} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
-            <Printer className="w-4 h-4" /> Print PDF
-          </button>
+          {view === 'clients' ? (
+            <button onClick={exportClientsCsv} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
+          ) : (
+            <button onClick={printPortfolio} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+              <Printer className="w-4 h-4" /> Print PDF
+            </button>
+          )}
           <button onClick={() => { setForm(emptyForm()); setError(''); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-on-accent" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
             <Plus className="w-4 h-4" /> Add Holding
           </button>
         </div>
       </div>
 
-      {/* Summary cards */}
+      {/* Summary cards — client-book totals on the list view, holding totals on detail */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
+        {(view === 'clients' ? [
+          { label: 'Total Clients', value: String(clientRows.length), color: 'var(--accent)' },
+          { label: 'Total Invested', value: fmt(totalInvested), color: 'var(--text-secondary)' },
+          { label: 'Total AUM', value: fmt(totalValue), color: 'var(--chart-5)' },
+          { label: gainLoss >= 0 ? 'Total Gain' : 'Total Loss', value: `${gainLoss >= 0 ? '+' : ''}${fmt(gainLoss)}`, color: gainLoss >= 0 ? 'var(--success)' : 'var(--danger)' },
+        ] : [
           { label: 'Total Value', value: fmt(totalValue), color: 'var(--accent)' },
           { label: 'Total Invested', value: fmt(totalInvested), color: 'var(--text-secondary)' },
           { label: gainLoss >= 0 ? 'Total Gain' : 'Total Loss', value: `${gainLoss >= 0 ? '+' : ''}${fmt(gainLoss)}`, color: gainLoss >= 0 ? 'var(--success)' : 'var(--danger)' },
           { label: 'Annual Interest Income', value: fmt(annualInterest), color: 'var(--chart-5)' },
-        ].map(s => (
+        ]).map(s => (
           <div key={s.label} className="rounded-2xl p-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
             <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-faint)' }}>{s.label}</p>
             <p className="text-2xl font-bold" style={{ color: s.color }}>{s.value}</p>
@@ -993,7 +1155,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
-        {isAdmin && (
+        {isAdmin && view === 'clients' && (
           <div className="relative">
             <select value={empFilter} onChange={e => { setEmpFilter(e.target.value); setClientFilter('all'); }}
               className="pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
@@ -1004,29 +1166,106 @@ export default function Portfolio({ employee, pageParams }: Props) {
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--accent)' }} />
           </div>
         )}
-        <div className="relative">
-          <select value={clientFilter} onChange={e => setClientFilter(e.target.value)}
-            className="pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
-            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-            <option value="all">All Clients</option>
-            {clients
-              .filter(c => empFilter === 'all' || c.employee_id === empFilter)
-              .map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-          </select>
-          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
-        </div>
-        <div className="relative">
-          <select value={productFilter} onChange={e => setProductFilter(e.target.value)}
-            className="pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
-            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-            <option value="all">All Products</option>
-            {PRODUCTS.map(p => <option key={p} value={p}>{PRODUCT_LABELS[p]}</option>)}
-          </select>
-          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
-        </div>
+        {view === 'clients' ? (
+          <div className="relative flex-1 min-w-[220px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search client name or code..."
+              className="w-full pl-10 pr-3 py-2.5 rounded-xl text-sm text-text-primary outline-none"
+              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }} />
+          </div>
+        ) : (
+          <>
+            <div className="relative">
+              <select value={clientFilter} onChange={e => setClientFilter(e.target.value)}
+                className="pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
+                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+                {clients
+                  .filter(c => empFilter === 'all' || c.employee_id === empFilter)
+                  .map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+              </select>
+              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
+            </div>
+            <div className="relative">
+              <select value={productFilter} onChange={e => setProductFilter(e.target.value)}
+                className="pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
+                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+                <option value="all">All Products</option>
+                {PRODUCTS.map(p => <option key={p} value={p}>{PRODUCT_LABELS[p]}</option>)}
+              </select>
+              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Holdings table */}
+      {/* Client book — one row per client, click to open the full portfolio */}
+      {view === 'clients' && (
+        <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+          <div className="overflow-x-auto">
+            <table className="w-full nw-table">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  {([
+                    { key: 'name', label: 'Client', align: 'left' },
+                    { key: 'employee', label: 'Employee', align: 'left' },
+                    { key: 'invested', label: 'Total Invested', align: 'right' },
+                    { key: 'aum', label: 'Current AUM', align: 'right' },
+                    { key: 'unlisted', label: 'Unlisted', align: 'right' },
+                    { key: 'bonds', label: 'Bonds', align: 'right' },
+                    { key: 'mf', label: 'Mutual Fund', align: 'right' },
+                    { key: 'pl', label: 'P&L', align: 'right' },
+                  ] as { key: ClientSortKey; label: string; align: 'left' | 'right' }[]).map(col => (
+                    <th key={col.key} onClick={() => toggleSort(col.key)}
+                      className={`px-5 py-3.5 ${col.align === 'right' ? 'text-right' : 'text-left'} text-xs font-semibold uppercase tracking-wider cursor-pointer select-none`}
+                      style={{ color: sortKey === col.key ? 'var(--accent)' : 'var(--text-faint)' }}>
+                      <span className={`inline-flex items-center gap-1 ${col.align === 'right' ? 'flex-row-reverse' : ''}`}>
+                        {col.label}
+                        {sortKey === col.key && (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={8} className="text-center py-12"><LogoLoader size={40} /></td></tr>
+                ) : clientRows.length === 0 ? (
+                  <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>
+                    {search ? 'No clients match your search' : 'No clients found'}
+                  </td></tr>
+                ) : clientRows.map(r => (
+                  <tr key={r.id} onClick={() => openClient(r.id)}
+                    style={{ borderBottom: '1px solid var(--bg-raised)', cursor: 'pointer' }}>
+                    <td className="px-5 py-3.5">
+                      <p className="text-sm font-semibold text-text-primary">{r.name}</p>
+                      <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{r.code}</p>
+                    </td>
+                    <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--text-secondary)' }}>{r.employeeName}</td>
+                    <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.invested > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{fmt(r.invested)}</td>
+                    <td className="px-5 py-3.5 text-right text-sm font-bold" style={{ color: r.aum > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{fmt(r.aum)}</td>
+                    <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.unlisted > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.unlisted > 0 ? fmt(r.unlisted) : '—'}</td>
+                    <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.bonds > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.bonds > 0 ? fmt(r.bonds) : '—'}</td>
+                    <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.mf > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.mf > 0 ? fmt(r.mf) : '—'}</td>
+                    <td className="px-5 py-3.5 text-right">
+                      {r.invested === 0 && r.aum === 0 ? (
+                        <span className="text-sm" style={{ color: 'var(--text-faint)' }}>—</span>
+                      ) : (
+                        <>
+                          <p className={`text-sm font-bold ${r.pl >= 0 ? 'text-c-emerald' : 'text-c-red'}`}>{r.pl >= 0 ? '+' : ''}{fmt(r.pl)}</p>
+                          <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{r.pl >= 0 ? '+' : ''}{r.plPct.toFixed(1)}%</p>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Holdings table (single client) */}
+      {view === 'detail' && (
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         <div className="overflow-x-auto">
           <table className="w-full nw-table">
@@ -1173,6 +1412,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
           </table>
         </div>
       </div>
+      )}
 
       {showAdd && <Modal title="Add Holding" onClose={() => setShowAdd(false)}>{holdingFormJsx}</Modal>}
       {editHolding && <Modal title="Edit Holding" onClose={() => setEditHolding(null)}>{holdingFormJsx}</Modal>}
