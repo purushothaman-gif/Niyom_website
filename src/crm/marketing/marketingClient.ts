@@ -12,7 +12,7 @@ import { supabase } from '../../lib/supabase';
 import {
   ContentFilters, MktAsset, MktContent, MktContentHistory, MktContentPerformanceRow,
   MktDashboardTotals, MktGenerateRequest, MktGenerateResponse, MktLeaderboardRow,
-  MktPlatformUsageRow, MktReferralLink, DownloadEventType,
+  MktPlatformUsageRow, MktReferralLink, MktCompanyChannelStats, DownloadEventType,
 } from './marketingTypes';
 
 export const mktQueryClient = new QueryClient({
@@ -25,7 +25,9 @@ export const mktKeys = {
   detail: (id: string) => ['mkt_content', 'detail', id] as const,
   assets: (id: string) => ['mkt_content', 'assets', id] as const,
   history: (search: string) => ['mkt_content', 'history', search] as const,
-  myLink: () => ['mkt_referral_link', 'me'] as const,
+  myLink: (employeeId: string) => ['mkt_referral_link', 'me', employeeId] as const,
+  companyLink: () => ['mkt_referral_link', 'company'] as const,
+  companyStats: () => ['mkt_company_channel_stats'] as const,
   totals: () => ['mkt_analytics', 'totals'] as const,
   leaderboard: () => ['mkt_analytics', 'leaderboard'] as const,
   performance: () => ['mkt_analytics', 'performance'] as const,
@@ -130,16 +132,58 @@ export function useContentHistory(search: string) {
   });
 }
 
-/** The signed-in employee's own referral link (RLS scopes this to one row). */
-export function useMyReferralLink() {
+/**
+ * The signed-in employee's own referral link.
+ *
+ * Filtered explicitly rather than leaning on RLS to return a single row: an
+ * admin can read every link, so an unfiltered `.limit(1)` would hand them an
+ * arbitrary person's code — or the company one.
+ */
+export function useMyReferralLink(employeeId: string) {
   return useQuery({
-    queryKey: mktKeys.myLink(),
+    queryKey: mktKeys.myLink(employeeId),
     staleTime: 10 * 60_000,
     queryFn: async (): Promise<MktReferralLink | null> => {
       const { data, error } = await supabase.from('mkt_referral_links')
-        .select('*').eq('active', true).limit(1).maybeSingle();
+        .select('*')
+        .eq('kind', 'employee')
+        .eq('employee_id', employeeId)
+        .eq('active', true)
+        .maybeSingle();
       if (error) throw error;
       return (data as MktReferralLink) ?? null;
+    },
+  });
+}
+
+/**
+ * The single company link, for posts made from NIYOM's own accounts.
+ *
+ * Admin-only by RLS. Signups through it stay on the house account and are
+ * reported as their own channel rather than counting toward any employee.
+ */
+export function useCompanyReferralLink() {
+  return useQuery({
+    queryKey: mktKeys.companyLink(),
+    staleTime: 10 * 60_000,
+    queryFn: async (): Promise<MktReferralLink | null> => {
+      const { data, error } = await supabase.from('mkt_referral_links')
+        .select('*').eq('kind', 'company').maybeSingle();
+      if (error) throw error;
+      return (data as MktReferralLink) ?? null;
+    },
+  });
+}
+
+/** Company-channel performance, excluded from the employee leaderboard. */
+export function useCompanyChannelStats() {
+  return useQuery({
+    queryKey: mktKeys.companyStats(),
+    staleTime: 60_000,
+    queryFn: async (): Promise<MktCompanyChannelStats | null> => {
+      const { data, error } = await supabase.rpc('mkt_company_channel_stats');
+      if (error) throw error;
+      return ((data as MktCompanyChannelStats[]) ?? [])[0] ?? null;
     },
   });
 }

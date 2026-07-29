@@ -146,10 +146,24 @@ export interface MktContentHistory {
 
 export interface MktReferralLink {
   id: string;
-  employee_id: string;
+  /** Null on the company link — NIYOM's own posts belong to the house. */
+  employee_id: string | null;
+  kind: 'employee' | 'company';
+  /** Display name, set for the company link. */
+  label: string | null;
   ref_code: string;
   active: boolean;
   created_at: string;
+}
+
+/** Company-channel totals, kept out of the employee leaderboard. */
+export interface MktCompanyChannelStats {
+  ref_code: string;
+  label: string | null;
+  active: boolean;
+  clicks: number;
+  leads: number;
+  clients: number;
 }
 
 /** Library search + filter state. */
