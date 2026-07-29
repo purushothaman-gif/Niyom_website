@@ -90,6 +90,98 @@ export function loadBrandLogo(): Promise<HTMLImageElement | null> {
   return logoLoad;
 }
 
+// --- brand end card (real footage) -----------------------------------------
+
+/**
+ * The supplied NIYOM ident, played as the closing card.
+ *
+ * Served from /public, so it is same-origin: drawing its frames onto the canvas
+ * does not taint it and PNG/video export keeps working. A cross-origin copy
+ * (Supabase storage, a CDN) would need CORS headers *and* crossOrigin set, and
+ * would break export silently if either were missing — hence the local copy.
+ *
+ * 1920x1080 gold-on-black. It is letterboxed rather than cropped: cropping a
+ * 16:9 ident into 9:16 would cut most of the lockup off. The canvas is filled
+ * black first so the bars merge into the footage's own background and the whole
+ * frame reads as one deliberate black ident card.
+ */
+export const END_CARD_SRC = '/niyom-end-card.mp4';
+
+let endCard: HTMLVideoElement | null = null;
+let endCardLoad: Promise<HTMLVideoElement | null> | null = null;
+
+export function loadEndCard(): Promise<HTMLVideoElement | null> {
+  if (endCard) return Promise.resolve(endCard);
+  if (endCardLoad) return endCardLoad;
+
+  endCardLoad = new Promise(resolve => {
+    const v = document.createElement('video');
+    v.src = END_CARD_SRC;
+    v.muted = true;               // required for programmatic play()
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.loop = false;
+    const done = () => { endCard = v; resolve(v); };
+    // canplaythrough can be slow to fire; loadeddata is enough to draw frames.
+    v.addEventListener('loadeddata', done, { once: true });
+    // A missing or undecodable ident must not abort a render — the caller
+    // falls back to the drawn end card.
+    v.addEventListener('error', () => resolve(null), { once: true });
+  });
+  return endCardLoad;
+}
+
+/**
+ * Draw the ident letterboxed into the frame, over black.
+ * `alpha` lets the caller cross-fade into it from the last scene.
+ */
+function drawEndCardFrame(
+  ctx: CanvasRenderingContext2D, w: number, h: number, v: HTMLVideoElement, alpha: number,
+) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, w, h);
+
+  const vw = v.videoWidth || 1920;
+  const vh = v.videoHeight || 1080;
+  const s = Math.min(w / vw, h / vh);
+  const dw = vw * s;
+  const dh = vh * s;
+  ctx.drawImage(v, (w - dw) / 2, (h - dh) / 2, dw, dh);
+  ctx.restore();
+}
+
+/**
+ * How much of the ident to use.
+ *
+ * The supplied footage runs ~12s: the lockup draws in and resolves by about
+ * 2.5s, then a tagline, then the website, then a fade to black. Playing all of
+ * it would leave a 15s "short video" with 3s of actual content, so it is capped
+ * at the resolve-and-hold, which is the part that reads as a sign-off. Raise
+ * this to let more of the ident play.
+ */
+const END_CARD_MAX_MS = 3800;
+
+/** Fallback outro length when the ident cannot be loaded. */
+const DRAWN_OUTRO_MS = 2200;
+
+/** Compliance line, over whatever is behind it. */
+function overlayDisclaimer(
+  ctx: CanvasRenderingContext2D, w: number, h: number, disclaimer: string,
+) {
+  const scale = Math.min(w, h) / 1080;
+  const margin = Math.round(Math.min(w, h) * 0.085);
+  ctx.save();
+  ctx.font = `${16 * scale}px ${FONT_SANS}`;
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(disclaimer, w - margin, h - margin);
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
 /** 0 -> 1 over the first `d` of the scene, 1 -> 0 over the last `d`. */
 function fade(t: number, d = 0.16): number {
   if (t < d) return easeOutCubic(t / d);
@@ -483,9 +575,10 @@ export async function renderVideoFrame(
   req: Omit<VideoRenderRequest, 'onProgress'>,
   position = 0.5,
 ): Promise<{ canvas: HTMLCanvasElement; width: number; height: number }> {
-  const [, artImage] = await Promise.all([
+  const [, artImage, endCardVideo] = await Promise.all([
     loadBrandLogo(),
     rasterizeArt(artForCategory(req.category, req.headline), paletteFor(req.paletteId), 520),
+    loadEndCard(),
   ]);
   const { width, height } = ASPECT_VARIANTS[req.variant];
   const palette = paletteFor(req.paletteId);
@@ -496,11 +589,28 @@ export async function renderVideoFrame(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D unavailable — cannot render video frame');
 
-  const hasOutro = !!req.cta;
+  // The ident always closes the piece when it loaded, matching renderVideo.
+  const hasOutro = !!endCardVideo || !!req.cta;
   const units = req.scenes.length + (hasOutro ? 1 : 0);
   const at = clamp01(position) * units;
   const idx = Math.min(Math.floor(at), units - 1);
   const local = at - idx;
+
+  if (idx >= req.scenes.length && endCardVideo) {
+    // A still of the ident needs a real seek: unlike the recording path there
+    // is no playback to sample, so wait for the decoder to land on the frame.
+    const target = Math.min(END_CARD_MAX_MS / 1000, endCardVideo.duration || 4) * local;
+    await new Promise<void>(resolve => {
+      const onSeeked = () => resolve();
+      endCardVideo.addEventListener('seeked', onSeeked, { once: true });
+      endCardVideo.currentTime = target;
+      // Some decoders will not fire 'seeked' for a no-op seek; do not hang.
+      setTimeout(() => { endCardVideo.removeEventListener('seeked', onSeeked); resolve(); }, 600);
+    });
+    drawEndCardFrame(ctx, width, height, endCardVideo, 1);
+    overlayDisclaimer(ctx, width, height, req.disclaimer);
+    return { canvas, width, height };
+  }
 
   if (idx < req.scenes.length) {
     drawScene(ctx, width, height, palette, req.scenes[idx], idx, units,
@@ -528,11 +638,12 @@ export async function renderVideo(req: VideoRenderRequest): Promise<RenderedVide
   const { width, height } = ASPECT_VARIANTS[req.variant];
   const palette = paletteFor(req.paletteId);
 
-  // Decode the emblem and rasterise the illustration before the first frame —
-  // every frame after this is drawn synchronously and cannot wait for either.
-  const [, artImage] = await Promise.all([
+  // Decode the emblem, rasterise the illustration and load the ident before the
+  // first frame — every frame after this is drawn synchronously and cannot wait.
+  const [, artImage, endCardVideo] = await Promise.all([
     loadBrandLogo(),
     rasterizeArt(artForCategory(req.category, req.headline), palette, 520),
+    loadEndCard(),
   ]);
 
   const canvas = document.createElement('canvas');
@@ -550,9 +661,15 @@ export async function renderVideo(req: VideoRenderRequest): Promise<RenderedVide
   const chunks: BlobPart[] = [];
   recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
 
-  const OUTRO_MS = 2200;
+  // The real ident always closes the piece, whether or not a CTA was written —
+  // it is the brand sign-off, not a function of the copy. Its length comes from
+  // the footage itself, capped so the ident cannot dominate a short video.
+  const outroMs = endCardVideo
+    ? Math.min(END_CARD_MAX_MS, (endCardVideo.duration || 4) * 1000)
+    : (req.cta ? DRAWN_OUTRO_MS : 0);
   const sceneMs = req.scenes.map(s => Math.max(1200, (s.duration_seconds || 3) * 1000));
-  const totalMs = sceneMs.reduce((a, b) => a + b, 0) + (req.cta ? OUTRO_MS : 0);
+  const totalMs = sceneMs.reduce((a, b) => a + b, 0) + outroMs;
+  let endCardStarted = false;
 
   const finished = new Promise<Blob>((resolve, reject) => {
     recorder.onstop = () => {
@@ -583,11 +700,27 @@ export async function renderVideo(req: VideoRenderRequest): Promise<RenderedVide
 
       if (idx >= 0) {
         drawScene(ctx, width, height, palette, req.scenes[idx], idx,
-          req.scenes.length + (req.cta ? 1 : 0), req.category, req.disclaimer,
+          req.scenes.length + 1, req.category, req.disclaimer,
           (elapsed - acc) / sceneMs[idx], artImage);
+      } else if (endCardVideo) {
+        // Started on first entry rather than up front, so the ident begins at
+        // its own frame zero exactly when the last scene ends. It then plays in
+        // real time alongside the capture, which keeps the two in step without
+        // seeking per frame.
+        if (!endCardStarted) {
+          endCardStarted = true;
+          endCardVideo.currentTime = 0;
+          void endCardVideo.play().catch(() => { /* fall through to whatever frame exists */ });
+        }
+        const p01 = clamp01((elapsed - acc) / outroMs);
+        // Short cross-fade in so the cut from the last scene is not abrupt.
+        drawEndCardFrame(ctx, width, height, endCardVideo, easeOutCubic(clamp01(p01 / 0.12)));
+        // Disclaimer stays on every frame — required furniture, and the ident
+        // itself does not carry it.
+        overlayDisclaimer(ctx, width, height, req.disclaimer);
       } else if (req.cta) {
         drawOutro(ctx, width, height, palette, req.cta, req.category, req.disclaimer,
-          clamp01((elapsed - acc) / OUTRO_MS));
+          clamp01((elapsed - acc) / outroMs));
       }
 
       requestAnimationFrame(tick);

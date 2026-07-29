@@ -116,7 +116,12 @@ UNIQUENESS
 You will be given previously used titles, headlines, topics and hashtags. Your output must not repeat or closely paraphrase any of them. Pick a genuinely fresh angle, fresh wording and mostly fresh hashtags (at least 60% not in the provided list).
 
 OUTPUT
-Return only JSON matching the provided schema. Write the "body" as the text that will be typeset onto the poster itself: short, punchy, at most about 45 words. The "caption" is the longer social post copy.`;
+Return only JSON matching the provided schema.
+
+The "body" is typeset onto the poster beside an illustration, in a narrow
+column - so keep it to at most 25 words, ideally one or two short sentences.
+Copy longer than that has to be shrunk or trimmed to fit, and reads as dense
+on a phone. Put the fuller explanation in "caption" instead, which has room.`;
 
 // Structured-output schema.
 //
@@ -142,7 +147,7 @@ const DRAFT_SCHEMA = {
   properties: {
     title: { type: "string", description: "Internal reference title, max 70 characters" },
     headline: { type: "string", description: "The hero line typeset on the poster, max 110 characters" },
-    body: { type: "string", description: "Supporting copy for the poster, about 45 words maximum" },
+    body: { type: "string", description: "Supporting copy typeset on the poster in a narrow column: at most 25 words, one or two short sentences" },
     caption: { type: "string", description: `Social post copy. Must contain ${REF_PLACEHOLDER} exactly once.` },
     hashtags: { type: "array", items: { type: "string" }, description: "Between 8 and 20 hashtags, without the # prefix" },
     cta: { type: "string", description: "Education-only call to action" },
