@@ -169,6 +169,47 @@ export const BRAND_TAGLINE = 'niyomwealth.com';
 export const LOGO_EMBLEM = 72;
 
 /**
+ * Whether a palette sits on a dark ground.
+ *
+ * Decides the emblem's backing treatment: the emblem is a black disc, and on
+ * the dark palettes (8 of the 11) a black disc on a dark ground all but
+ * disappears. Standard relative-luminance weights over bgFrom.
+ */
+export function isDarkPalette(palette: Palette): boolean {
+  const hex = palette.bgFrom.replace('#', '');
+  const n = parseInt(hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex, 16);
+  const lum = 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
+  return lum < 128;
+}
+
+/**
+ * Backing that lifts the emblem off a dark ground: a soft radial halo plus a
+ * thin accent ring tracing the disc's edge. On light grounds the black disc
+ * already carries its own contrast, so only a whisper of ring is added.
+ * Coordinates are the emblem's centre.
+ */
+export function emblemBacking(cx: number, cy: number, radius: number, palette: Palette, uid: string): string {
+  const dark = isDarkPalette(palette);
+  const x = cx.toFixed(1);
+  const y = cy.toFixed(1);
+
+  const halo = dark
+    ? `<defs>
+         <radialGradient id="${uid}halo" cx="0.5" cy="0.5" r="0.5">
+           <stop offset="55%" stop-color="${palette.accent}" stop-opacity="0.34"/>
+           <stop offset="100%" stop-color="${palette.accent}" stop-opacity="0"/>
+         </radialGradient>
+       </defs>
+       <circle cx="${x}" cy="${y}" r="${(radius * 1.55).toFixed(1)}" fill="url(#${uid}halo)"/>`
+    : '';
+
+  return `${halo}
+    <circle cx="${x}" cy="${y}" r="${(radius + 1.5).toFixed(1)}"
+            fill="none" stroke="${palette.accent}" stroke-width="${(dark ? 2.4 : 1.4).toFixed(1)}"
+            opacity="${dark ? 0.9 : 0.5}"/>`;
+}
+
+/**
  * Brand lockup: the real NIYOM emblem plus the site line.
  *
  * The emblem is embedded as a data URI (see brandLogo.ts for why a file path
@@ -184,6 +225,7 @@ export function logoLockup(x: number, y: number, scale: number, palette: Palette
   const tagSize = 15 * scale;
   return `
     <g transform="translate(${x},${y})">
+      ${emblemBacking(size / 2, size / 2, size / 2, palette, `lk${Math.round(x)}`)}
       <image href="${NIYOM_LOGO_DATA_URI}" x="0" y="0"
              width="${size.toFixed(2)}" height="${size.toFixed(2)}"
              preserveAspectRatio="xMidYMid meet"/>

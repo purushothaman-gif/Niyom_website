@@ -17,7 +17,7 @@
 
 import { ASPECT_VARIANTS } from '../marketingConstants';
 import { AspectVariant, VideoScene } from '../marketingTypes';
-import { FONT_SANS, Palette, NIYOM_LOGO_DATA_URI } from './brandTokens';
+import { FONT_SANS, Palette, NIYOM_LOGO_DATA_URI, LOGO_EMBLEM, isDarkPalette } from './brandTokens';
 import { art, artForCategory } from './financeArt';
 import { paletteFor } from './TemplateRenderer';
 import { iconForCategory, IconDef } from './financeIcons';
@@ -180,6 +180,39 @@ export function rasterizeArt(
   });
 }
 
+/**
+ * Draw the emblem with the same visibility treatment as the poster lockup: a
+ * soft accent halo plus a thin ring on dark palettes, ring only on light ones.
+ * (cx, cy) is the centre; `size` the emblem's edge length.
+ */
+function drawEmblem(
+  ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, p: Palette, alpha: number,
+) {
+  if (!logoImage) return;
+  const r = size / 2;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  if (isDarkPalette(p)) {
+    const halo = ctx.createRadialGradient(cx, cy, r * 0.55, cx, cy, r * 1.55);
+    halo.addColorStop(0, hexToRgba(p.accent, 0.34));
+    halo.addColorStop(1, hexToRgba(p.accent, 0));
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.55, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + size * 0.02, 0, Math.PI * 2);
+  ctx.strokeStyle = hexToRgba(p.accent, isDarkPalette(p) ? 0.9 : 0.5);
+  ctx.lineWidth = size * (isDarkPalette(p) ? 0.033 : 0.02);
+  ctx.stroke();
+
+  ctx.drawImage(logoImage, cx - r, cy - r, size, size);
+  ctx.restore();
+}
+
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
   const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
@@ -227,14 +260,15 @@ function drawChrome(
   ctx.textBaseline = 'middle';
   ctx.fillText(label, margin + 18 * scale, margin + chipH / 2);
 
-  // Brand lockup — the real emblem, matching the poster templates. The emblem
-  // carries the wordmark, so only the domain sits beside it.
+  // Brand lockup — same emblem size as the posters (it was previously drawn at
+  // less than half this, which is why the logo barely registered in videos),
+  // with the same lift-off-a-dark-ground treatment as the SVG lockup.
   const baseY = h - margin;
-  const emblem = 34 * scale;
+  const emblem = LOGO_EMBLEM * scale;
   ctx.textBaseline = 'alphabetic';
 
   if (logoImage) {
-    ctx.drawImage(logoImage, margin, baseY - emblem, emblem, emblem);
+    drawEmblem(ctx, margin + emblem / 2, baseY - emblem / 2, emblem, p, 1);
   } else {
     // Emblem not decoded yet — keep the brand present rather than blank.
     ctx.fillStyle = p.heading;
@@ -243,11 +277,11 @@ function drawChrome(
   }
 
   ctx.fillStyle = p.footer;
-  ctx.font = `${11 * scale}px ${FONT_SANS}`;
+  ctx.font = `${15 * scale}px ${FONT_SANS}`;
   ctx.fillText(
     'niyomwealth.com',
-    margin + (logoImage ? emblem + 11 * scale : 0),
-    baseY - emblem / 2 + 4 * scale,
+    margin + (logoImage ? emblem + 14 * scale : 0),
+    baseY - emblem / 2 + 5 * scale,
   );
 
   // Disclaimer — required furniture on every asset.
@@ -348,37 +382,81 @@ function drawScene(
 /** Closing card: the education-only CTA plus the brand lockup. */
 function drawOutro(
   ctx: CanvasRenderingContext2D, w: number, h: number, p: Palette,
-  cta: string, category: string, disclaimer: string, t: number,
+  // Kept in the signature for call-site symmetry with drawScene; the end card
+  // deliberately drops the category chip so the frame belongs to the brand.
+  cta: string, _category: string, disclaimer: string, t: number,
 ) {
   const scale = Math.min(w, h) / 1080;
   const margin = Math.round(Math.min(w, h) * 0.085);
   const contentW = w - margin * 2;
 
   drawBackground(ctx, w, h, p, 1);
-  drawChrome(ctx, w, h, p, category, disclaimer, scale);
+  // No footer chrome here: the end card IS the brand moment, and a second
+  // small emblem in the corner under a large centred one reads as a mistake.
+  // The disclaimer still renders — it is required furniture on every frame.
+  const baseY = h - margin;
+  ctx.font = `${16 * scale}px ${FONT_SANS}`;
+  ctx.fillStyle = p.footer;
+  ctx.textAlign = 'right';
+  ctx.fillText(disclaimer, w - margin, baseY - 6 * scale);
+  ctx.textAlign = 'left';
 
   const alpha = fade(t, 0.2);
+
+  // Centred brand end card: the emblem scales in with a slight overshoot,
+  // the CTA settles above it, the domain below. This is the close of every
+  // animated piece — the one frame guaranteed to be on screen when a viewer
+  // reaches the end, so it belongs to the brand rather than to layout chrome.
+  const emblemSize = Math.min(w, h) * 0.3;
+  const cx = w / 2;
+  const cy = h * 0.52;
+  const enter = easeOutCubic(clamp01(t / 0.38));
+  // Overshoot: rises to ~1.06 then settles at 1. Reads as a "pop" landing.
+  const overshoot = enter < 1 ? 0.7 + enter * 0.36 : 1.06 - 0.06 * easeOutCubic(clamp01((t - 0.38) / 0.2));
+
   ctx.save();
-  ctx.globalAlpha = alpha;
-
-  let fontSize = 64 * scale;
-  let lines: string[] = [];
-  for (; fontSize >= 30 * scale; fontSize -= 3 * scale) {
-    ctx.font = `700 ${fontSize}px ${FONT_SANS}`;
-    lines = wrapLines(ctx, cta, contentW);
-    if (lines.length <= 3) break;
-  }
-  ctx.font = `700 ${fontSize}px ${FONT_SANS}`;
-
-  const lineHeight = fontSize * 1.2;
-  const startY = (h - lines.length * lineHeight) / 2 + fontSize * 0.34;
-
-  ctx.fillStyle = p.accent;
-  ctx.fillRect(margin, startY - fontSize - 30 * scale, 62 * scale, 4 * scale);
-
-  ctx.fillStyle = p.heading;
-  lines.forEach((line, i) => ctx.fillText(line, margin, startY + i * lineHeight));
+  ctx.globalAlpha = alpha * enter;
+  ctx.translate(cx, cy);
+  ctx.scale(overshoot, overshoot);
+  ctx.translate(-cx, -cy);
+  drawEmblem(ctx, cx, cy, emblemSize, p, 1);
   ctx.restore();
+
+  // CTA above the emblem, centred, appearing slightly after it.
+  const ctaIn = easeOutCubic(clamp01((t - 0.14) / 0.3));
+  if (cta && ctaIn > 0) {
+    let fontSize = 52 * scale;
+    let lines: string[] = [];
+    for (; fontSize >= 28 * scale; fontSize -= 3 * scale) {
+      ctx.font = `700 ${fontSize}px ${FONT_SANS}`;
+      lines = wrapLines(ctx, cta, contentW * 0.88);
+      if (lines.length <= 2) break;
+    }
+    ctx.font = `700 ${fontSize}px ${FONT_SANS}`;
+    const lineHeight = fontSize * 1.2;
+    const blockBottom = cy - emblemSize * 0.78;
+    ctx.save();
+    ctx.globalAlpha = alpha * ctaIn;
+    ctx.fillStyle = p.heading;
+    ctx.textAlign = 'center';
+    lines.forEach((line, i) => ctx.fillText(
+      line, cx, blockBottom - (lines.length - 1 - i) * lineHeight + (1 - ctaIn) * 20 * scale,
+    ));
+    ctx.restore();
+  }
+
+  // Domain under the emblem, last to arrive.
+  const domainIn = easeOutCubic(clamp01((t - 0.3) / 0.3));
+  if (domainIn > 0) {
+    ctx.save();
+    ctx.globalAlpha = alpha * domainIn;
+    ctx.font = `600 ${26 * scale}px ${FONT_SANS}`;
+    ctx.fillStyle = p.body;
+    ctx.textAlign = 'center';
+    ctx.fillText('niyomwealth.com', cx, cy + emblemSize * 0.78);
+    ctx.restore();
+  }
+  ctx.textAlign = 'left';
 }
 
 /**
