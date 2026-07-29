@@ -44,8 +44,10 @@ Deno.serve(async (req: Request) => {
     let body: Record<string, unknown> = {};
     try { body = await req.json(); } catch { /* nothing to record */ }
 
+    // A bare visit (no ref) is NIYOM's own channel — the plain /onboarding URL
+    // is what the company accounts post. It is resolved to the company link
+    // below rather than dropped, so that channel reports real numbers.
     const ref = String(body.ref ?? "").trim().slice(0, 64);
-    if (!ref) return json({ ok: true });
 
     const contentNo = body.cnt ? String(body.cnt).trim().slice(0, 32) : null;
     const platform = body.pl ? String(body.pl).trim().slice(0, 32) : "";
@@ -72,15 +74,33 @@ Deno.serve(async (req: Request) => {
     // Resolve the code to an employee. An unknown or retired code still records
     // the click (useful for spotting stale links in the wild) but attributes it
     // to nobody.
-    const { data: link } = await db
-      .from("mkt_referral_links")
-      .select("employee_id")
-      .eq("ref_code", ref)
-      .eq("active", true)
-      .maybeSingle();
+    const { data: link } = ref
+      ? await db
+          .from("mkt_referral_links")
+          .select("employee_id")
+          .eq("ref_code", ref)
+          .eq("active", true)
+          .maybeSingle()
+      : { data: null };
+
+    // With no code supplied, fall back to the company link so the visit is
+    // counted against NIYOM's own channel. If that link is missing there is
+    // nothing meaningful to attribute the click to, so drop it rather than
+    // writing an unattributed row.
+    let effectiveRef = ref;
+    if (!effectiveRef) {
+      const { data: houseLink } = await db
+        .from("mkt_referral_links")
+        .select("ref_code")
+        .eq("kind", "company")
+        .eq("active", true)
+        .maybeSingle();
+      if (!houseLink?.ref_code) return json({ ok: true });
+      effectiveRef = houseLink.ref_code;
+    }
 
     await db.from("mkt_referral_clicks").insert([{
-      ref_code: ref,
+      ref_code: effectiveRef,
       employee_id: link?.employee_id ?? null,
       content_no: contentNo,
       platform,

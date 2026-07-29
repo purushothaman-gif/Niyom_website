@@ -63,6 +63,8 @@ Deno.serve(async (req: Request) => {
     // behaviour this function had before referrals existed.
     let ownerEmployeeId = NIYOM_DEFAULT_EMPLOYEE_ID;
     let refCode: string | null = null;
+    // Which channel the signup came through, for the activity log wording.
+    let refKind: "employee" | "company" | null = null;
 
     if (typeof body.ref === "string" && body.ref.trim()) {
       const candidate = body.ref.trim().slice(0, 64);
@@ -82,10 +84,34 @@ Deno.serve(async (req: Request) => {
         // person's numbers.
         if (link) {
           refCode = candidate;
+          refKind = link.kind === "company" ? "company" : "employee";
           if (link.employee_id) ownerEmployeeId = link.employee_id;
         }
       } catch (refErr) {
         console.error("referral resolution failed, using default owner:", refErr);
+      }
+    }
+
+    // No employee referral resolved — this signup arrived through NIYOM's own
+    // channel: the bare /onboarding URL posted from the company accounts, a
+    // direct visit, or a link whose code no longer resolves. Attribute it to
+    // the company link so the channel has real numbers instead of sitting at
+    // zero, and so every signup is accounted for somewhere. Ownership is
+    // untouched — it stays on the house account exactly as before.
+    if (!refCode) {
+      try {
+        const { data: houseLink } = await db
+          .from("mkt_referral_links")
+          .select("ref_code")
+          .eq("kind", "company")
+          .eq("active", true)
+          .maybeSingle();
+        if (houseLink?.ref_code) {
+          refCode = houseLink.ref_code;
+          refKind = "company";
+        }
+      } catch (houseErr) {
+        console.error("company link lookup failed, recording no attribution:", houseErr);
       }
     }
 
@@ -174,7 +200,8 @@ Deno.serve(async (req: Request) => {
       client_id: client.id,
       action: "Client Self-Registered (Free Account)",
       description: `${full_name} created a free account (${clientCode}) via the public portal.`
-        + `${refCode ? ` Referred by this employee's link (${refCode}).` : ""}`
+        + `${refKind === "employee" ? ` Referred by this employee's link (${refCode}).` : ""}`
+        + `${refKind === "company" ? ` Arrived through NIYOM's own channel.` : ""}`
         + ` Mobile OTP sent; KYC pending.`,
     }]);
 

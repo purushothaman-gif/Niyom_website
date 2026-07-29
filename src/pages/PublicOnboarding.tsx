@@ -97,17 +97,27 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
-  // Persist referral attribution on arrival and record the click. Runs once,
-  // only when a ref is actually present, and never blocks or fails the page:
-  // this is marketing telemetry sitting in front of a signup funnel.
+  // Persist referral attribution on arrival and record the click. Never blocks
+  // or fails the page: this is marketing telemetry sitting in front of a signup
+  // funnel.
+  //
+  // Fires with or without a ref. The bare /onboarding URL is what NIYOM posts
+  // from its own social accounts, so a visit carrying no code is a click on the
+  // company channel rather than nothing at all; the edge function resolves it
+  // to the company link. Only a real code is persisted for the signup step —
+  // with none, public-onboard-start applies the same company fallback itself.
   useEffect(() => {
-    if (!refCode) return;
-    const attr: RefAttribution = {
-      ref: refCode,
-      ...(contentNo ? { cnt: contentNo } : {}),
-      ...(platform ? { pl: platform } : {}),
-    };
-    try { sessionStorage.setItem(REF_ATTR_KEY, JSON.stringify(attr)); } catch { /* private mode */ }
+    const attr: RefAttribution | Record<string, never> = refCode
+      ? {
+          ref: refCode,
+          ...(contentNo ? { cnt: contentNo } : {}),
+          ...(platform ? { pl: platform } : {}),
+        }
+      : {};
+
+    if (refCode) {
+      try { sessionStorage.setItem(REF_ATTR_KEY, JSON.stringify(attr)); } catch { /* private mode */ }
+    }
     callFn('mkt-track-click', attr).catch(() => { /* tracking is never load-bearing */ });
   }, [refCode, contentNo, platform]);
 
