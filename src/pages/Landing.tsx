@@ -1,4 +1,4 @@
-import { ArrowRight, Shield, Target, Zap, TrendingUp, Users, Award, Instagram, Linkedin, ChevronRight, Phone, Mail, MessageCircle, Menu, X, ChevronDown, ShieldCheck, Search, Eye, Handshake, KeyRound, LayoutDashboard, BarChart3, ArrowUpRight } from 'lucide-react';
+import { ArrowRight, Shield, Target, Zap, TrendingUp, Users, Award, Instagram, Linkedin, ChevronRight, Phone, Mail, MessageCircle, Menu, X, ChevronDown, ShieldCheck, Search, Eye, Handshake, KeyRound, LayoutDashboard, BarChart3, ArrowUpRight, LogIn } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Logo } from '../components/Logo';
 import { RegulatoryInfo } from '../components/RegulatoryInfo';
@@ -23,6 +23,8 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
   const [isEmployeeDropdownOpen, setIsEmployeeDropdownOpen] = useState(false);
   const employeeMenuRef = useRef<HTMLDivElement>(null);
   const employeeTriggerRef = useRef<HTMLButtonElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const [mobileSheetMaxHeight, setMobileSheetMaxHeight] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     setIsLoaded(true);
@@ -53,6 +55,22 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
       document.removeEventListener('pointerdown', onPointerDown);
     };
   }, [isEmployeeDropdownOpen]);
+
+  // The mobile sheet may be taller than the space under the header, so cap it
+  // to what's actually left below the (always top-pinned) nav. Re-measured on
+  // resize/rotate; the nav's own box excludes the sheet, which is out of flow.
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+
+    const measure = () => {
+      const navBottom = navRef.current?.getBoundingClientRect().bottom ?? 0;
+      setMobileSheetMaxHeight(window.innerHeight - navBottom);
+    };
+
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [isMobileMenuOpen]);
 
   // Single source for the three employee consoles — the desktop dropdown and
   // the mobile sheet render the same set, so they can't drift apart.
@@ -90,6 +108,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
           scrolls softly beneath it. Falls back to solid navy where backdrop
           blur is unsupported. */}
       <nav
+        ref={navRef}
         className={`text-white sticky top-0 z-50 ${isLoaded ? 'animate-fadeIn' : 'opacity-0'}`}
         style={{
           background: 'rgba(7, 21, 36, 0.72)',
@@ -188,10 +207,19 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                   </div>
                 )}
               </div>
+              {/* Primary CTA — carries the hero's gold-glow treatment at nav
+                  scale, on a gradient fill so it reads as brushed metal rather
+                  than a flat swatch. Text stays near-black in both themes: the
+                  --text-on-accent token turns white in light mode, which is the
+                  weaker contrast of the two against this gold. */}
               <button
                 onClick={() => window.open('/client-login', '_blank')}
-                className={`lift press bg-accent-soft hover:bg-accent-soft-deep text-black px-8 py-3 rounded-xl font-semibold shadow-md ${isLoaded ? 'animate-slideDown animate-delay-200' : 'opacity-0'}`}
+                className={`cta-glow-sm gold-sheen press flex items-center gap-2 rounded-xl px-7 py-3 font-semibold text-black hover:brightness-[1.06] ${isLoaded ? 'animate-slideDown animate-delay-200' : 'opacity-0'}`}
+                style={{
+                  background: 'linear-gradient(135deg, rgb(var(--accent-soft-rgb)) 0%, rgb(var(--accent-rgb)) 100%)',
+                }}
               >
+                <LogIn size={16} />
                 Client Login
               </button>
             </div>
@@ -258,7 +286,15 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
         </div>
 
         {isMobileMenuOpen && (
-          <div className="md:hidden absolute top-full left-0 right-0 bg-black border-t border-accent-soft/20 shadow-lg">
+          /* Capped + scrollable: the sheet hangs off a sticky nav, so anything
+             below the viewport bottom is unreachable — the page behind it can't
+             scroll the sheet into view. The cap is measured rather than a CSS
+             percentage, because the header's height changes with how the
+             wordmark wraps. */
+          <div
+            className="md:hidden absolute top-full left-0 right-0 overflow-y-auto overscroll-contain bg-black border-t border-accent-soft/20 shadow-lg"
+            style={{ maxHeight: mobileSheetMaxHeight }}
+          >
             <div className="flex flex-col p-4 space-y-3">
               <button
                 onClick={() => {
@@ -352,8 +388,12 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                   window.open('/client-login', '_blank');
                   setIsMobileMenuOpen(false);
                 }}
-                className="bg-accent-soft hover:bg-accent-soft-deep text-black px-4 py-3 rounded-md font-semibold transition-all duration-300"
+                className="cta-glow-sm press flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-black"
+                style={{
+                  background: 'linear-gradient(135deg, rgb(var(--accent-soft-rgb)) 0%, rgb(var(--accent-rgb)) 100%)',
+                }}
               >
+                <LogIn size={16} />
                 Client Login
               </button>
             </div>

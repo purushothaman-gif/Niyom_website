@@ -580,6 +580,56 @@ input[type='range'] {
   }
 }
 
+/* Nav-scale variant of the same idea. The hero's glow is tuned for a 56px CTA
+ * on open space; in the header it would bloom over the neighbouring controls,
+ * so the spread is tighter and the lift is halved. */
+.cta-glow-sm {
+  box-shadow: 0 6px 18px rgba(200, 164, 93, 0.25);
+  transition: box-shadow var(--dur-base, 250ms) var(--ease-out, ease),
+              transform var(--dur-fast, 150ms) var(--ease-out, ease),
+              filter var(--dur-base, 250ms) var(--ease-out, ease);
+}
+.cta-glow-sm:hover {
+  box-shadow: 0 0 0 1px rgba(200, 164, 93, 0.5), 0 8px 26px rgba(200, 164, 93, 0.42);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cta-glow-sm:hover {
+    transform: translateY(-1px);
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * Gold CTA sheen — a soft highlight sweeps across the fill once on hover, the
+ * light-on-metal cue that reads as "premium" without animating at rest. The
+ * sweep is only transitioned on :hover, so leaving snaps the highlight back
+ * off-screen instead of playing in reverse. Pointer-events-none: it must never
+ * intercept the click.
+ * -------------------------------------------------------------------------- */
+.gold-sheen {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.gold-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 65%
+  );
+  transform: translateX(-130%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .gold-sheen:hover::after {
+    transform: translateX(130%);
+    transition: transform 0.75s var(--ease-out, ease);
+  }
+}
+
 /* -----------------------------------------------------------------------------
  * HeroBackground — mesh blooms + data grid (see components/HeroBackground.tsx).
  * Pure-CSS layers behind the canvas network. Compositor-only transforms, so
