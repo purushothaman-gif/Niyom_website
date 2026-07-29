@@ -5,7 +5,7 @@ import {
   LayoutDashboard, UserPlus, Users, PieChart, ArrowLeftRight,
   FileText, UserCog, Settings, LogOut, Bell, ChevronRight, X, Home,
   FolderOpen, Shield, BarChart3, Wallet, Handshake, ClipboardList,
-  Send, Target, Landmark, LifeBuoy, Megaphone, Sparkles,
+  Send, Target, Landmark, LifeBuoy, Sparkles,
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
@@ -27,12 +27,11 @@ interface NavItem {
 }
 
 // The sidebar is grouped by the nature of the work: acquisition, servicing,
-// reporting, marketing, partners, records, administration. A section with a
-// null label renders its items without a heading (the Dashboard entry point).
+// reporting, marketing, partners, administration. A section with a null label
+// renders its items without a heading (the Dashboard entry point).
 interface NavSection {
   id: string;
   label: string | null;
-  icon?: typeof LayoutDashboard;
   items: NavItem[];
 }
 
@@ -44,63 +43,65 @@ const NAV: NavSection[] = [
     ],
   },
   {
-    id: 'acquisition', label: 'Sales & Onboarding', icon: Target,
+    // New business, in the order it actually happens: lead → onboard →
+    // confirm the deal → book the transaction.
+    id: 'acquisition', label: 'Sales & Onboarding',
     items: [
       { key: 'leads' as CRMPage,             label: 'Leads',             icon: Target },
       { key: 'onboarding' as CRMPage,        label: 'Client Onboarding', icon: UserPlus },
       { key: 'deal_confirmation' as CRMPage, label: 'Deal Confirmation', icon: ClipboardList },
+      { key: 'transactions' as CRMPage,      label: 'Transactions',      icon: ArrowLeftRight },
       { key: 'transfer_queue' as CRMPage,    label: 'Transfer Queue',    icon: Send, adminOnly: true },
     ],
   },
   {
-    id: 'servicing', label: 'Clients & Investments', icon: Users,
+    // Servicing an existing book. The two document pages are role-exclusive,
+    // so each user sees exactly one of them here.
+    id: 'servicing', label: 'Clients & Investments',
     items: [
       { key: 'clients' as CRMPage,           label: 'Manage Clients',    icon: Users },
       { key: 'portfolio' as CRMPage,         label: 'Portfolio',         icon: PieChart },
-      { key: 'transactions' as CRMPage,      label: 'Transactions',      icon: ArrowLeftRight },
+      { key: 'documents' as CRMPage,         label: 'Client Documents',  icon: FolderOpen, hideForAdmin: true },
+      { key: 'admin_documents' as CRMPage,   label: 'Document Vault',    icon: Shield, adminOnly: true },
       { key: 'support_tickets' as CRMPage,   label: 'Support Tickets',   icon: LifeBuoy },
     ],
   },
   {
-    id: 'insights', label: 'Reports & Analytics', icon: BarChart3,
+    id: 'insights', label: 'Reports & Analytics',
     items: [
       { key: 'reports' as CRMPage,           label: 'Reports',           icon: FileText },
       { key: 'mis' as CRMPage,               label: 'MIS Report',        icon: BarChart3 },
     ],
   },
   {
-    id: 'marketing', label: 'Marketing Tools', icon: Megaphone,
+    id: 'marketing', label: 'Marketing Tools',
     items: [
       { key: 'bonds' as CRMPage,             label: 'Bond Creation',     icon: Landmark },
       { key: 'marketing_content' as CRMPage, label: 'Content Creation',  icon: Sparkles },
     ],
   },
   {
-    id: 'partners', label: 'Partners & Payouts', icon: Handshake,
+    id: 'partners', label: 'Partners & Payouts',
     items: [
       { key: 'dsa_management' as CRMPage,    label: 'DSA Management',    icon: Handshake },
       { key: 'dsa_payout' as CRMPage,        label: 'DSA Payout',        icon: Wallet },
     ],
   },
   {
-    id: 'records', label: 'Documents', icon: FolderOpen,
-    items: [
-      { key: 'documents' as CRMPage,         label: 'Documents',         icon: FolderOpen, hideForAdmin: true },
-      { key: 'admin_documents' as CRMPage,   label: 'Document Vault',    icon: Shield, adminOnly: true },
-    ],
-  },
-  {
-    id: 'administration', label: 'Administration', icon: Settings,
+    id: 'administration', label: 'Administration',
     items: [
       { key: 'employees' as CRMPage,         label: 'Employees',         icon: UserCog, adminOnly: true },
-      { key: 'settings' as CRMPage,          label: 'Settings',          icon: Settings },
     ],
   },
 ];
 
+// Settings lives outside the scrolling nav — it is pinned into the footer card
+// next to the logout control, so it is reachable without scrolling.
+const SETTINGS_ITEM: NavItem = { key: 'settings' as CRMPage, label: 'Settings', icon: Settings };
+
 // Flat view of every navigable page — used for access filtering and the
 // topbar title lookup.
-const NAV_FLAT: NavItem[] = NAV.flatMap(s => s.items);
+const NAV_FLAT: NavItem[] = [...NAV.flatMap(s => s.items), SETTINGS_ITEM];
 
 export default function Layout({ children, page, onNavigate, employee }: Props) {
   const [alerts, setAlerts] = useState<NWAlert[]>([]);
@@ -165,13 +166,10 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        {navSections.map((section, i) => (
-          <div key={section.id} className={i === 0 ? '' : 'mt-4'}>
+        {navSections.map(section => (
+          <div key={section.id} className="crm-nav-section">
             {section.label && (
-              <p className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-wider select-none"
-                style={{ color: 'var(--text-faint)' }}>
-                {section.label}
-              </p>
+              <div className="crm-nav-heading"><span>{section.label}</span></div>
             )}
             <div className="space-y-0.5">
               {section.items.map(({ key, label, icon: Icon }) => {
@@ -182,7 +180,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
                     onNavigate(key);
                     setMobileOpen(false);
                   }}
-                    className={`crm-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${active ? 'is-active' : ''}`}>
+                    className={`crm-nav-item w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${active ? 'is-active' : ''}`}>
                     <Icon className="w-4 h-4 flex-shrink-0" />
                     <span className="truncate">{label}</span>
                     {active && <ChevronRight className="w-3.5 h-3.5 ml-auto flex-shrink-0" />}
@@ -193,12 +191,14 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
           </div>
         ))}
 
-        {/* Divider */}
-        <div className="my-3" style={{ borderTop: '1px solid rgba(var(--accent-soft-rgb),0.08)' }} />
+        {/* Divider — fades out to match the section rules above */}
+        <div className="mx-3 my-3 h-px" style={{
+          background: 'linear-gradient(to right, rgba(var(--accent-soft-rgb),0.18), rgba(var(--accent-soft-rgb),0))',
+        }} />
 
         {/* Back to Home */}
         <button onClick={goHome}
-          className="crm-nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all">
+          className="crm-nav-link w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all">
           <Home className="w-4 h-4 flex-shrink-0" />
           <span className="truncate">Back to Website</span>
         </button>
@@ -206,14 +206,25 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
 
       {/* Employee card */}
       <div className="px-3 pb-4" style={{ borderTop: '1px solid rgba(var(--accent-soft-rgb),0.1)' }}>
-        <div className="mt-4 p-3 rounded-xl flex items-center gap-3" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-          <EmployeeAvatar name={employee.full_name} url={employee.avatar_url} size={36} rounded="xl"
+        <div className="mt-4 p-2.5 rounded-xl flex items-center gap-2" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          <EmployeeAvatar name={employee.full_name} url={employee.avatar_url} size={32} rounded="xl"
             badgeStyle={{ background: 'rgba(var(--accent-soft-rgb),0.15)', color: 'var(--accent-soft)' }} />
           <div className="flex-1 overflow-hidden min-w-0">
             <p className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{employee.full_name}</p>
             <p className="text-xs truncate" style={{ color: 'var(--text-faint)' }}>{employee.employee_code}</p>
           </div>
-          <button onClick={async () => { await supabase.auth.signOut(); clearStorageKeepingTrustedDevices(); window.location.replace('/crm'); }} className="crm-icon-danger p-1.5 rounded-lg transition-colors flex-shrink-0">
+          {/* Settings — pinned here so it never scrolls out of reach */}
+          <button onClick={() => {
+            window.history.pushState({}, '', `/crm/${SETTINGS_ITEM.key}`);
+            onNavigate(SETTINGS_ITEM.key);
+            setMobileOpen(false);
+          }}
+            title="Settings" aria-label="Settings" aria-current={page === SETTINGS_ITEM.key ? 'page' : undefined}
+            className={`crm-icon-action p-1 rounded-lg transition-colors flex-shrink-0 ${page === SETTINGS_ITEM.key ? 'is-active' : ''}`}>
+            <Settings className="w-4 h-4" />
+          </button>
+          <button onClick={async () => { await supabase.auth.signOut(); clearStorageKeepingTrustedDevices(); window.location.replace('/crm'); }}
+            title="Sign out" aria-label="Sign out" className="crm-icon-danger p-1 rounded-lg transition-colors flex-shrink-0">
             <LogOut className="w-4 h-4" />
           </button>
         </div>
