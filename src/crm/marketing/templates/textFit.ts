@@ -129,3 +129,43 @@ export function tspans(
     .map((line, i) => `<tspan x="${x}" y="${(y + i * fitted.lineHeight).toFixed(1)}">${escape(line)}</tspan>`)
     .join('');
 }
+
+/**
+ * Like tspans, but sets the final word (two words when the last is very short,
+ * so an accent never lands on a bare "it." or "up.") in a highlight colour.
+ *
+ * The two-tone headline is the single strongest "designed by someone" signal in
+ * fintech marketing — a full-colour block headline reads as template output,
+ * one accented phrase reads as a decision. The closing words carry it because
+ * education headlines resolve there ("...is your peace of mind.").
+ */
+export function accentTspans(
+  fitted: FittedText,
+  x: number,
+  y: number,
+  escape: (s: string) => string,
+  accentColor: string,
+): string {
+  const out: string[] = [];
+  fitted.lines.forEach((line, i) => {
+    const lineY = (y + i * fitted.lineHeight).toFixed(1);
+    if (i < fitted.lines.length - 1) {
+      out.push(`<tspan x="${x}" y="${lineY}">${escape(line)}</tspan>`);
+      return;
+    }
+    const words = line.split(' ');
+    let take = 1;
+    if (words.length > 2 && words[words.length - 1].replace(/[^\p{L}\p{N}]/gu, '').length <= 3) take = 2;
+    const head = words.slice(0, -take).join(' ');
+    const tail = words.slice(-take).join(' ');
+    if (!head) {
+      out.push(`<tspan x="${x}" y="${lineY}" fill="${accentColor}">${escape(line)}</tspan>`);
+    } else {
+      out.push(
+        `<tspan x="${x}" y="${lineY}">${escape(head)} </tspan>` +
+        `<tspan fill="${accentColor}">${escape(tail)}</tspan>`,
+      );
+    }
+  });
+  return out.join('');
+}

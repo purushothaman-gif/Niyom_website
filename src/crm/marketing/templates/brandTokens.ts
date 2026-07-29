@@ -33,6 +33,12 @@ export interface Palette {
   body: string;
   /** Accent used for the eyebrow, rules and icon strokes. */
   accent: string;
+  /**
+   * Support hue from a different family than the accent. One-hue frames are
+   * what made the output read as plain — this drives the second background
+   * wash, the seat behind illustrations, and secondary art elements.
+   */
+  accent2: string;
   /** Colour of the footer/disclaimer line. */
   footer: string;
   /** Fill behind the logo lockup + category chip. */
@@ -46,7 +52,7 @@ export const PALETTES: Record<string, Palette> = {
     id: 'midnightGold',
     bgFrom: BRAND.navy, bgTo: BRAND.navyLift,
     heading: BRAND.white, body: '#c9d6e4',
-    accent: BRAND.gold, footer: '#7f93a9',
+    accent: BRAND.gold, accent2: '#5aa7d6', footer: '#7f93a9',
     chipBg: 'rgba(200,164,93,0.16)', chipText: BRAND.goldSoft,
   },
   // Light counterpart for variety in a feed — same family, inverted.
@@ -54,7 +60,7 @@ export const PALETTES: Record<string, Palette> = {
     id: 'porcelainInk',
     bgFrom: BRAND.porcelain, bgTo: '#e9eef6',
     heading: BRAND.ink, body: '#41505f',
-    accent: BRAND.goldDeep, footer: '#7b8794',
+    accent: BRAND.goldDeep, accent2: '#3f7fbf', footer: '#7b8794',
     chipBg: 'rgba(184,147,74,0.14)', chipText: BRAND.goldDeeper,
   },
   // Warm editorial tone for quotes / "did you know" formats.
@@ -62,7 +68,7 @@ export const PALETTES: Record<string, Palette> = {
     id: 'creamGold',
     bgFrom: BRAND.cream, bgTo: '#e7dbc7',
     heading: '#2b2418', body: '#4f4536',
-    accent: BRAND.goldDeeper, footer: '#8a7c66',
+    accent: BRAND.goldDeeper, accent2: '#7a9e7e', footer: '#8a7c66',
     chipBg: 'rgba(154,121,56,0.16)', chipText: '#6d551f',
   },
   // High-contrast gold-forward panel for single-stat highlights.
@@ -70,7 +76,7 @@ export const PALETTES: Record<string, Palette> = {
     id: 'goldOnNavyBold',
     bgFrom: '#04101c', bgTo: '#123049',
     heading: BRAND.goldSoft, body: '#d5e2ee',
-    accent: BRAND.gold, footer: '#7f93a9',
+    accent: BRAND.gold, accent2: '#6fb4e0', footer: '#7f93a9',
     chipBg: 'rgba(216,189,134,0.18)', chipText: BRAND.goldSoft,
   },
 
@@ -89,49 +95,49 @@ export const PALETTES: Record<string, Palette> = {
     id: 'tealDeep',
     bgFrom: '#062a2e', bgTo: '#0c3f45',
     heading: '#f2fbfa', body: '#b7d8d8',
-    accent: '#4fd1c5', footer: '#6f9d9d',
+    accent: '#4fd1c5', accent2: '#f5b660', footer: '#6f9d9d',
     chipBg: 'rgba(79,209,197,0.18)', chipText: '#8fe4da',
   },
   plumRich: {
     id: 'plumRich',
     bgFrom: '#2a0f2e', bgTo: '#431a45',
     heading: '#fdf3fb', body: '#dcc0da',
-    accent: '#e26fb0', footer: '#a077a0',
+    accent: '#e26fb0', accent2: '#8b93f8', footer: '#a077a0',
     chipBg: 'rgba(226,111,176,0.18)', chipText: '#f3a5cf',
   },
   forestCalm: {
     id: 'forestCalm',
     bgFrom: '#0d2818', bgTo: '#153a24',
     heading: '#f2fbf4', body: '#bcd8c4',
-    accent: '#7bc96f', footer: '#7d9d85',
+    accent: '#7bc96f', accent2: '#e9c46a', footer: '#7d9d85',
     chipBg: 'rgba(123,201,111,0.18)', chipText: '#a5dd9c',
   },
   sunsetWarm: {
     id: 'sunsetWarm',
     bgFrom: '#331408', bgTo: '#5a2410',
     heading: '#fff6ef', body: '#e8c6b0',
-    accent: '#ff9f5a', footer: '#b0846a',
+    accent: '#ff9f5a', accent2: '#f0c987', footer: '#b0846a',
     chipBg: 'rgba(255,159,90,0.18)', chipText: '#ffc194',
   },
   indigoNight: {
     id: 'indigoNight',
     bgFrom: '#141a3d', bgTo: '#232c5e',
     heading: '#f3f4ff', body: '#c2c7ea',
-    accent: '#8b93f8', footer: '#8086ad',
+    accent: '#8b93f8', accent2: '#5eead4', footer: '#8086ad',
     chipBg: 'rgba(139,147,248,0.18)', chipText: '#b0b6fb',
   },
   sandWarm: {
     id: 'sandWarm',
     bgFrom: '#f5ede1', bgTo: '#e8dac6',
     heading: '#3a2c1c', body: '#6b5940',
-    accent: '#c1663a', footer: '#9c876d',
+    accent: '#c1663a', accent2: '#2a9d8f', footer: '#9c876d',
     chipBg: 'rgba(193,102,58,0.16)', chipText: '#a9542e',
   },
   slateMint: {
     id: 'slateMint',
     bgFrom: '#f4f7f6', bgTo: '#e3ebe8',
     heading: '#16302a', body: '#41564f',
-    accent: '#0f8f79', footer: '#7c918b',
+    accent: '#0f8f79', accent2: '#e0a458', footer: '#7c918b',
     chipBg: 'rgba(15,143,121,0.14)', chipText: '#0c7a67',
   },
 };

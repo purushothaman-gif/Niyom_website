@@ -140,6 +140,14 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number, p: 
   ctx.fillStyle = radial;
   ctx.fillRect(0, 0, w, h);
 
+  // Second wash in the support hue from the opposite corner — matches the
+  // poster backdrop, and is what keeps a frame from reading as one flat hue.
+  const r2 = ctx.createRadialGradient(w * 0.08, h * 0.92, 0, w * 0.08, h * 0.92, Math.max(w, h) * 0.8);
+  r2.addColorStop(0, hexToRgba(p.accent2, 0.14));
+  r2.addColorStop(1, hexToRgba(p.accent2, 0));
+  ctx.fillStyle = r2;
+  ctx.fillRect(0, 0, w, h);
+
   const scale = Math.min(w, h) / 1080;
   for (let i = 0; i < PARTICLE_COUNT; i++) {
     // Cheap deterministic scatter — no RNG, so frames stay reproducible.
@@ -153,7 +161,9 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number, p: 
     const o = 0.05 + ((i * 29) % 10) / 100;
     ctx.beginPath();
     ctx.arc(x * w, y * h, size, 0, Math.PI * 2);
-    ctx.fillStyle = hexToRgba(p.accent, o);
+    // Every third particle carries the support hue, so even the dust in the
+    // frame is two-toned.
+    ctx.fillStyle = hexToRgba(i % 3 === 0 ? p.accent2 : p.accent, o);
     ctx.fill();
   }
 }
@@ -403,21 +413,21 @@ function drawOutro(
 
   const alpha = fade(t, 0.2);
 
-  // Centred brand end card: the emblem scales in with a slight overshoot,
-  // the CTA settles above it, the domain below. This is the close of every
-  // animated piece — the one frame guaranteed to be on screen when a viewer
-  // reaches the end, so it belongs to the brand rather than to layout chrome.
+  // Centred brand end card. Deliberately quiet: the emblem fades in with a
+  // barely-perceptible settle (0.97 -> 1.0) — no bounce, no overshoot. A pop
+  // reads as an app promo; a fade-and-hold reads like the close of a broadcast
+  // ident, which is the register a wealth brand wants. This is the one frame
+  // guaranteed to be on screen when a viewer reaches the end.
   const emblemSize = Math.min(w, h) * 0.3;
   const cx = w / 2;
   const cy = h * 0.52;
-  const enter = easeOutCubic(clamp01(t / 0.38));
-  // Overshoot: rises to ~1.06 then settles at 1. Reads as a "pop" landing.
-  const overshoot = enter < 1 ? 0.7 + enter * 0.36 : 1.06 - 0.06 * easeOutCubic(clamp01((t - 0.38) / 0.2));
+  const enter = easeOutCubic(clamp01(t / 0.45));
+  const settle = 0.97 + 0.03 * enter;
 
   ctx.save();
   ctx.globalAlpha = alpha * enter;
   ctx.translate(cx, cy);
-  ctx.scale(overshoot, overshoot);
+  ctx.scale(settle, settle);
   ctx.translate(-cx, -cy);
   drawEmblem(ctx, cx, cy, emblemSize, p, 1);
   ctx.restore();
@@ -435,12 +445,13 @@ function drawOutro(
     ctx.font = `700 ${fontSize}px ${FONT_SANS}`;
     const lineHeight = fontSize * 1.2;
     const blockBottom = cy - emblemSize * 0.78;
+    // Pure fade, no travel — the movement stays on the emblem alone.
     ctx.save();
     ctx.globalAlpha = alpha * ctaIn;
     ctx.fillStyle = p.heading;
     ctx.textAlign = 'center';
     lines.forEach((line, i) => ctx.fillText(
-      line, cx, blockBottom - (lines.length - 1 - i) * lineHeight + (1 - ctaIn) * 20 * scale,
+      line, cx, blockBottom - (lines.length - 1 - i) * lineHeight,
     ));
     ctx.restore();
   }
