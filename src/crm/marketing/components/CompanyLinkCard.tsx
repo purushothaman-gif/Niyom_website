@@ -11,7 +11,7 @@
 
 import { useState } from 'react';
 import { Building2, Check, Copy, Link2, MousePointerClick, UserPlus, Users } from 'lucide-react';
-import { buildReferralUrl } from '../marketingConstants';
+import { buildCompanyUrl } from '../marketingConstants';
 import { useCompanyChannelStats, useCompanyReferralLink } from '../marketingClient';
 
 function Stat({ icon: Icon, label, value }: {
@@ -35,7 +35,12 @@ export default function CompanyLinkCard() {
 
   if (isLoading || !link) return null;
 
-  const url = buildReferralUrl(link.ref_code);
+  // The bare URL, with no tracking parameter — this is what goes out on NIYOM's
+  // own accounts. The link's ref_code still exists as the channel's identity in
+  // the database and is what attribution rows are written against; it just
+  // never has to appear in the URL, because a visit without a code resolves to
+  // this link server-side.
+  const url = buildCompanyUrl();
 
   const copy = async () => {
     try {
