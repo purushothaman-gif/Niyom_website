@@ -13,7 +13,7 @@ import { MktContent } from './marketingTypes';
 import ContentLibrary from './components/ContentLibrary';
 import ContentStudio from './components/ContentStudio';
 import ContentDetail from './components/ContentDetail';
-import EmployeeGallery from './components/EmployeeGallery';
+import ContentGallery from './components/ContentGallery';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 
 interface Props {
@@ -25,7 +25,10 @@ type View =
   | { name: 'library' }
   | { name: 'studio' }
   | { name: 'detail'; content: MktContent }
-  | { name: 'analytics' };
+  | { name: 'analytics' }
+  // Admins posting from NIYOM's own accounts: the same gallery employees get,
+  // on the company channel.
+  | { name: 'company' };
 
 export default function MarketingContent({ employee }: Props) {
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
@@ -34,12 +37,16 @@ export default function MarketingContent({ employee }: Props) {
   return (
     <QueryClientProvider client={mktQueryClient}>
       {!isAdmin ? (
-        <EmployeeGallery employee={employee} />
+        <ContentGallery employee={employee} />
+      ) : view.name === 'company' ? (
+        <ContentGallery employee={employee} channel="company"
+          onBack={() => setView({ name: 'library' })} />
       ) : view.name === 'library' ? (
         <ContentLibrary
           onOpen={content => setView({ name: 'detail', content })}
           onNew={() => setView({ name: 'studio' })}
-          onAnalytics={() => setView({ name: 'analytics' })} />
+          onAnalytics={() => setView({ name: 'analytics' })}
+          onCompanyPosting={() => setView({ name: 'company' })} />
       ) : view.name === 'studio' ? (
         <ContentStudio employee={employee}
           onBack={() => setView({ name: 'library' })}

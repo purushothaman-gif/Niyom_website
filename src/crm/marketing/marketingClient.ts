@@ -13,6 +13,7 @@ import {
   ContentFilters, MktAsset, MktContent, MktContentHistory, MktContentPerformanceRow,
   MktDashboardTotals, MktGenerateRequest, MktGenerateResponse, MktLeaderboardRow,
   MktPlatformUsageRow, MktReferralLink, MktCompanyChannelStats, DownloadEventType,
+  ContentChannel,
 } from './marketingTypes';
 
 export const mktQueryClient = new QueryClient({
@@ -328,17 +329,26 @@ export function useUploadAsset() {
 // Employee activity
 // ---------------------------------------------------------------------------
 
-/** Log a download/copy/share. Best-effort: never block the user's action. */
+/**
+ * Log a download/copy/share. Best-effort: never block the user's action.
+ *
+ * `channel` records whose activity this is. An admin taking content for NIYOM's
+ * own accounts is doing company work, not personal work — without the marker it
+ * would land in their own leaderboard tally. RLS only lets an admin write a
+ * 'company' row, so an employee cannot hide their activity by claiming it.
+ */
 export function useRecordEvent() {
   return useMutation({
     mutationFn: async (evt: {
       contentId: string; contentNo: string; employeeId: string;
       eventType: DownloadEventType; variant?: string; platform?: string;
+      channel?: ContentChannel;
     }) => {
       const { error } = await supabase.from('mkt_downloads').insert([{
         content_id: evt.contentId, content_no: evt.contentNo,
         employee_id: evt.employeeId, event_type: evt.eventType,
         variant: evt.variant ?? '', platform: evt.platform ?? '',
+        channel: evt.channel ?? 'employee',
       }]);
       if (error) throw error;
     },

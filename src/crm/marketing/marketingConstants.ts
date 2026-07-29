@@ -210,8 +210,10 @@ export function applyReferralLink(
   refCode: string,
   contentNo?: string,
   platform?: string,
+  /** Overrides the built URL — used by the company channel's bare link. */
+  urlOverride?: string,
 ): string {
-  const url = buildReferralUrl(refCode, contentNo, platform);
+  const url = urlOverride ?? buildReferralUrl(refCode, contentNo, platform);
   return caption.split(REF_LINK_PLACEHOLDER).join(url);
 }
 
@@ -222,8 +224,10 @@ export function buildCopyText(
   refCode: string,
   contentNo?: string,
   platform?: string,
+  /** Overrides the built URL — used by the company channel's bare link. */
+  urlOverride?: string,
 ): string {
-  const body = applyReferralLink(caption, refCode, contentNo, platform);
+  const body = applyReferralLink(caption, refCode, contentNo, platform, urlOverride);
   const tags = hashtags.length ? `\n\n${formatHashtags(hashtags)}` : '';
   return `${body}${tags}`;
 }

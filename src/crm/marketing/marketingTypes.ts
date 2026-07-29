@@ -156,11 +156,16 @@ export interface MktReferralLink {
   created_at: string;
 }
 
+/** Whose activity a download/copy belongs to. */
+export type ContentChannel = 'employee' | 'company';
+
 /** Company-channel totals, kept out of the employee leaderboard. */
 export interface MktCompanyChannelStats {
   ref_code: string;
   label: string | null;
   active: boolean;
+  downloads: number;
+  copies: number;
   clicks: number;
   leads: number;
   clients: number;
