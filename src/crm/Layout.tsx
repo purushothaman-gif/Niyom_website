@@ -153,7 +153,11 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
     window.location.href = '/';
   };
 
-  const SidebarContent = () => (
+  // A plain element, NOT a component: declaring `const SidebarContent = () => …`
+  // here would mint a new component type on every render, so React would unmount
+  // and remount the scrolling <nav> each time `page` changes — resetting its
+  // scroll to the top whenever you clicked an item near the bottom.
+  const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Brand logo */}
       <div className="px-5 py-5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(var(--accent-soft-rgb),0.15)' }}>
@@ -236,7 +240,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-60 flex-shrink-0" style={{ background: 'var(--sidebar-bg)', borderRight: '1px solid var(--border-subtle)' }}>
-        <SidebarContent />
+        {sidebarContent}
       </aside>
 
       {/* Mobile Sidebar Overlay */}
@@ -244,7 +248,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0" style={{ background: 'var(--bg-overlay)' }} onClick={() => setMobileOpen(false)} />
           <aside className="absolute left-0 top-0 bottom-0 w-64 flex flex-col" style={{ background: 'var(--sidebar-bg)', borderRight: '1px solid var(--border-subtle)' }}>
-            <SidebarContent />
+            {sidebarContent}
           </aside>
         </div>
       )}
