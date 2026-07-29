@@ -1,5 +1,5 @@
-import { ArrowRight, Shield, Target, Zap, TrendingUp, Users, Award, Instagram, Linkedin, ChevronRight, Phone, Mail, MessageCircle, Menu, X, ChevronDown, ShieldCheck, Search, Eye, Handshake } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { ArrowRight, Shield, Target, Zap, TrendingUp, Users, Award, Instagram, Linkedin, ChevronRight, Phone, Mail, MessageCircle, Menu, X, ChevronDown, ShieldCheck, Search, Eye, Handshake, KeyRound, LayoutDashboard, BarChart3, ArrowUpRight } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 import { Logo } from '../components/Logo';
 import { RegulatoryInfo } from '../components/RegulatoryInfo';
 import { ThemeToggle } from '../theme/ThemeToggle';
@@ -21,10 +21,61 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isEmployeeDropdownOpen, setIsEmployeeDropdownOpen] = useState(false);
+  const employeeMenuRef = useRef<HTMLDivElement>(null);
+  const employeeTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setIsLoaded(true);
   }, []);
+
+  // The employee menu opens on hover for pointers, but it must also close on
+  // Escape and on an outside click so keyboard and touch users aren't trapped
+  // with a panel they can't dismiss.
+  useEffect(() => {
+    if (!isEmployeeDropdownOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsEmployeeDropdownOpen(false);
+        employeeTriggerRef.current?.focus();
+      }
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (!employeeMenuRef.current?.contains(e.target as Node)) {
+        setIsEmployeeDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [isEmployeeDropdownOpen]);
+
+  // Single source for the three employee consoles — the desktop dropdown and
+  // the mobile sheet render the same set, so they can't drift apart.
+  const employeeLinks = [
+    {
+      label: 'HRM',
+      hint: 'People & attendance',
+      icon: Users,
+      open: () => window.open('https://www.zoho.com/people/login.html', '_blank', 'noopener,noreferrer'),
+    },
+    {
+      label: 'CRM',
+      hint: 'Clients & deal flow',
+      icon: LayoutDashboard,
+      open: () => { window.location.href = '/crm'; },
+    },
+    {
+      label: 'MF Admin',
+      hint: 'Mutual fund console',
+      icon: BarChart3,
+      open: () => { window.open('/mf-admin', '_blank'); },
+    },
+  ];
 
   const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId);
@@ -62,39 +113,78 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
 
             <div className="hidden md:flex items-center gap-3">
               <ThemeToggle variant="icon" />
-              <div className="relative">
+              {/* Employee access — deliberately the quieter sibling of the gold
+                  Client Login CTA: a frosted outline that borrows the nav's own
+                  glass, warming to brand gold on hover rather than sitting in
+                  off-palette slate. */}
+              <div
+                ref={employeeMenuRef}
+                className="relative"
+                onMouseEnter={() => setIsEmployeeDropdownOpen(true)}
+                onMouseLeave={() => setIsEmployeeDropdownOpen(false)}
+              >
                 <button
-                  onMouseEnter={() => setIsEmployeeDropdownOpen(true)}
-                  onMouseLeave={() => setIsEmployeeDropdownOpen(false)}
-                  className={`bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-md font-semibold transition-all duration-300 shadow-md hover:shadow-lg flex items-center gap-2 ${isLoaded ? 'animate-slideDown animate-delay-200' : 'opacity-0'}`}
+                  ref={employeeTriggerRef}
+                  /* Open-only: on a hover-capable pointer the menu is already
+                     open by the time the click lands, so a toggle would read as
+                     "clicking the button closes it". Escape, an outside click,
+                     or moving the pointer away dismiss it instead. */
+                  onClick={() => setIsEmployeeDropdownOpen(true)}
+                  aria-haspopup="menu"
+                  aria-expanded={isEmployeeDropdownOpen}
+                  className={`press flex items-center gap-2 rounded-xl border px-5 py-3 font-semibold transition-all duration-300 ${
+                    isEmployeeDropdownOpen
+                      ? 'border-accent-soft/55 bg-accent-soft/10 text-accent-soft'
+                      : 'border-white/15 bg-white/[0.06] text-white/90 hover:border-accent-soft/50 hover:bg-accent-soft/10 hover:text-accent-soft'
+                  } ${isLoaded ? 'animate-slideDown animate-delay-200' : 'opacity-0'}`}
+                  style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
                 >
+                  <KeyRound size={16} className="opacity-80" />
                   Employee Login
-                  <ChevronDown size={16} className={`transition-transform duration-200 ${isEmployeeDropdownOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={16} className={`transition-transform duration-300 ${isEmployeeDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {isEmployeeDropdownOpen && (
-                  <div
-                    onMouseEnter={() => setIsEmployeeDropdownOpen(true)}
-                    onMouseLeave={() => setIsEmployeeDropdownOpen(false)}
-                    className="absolute top-full right-0 mt-0 bg-black border border-accent-soft/20 rounded-md shadow-lg min-w-[160px] z-50"
-                  >
-                    <button
-                      onClick={() => window.open('https://www.zoho.com/people/login.html', '_blank')}
-                      className="w-full text-left px-4 py-3 text-white hover:text-accent-soft hover:bg-bg-elevated/5 transition-colors duration-200 first:rounded-t-md"
+                  /* The wrapper's top padding bridges the trigger-to-panel gap,
+                     so the pointer can travel down without the menu closing. */
+                  <div className="absolute top-full right-0 z-50 pt-2">
+                    <div
+                      role="menu"
+                      aria-label="Employee Login"
+                      className="animate-navMenuIn w-[268px] overflow-hidden rounded-2xl border border-accent-soft/20"
+                      style={{
+                        /* Near-opaque: the nav row sits directly behind the
+                           panel, and at lower alpha its links ghost through. */
+                        background: 'rgba(7, 21, 36, 0.97)',
+                        backdropFilter: 'saturate(160%) blur(18px)',
+                        WebkitBackdropFilter: 'saturate(160%) blur(18px)',
+                        boxShadow: 'var(--shadow-lg)',
+                      }}
                     >
-                      HRM
-                    </button>
-                    <button
-                      onClick={() => { window.location.href = '/crm'; }}
-                      className="w-full text-left px-4 py-3 text-white hover:text-accent-soft hover:bg-bg-elevated/5 transition-colors duration-200"
-                    >
-                      CRM
-                    </button>
-                    <button
-                      onClick={() => { window.open('/mf-admin', '_blank'); }}
-                      className="w-full text-left px-4 py-3 text-white hover:text-accent-soft hover:bg-bg-elevated/5 transition-colors duration-200 last:rounded-b-md"
-                    >
-                      MF Admin
-                    </button>
+                      <div className="px-4 pt-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-soft/70">
+                        Employee Access
+                      </div>
+                      {employeeLinks.map(({ label, hint, icon: Icon, open }) => (
+                        <button
+                          key={label}
+                          role="menuitem"
+                          onClick={() => { setIsEmployeeDropdownOpen(false); open(); }}
+                          className="group/item flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-accent-soft/10"
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft/10 text-accent-soft ring-1 ring-inset ring-accent-soft/20 transition-colors duration-200 group-hover/item:bg-accent-soft/20">
+                            <Icon size={17} />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-semibold text-white">{label}</span>
+                            <span className="block text-[11px] text-white/45">{hint}</span>
+                          </span>
+                          <ArrowUpRight
+                            size={14}
+                            className="text-white/25 transition-all duration-200 group-hover/item:-translate-y-0.5 group-hover/item:translate-x-0.5 group-hover/item:text-accent-soft"
+                          />
+                        </button>
+                      ))}
+                      <div className="h-1" />
+                    </div>
                   </div>
                 )}
               </div>
@@ -224,26 +314,29 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               >
                 Calculator
               </button>
-              <div className="border-t border-accent-soft/20 my-2 pt-2">
-                <div className="text-accent-soft text-xs uppercase tracking-wider px-4 py-2 font-semibold">Employee Login</div>
-                <button
-                  onClick={() => { window.open('https://www.zoho.com/people/login.html', '_blank'); setIsMobileMenuOpen(false); }}
-                  className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 px-4 rounded mb-2 transition-colors"
-                >
-                  HRM
-                </button>
-                <button
-                  onClick={() => { window.location.href = '/crm'; }}
-                  className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 px-4 rounded mb-2 transition-colors"
-                >
-                  CRM
-                </button>
-                <button
-                  onClick={() => { window.open('/mf-admin', '_blank'); setIsMobileMenuOpen(false); }}
-                  className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 px-4 rounded transition-colors"
-                >
-                  MF Admin
-                </button>
+              <div className="border-t border-accent-soft/20 my-2 pt-3">
+                <div className="flex items-center gap-2 px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-soft/80">
+                  <KeyRound size={13} />
+                  Employee Access
+                </div>
+                <div className="space-y-2">
+                  {employeeLinks.map(({ label, hint, icon: Icon, open }) => (
+                    <button
+                      key={label}
+                      onClick={() => { setIsMobileMenuOpen(false); open(); }}
+                      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition-colors hover:border-accent-soft/40 hover:bg-accent-soft/10"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft/10 text-accent-soft ring-1 ring-inset ring-accent-soft/20">
+                        <Icon size={17} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-white">{label}</span>
+                        <span className="block text-[11px] text-white/45">{hint}</span>
+                      </span>
+                      <ArrowUpRight size={14} className="text-white/25" />
+                    </button>
+                  ))}
+                </div>
               </div>
               <button
                 onClick={() => {

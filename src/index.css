@@ -507,6 +507,33 @@ input[type='range'] {
 }
 
 /* -----------------------------------------------------------------------------
+ * Nav dropdown entrance — frosted nav menus (e.g. the landing header's Employee
+ * Access panel) grow out of their trigger instead of hard-cutting in. Kept
+ * short so the header still feels instant.
+ * -------------------------------------------------------------------------- */
+@keyframes navMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-navMenuIn {
+  transform-origin: top right;
+  animation: navMenuIn 0.18s var(--ease-out, ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-navMenuIn {
+    animation: none;
+  }
+}
+
+/* -----------------------------------------------------------------------------
  * CRM page transition — a subtle fade + rise applied to the routed page content
  * on each navigation (keyed by page in Layout). Fast and gentle so dense tables
  * settle quickly. Reduced-motion users get no animation (content is already at
