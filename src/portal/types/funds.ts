@@ -106,6 +106,12 @@ export interface OrderResult {
   expectedNavDate: string;
   /** True while BSEService is mocked (no real money moved). */
   isMock: boolean;
+  /**
+   * BSE-hosted link the INVESTOR must approve. Until they do, the order sits at
+   * mem_2fa 'p' and cannot even be paid for — so this is the next step, not an
+   * optional extra.
+   */
+  twoFaUrl?: string | null;
 }
 
 /* ----------------------------- Redeem & Switch ---------------------------- */

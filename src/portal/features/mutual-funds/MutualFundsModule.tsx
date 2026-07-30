@@ -6,6 +6,7 @@ import type { PortalView } from '../../layout/navigation';
 import { Segmented } from '../../components/Segmented';
 import { useFundCatalog } from '../../hooks/useFundCatalog';
 import { BSEService } from '../../services/BSEService';
+import { useBseAccount } from './useBseAccount';
 import type { OrderType } from '../../types/funds';
 import { FundDiscoveryPage } from './discovery/FundDiscoveryPage';
 import { FundDetailsPage } from './details/FundDetailsPage';
@@ -33,7 +34,19 @@ interface Props {
  *                     (BSEService.isMock). We block rather than let clients place
  *                     simulated orders they might mistake for real ones.
  */
-type InvestGate = 'onboarding' | 'coming_soon' | null;
+/**
+ * Why a client cannot order, most fundamental first. null means they can.
+ * Layered deliberately: KYC, then registered at BSE, then BSE's own checks —
+ * so the message names the actual obstacle rather than a generic refusal.
+ */
+export type InvestGate =
+  | 'onboarding'
+  | 'coming_soon'
+  | 'checking'
+  | 'bse_not_registered'
+  | 'bse_pending'
+  | 'bse_unavailable'
+  | null;
 
 type Tab = 'explore' | 'my-funds';
 
@@ -63,11 +76,27 @@ export function MutualFundsModule({
   // Ordering is gated: finish KYC first, and until live BSE is enabled we block
   // (rather than allow simulated orders). `investGate` is null only when a client
   // is fully onboarded AND real ordering is live.
+  // The client's BSE account — only worth asking once they are past KYC and we
+  // are actually talking to BSE.
+  const live = !BSEService.isMock();
+  const bse = useBseAccount(onboardingComplete && live);
+
+  // Ordering is gated in layers, most fundamental first: finish KYC, then be
+  // registered at BSE, then have BSE's checks pass. `investGate` is null only
+  // when a client can genuinely place an order that will be accepted.
   const investGate: InvestGate = !onboardingComplete
     ? 'onboarding'
-    : BSEService.isMock()
+    : !live
       ? 'coming_soon'
-      : null;
+      : bse.loading
+        ? 'checking'
+        : bse.state?.status === 'ready'
+          ? null
+          : bse.state?.status === 'pending'
+            ? 'bse_pending'
+            : bse.state?.status === 'not_registered'
+              ? 'bse_not_registered'
+              : 'bse_unavailable';
   const [gatePrompt, setGatePrompt] = useState<InvestGate>(null);
   /** Run an order action only when allowed; otherwise surface the gate. */
   const guardOrder = (proceed: () => void) => {
@@ -215,6 +244,22 @@ const GATE_COPY: Record<Exclude<InvestGate, null>, { title: string; body: string
   coming_soon: {
     title: 'Investing launches soon',
     body: 'Mutual fund ordering isn’t live yet — you can explore funds now, and we’ll enable orders shortly. No orders can be placed at the moment.',
+  },
+  checking: {
+    title: 'Checking your investment account',
+    body: 'One moment while we confirm your account with the exchange.',
+  },
+  bse_not_registered: {
+    title: 'Your investment account is being set up',
+    body: 'Before you can invest, we register you with the exchange. Your relationship manager is on it — you’ll be notified as soon as it’s ready.',
+  },
+  bse_pending: {
+    title: 'Almost there — a step is pending',
+    body: 'Your exchange account is registered but not yet cleared to transact. Approving the link we sent you is usually what’s outstanding.',
+  },
+  bse_unavailable: {
+    title: 'We can’t reach the exchange right now',
+    body: 'This is on our side, not yours. Please try again shortly — nothing about your account has changed.',
   },
 };
 

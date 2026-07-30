@@ -108,15 +108,17 @@ export function ClientOnboardingPage() {
   const [results, setResults] = useState<CrmClientLookup[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [importedFrom, setImportedFrom] = useState<string | null>(null);
+  // CRM row this form was prefilled from — needed to store the UCC afterwards.
+  const [importedId, setImportedId] = useState<string | null>(null);
   // PAN check against Cashfree — its registered name is what BSE's KYC compares.
   const [panCheck, setPanCheck] = useState<{ state: 'ok' | 'bad'; name?: string; msg?: string } | null>(null);
   const [panBusy, setPanBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ clientCode: string; status: string; url?: string } | null>(
-    null,
-  );
+  const [done, setDone] = useState<
+    { clientCode: string; status: string; url?: string; linked?: boolean | null } | null
+  >(null);
 
   const errors = validate(form);
   const valid = Object.keys(errors).length === 0;
@@ -159,6 +161,7 @@ export function ClientOnboardingPage() {
       accountType: 'SB',
     });
     setImportedFrom(`${c.fullName} (${c.clientCode})`);
+    setImportedId(c.id);
     setPanCheck(c.panVerified && c.panName ? { state: 'ok', name: c.panName } : null);
     setResults(null);
     setTerm('');
@@ -225,7 +228,11 @@ export function ClientOnboardingPage() {
       } catch {
         /* best effort — registration itself succeeded */
       }
-      setDone({ clientCode: res.clientCode, status: res.status, url });
+      // Store the UCC on the CRM client so they can transact in the portal.
+      // Without this the proxy cannot resolve their UCC and will refuse them.
+      let linked: boolean | null = null;
+      if (importedId) linked = await CrmImportService.linkUcc(importedId, res.clientCode, res.status);
+      setDone({ clientCode: res.clientCode, status: res.status, url, linked });
       setForm(EMPTY);
       setTouched(false);
       setConfirming(false);
@@ -250,6 +257,19 @@ export function ClientOnboardingPage() {
             UCC <span className="font-mono font-semibold">{done.clientCode}</span> created — status{' '}
             {done.status}.
           </p>
+          {done.linked === false && (
+            <p className="mt-2 text-xs text-warning">
+              Registered at BSE, but the UCC could not be saved against the client record — they
+              won&rsquo;t be able to invest from the portal until it is. Re-run the import or set it
+              manually.
+            </p>
+          )}
+          {done.linked === true && (
+            <p className="mt-2 text-xs text-text-secondary">
+              Linked to their client record — they can invest from the portal once BSE marks the
+              UCC active.
+            </p>
+          )}
           {done.url ? (
             <p className="mt-2 text-xs text-text-secondary">
               Send the investor this approval link — verification only starts once they complete it:{' '}
