@@ -33,6 +33,14 @@ export interface ProxyConfig {
   webhookAllowedIps: string[];
   /** Set false only for local smoke tests. */
   requireAuth: boolean;
+  /* --- Cashfree Verification relay (PAN). This droplet's static IP is what
+   * Cashfree whitelists; the /verify/pan route forwards to Cashfree from here.
+   * The Supabase edge function calls it with x-relay-secret. All optional so
+   * the proxy still boots if verification isn't configured yet. */
+  panRelaySecret: string | null;
+  cashfreeVerifyClientId: string | null;
+  cashfreeVerifySecret: string | null;
+  cashfreeVerifyEnv: 'production' | 'sandbox';
 }
 
 export function loadConfig(): ProxyConfig {
@@ -56,5 +64,9 @@ export function loadConfig(): ProxyConfig {
       .map((s) => s.trim())
       .filter(Boolean),
     requireAuth: process.env.REQUIRE_AUTH !== 'false',
+    panRelaySecret: process.env.PAN_RELAY_SECRET || null,
+    cashfreeVerifyClientId: process.env.CASHFREE_VERIFY_CLIENT_ID || null,
+    cashfreeVerifySecret: process.env.CASHFREE_VERIFY_SECRET_KEY || null,
+    cashfreeVerifyEnv: (process.env.CASHFREE_VERIFY_ENV === 'sandbox' ? 'sandbox' : 'production'),
   };
 }
