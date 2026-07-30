@@ -450,6 +450,91 @@ app.post('/payment/status', async (req, res, next) => {
   }
 });
 
+/* ------------------------- Read models for the console --------------------- */
+
+/**
+ * Order book. BSE splits orders into open ("o") and closed ("c") lists and
+ * requires `open_close` INSIDE filter_param — so we fetch both and merge.
+ */
+app.get('/orders', async (req, res, next) => {
+  try {
+    const clientCode = typeof req.query.clientCode === 'string' ? req.query.clientCode : null;
+    const fetchSide = async (openClose: 'o' | 'c') => {
+      const r = await bse.post<Record<string, unknown>>('/order_list', {
+        start: 0,
+        length: 200,
+        fields: ['ALL'],
+        count_only: false,
+        filter_param: { open_close: openClose },
+      });
+      const list = ((r.lists ?? r.list ?? []) as Record<string, unknown>[]) || [];
+      return list.map(
+        (row): Record<string, unknown> => ({
+          ...row,
+          __side: openClose === 'o' ? 'open' : 'closed',
+        }),
+      );
+    };
+    const rows = [...(await fetchSide('o')), ...(await fetchSide('c'))];
+    res.json(
+      rows
+        .filter((r) => !clientCode || String((r.investor as Record<string, unknown>)?.ucc ?? '') === clientCode)
+        .map((r) => ({
+          orderId: String(r.id ?? ''),
+          memberRef: String(r.mem_ord_ref_id ?? ''),
+          clientCode: String((r.investor as Record<string, unknown>)?.ucc ?? ''),
+          schemeCode: String(r.scheme ?? ''),
+          amount: Number(r.amount ?? 0),
+          type: String(r.type ?? ''),
+          status: String(r.status ?? ''),
+          side: String(r.__side ?? ''),
+          folio: String(r.folio_num ?? r.folio ?? ''),
+          placedAt: String(r.created_at ?? r.order_date ?? ''),
+          isMock: false,
+        }))
+        .sort((a, b) => (a.orderId < b.orderId ? 1 : -1)),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** All UCCs registered under this member, with their verification status. */
+app.get('/uccs', async (_req, res, next) => {
+  try {
+    const result = await bse.post<Record<string, unknown>>('/v2/list_ucc', {
+      start: 0,
+      length: 200,
+      fields: ['ALL'],
+      count_only: false,
+      ucc_status: 'ALL',
+    });
+    const rows = ((result.lists ?? result.list ?? []) as Record<string, unknown>[]) || [];
+    res.json(
+      rows.map((r) => {
+        const holder = ((r.holder as Record<string, unknown>[]) ?? [{}])[0] ?? {};
+        const person = (holder.person as Record<string, unknown>) ?? {};
+        const pan = ((holder.identifier as Record<string, unknown>[]) ?? []).find(
+          (i) => i.identifier_type === 'pan',
+        );
+        return {
+          clientCode: String((r.investor as Record<string, unknown>)?.client_code ?? ''),
+          name: [person.first_name, person.middle_name, person.last_name]
+            .filter(Boolean)
+            .join(' '),
+          pan: String(pan?.identifier_number ?? ''),
+          status: String(r.ucc_status ?? ''),
+          holdingNature: String(r.holding_nature ?? ''),
+          isPanVerified: Boolean(holder.is_pan_verified),
+          isMock: false,
+        };
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
 /* --------------------------------- SXP ------------------------------------ */
 
 /**
