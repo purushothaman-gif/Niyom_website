@@ -387,3 +387,39 @@ export const BseOpsService = {
       amount: input.amount,
     }),
 };
+
+/* ------------------------------ Ops surfaces ------------------------------- */
+
+/** One callback BSE sent us — the audit trail of what BSE reported. */
+export interface BseEventRow {
+  received_at: string;
+  event_type: string | null;
+  event: string | null;
+  client_code: string | null;
+  order_id: string | null;
+  sxp_reg_num: string | null;
+  mandate_id: string | null;
+  msgcode: number | null;
+  request_id: string | null;
+}
+
+export interface BseDiagnostics {
+  environment: string;
+  bseBaseUrl: string;
+  memberCode: string;
+  credentialsConfigured: boolean;
+  /** Our outbound IP — the one BSE whitelists. */
+  egressIp: string;
+  bseReachable: boolean;
+  bseError: string;
+  webhookUrl: string;
+  webhookPersistence: boolean;
+  requireAuth: boolean;
+  allowedOrigins: string[];
+  serverTime: string;
+}
+
+export const BseOpsExtra = {
+  events: (limit = 200) => get<BseEventRow[]>(`/webhooks/events?limit=${limit}`),
+  diagnostics: () => get<BseDiagnostics>('/diagnostics'),
+};
