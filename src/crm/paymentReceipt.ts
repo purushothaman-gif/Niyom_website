@@ -88,7 +88,10 @@ export interface ReceiptPaymentContext {
 export interface ReceiptSummaryContext {
   total_paid_amount:   number;
   outstanding_amount:  number;
-  payment_status:      'not_paid' | 'partially_paid' | 'fully_paid';
+  // Mirrors nw_deal_payment_summary.payment_status. 'over_paid' is a real value
+  // the view returns; without it here the receipt printed "undefined" as the
+  // status on any deal paid above its settlement amount.
+  payment_status:      'not_paid' | 'partially_paid' | 'fully_paid' | 'over_paid';
 }
 
 export interface ReceiptRenderInput {
@@ -108,6 +111,7 @@ const STATUS_LABEL: Record<ReceiptSummaryContext['payment_status'], string> = {
   not_paid:       'NOT PAID',
   partially_paid: 'PARTIALLY PAID',
   fully_paid:     'FULLY PAID',
+  over_paid:      'OVER PAID',
 };
 
 function referenceCell(p: ReceiptPaymentContext): string {
@@ -232,7 +236,7 @@ function buildHtml(input: ReceiptRenderInput): string {
         </div>
         <div style="text-align:right;margin-top:12px;">
           <div style="${label}margin-bottom:4px;">Payment Status</div>
-          <div style="font-family:${SANS};font-size:11px;font-weight:700;letter-spacing:0.1em;color:${INK};">${STATUS_LABEL[summary.payment_status]}</div>
+          <div style="font-family:${SANS};font-size:11px;font-weight:700;letter-spacing:0.1em;color:${INK};">${STATUS_LABEL[summary.payment_status] ?? STATUS_LABEL.not_paid}</div>
           ${excess > 0 ? `<div style="font-size:9px;color:${MUTE};margin-top:3px;">Excess on record: ${inr(excess)}</div>` : ''}
         </div>
       </div>
