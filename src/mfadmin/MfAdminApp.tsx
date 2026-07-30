@@ -37,6 +37,8 @@ import { RedeemPage } from './features/bse/RedeemPage';
 import { SwitchPage } from './features/bse/SwitchPage';
 import { ClientManagementPage } from './features/bse/ClientManagementPage';
 import { KycPage } from './features/bse/KycPage';
+import { BrokeragePage } from './features/bse/BrokeragePage';
+import { CommissionPage } from './features/bse/CommissionPage';
 
 export default function MfAdminApp() {
   const [employee, setEmployee] = useState<NWEmployee | null>(null);
@@ -143,6 +145,10 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
         return <UccBookPage />;
       case 'kyc':
         return <KycPage />;
+      case 'brokerage':
+        return <BrokeragePage />;
+      case 'commission':
+        return <CommissionPage />;
       case 'sip':
         return <SxpBookPage title="SIP Book" only="SIP" />;
       case 'stp':
