@@ -53,41 +53,119 @@ app.use(
 
 /* ------------------------- caller authentication -------------------------- */
 
-async function requireSupabaseUser(req: Request, res: Response, next: NextFunction) {
-  if (!cfg.requireAuth) return next();
+/**
+ * Who is calling, and what they are allowed to touch.
+ *
+ * Staff (an nw_employees row) may act on any UCC — that is the MF Admin
+ * console. A client may act on exactly one: their own. Anyone else is refused.
+ */
+interface Caller {
+  kind: 'staff' | 'client';
+  authUserId: string;
+  /** Clients only. The ONLY UCC this caller may read or transact on. */
+  ucc: string | null;
+  clientId?: string;
+}
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      caller?: Caller;
+    }
+  }
+}
+
+/** Query Supabase with the service role — used only to identify the caller. */
+async function sbSelect(path: string): Promise<Record<string, unknown>[]> {
+  if (!cfg.supabaseServiceRoleKey) return [];
+  const r = await fetch(`${cfg.supabaseUrl}/rest/v1/${path}`, {
+    headers: {
+      apikey: cfg.supabaseServiceRoleKey,
+      Authorization: `Bearer ${cfg.supabaseServiceRoleKey}`,
+    },
+  });
+  if (!r.ok) return [];
+  return (await r.json()) as Record<string, unknown>[];
+}
+
+/**
+ * Resolve the bearer token to a Caller.
+ *
+ * A valid JWT alone is NOT authorization — that was the old gate, and it was
+ * safe only because every caller was a vetted admin. Clients transacting makes
+ * it a hole: without resolving identity, any signed-in user could pass any
+ * clientCode and act on another person's account.
+ */
+async function requireCaller(req: Request, res: Response, next: NextFunction) {
+  if (!cfg.requireAuth) {
+    req.caller = { kind: 'staff', authUserId: 'auth-disabled', ucc: null };
+    return next();
+  }
   const auth = req.header('authorization');
   const jwt = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!jwt) return res.status(401).json({ error: 'Missing bearer token' });
+
+  let authUserId: string;
   try {
     const r = await fetch(`${cfg.supabaseUrl}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${jwt}`, apikey: cfg.supabaseAnonKey },
     });
     if (!r.ok) return res.status(401).json({ error: 'Invalid session' });
-    next();
+    authUserId = String(((await r.json()) as { id?: string }).id ?? '');
+    if (!authUserId) return res.status(401).json({ error: 'Invalid session' });
   } catch {
-    res.status(502).json({ error: 'Auth verification unavailable' });
+    return res.status(502).json({ error: 'Auth verification unavailable' });
   }
+
+  // Staff first — the MF Admin console keeps full reach.
+  const staff = await sbSelect(
+    `nw_employees?select=id&status=eq.active&auth_user_id=eq.${encodeURIComponent(authUserId)}&limit=1`,
+  );
+  if (staff.length) {
+    req.caller = { kind: 'staff', authUserId, ucc: null };
+    return next();
+  }
+
+  // Otherwise a portal client, scoped to their own UCC.
+  const client = await sbSelect(
+    `nw_clients?select=id,bse_ucc&client_auth_user_id=eq.${encodeURIComponent(authUserId)}&limit=1`,
+  );
+  if (client.length) {
+    req.caller = {
+      kind: 'client',
+      authUserId,
+      ucc: (client[0].bse_ucc as string) || null,
+      clientId: String(client[0].id ?? ''),
+    };
+    return next();
+  }
+
+  return res.status(403).json({ error: 'This account is not permitted to use the BSE service.' });
 }
 
 /**
- * BSE answers order_new with {"status":"success","data":{}} — no id, nothing
- * created — when it silently refuses an order (UCC not transaction-ready,
- * scheme/mode mismatch, or a payload it could not use). Treating that as
- * success would tell a client their money moved when it did not, so every
- * order-placing route must assert a real id came back.
+ * The UCC a request may act on.
+ *
+ * For a client the answer never comes from the request body — it is read from
+ * their own record. A client may therefore ask for someone else's UCC and
+ * simply get their own; there is no code path that honours the request.
  */
-function assertOrderPlaced(result: Record<string, unknown>, what: string): void {
-  const items = (result.items as Record<string, unknown>[] | undefined) ?? [];
-  const id = String(items[0]?.id ?? result.id ?? result.order_id ?? '');
-  if (!id) {
+function scopedUcc(req: Request, requested?: string | null): string {
+  const c = req.caller;
+  if (!c) throw new BseError('Caller not resolved', 401);
+  if (c.kind === 'staff') {
+    const ucc = (requested ?? '').trim();
+    if (!ucc) throw new BseError('A client code is required.', 400);
+    return ucc;
+  }
+  if (!c.ucc) {
     throw new BseError(
-      `BSE returned success but no order id — the ${what} was NOT placed. Common causes: ` +
-        'the folio does not exist, the UCC is not transaction-ready, or the scheme does not ' +
-        'allow this mode (physical vs demat).',
-      502,
-      result,
+      'Your investment account is not set up yet. Please contact your relationship manager.',
+      403,
     );
   }
+  return c.ucc;
 }
 
 /* --------------------------------- routes --------------------------------- */
@@ -199,7 +277,50 @@ app.post('/verify/pan', async (req: Request, res: Response) => {
   }
 });
 
-app.use(requireSupabaseUser);
+/**
+ * BSE answers order_new with {"status":"success","data":{}} — no id, nothing
+ * created — when it silently refuses an order (UCC not transaction-ready,
+ * scheme/mode mismatch, or a payload it could not use). Treating that as
+ * success would tell a client their money moved when it did not.
+ */
+function assertOrderPlaced(result: Record<string, unknown>, what: string): void {
+  const items = (result.items as Record<string, unknown>[] | undefined) ?? [];
+  const id = String(items[0]?.id ?? result.id ?? result.order_id ?? '');
+  if (!id) {
+    throw new BseError(
+      `BSE returned success but no order id — the ${what} was NOT placed. Common causes: ` +
+        'the folio does not exist, the UCC is not transaction-ready, or the scheme does not ' +
+        'allow this mode (physical vs demat).',
+      502,
+      result,
+    );
+  }
+}
+
+/** Routes a portal client must never reach. */
+function staffOnly(req: Request, res: Response, next: NextFunction) {
+  if (req.caller?.kind !== 'staff') {
+    return res.status(403).json({ error: 'Staff only.' });
+  }
+  next();
+}
+
+/**
+ * Confirm a record identified only by its BSE id belongs to the caller.
+ *
+ * Ids like sxp_reg_num and exch_mandate_id carry no owner, so a client could
+ * otherwise cancel someone else's SIP or read their mandate simply by knowing
+ * a number. Staff skip the check; a client must match on UCC.
+ */
+async function assertOwnsByUcc(req: Request, ownerUcc: string | null | undefined, what: string) {
+  const c = req.caller;
+  if (!c || c.kind === 'staff') return;
+  if (!c.ucc || String(ownerUcc ?? '') !== c.ucc) {
+    throw new BseError(`That ${what} does not belong to your account.`, 403);
+  }
+}
+
+app.use(requireCaller);
 
 /* ----------------------------- scheme master ------------------------------ */
 
@@ -274,6 +395,8 @@ app.get('/schemes/:code', async (req, res, next) => {
 app.post('/order', async (req, res, next) => {
   try {
     const body = req.body as AppOrderRequest & { schemeName?: string };
+    // A client's UCC comes from their own record; any clientCode they sent is ignored.
+    body.clientCode = scopedUcc(req, body.clientCode);
     if (body.type === 'sip') {
       const sxp = await bse.post<Record<string, unknown>>(
         '/sxp_register',
@@ -312,6 +435,7 @@ app.post('/order', async (req, res, next) => {
 app.post('/redemption', async (req, res, next) => {
   try {
     const body = req.body as AppRedemptionRequest;
+    body.clientCode = scopedUcc(req, body.clientCode);
     const result = await bse.post<Record<string, unknown>>('/order_new', {
       orders: [toRedemption(body, cfg.bseMemberCode)],
     });
@@ -327,6 +451,7 @@ app.post('/redemption', async (req, res, next) => {
 app.post('/switch', async (req, res, next) => {
   try {
     const body = req.body as AppSwitchRequest;
+    body.clientCode = scopedUcc(req, body.clientCode);
     const result = await bse.post<Record<string, unknown>>('/order_new', { orders: [toSwitch(body, cfg.bseMemberCode)] });
     assertOrderPlaced(result, 'switch');
     res.json(
@@ -345,7 +470,17 @@ app.post('/switch', async (req, res, next) => {
  */
 app.post('/cancel', async (req, res, next) => {
   try {
-    const { orderId, clientCode } = req.body as { orderId: string; clientCode: string };
+    const { orderId } = req.body as { orderId: string };
+    const clientCode = scopedUcc(req, (req.body as { clientCode?: string }).clientCode);
+    if (req.caller?.kind === 'client') {
+      const list = await bse.post<Record<string, unknown>>('/order_list', {
+        start: 0, length: 500, fields: ['ALL'], count_only: false,
+        filter_param: { open_close: 'o' },
+      });
+      const rows = ((list.lists ?? list.list ?? []) as Record<string, unknown>[]) || [];
+      const hit = rows.find((r) => String(r.id ?? '') === String(orderId));
+      await assertOwnsByUcc(req, (hit?.investor as Record<string, unknown>)?.ucc as string, 'order');
+    }
     const result = await bse.post<Record<string, unknown>>('/order_cancel', {
       id: Number(orderId) || orderId,
       investor: { ucc: clientCode },
@@ -385,7 +520,7 @@ app.post('/cancel', async (req, res, next) => {
  * resident-individual UCC registered and returned status APPROVED, then settled
  * to PENDING_AUTH pending the investor's 2FA (see /ucc/2fa-link below).
  */
-app.post('/ucc', async (req, res, next) => {
+app.post('/ucc', staffOnly, async (req, res, next) => {
   try {
     const body = req.body as AppUccRequest;
     const result = await bse.post<Record<string, unknown>>(
@@ -409,8 +544,9 @@ app.post('/ucc', async (req, res, next) => {
  */
 app.get('/ucc/:clientCode', async (req, res, next) => {
   try {
+    const clientCode = scopedUcc(req, req.params.clientCode);
     const result = await bse.post<Record<string, unknown>>('/v2/get_ucc', {
-      investor: { client_code: req.params.clientCode },
+      investor: { client_code: clientCode },
       fields: ['ALL'],
     });
     const so = (result.ucc_status_object as Record<string, unknown>) ?? {};
@@ -456,7 +592,7 @@ app.get('/ucc/:clientCode', async (req, res, next) => {
     ];
 
     res.json({
-      ...toAppUccResult(result, req.params.clientCode),
+      ...toAppUccResult(result, clientCode),
       transactionReady: state(txnReady.verified_status) === 'pass',
       transactionReadyReason: String(txnReady.verification_failed_reason ?? ''),
       mode: String(txnReady.mode ?? ''),
@@ -477,7 +613,8 @@ app.get('/ucc/:clientCode', async (req, res, next) => {
  */
 app.post('/ucc/2fa-link', async (req, res, next) => {
   try {
-    const { clientCode, event } = req.body as { clientCode: string; event?: string };
+    const { event } = req.body as { event?: string };
+    const clientCode = scopedUcc(req, (req.body as { clientCode?: string }).clientCode);
     const rows = await bse.postRaw<Record<string, unknown>[]>('/v2/get_2fa_link', [
       {
         event: event ?? 'ucc_auth',
@@ -511,6 +648,7 @@ app.post('/ucc/2fa-link', async (req, res, next) => {
 app.post('/mandate', async (req, res, next) => {
   try {
     const body = req.body as AppMandateRequest;
+    body.clientCode = scopedUcc(req, body.clientCode);
     const result = await bse.post<Record<string, unknown>>(
       '/mandate_register',
       toMandateRegister(body, cfg.bseMemberCode),
@@ -527,6 +665,7 @@ app.get('/mandate/:mandateId', async (req, res, next) => {
     const result = await bse.post<Record<string, unknown>>('/mandate_get', {
       exch_mandate_id: Number(req.params.mandateId),
     });
+    await assertOwnsByUcc(req, result.ucc as string, 'mandate');
     res.json({ ...toAppMandateResult(result), raw: result });
   } catch (err) {
     next(err);
@@ -536,7 +675,12 @@ app.get('/mandate/:mandateId', async (req, res, next) => {
 /** All mandates, newest first — optionally filtered to one client. */
 app.get('/mandates', async (req, res, next) => {
   try {
-    const clientCode = typeof req.query.clientCode === 'string' ? req.query.clientCode : null;
+    const clientCode =
+      req.caller?.kind === 'client'
+        ? (req.caller.ucc ?? '\u0000') // no UCC => matches nothing, never everything
+        : typeof req.query.clientCode === 'string'
+          ? req.query.clientCode
+          : null;
     const result = await bse.post<Record<string, unknown>>('/mandate_list', {
       start: 0,
       length: 200,
@@ -566,7 +710,9 @@ app.get('/mandates', async (req, res, next) => {
 
 app.post('/payment/link', async (req, res, next) => {
   try {
-    const result = await bse.post<Record<string, unknown>>('/v2/get_payment_detail', req.body);
+    const body = req.body as Record<string, unknown>;
+    body.clientCode = scopedUcc(req, body.clientCode as string | undefined);
+    const result = await bse.post<Record<string, unknown>>('/v2/get_payment_detail', body);
     res.json({ paymentUrl: String(result.payment_url ?? result.url ?? ''), isMock: false });
   } catch (err) {
     next(err);
@@ -576,6 +722,16 @@ app.post('/payment/link', async (req, res, next) => {
 app.post('/payment/status', async (req, res, next) => {
   try {
     const { orderId } = req.body as { orderId: string };
+    // Order ids are guessable; make sure this one is the caller's.
+    if (req.caller?.kind === 'client') {
+      const list = await bse.post<Record<string, unknown>>('/order_list', {
+        start: 0, length: 500, fields: ['ALL'], count_only: false,
+        filter_param: { open_close: 'o' },
+      });
+      const rows = ((list.lists ?? list.list ?? []) as Record<string, unknown>[]) || [];
+      const hit = rows.find((r) => String(r.id ?? '') === String(orderId));
+      await assertOwnsByUcc(req, (hit?.investor as Record<string, unknown>)?.ucc as string, 'order');
+    }
     const result = await bse.post<Record<string, unknown>>('/get_bse_pg_payment_status', { order_id: orderId });
     res.json({
       orderId,
@@ -596,7 +752,7 @@ app.post('/payment/status', async (req, res, next) => {
  * KYC check compares the holder name against exactly this, so onboarding with a
  * name that differs is the difference between ACTIVE and stuck.
  */
-app.post('/pan/verify', async (req, res, next) => {
+app.post('/pan/verify', staffOnly, async (req, res, next) => {
   try {
     const pan = String(req.body?.pan ?? '').trim().toUpperCase();
     const name = req.body?.name ? String(req.body.name).trim() : undefined;
@@ -614,7 +770,7 @@ app.post('/pan/verify', async (req, res, next) => {
  * Served through the proxy (which owns the table and the service-role key) so
  * the console keeps reading only one backend.
  */
-app.get('/webhooks/events', async (req, res, next) => {
+app.get('/webhooks/events', staffOnly, async (req, res, next) => {
   try {
     if (!cfg.supabaseServiceRoleKey) return res.json([]);
     const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
@@ -670,7 +826,7 @@ async function resolveEgressIp(): Promise<string> {
  * to, as which member, from which egress IP (the one BSE whitelists), and
  * whether a login currently succeeds.
  */
-app.get('/diagnostics', async (_req, res, next) => {
+app.get('/diagnostics', staffOnly, async (_req, res, next) => {
   try {
     const egressIp = await resolveEgressIp();
 
@@ -711,7 +867,12 @@ app.get('/diagnostics', async (_req, res, next) => {
  */
 app.get('/orders', async (req, res, next) => {
   try {
-    const clientCode = typeof req.query.clientCode === 'string' ? req.query.clientCode : null;
+    const clientCode =
+      req.caller?.kind === 'client'
+        ? (req.caller.ucc ?? '\u0000') // no UCC => matches nothing, never everything
+        : typeof req.query.clientCode === 'string'
+          ? req.query.clientCode
+          : null;
     const fetchSide = async (openClose: 'o' | 'c') => {
       const r = await bse.post<Record<string, unknown>>('/order_list', {
         start: 0,
@@ -764,7 +925,7 @@ app.get('/orders', async (req, res, next) => {
 });
 
 /** All UCCs registered under this member, with their verification status. */
-app.get('/uccs', async (_req, res, next) => {
+app.get('/uccs', staffOnly, async (_req, res, next) => {
   try {
     const result = await bse.post<Record<string, unknown>>('/v2/list_ucc', {
       start: 0,
@@ -816,7 +977,12 @@ app.get('/uccs', async (_req, res, next) => {
  */
 app.get('/holdings', async (req, res, next) => {
   try {
-    const clientCode = typeof req.query.clientCode === 'string' ? req.query.clientCode : null;
+    const clientCode =
+      req.caller?.kind === 'client'
+        ? (req.caller.ucc ?? '\u0000') // no UCC => matches nothing, never everything
+        : typeof req.query.clientCode === 'string'
+          ? req.query.clientCode
+          : null;
     const fetchSide = async (openClose: 'o' | 'c') => {
       const r = await bse.post<Record<string, unknown>>('/order_list', {
         start: 0,
@@ -929,6 +1095,7 @@ app.get('/holdings', async (req, res, next) => {
 app.post('/sxp', async (req, res, next) => {
   try {
     const body = req.body as AppSxpRequest;
+    body.clientCode = scopedUcc(req, body.clientCode);
     const result = await bse.post<Record<string, unknown>>(
       '/sxp_register',
       toSxpRegister2(body, cfg.bseMemberCode),
@@ -946,7 +1113,12 @@ app.post('/sxp', async (req, res, next) => {
 /** All systematic plans, optionally filtered to one client. */
 app.get('/sxp', async (req, res, next) => {
   try {
-    const clientCode = typeof req.query.clientCode === 'string' ? req.query.clientCode : null;
+    const clientCode =
+      req.caller?.kind === 'client'
+        ? (req.caller.ucc ?? '\u0000') // no UCC => matches nothing, never everything
+        : typeof req.query.clientCode === 'string'
+          ? req.query.clientCode
+          : null;
     const result = await bse.post<Record<string, unknown>>('/sxp_list', {
       start: 0,
       length: 200,
@@ -978,6 +1150,17 @@ app.get('/sxp', async (req, res, next) => {
 app.post('/sxp/cancel', async (req, res, next) => {
   try {
     const { sxpRegNum } = req.body as { sxpRegNum: string };
+    // A registration number alone proves nothing — confirm it is the caller's.
+    if (req.caller?.kind === 'client') {
+      const list = await bse.post<Record<string, unknown>>('/sxp_list', {
+        start: 0, length: 500, fields: ['ALL'], count_only: false,
+      });
+      const rows = ((list.lists ?? list.list ?? []) as Record<string, unknown>[]) || [];
+      const hit = rows.find(
+        (r) => String(r.sxp_id ?? r.sxp_reg_num ?? '') === String(sxpRegNum),
+      );
+      await assertOwnsByUcc(req, ((hit?.investor as Record<string, unknown>)?.ucc ?? hit?.ucc) as string, 'plan');
+    }
     const result = await bse.post<Record<string, unknown>>('/sxp_cancel', {
       sxp_reg_num: sxpRegNum,
       member: cfg.bseMemberCode,
