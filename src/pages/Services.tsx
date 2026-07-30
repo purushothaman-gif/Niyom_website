@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ArrowLeft, TrendingUp, Target, Shield, Users, Award, Zap, Menu, X } from 'lucide-react';
+import { ArrowLeft, TrendingUp, Target, Shield, Users, Award, Zap, Menu, X, LogIn } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { HeroBackground } from '../components/HeroBackground';
 import { Reveal } from '../components/Reveal';
 import { ThemeToggle } from '../theme/ThemeToggle';
+import { LoginMenu, LOGIN_PORTALS } from '../components/LoginMenu';
 
 interface ServicesProps {
   onBack: () => void;
@@ -189,12 +190,11 @@ export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
               <ArrowLeft size={20} />
               Back
             </button>
-            <button
-              onClick={onGetStarted}
-              className="bg-accent-soft hover:bg-accent-soft-deep text-black px-8 py-3 rounded-md font-semibold transition-all duration-300 shadow-md hover:shadow-lg"
-            >
-              Client Login
-            </button>
+            {/* Was labelled "Client Login" but wired to onGetStarted, i.e. it
+                opened the signup flow. Now a real portal chooser, matching the
+                other public headers; signup stays on the "Get Started Today"
+                CTA further down the page. */}
+            <LoginMenu triggerClassName="px-8 py-3 shadow-md" />
           </div>
 
           <div className="md:hidden flex items-center gap-1 flex-shrink-0">
@@ -222,15 +222,32 @@ export function Services({ onBack, onGetStarted, initialTab }: ServicesProps) {
                 <ArrowLeft size={20} />
                 Back
               </button>
-              <button
-                onClick={() => {
-                  onGetStarted();
-                  setIsMobileMenuOpen(false);
-                }}
-                className="bg-accent-soft hover:bg-accent-soft-deep text-black px-4 py-3 rounded-md font-semibold transition-all duration-300"
-              >
-                Client Login
-              </button>
+              {/* Both portals laid out directly — a sheet has the room, so no
+                  dropdown. Same LOGIN_PORTALS source as the desktop menu. */}
+              <div className="border-t border-accent-soft/20 pt-3 space-y-2">
+                <div className="flex items-center gap-2 px-1 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-soft/80">
+                  <LogIn size={13} />
+                  Choose your portal
+                </div>
+                {LOGIN_PORTALS.map(({ label, hint, icon: Icon, href }) => (
+                  <button
+                    key={label}
+                    onClick={() => {
+                      window.open(href, '_blank');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition-colors hover:border-accent-soft/40 hover:bg-accent-soft/10"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft/10 text-accent-soft ring-1 ring-inset ring-accent-soft/20">
+                      <Icon size={17} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-white">{label}</span>
+                      <span className="block text-[11px] text-white/45">{hint}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
