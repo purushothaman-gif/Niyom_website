@@ -30,6 +30,8 @@ export class BseError extends Error {
 export class BseClient {
   private token: string | null = null;
   private tokenIssuedAt = 0;
+  /** In-flight login, so concurrent callers share one round trip (see getToken). */
+  private loginInFlight: Promise<string> | null = null;
   /** Conservative token lifetime; UAT-VERIFY the real expiry (likely JWT exp). */
   private static TOKEN_TTL_MS = 45 * 60 * 1000;
 
@@ -58,11 +60,24 @@ export class BseClient {
     return token;
   }
 
+  /**
+   * The member's BSE token, shared by every caller.
+   *
+   * SINGLE-FLIGHT: when the token is stale, concurrent requests must NOT each
+   * call login(). Ten clients ordering at once would otherwise fire ten logins;
+   * if BSE issues one session per member, each login invalidates the previous
+   * and the losers cascade into 401s. Callers that arrive during a login join
+   * the in-flight promise instead of starting another.
+   */
   private async getToken(): Promise<string> {
     if (this.token && Date.now() - this.tokenIssuedAt < BseClient.TOKEN_TTL_MS) {
       return this.token;
     }
-    return this.login();
+    if (this.loginInFlight) return this.loginInFlight;
+    this.loginInFlight = this.login().finally(() => {
+      this.loginInFlight = null;
+    });
+    return this.loginInFlight;
   }
 
   /**
@@ -89,7 +104,13 @@ export class BseClient {
     });
 
     if (res.status === 401 && retry) {
-      this.token = null;
+      // Only invalidate the token WE used. Under concurrency another request may
+      // already have refreshed it, and blindly nulling would discard a good
+      // token and start the stampede this class exists to prevent.
+      if (this.token === token) {
+        this.token = null;
+        this.tokenIssuedAt = 0;
+      }
       return this.post<T>(route, data, false);
     }
 

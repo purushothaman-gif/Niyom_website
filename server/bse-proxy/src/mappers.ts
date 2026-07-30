@@ -50,9 +50,23 @@ export interface AppSwitchRequest {
 
 /* ------------------------------ helpers ----------------------------------- */
 
-/** Member order ref: numbers and hyphens only, 1-32 chars (BSE constraint). */
+/**
+ * Member order reference: digits and hyphens only, 1-32 chars (BSE constraint),
+ * and it must be UNIQUE — BSE rejects or misattributes duplicates.
+ *
+ * The previous `Date.now()-random(0..9998)` collided about 0.45% of the time
+ * for ten orders placed in the same millisecond: invisible in single-user
+ * testing, inevitable once clients transact concurrently, and it lands on
+ * money. A per-process counter cannot collide within a process; the random
+ * salt (fixed at startup) separates processes and restarts that share a
+ * millisecond.
+ */
+const REF_SALT = String(Math.floor(Math.random() * 9000) + 1000);
+let refCounter = 0;
+
 export function memRefId(): string {
-  return `${Date.now()}-${Math.floor(Math.random() * 9999)}`.slice(0, 32);
+  refCounter = (refCounter + 1) % 1_000_000;
+  return `${Date.now()}-${REF_SALT}-${refCounter}`;
 }
 
 const isoDate = (d = new Date()) => d.toISOString().slice(0, 10);
