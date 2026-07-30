@@ -17,7 +17,7 @@ export const bondKeys = {
 
 const LIST_COLUMNS =
   'id, isin, bond_name, issuer_name, coupon_rate, coupon_frequency, maturity_date, rating, ' +
-  'rating_agency, latest_price, selling_price, price_updated_at, active_status, ' +
+  'rating_agency, security_type, latest_price, selling_price, price_updated_at, active_status, ' +
   'verification_status, data_quality_score, updated_at';
 
 export function useBonds(search: string) {

@@ -16,6 +16,7 @@ const COLUMNS: { label: string; type: SortType; get: (b: BondPublic) => string |
   { label: 'Freq', type: 'text', get: b => b.coupon_frequency || '' },
   { label: 'Maturity', type: 'date', get: b => b.maturity_date },
   { label: 'Rating', type: 'text', get: b => b.rating || '' },
+  { label: 'Category', type: 'text', get: b => b.security_type || '' },
   { label: 'Price', type: 'num', get: b => b.latest_price },
   { label: 'Quality', type: 'num', get: b => b.data_quality_score },
   { label: 'Status', type: 'text', get: b => b.verification_status || '' },
@@ -68,7 +69,8 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
   const review = bonds.filter(b => b.verification_status === 'needs_review').length;
 
   // Column filters (client-side — the whole active list is already loaded).
-  const EMPTY = { freq: '', status: '', rating: '', couponMin: '', couponMax: '', priceMin: '', priceMax: '', qualityMin: '', matFrom: '', matTo: '', updFrom: '' };
+  const EMPTY = { freq: '', status: '', cat: '', rating: '', couponMin: '', couponMax: '', priceMin: '', priceMax: '', qualityMin: '', matFrom: '', matTo: '', updFrom: '' };
+  const categories = Array.from(new Set(bonds.map(b => b.security_type).filter(Boolean))).sort() as string[];
   const [filters, setFilters] = useState<Record<string, string>>(EMPTY);
   const [showFilters, setShowFilters] = useState(false);
   const setF = (k: string, v: string) => setFilters(f => ({ ...f, [k]: v }));
@@ -83,6 +85,7 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
   const filtered = bonds.filter((b: BondPublic) => {
     if (filters.freq && b.coupon_frequency !== filters.freq) return false;
     if (filters.status && b.verification_status !== filters.status) return false;
+    if (filters.cat && b.security_type !== filters.cat) return false;
     if (filters.rating && !(b.rating || '').toLowerCase().includes(filters.rating.toLowerCase())) return false;
     if (!inRange(b.coupon_rate, numOr(filters.couponMin), numOr(filters.couponMax))) return false;
     if (!inRange(b.latest_price, numOr(filters.priceMin), numOr(filters.priceMax))) return false;
@@ -187,6 +190,13 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
               </select>
             </div>
             <div>
+              <label className="block text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--text-faint)' }}>Category</label>
+              <select value={filters.cat} onChange={e => setF('cat', e.target.value)} className="w-full px-2.5 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+                <option value="">All</option>
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="block text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--text-faint)' }}>Rating contains</label>
               <input value={filters.rating} onChange={e => setF('rating', e.target.value)} placeholder="e.g. AAA, AA+" className="w-full px-2.5 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
             </div>
@@ -278,6 +288,7 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
                     <td className="px-3 py-2.5 text-xs capitalize" style={{ color: 'var(--text-faint)' }}>{(b.coupon_frequency || '—').replace('_', '-')}</td>
                     <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{fmtDate(b.maturity_date)}</td>
                     <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{b.rating || '—'}</td>
+                    <td className="px-3 py-2.5 text-xs whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>{b.security_type || '—'}</td>
                     <td className="px-3 py-2.5 text-right font-semibold" style={{ color: 'var(--text-primary)' }}>{fmtPrice(b.latest_price)}</td>
                     <td className="px-3 py-2.5"><QualityBadge score={b.data_quality_score} /></td>
                     <td className="px-3 py-2.5"><VerifBadge status={b.verification_status} /></td>
