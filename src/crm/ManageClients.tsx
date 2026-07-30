@@ -153,6 +153,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
     setEditDupWarnings({ pan: null, phone: null, email: null });
     setEditForm({
       full_name: c.full_name, email: c.email, phone: c.phone, pan: c.pan,
+      gender: c.gender ?? '',
       address: c.address, city: c.city, state: c.state,
       demat_account: c.demat_account, dp_name: c.dp_name,
       verification_status: c.verification_status, notes: c.notes,
@@ -162,7 +163,16 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   const handleSaveEdit = async () => {
     if (!editClient) return;
     setSaving(true);
-    const { error } = await supabase.from('nw_clients').update({ ...editForm, updated_at: new Date().toISOString() }).eq('id', editClient.id);
+    const { error } = await supabase
+      .from('nw_clients')
+      .update({
+        ...editForm,
+        // gender is CHECK'd against M/F/O or NULL — the select's "Not set"
+        // yields '', which the constraint rejects.
+        gender: editForm.gender ? editForm.gender : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', editClient.id);
     setSaving(false);
     if (error) { showToast(error.message, false); return; }
     setEditClient(null);
@@ -616,6 +626,21 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                 <input type="text" value={editForm.pan || ''} onChange={e => onEditFieldChange('pan', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10), editClient!.id)}
                   className="w-full px-3 py-2 rounded-xl text-sm text-text-primary outline-none" style={inputStyle} />
                 <EditDupWarn msg={editDupWarnings.pan} />
+              </InlineField>
+              <InlineField label="Gender">
+                {/* Required by BSE StAR MF to register a UCC. Existing clients
+                    predate the field, so it is blank until set here. */}
+                <select
+                  value={editForm.gender || ''}
+                  onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl text-sm text-text-primary outline-none"
+                  style={inputStyle}
+                >
+                  <option value="">Not set</option>
+                  <option value="M">Male</option>
+                  <option value="F">Female</option>
+                  <option value="O">Other</option>
+                </select>
               </InlineField>
               <InlineField label="Verification Status">
                 <select value={editForm.verification_status || 'pending'} onChange={e => setEditForm(f => ({ ...f, verification_status: e.target.value as any }))}

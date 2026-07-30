@@ -116,7 +116,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
   const [success, setSuccess] = useState('');
 
   const [form, setForm] = useState({
-    full_name: '', pan: '', dob: '', phone: '', email: '',
+    full_name: '', pan: '', dob: '', gender: '', phone: '', email: '',
     address: '', city: '', state: '', pincode: '',
     demat_account: '', dp_name: '',
     bank_account: '', bank_ifsc: '', bank_name: '',
@@ -293,6 +293,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     if (!form.pan.trim())        { setError('PAN number is required.'); return false; }
     if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan)) { setError('PAN format is invalid (e.g. ABCDE1234F).'); return false; }
     if (!form.dob)               { setError('Date of birth is required.'); return false; }
+    if (!form.gender)            { setError('Gender is required — BSE needs it to register the client.'); return false; }
     if (!form.phone.trim())      { setError('Mobile number is required.'); return false; }
     if (!/^[6-9]\d{9}$/.test(form.phone)) { setError('Enter a valid 10-digit Indian mobile number.'); return false; }
     if (!form.email.trim())      { setError('Email address is required.'); return false; }
@@ -417,6 +418,8 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
         full_name: form.full_name.trim(),
         pan: form.pan.toUpperCase(),
         dob: form.dob,
+        // BSE StAR MF requires a gender when registering a UCC; null until chosen.
+        gender: form.gender || null,
         phone: form.phone,
         email: form.email.trim().toLowerCase(),
         address: form.address,
@@ -805,6 +808,19 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
               </Field>
               <Field label="Date of Birth" required>
                 <Input type="date" value={form.dob} onChange={e => set('dob', e.target.value)} />
+              </Field>
+              <Field label="Gender" required>
+                <select
+                  value={form.gender}
+                  onChange={e => set('gender', e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                  style={{ background: 'var(--bg-base)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                >
+                  <option value="">Select…</option>
+                  <option value="M">Male</option>
+                  <option value="F">Female</option>
+                  <option value="O">Other</option>
+                </select>
               </Field>
               <Field label="Mobile Number" required>
                 <Input type="tel" value={form.phone} onChange={e => onFieldChange('phone', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="9876543210" maxLength={10} />
