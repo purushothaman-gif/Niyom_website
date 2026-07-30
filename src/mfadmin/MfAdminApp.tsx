@@ -13,7 +13,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ArrowDownUp, Repeat } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { NWEmployee } from '../crm/types';
 import {
@@ -29,6 +29,9 @@ import { useAdminRouter } from './routing/useAdminRouter';
 import { useAdminDashboard } from './hooks/useAdminDashboard';
 import { AdminDashboardPage } from './features/dashboard/AdminDashboardPage';
 import { AdminPlaceholder } from './features/AdminPlaceholder';
+import { OrderBookPage } from './features/bse/OrderBookPage';
+import { UccBookPage } from './features/bse/UccBookPage';
+import { SxpBookPage } from './features/bse/SxpBookPage';
 
 export default function MfAdminApp() {
   const [employee, setEmployee] = useState<NWEmployee | null>(null);
@@ -113,13 +116,28 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
   };
 
   const renderView = () => {
-    if (view === 'dashboard') {
-      if (loading && !data) return <Spinner />;
-      if (error) return <ErrorState message={error} onRetry={refresh} />;
-      if (data) return <AdminDashboardPage data={data} />;
-      return <Spinner />;
+    switch (view) {
+      case 'dashboard':
+        if (loading && !data) return <Spinner />;
+        if (error) return <ErrorState message={error} onRetry={refresh} />;
+        if (data) return <AdminDashboardPage data={data} />;
+        return <Spinner />;
+
+      // Live BSE StAR MF surfaces (via the NIYOM proxy).
+      case 'orders':
+        return <OrderBookPage />;
+      case 'ucc':
+        return <UccBookPage />;
+      case 'sip':
+        return <SxpBookPage title="SIP Book" only="SIP" />;
+      case 'stp':
+        return <SxpBookPage title="Systematic Transfer Plan" icon={Repeat} only="STP" />;
+      case 'swp':
+        return <SxpBookPage title="Systematic Withdrawal Plan" icon={ArrowDownUp} only="SWP" />;
+
+      default:
+        return <AdminPlaceholder title={ADMIN_VIEW_TITLES[view]} />;
     }
-    return <AdminPlaceholder title={ADMIN_VIEW_TITLES[view]} />;
   };
 
   return (
