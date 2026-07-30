@@ -78,6 +78,30 @@ const COLUMNS =
 
 export const CrmImportService = {
   /**
+   * Record the UCC BSE assigned against the CRM client.
+   *
+   * This is what lets the proxy answer "which UCC does this caller own?" when
+   * the client later signs into the portal — without it they cannot transact,
+   * however complete their BSE registration is. Best-effort: registration at
+   * BSE has already succeeded by this point and must not be reported as failed.
+   */
+  async linkUcc(clientId: string, ucc: string, status: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('nw_clients')
+        .update({
+          bse_ucc: ucc,
+          bse_ucc_status: status,
+          bse_ucc_synced_at: new Date().toISOString(),
+        })
+        .eq('id', clientId);
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
    * Search CRM clients by name, code or PAN. Returns [] rather than throwing if
    * the CRM is unavailable — this is a convenience, and it must never be the
    * reason a client can't be registered at BSE.

@@ -7,13 +7,15 @@ import { AmcAvatar } from '../components/AmcAvatar';
 import { RatingStars } from '../components/RatingStars';
 import { RiskBadge } from '../components/RiskBadge';
 import { ReturnsRow } from '../components/ReturnsRow';
+import type { InvestGate } from '../MutualFundsModule';
 
 interface Props {
   scheme: FundScheme;
   onBack: () => void;
   onInvest: (type: OrderType) => void;
   /** When set, ordering is blocked; the CTAs reflect why (see MutualFundsModule). */
-  gate?: 'onboarding' | 'coming_soon' | null;
+  /** Why ordering is blocked, if it is — see InvestGate in MutualFundsModule. */
+  gate?: InvestGate;
 }
 
 export function FundDetailsPage({ scheme, onBack, onInvest, gate }: Props) {

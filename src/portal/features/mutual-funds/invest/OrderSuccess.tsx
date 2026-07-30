@@ -1,4 +1,4 @@
-import { CheckCircle2, Info } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Info, ShieldCheck } from 'lucide-react';
 import { fmt, fmtDate } from '../../../../crm/utils';
 import { Card } from '../../../components/Card';
 import type { OrderResult } from '../../../types/funds';
@@ -23,11 +23,30 @@ export function OrderSuccess({ result, onDone }: Props) {
         <span className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success-soft/10">
           <CheckCircle2 className="h-8 w-8" style={{ color: 'var(--success)' }} />
         </span>
-        <h2 className="font-display text-xl font-bold text-text-primary">Order Confirmed</h2>
+        <h2 className="font-display text-xl font-bold text-text-primary">
+          {result.twoFaUrl ? 'One last step' : 'Order Confirmed'}
+        </h2>
         <p className="mx-auto mt-1 max-w-xs text-sm text-text-secondary">
-          Your {result.type === 'sip' ? 'SIP has been registered' : 'investment has been placed'}{' '}
-          successfully.
+          {result.twoFaUrl
+            ? `Your ${result.type === 'sip' ? 'SIP' : 'order'} is placed but needs your approval before it can go ahead.`
+            : `Your ${result.type === 'sip' ? 'SIP has been registered' : 'investment has been placed'} successfully.`}
         </p>
+
+        {/* Without this the order simply never proceeds — say so plainly rather
+            than letting "Confirmed" imply it is done. */}
+        {result.twoFaUrl && (
+          <a
+            href={result.twoFaUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-token-md py-3 text-sm font-bold text-on-accent"
+            style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Approve this order
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        )}
 
         <dl className="mt-5 space-y-2 text-left">
           {rows.map((r) => (
