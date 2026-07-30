@@ -14,9 +14,12 @@ import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { DonutChart } from '../../../portal/components/DonutChart';
 import { StatusPill } from '../../../portal/components/StatusPill';
 import { EmptyState } from '../../../portal/components/EmptyState';
+import { EnvBadge, useBseEnv } from '../bse/EnvBadge';
 import type { AdminDashboardData } from '../../types';
 
 export function AdminDashboardPage({ data }: { data: AdminDashboardData }) {
+  const env = useBseEnv();
+
   return (
     <div className="space-y-6">
       {/* Primary KPIs */}
@@ -61,7 +64,7 @@ export function AdminDashboardPage({ data }: { data: AdminDashboardData }) {
               sub="of clients"
             />
           </div>
-          <StatusPill tone="success">Live from BSE</StatusPill>
+          <EnvBadge env={env} />
         </div>
       </Card>
 
