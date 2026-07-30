@@ -5,14 +5,14 @@ import { NWEmployee } from './types';
 import { EmployeeAvatar } from './EmployeeAvatar';
 import ImageCropModal from './ImageCropModal';
 import { fmtDate } from './utils';
-import { Plus, X, Pencil, Users, UserCheck, UserX, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, X, Pencil, Users, UserCheck, UserX, Eye, EyeOff, CheckCircle2, AlertCircle, Trash2, AlertTriangle } from 'lucide-react';
 
 interface Props { employee: NWEmployee; }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
-      <div className="w-full max-w-md rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+      <div className={`w-full ${wide ? 'max-w-lg' : 'max-w-md'} rounded-2xl overflow-hidden`} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-bold text-text-primary">{title}</h3>
           <button onClick={onClose} style={{ color: 'var(--text-faint)' }}><X className="w-5 h-5" /></button>
@@ -26,6 +26,13 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 // Display-only job titles (NOT authorization — that stays on `role`).
 const DESIGNATIONS = ['Relationship Manager', 'Senior Relationship Manager', 'Designated Partner'];
 
+// Workload snapshot returned by the delete-crm-user edge function.
+interface DeleteImpact {
+  clients: number; leads: number; dsas: number; tickets_open: number;
+  transactions: number; deals: number; debit_notes: number;
+  marketing_content: number; referral_links: number;
+}
+
 export default function Employees({ employee }: Props) {
   const [employees, setEmployees] = useState<NWEmployee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +45,16 @@ export default function Employees({ employee }: Props) {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Delete / offboarding (resignation) — super admin only.
+  const [deleteEmp, setDeleteEmp] = useState<NWEmployee | null>(null);
+  const [impact, setImpact] = useState<DeleteImpact | null>(null);
+  const [impactLoading, setImpactLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [successorId, setSuccessorId] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
+  const [confirmCode, setConfirmCode] = useState('');
 
   const [addForm, setAddForm] = useState({ full_name: '', email: '', password: '', role: 'employee', designation: 'Relationship Manager', employee_code: '' });
   const [editForm, setEditForm] = useState({ full_name: '', phone: '', role: 'employee', designation: 'Relationship Manager', status: 'active' });
@@ -128,6 +145,56 @@ export default function Employees({ employee }: Props) {
     const { error } = await supabase.from('nw_employees').update({ status: newStatus }).eq('id', emp.id);
     if (error) { showToast(error.message, false); return; }
     showToast(`${emp.full_name} marked as ${newStatus}.`);
+    load();
+  };
+
+  const callDeleteFn = async (payload: Record<string, unknown>) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-crm-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify(payload),
+    });
+    return { res, json: await res.json() };
+  };
+
+  // Opens the delete modal and pulls the employee's live workload, so the
+  // admin sees exactly what has to change hands before the account goes.
+  const openDelete = async (emp: NWEmployee) => {
+    setDeleteEmp(emp);
+    setImpact(null);
+    setDeleteError('');
+    setSuccessorId('');
+    setDeleteReason('');
+    setConfirmCode('');
+    setImpactLoading(true);
+    const { res, json } = await callDeleteFn({ mode: 'impact', employee_id: emp.id });
+    setImpactLoading(false);
+    if (!res.ok || json.error) { setDeleteError(json.error || 'Could not load employee records.'); return; }
+    setImpact(json.impact as DeleteImpact);
+  };
+
+  const ownedCount = impact ? impact.clients + impact.leads + impact.dsas + impact.tickets_open : 0;
+
+  const handleDelete = async () => {
+    if (!deleteEmp) return;
+    if (ownedCount > 0 && !successorId) { setDeleteError('Choose an employee to take over this book first.'); return; }
+    if (confirmCode.trim().toUpperCase() !== deleteEmp.employee_code.toUpperCase()) {
+      setDeleteError(`Type ${deleteEmp.employee_code} to confirm.`); return;
+    }
+    setDeleteError('');
+    setDeleting(true);
+    const { res, json } = await callDeleteFn({
+      mode: 'delete',
+      employee_id: deleteEmp.id,
+      confirm_code: confirmCode.trim(),
+      reassign_to: successorId || null,
+      reason: deleteReason.trim(),
+    });
+    setDeleting(false);
+    if (!res.ok || json.error) { setDeleteError(json.error || 'Failed to delete employee.'); return; }
+    setDeleteEmp(null);
+    showToast(`${json.full_name} (${json.employee_code}) removed.` + (json.reassigned_to ? ` Book moved to ${json.reassigned_to}.` : ''));
     load();
   };
 
@@ -232,6 +299,12 @@ export default function Employees({ employee }: Props) {
                           onMouseLeave={ev => (ev.currentTarget.style.color = 'var(--text-faint)')}>
                           {e.status === 'active' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                         </button>
+                        {isSuperAdmin && (
+                          <button onClick={() => openDelete(e)} title="Delete employee (resignation)" className="p-1.5 rounded-lg" style={{ color: 'var(--text-faint)' }}
+                            onMouseEnter={ev => (ev.currentTarget.style.color = 'var(--danger)')} onMouseLeave={ev => (ev.currentTarget.style.color = 'var(--text-faint)')}>
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </td>
@@ -358,6 +431,107 @@ export default function Employees({ employee }: Props) {
               <button onClick={() => setEditEmp(null)} className="px-4 py-2 rounded-xl text-sm" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
               <button onClick={handleEdit} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
                 {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Delete Employee Modal — offboarding on resignation */}
+      {deleteEmp && (
+        <Modal title={`Delete Employee — ${deleteEmp.full_name}`} onClose={() => setDeleteEmp(null)} wide>
+          <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+            <div className="p-4 rounded-xl flex gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+              <AlertTriangle className="w-5 h-5 flex-shrink-0 text-c-red" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-text-primary">This permanently removes {deleteEmp.employee_code} and their CRM login.</p>
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  Past work (transactions, deals, debit notes, activity logs) stays in the system but is no longer linked to a named employee.
+                  Their alerts, saved views and marketing referral links are deleted. This cannot be undone — to keep a resigned employee's
+                  records intact, mark them <span className="text-text-primary font-medium">Inactive</span> instead.
+                </p>
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 rounded-xl text-sm text-c-red" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>{deleteError}</div>
+            )}
+
+            {impactLoading ? (
+              <div className="py-8 flex justify-center"><LogoLoader size={36} /></div>
+            ) : impact && (
+              <>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Currently owned — moves to the new employee</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { label: 'Clients', value: impact.clients },
+                      { label: 'Leads', value: impact.leads },
+                      { label: 'DSAs', value: impact.dsas },
+                      { label: 'Open tickets', value: impact.tickets_open },
+                    ].map(s => (
+                      <div key={s.label} className="rounded-xl p-3 text-center" style={{ background: 'var(--bg-raised)', border: `1px solid ${s.value > 0 ? 'rgba(239,68,68,0.25)' : 'var(--border)'}` }}>
+                        <p className="text-lg font-bold text-text-primary">{s.value}</p>
+                        <p className="text-[10px] leading-tight" style={{ color: 'var(--text-faint)' }}>{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>History — kept, but unlinked from the employee</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      ['Transactions', impact.transactions],
+                      ['Deal confirmations', impact.deals],
+                      ['Debit notes', impact.debit_notes],
+                      ['Marketing content', impact.marketing_content],
+                      ['Referral links (deleted)', impact.referral_links],
+                    ].map(([label, value]) => (
+                      <span key={label as string} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                        {label}: <span className="text-text-primary font-semibold">{value}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {ownedCount > 0 && (
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                      Hand over to <span style={{ color: 'var(--accent)' }}>*</span>
+                    </label>
+                    <select value={successorId} onChange={e => setSuccessorId(e.target.value)} className={inputClass} style={inputStyle}>
+                      <option value="">— Select an employee —</option>
+                      {employees.filter(x => x.id !== deleteEmp.id && x.status === 'active').map(x => (
+                        <option key={x.id} value={x.id}>{x.full_name} ({x.employee_code})</option>
+                      ))}
+                    </select>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>
+                      All clients, leads, DSAs and open tickets move to this employee, who is notified in the CRM.
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Reason (optional)</label>
+                  <input type="text" value={deleteReason} onChange={e => setDeleteReason(e.target.value)} placeholder="e.g. Resigned — last working day 31 Jul 2026" className={inputClass} style={inputStyle} />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                    Type <span className="font-mono" style={{ color: 'var(--accent)' }}>{deleteEmp.employee_code}</span> to confirm
+                  </label>
+                  <input type="text" value={confirmCode} onChange={e => setConfirmCode(e.target.value)} placeholder={deleteEmp.employee_code} className={inputClass} style={inputStyle} />
+                </div>
+              </>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setDeleteEmp(null)} className="px-4 py-2 rounded-xl text-sm" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
+              <button onClick={handleDelete} disabled={deleting || impactLoading || !impact}
+                className="px-5 py-2 rounded-xl text-sm font-bold text-text-primary disabled:opacity-50"
+                style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                {deleting ? 'Deleting...' : 'Delete Employee'}
               </button>
             </div>
           </div>
