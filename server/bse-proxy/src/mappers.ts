@@ -198,38 +198,63 @@ export function toAppTxnResult(
 }
 
 /**
- * Scheme master row → app FundScheme. The master's exact column names need a
- * sandbox sample (UAT-VERIFY); every read is defensive with fallbacks so a
- * partial mapping degrades gracefully instead of crashing.
+ * Scheme master row -> app FundScheme. Field names verified against the BSE
+ * StARMF 2.0 demo `/api/master_scheme_list` response (25-Jul-2026). The scheme
+ * master carries identity + AMC + plan/option; NAV, returns, AUM, expense and
+ * risk are NOT in this feed (NAV comes from nav_master_list) — enrich later.
  */
 export function toAppScheme(row: Record<string, unknown>) {
-  const s = (k: string[], fb = '') => {
-    for (const key of k) if (row[key] != null) return String(row[key]);
+  const s = (keys: string[], fb = ''): string => {
+    for (const k of keys) {
+      const v = row[k];
+      if (v != null && String(v).trim() !== '') return String(v);
+    }
     return fb;
   };
-  const n = (k: string[], fb = 0) => {
-    for (const key of k) if (row[key] != null && !isNaN(Number(row[key]))) return Number(row[key]);
+  const num = (keys: string[], fb = 0): number => {
+    for (const k of keys) {
+      const v = row[k];
+      if (v != null && v !== '' && !isNaN(Number(v))) return Number(v);
+    }
     return fb;
   };
+
+  const catText = (s(['scheme_category']) + ' ' + s(['scheme_sub_category'])).toLowerCase();
+  const category = /equity|elss|large|mid|small|flexi|multi.?cap|index|sectoral|thematic|contra|value|focused/.test(catText)
+    ? 'Equity'
+    : /debt|bond|gilt|liquid|money.?market|duration|credit|overnight|banking.?psu|corporate|floater/.test(catText)
+      ? 'Debt'
+      : /hybrid|balanced|arbitrage|multi.?asset|equity.?savings|advantage/.test(catText)
+        ? 'Hybrid'
+        : 'Other';
+
+  const optText = (s(['scheme_option']) + ' ' + s(['name'])).toLowerCase();
+  const plans = /idcw|dividend|payout|reinvest/.test(optText) && !/growth/.test(optText) ? ['IDCW'] : ['Growth'];
+
+  const exitRemarks = s(['scheme_exit_load_remarks']);
+  const exitNum = num(['scheme_exit_load']);
+  const exitLoad = exitRemarks && exitRemarks !== '0' ? exitRemarks : exitNum ? String(exitNum) : 'Nil';
+
   return {
-    schemeCode: s(['scheme_code', 'code', 'scheme_cd', 'id']),
-    name: s(['scheme_name', 'name', 'legal_name']),
-    amc: s(['amc_name', 'amc', 'amc_code']),
-    category: s(['category', 'scheme_category'], 'Other'),
-    subCategory: s(['sub_category', 'scheme_sub_category'], ''),
-    riskLevel: s(['risk', 'riskometer', 'risk_level'], 'Moderate'),
-    nav: n(['nav', 'latest_nav']),
-    navDate: s(['nav_date', 'as_on'], isoDate()),
-    returns: { '1M': 0, '6M': 0, '1Y': 0, '3Y': 0, '5Y': 0 }, // NAV history feed later
-    expenseRatio: n(['expense_ratio', 'ter']),
-    aum: n(['aum']),
-    minLumpsum: n(['min_purchase_amt', 'min_lumpsum'], 100),
-    minSip: n(['min_sip_amt', 'min_sip'], 100),
-    exitLoad: s(['exit_load'], '—'),
-    fundManager: s(['fund_manager'], '—'),
-    benchmark: s(['benchmark'], '—'),
+    schemeCode: s(['scheme_bse_code', 'scheme_rta_code', 'scheme_cpc_code']),
+    name: s(['name', 'parent_scheme_name']),
+    amc: s(['scheme_amc_name'], '—'),
+    category,
+    subCategory: s(['scheme_sub_category']),
+    riskLevel: 'Moderate', // not in scheme master feed
+    nav: 0, // from nav_master_list (separate feed) — enrich later
+    navDate: '',
+    returns: { '1M': 0, '6M': 0, '1Y': 0, '3Y': 0, '5Y': 0 },
+    expenseRatio: 0,
+    aum: 0,
+    minLumpsum: 0, // nested in `lumpsum` array — enrich later
+    minSip: 0, // nested in `systematic` array — enrich later
+    exitLoad,
+    fundManager: '—',
+    benchmark: s(['scheme_benchmark'], '—'),
     rating: 0,
-    plans: ['Growth'],
+    plans,
+    isin: s(['scheme_isin']),
     isMock: false,
   };
 }

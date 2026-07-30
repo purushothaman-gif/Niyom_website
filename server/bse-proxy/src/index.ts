@@ -69,20 +69,97 @@ app.get('/health', (_req, res) => {
 // Public — BSE calls this, so it must sit BEFORE the Supabase-JWT gate.
 app.use('/webhooks', webhookRouter(cfg));
 
+/**
+ * Cashfree PAN verification relay. Called server-to-server by the Supabase edge
+ * function (public-pan-verify) with a shared secret — NOT a Supabase JWT — so it
+ * sits before the JWT gate. The whole point of routing through this droplet is
+ * that Cashfree only accepts calls from this box's whitelisted static IP.
+ * The edge function keeps all app logic (ownership, dedup, DB write); this route
+ * is a thin pass-through that adds the static IP + holds the Cashfree keys.
+ */
+app.post('/verify/pan', async (req: Request, res: Response) => {
+  if (!cfg.panRelaySecret || req.header('x-relay-secret') !== cfg.panRelaySecret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!cfg.cashfreeVerifyClientId || !cfg.cashfreeVerifySecret) {
+    return res.status(503).json({ error: 'Cashfree verification not configured' });
+  }
+  const pan = String(req.body?.pan ?? '').trim().toUpperCase();
+  const name = req.body?.name ? String(req.body.name).trim() : undefined;
+  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+    return res.status(400).json({ error: 'Invalid PAN format' });
+  }
+  const base = cfg.cashfreeVerifyEnv === 'sandbox'
+    ? 'https://sandbox.cashfree.com'
+    : 'https://api.cashfree.com';
+  try {
+    const cf = await fetch(`${base}/verification/pan`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-client-id': cfg.cashfreeVerifyClientId,
+        'x-client-secret': cfg.cashfreeVerifySecret,
+      },
+      body: JSON.stringify(name ? { pan, name } : { pan }),
+    });
+    const data = (await cf.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!cf.ok) {
+      return res.status(cf.status).json({ valid: false, error: (data.message as string) || 'PAN verification failed' });
+    }
+    const valid = data.valid === true;
+    res.json({
+      valid,
+      registered_name: valid ? ((data.registered_name as string) || (data.name_provided as string) || null) : null,
+      message: (data.message as string) ?? null,
+    });
+  } catch (e) {
+    console.error('[verify/pan] error', (e as Error)?.message);
+    res.status(502).json({ valid: false, error: 'Verification service unavailable' });
+  }
+});
+
 app.use(requireSupabaseUser);
 
-/** Scheme master → app FundScheme[]. */
-app.get('/schemes', async (_req, res, next) => {
+/* ----------------------------- scheme master ------------------------------ */
+
+/**
+ * Fields requested from BSE — trims the payload ~16x vs fields:["ALL"]
+ * (verified on the demo: 19.3KB -> 1.2KB per row).
+ */
+const SCHEME_FIELDS = [
+  'name', 'scheme_bse_code', 'scheme_amc_name', 'scheme_category',
+  'scheme_sub_category', 'scheme_isin', 'scheme_plan', 'scheme_option',
+  'scheme_benchmark', 'scheme_exit_load', 'scheme_exit_load_remarks',
+  'scheme_offer_status', 'is_active',
+];
+
+/** 28k schemes change rarely — cache mapped pages for 6h. */
+const SCHEME_TTL_MS = 6 * 60 * 60 * 1000;
+const schemeCache = new Map<string, { at: number; rows: ReturnType<typeof toAppScheme>[] }>();
+
+async function fetchSchemes(search: string, limit: number) {
+  const key = `${search}|${limit}`;
+  const hit = schemeCache.get(key);
+  if (hit && Date.now() - hit.at < SCHEME_TTL_MS) return hit.rows;
+  // Demo path verified 25-Jul-2026: /master_scheme_list (NOT /v2/...).
+  const data = await bse.post<Record<string, unknown>>('/master_scheme_list', {
+    start: 0,
+    length: limit,
+    fields: SCHEME_FIELDS,
+    count_only: false,
+    ...(search ? { search: { value: search } } : {}),
+  });
+  const rows = ((data.lists ?? data.list ?? []) as Record<string, unknown>[]).map(toAppScheme);
+  schemeCache.set(key, { at: Date.now(), rows });
+  return rows;
+}
+
+/** Scheme master → app FundScheme[]. Optional ?q= substring, ?limit= (max 2000). */
+app.get('/schemes', async (req, res, next) => {
   try {
-    // UAT-VERIFY: list envelope params accepted by master_scheme_list.
-    const data = await bse.post<Record<string, unknown>>('/v2/master_scheme_list', {
-      start: 0,
-      length: 5000,
-      fields: ['ALL'],
-      format: 'json',
-    });
-    const rows = (data.lists ?? data.list ?? data) as Record<string, unknown>[];
-    res.json(Array.isArray(rows) ? rows.map(toAppScheme) : []);
+    const q = String(req.query.q ?? '').trim();
+    const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 2000);
+    res.json(await fetchSchemes(q, limit));
   } catch (err) {
     next(err);
   }
@@ -90,15 +167,11 @@ app.get('/schemes', async (_req, res, next) => {
 
 app.get('/schemes/:code', async (req, res, next) => {
   try {
-    const data = await bse.post<Record<string, unknown>>('/v2/master_scheme_list', {
-      start: 0,
-      length: 1,
-      fields: ['ALL'],
-      format: 'json',
-      search: { value: req.params.code },
-    });
-    const rows = (data.lists ?? data.list ?? []) as Record<string, unknown>[];
-    res.json(rows.length ? toAppScheme(rows[0]) : null);
+    // BSE search is substring ("007-DP" also matches "IC9007-DP") — fetch a
+    // page and pick the exact scheme_bse_code match.
+    const code = req.params.code;
+    const rows = await fetchSchemes(code, 20);
+    res.json(rows.find((r) => r.schemeCode === code) ?? null);
   } catch (err) {
     next(err);
   }
