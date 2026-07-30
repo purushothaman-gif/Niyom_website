@@ -121,12 +121,29 @@ export function loadEndCard(): Promise<HTMLVideoElement | null> {
     v.playsInline = true;
     v.preload = 'auto';
     v.loop = false;
-    const done = () => { endCard = v; resolve(v); };
-    // canplaythrough can be slow to fire; loadeddata is enough to draw frames.
-    v.addEventListener('loadeddata', done, { once: true });
+
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      endCard = v;
+      resolve(v);
+    };
+
+    // Wait for canplaythrough, not loadeddata.
+    //
+    // loadeddata only means the first frame decoded. Playing the full ident
+    // during a capture on that guarantee can stall part-way when the buffer runs
+    // dry, and a stalled ident looks exactly like a truncated one — the frame
+    // freezes and the recording keeps rolling. The file is small and
+    // same-origin, so full buffering is effectively instant.
+    v.addEventListener('canplaythrough', done, { once: true });
+    // Backstop: some browsers are stingy about canplaythrough for muted,
+    // never-visible elements. Don't hang the render waiting for it.
+    v.addEventListener('loadeddata', () => setTimeout(done, 1500), { once: true });
     // A missing or undecodable ident must not abort a render — the caller
     // falls back to the drawn end card.
-    v.addEventListener('error', () => resolve(null), { once: true });
+    v.addEventListener('error', () => { if (!settled) { settled = true; resolve(null); } }, { once: true });
   });
   return endCardLoad;
 }
@@ -151,17 +168,6 @@ function drawEndCardFrame(
   ctx.drawImage(v, (w - dw) / 2, (h - dh) / 2, dw, dh);
   ctx.restore();
 }
-
-/**
- * How much of the ident to use.
- *
- * The supplied footage runs ~12s: the lockup draws in and resolves by about
- * 2.5s, then a tagline, then the website, then a fade to black. Playing all of
- * it would leave a 15s "short video" with 3s of actual content, so it is capped
- * at the resolve-and-hold, which is the part that reads as a sign-off. Raise
- * this to let more of the ident play.
- */
-const END_CARD_MAX_MS = 3800;
 
 /** Fallback outro length when the ident cannot be loaded. */
 const DRAWN_OUTRO_MS = 2200;
@@ -584,7 +590,7 @@ export async function renderVideoFrame(
   if (idx >= req.scenes.length && endCardVideo) {
     // A still of the ident needs a real seek: unlike the recording path there
     // is no playback to sample, so wait for the decoder to land on the frame.
-    const target = Math.min(END_CARD_MAX_MS / 1000, endCardVideo.duration || 4) * local;
+    const target = (Number.isFinite(endCardVideo.duration) ? endCardVideo.duration : 4) * local;
     await new Promise<void>(resolve => {
       const onSeeked = () => resolve();
       endCardVideo.addEventListener('seeked', onSeeked, { once: true });
@@ -649,8 +655,23 @@ export async function renderVideo(req: VideoRenderRequest): Promise<RenderedVide
   // The real ident always closes the piece, whether or not a CTA was written —
   // it is the brand sign-off, not a function of the copy. Its length comes from
   // the footage itself, capped so the ident cannot dominate a short video.
-  const outroMs = endCardVideo
-    ? Math.min(END_CARD_MAX_MS, (endCardVideo.duration || 4) * 1000)
+  // The ident plays in FULL.
+  //
+  // An earlier version clipped it to the first 3.8s, reasoning that a 12s
+  // sign-off would dominate a 15s video. That was the wrong call to make on the
+  // brand's behalf — the footage is a designed sequence (lockup build, tagline,
+  // website, fade) and cutting it at the build leaves it looking broken rather
+  // than concise. The scene script keeps its requested length and the ident is
+  // added on top, so total runtime is scenes + ident.
+  //
+  // Number.isFinite guards a duration that has not resolved yet (it reads NaN
+  // before loadedmetadata), which would make totalMs NaN and end the render
+  // instantly with an empty file.
+  const identMs = endCardVideo && Number.isFinite(endCardVideo.duration)
+    ? endCardVideo.duration * 1000
+    : 0;
+  const outroMs = identMs > 0
+    ? identMs
     : (req.cta ? DRAWN_OUTRO_MS : 0);
   const sceneMs = req.scenes.map(s => Math.max(1200, (s.duration_seconds || 3) * 1000));
   const totalMs = sceneMs.reduce((a, b) => a + b, 0) + outroMs;
@@ -697,9 +718,10 @@ export async function renderVideo(req: VideoRenderRequest): Promise<RenderedVide
           endCardVideo.currentTime = 0;
           void endCardVideo.play().catch(() => { /* fall through to whatever frame exists */ });
         }
-        const p01 = clamp01((elapsed - acc) / outroMs);
-        // Short cross-fade in so the cut from the last scene is not abrupt.
-        drawEndCardFrame(ctx, width, height, endCardVideo, easeOutCubic(clamp01(p01 / 0.12)));
+        // Fixed 260ms cross-fade regardless of ident length — as a fraction of
+        // a 12s card it would have run for well over a second.
+        const fadeIn = easeOutCubic(clamp01((elapsed - acc) / 260));
+        drawEndCardFrame(ctx, width, height, endCardVideo, fadeIn);
         // Disclaimer stays on every frame — required furniture, and the ident
         // itself does not carry it.
         overlayDisclaimer(ctx, width, height, req.disclaimer);
