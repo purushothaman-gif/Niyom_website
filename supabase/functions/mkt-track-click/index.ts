@@ -77,7 +77,7 @@ Deno.serve(async (req: Request) => {
     const { data: link } = ref
       ? await db
           .from("mkt_referral_links")
-          .select("employee_id")
+          .select("employee_id, dsa_id")
           .eq("ref_code", ref)
           .eq("active", true)
           .maybeSingle()
@@ -102,6 +102,9 @@ Deno.serve(async (req: Request) => {
     await db.from("mkt_referral_clicks").insert([{
       ref_code: effectiveRef,
       employee_id: link?.employee_id ?? null,
+      // Partner links carry dsa_id instead of employee_id, so the partner's own
+      // funnel counter (nw_partner_referral) is a single-table query.
+      dsa_id: link?.dsa_id ?? null,
       content_no: contentNo,
       platform,
       ip_hash: ipHash,

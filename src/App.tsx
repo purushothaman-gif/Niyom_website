@@ -16,6 +16,9 @@ const MfAdminApp = lazy(() => import('./mfadmin/MfAdminApp'));
 const ClientLogin = lazy(() => import('./pages/ClientLogin'));
 const ClientChangePassword = lazy(() => import('./pages/ClientChangePassword'));
 const ClientPortal = lazy(() => import('./pages/ClientPortal'));
+const PartnerLogin = lazy(() => import('./pages/PartnerLogin'));
+const PartnerChangePassword = lazy(() => import('./pages/PartnerChangePassword'));
+const PartnerPortal = lazy(() => import('./pages/PartnerPortal'));
 const PublicOnboarding = lazy(() => import('./pages/PublicOnboarding'));
 const PublicDealView = lazy(() => import('./pages/PublicDealView'));
 const PublicDebitNoteView = lazy(() => import('./pages/PublicDebitNoteView'));
@@ -149,6 +152,90 @@ function ClientLoginRoute() {
   );
 }
 
+/**
+ * Partner (DSA) Portal login/session. Structural clone of ClientLoginRoute, on
+ * its own sessionStorage keys and its own Supabase instance so a staff, client
+ * and partner session can coexist in one browser. Lives at /partner-login.
+ */
+function PartnerLoginRoute() {
+  const navigate = useNavigate();
+  const [partnerDsaId, setPartnerDsaId] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem('nw_partner_dsa') || null;
+    } catch {
+      return null;
+    }
+  });
+  const [partnerPasswordChanged, setPartnerPasswordChanged] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('nw_partner_pw_ok') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  // Mount-only: a restored pointer is only valid while a live partner Supabase
+  // session backs it. If it has expired, drop the pointer so the login form
+  // shows instead of a portal whose every RPC would raise.
+  useEffect(() => {
+    if (!partnerDsaId) return;
+    let cancelled = false;
+    import('./lib/supabase').then(({ partnerSupabase }) =>
+      partnerSupabase.auth.getSession().then(({ data }) => {
+        if (cancelled || data.session) return;
+        try {
+          sessionStorage.removeItem('nw_partner_dsa');
+          sessionStorage.removeItem('nw_partner_pw_ok');
+        } catch {}
+        setPartnerDsaId(null);
+        setPartnerPasswordChanged(false);
+      }),
+    );
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handlePartnerLogin = (id: string, pwChanged: boolean) => {
+    try {
+      sessionStorage.setItem('nw_partner_dsa', id);
+      sessionStorage.setItem('nw_partner_pw_ok', pwChanged ? '1' : '0');
+    } catch {}
+    setPartnerDsaId(id);
+    setPartnerPasswordChanged(pwChanged);
+  };
+
+  const handlePartnerPasswordChanged = () => {
+    try {
+      sessionStorage.setItem('nw_partner_pw_ok', '1');
+    } catch {}
+    setPartnerPasswordChanged(true);
+  };
+
+  // Also the kill-switch target: PartnerApp calls this when an RPC reports that
+  // access was revoked mid-session (RM disabled the login / deactivated the DSA).
+  const handlePartnerLogout = () => {
+    try {
+      sessionStorage.removeItem('nw_partner_dsa');
+      sessionStorage.removeItem('nw_partner_pw_ok');
+    } catch {}
+    import('./lib/supabase').then(({ partnerSupabase }) => partnerSupabase.auth.signOut());
+    setPartnerDsaId(null);
+    setPartnerPasswordChanged(false);
+    navigate('/');
+  };
+
+  if (partnerDsaId) {
+    if (!partnerPasswordChanged) {
+      return <PartnerChangePassword onComplete={handlePartnerPasswordChanged} />;
+    }
+    return <PartnerPortal onLogout={handlePartnerLogout} />;
+  }
+
+  return <PartnerLogin onLogin={handlePartnerLogin} />;
+}
+
 function OnboardingRoute() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -195,6 +282,7 @@ function AppContent() {
 
           {/* Authenticated / utility surfaces (noindex). */}
           <Route path="/client-login" element={<ClientLoginRoute />} />
+          <Route path="/partner-login" element={<PartnerLoginRoute />} />
           <Route path="/onboarding" element={<OnboardingRoute />} />
           <Route path="/crm/*" element={<CRM />} />
           <Route path="/mf-admin" element={<MfAdminApp />} />

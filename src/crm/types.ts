@@ -77,6 +77,14 @@ export interface NWDSA {
   created_at: string;
   updated_at: string;
   employee?: { full_name: string; employee_code: string };
+  // Partner Portal login (mirrors the nw_clients trio). Provisioned by an
+  // RM/admin via the create-partner-login edge function; nw_current_dsa_id()
+  // requires dsa_login_enabled AND status='active', so deactivating a DSA
+  // instantly revokes portal access.
+  dsa_auth_user_id?: string | null;
+  dsa_login_enabled?: boolean;
+  dsa_password_changed?: boolean;
+  dsa_last_login_at?: string | null;
 }
 
 export type DSADebitNoteStatus = 'generated' | 'paid' | 'cancelled';

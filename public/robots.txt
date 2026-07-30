@@ -5,6 +5,7 @@ Allow: /
 Disallow: /crm
 Disallow: /mf-admin
 Disallow: /client-login
+Disallow: /partner-login
 Disallow: /login
 Disallow: /onboarding
 Disallow: /deal

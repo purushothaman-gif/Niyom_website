@@ -65,11 +65,16 @@ Deno.serve(async (req: Request) => {
         // admin pool. Wrapped so any failure falls through to the original
         // unattributed insert — an attribution problem must never cost us a
         // lead record.
-        let attribution: { id: string; employee_id: string; content_no: string | null } | null = null;
+        let attribution: {
+          id: string;
+          employee_id: string;
+          content_no: string | null;
+          dsa_id: string | null;
+        } | null = null;
         try {
           const { data } = await db
             .from("mkt_lead_attributions")
-            .select("id, employee_id, content_no")
+            .select("id, employee_id, content_no, dsa_id")
             .eq("client_id", client.id)
             .order("created_at", { ascending: false })
             .limit(1)
@@ -84,7 +89,13 @@ Deno.serve(async (req: Request) => {
           mobile: phone,
           email: client.email,
           lead_origin: "website_signup",
-          lead_source: attribution ? "Referral" : "Website Sign-up",
+          // A partner-referred signup is labelled as such, matching the
+          // 'Partner / DSA' entry that already exists in LEAD_SOURCES.
+          lead_source: attribution?.dsa_id
+            ? "Partner / DSA"
+            : attribution
+              ? "Referral"
+              : "Website Sign-up",
           campaign: attribution
             ? (attribution.content_no ? `mkt:${attribution.content_no}` : "mkt:referral")
             : "",
@@ -92,6 +103,9 @@ Deno.serve(async (req: Request) => {
           // Attributed -> the referring employee owns it; otherwise the admin
           // pool, exactly as before.
           owner_employee_id: attribution?.employee_id ?? null,
+          // Provenance, so the CRM (and the partner's own My Leads view) can
+          // see which partner introduced this person.
+          dsa_id: attribution?.dsa_id ?? null,
           converted_client_id: client.id,
         }]).select("id").single();
 
