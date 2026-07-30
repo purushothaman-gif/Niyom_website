@@ -565,6 +565,9 @@ app.get('/uccs', async (_req, res, next) => {
           status: String(r.ucc_status ?? ''),
           holdingNature: String(r.holding_nature ?? ''),
           isPanVerified: Boolean(holder.is_pan_verified),
+          // A PAN-exempt holder has no PAN to verify, so "pending" would be a
+          // permanent, misleading state on a compliance screen.
+          isPanExempt: Boolean(holder.is_pan_exempt),
           isMock: false,
         };
       }),
