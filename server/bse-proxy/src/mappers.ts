@@ -85,7 +85,7 @@ export function toOrderNew(req: AppOrderRequest, memberCode: string) {
     amount: req.amount,
     cur: 'INR',
     is_fresh: !req.folioNumber,
-    ...(req.folioNumber ? { folio_no: req.folioNumber } : {}), // UAT-VERIFY key
+    ...(req.folioNumber ? { folio: req.folioNumber } : {}), // UAT-VERIFY key
   };
 }
 
@@ -100,7 +100,7 @@ export function toRedemption(req: AppRedemptionRequest, memberCode: string) {
     scheme: req.schemeCode ?? '',
     cur: 'INR',
     is_fresh: false,
-    ...(req.folioNumber ? { folio_no: req.folioNumber } : {}),
+    ...(req.folioNumber ? { folio: req.folioNumber } : {}),
     ...(req.mode === 'units'
       ? { units: req.units }
       : req.mode === 'all'
@@ -121,7 +121,7 @@ export function toSwitch(req: AppSwitchRequest, memberCode: string) {
     dest_scheme: req.toSchemeCode, // UAT-VERIFY key name for switch target
     cur: 'INR',
     is_fresh: false,
-    ...(req.folioNumber ? { folio_no: req.folioNumber } : {}),
+    ...(req.folioNumber ? { folio: req.folioNumber } : {}),
     ...(req.mode === 'all' ? { all_units: true } : { amount: req.amount }),
   };
 }

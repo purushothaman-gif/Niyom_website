@@ -258,11 +258,42 @@ app.post('/switch', async (req, res, next) => {
   }
 });
 
+/**
+ * Cancel an open order. Verified live 30-Jul-2026: the payload needs the
+ * investor block and member alongside the id, and BSE answers
+ * { success_id: [...] } — but the order does NOT move to cancelled until the
+ * INVESTOR approves a `verify_order_cancel` 2FA link, which we return here.
+ */
 app.post('/cancel', async (req, res, next) => {
   try {
-    const { orderId } = req.body as { orderId: string };
-    const result = await bse.post<Record<string, unknown>>('/order_cancel', { id: Number(orderId) || orderId });
-    res.json(toAppTxnResult(result, 'redeem', '—', `Order ${orderId} cancelled`, 0));
+    const { orderId, clientCode } = req.body as { orderId: string; clientCode: string };
+    const result = await bse.post<Record<string, unknown>>('/order_cancel', {
+      id: Number(orderId) || orderId,
+      investor: { ucc: clientCode },
+      member: cfg.bseMemberCode,
+    });
+    const accepted = ((result.success_id as unknown[]) ?? []).length > 0;
+    if (!accepted) {
+      throw new BseError('BSE did not accept the cancellation', 502, result);
+    }
+    // Fetch the investor's 2FA link so the caller can surface it immediately.
+    let twoFaUrl: string | null = null;
+    try {
+      const rows = await bse.postRaw<Record<string, unknown>[]>('/v2/get_2fa_link', [
+        { event: 'verify_order_cancel', order: String(orderId), member_code: cfg.bseMemberCode },
+      ]);
+      const action = ((rows ?? [])[0]?.action ?? {}) as Record<string, unknown>;
+      const objs = (action.event_object ?? []) as Record<string, unknown>[];
+      twoFaUrl = (objs[0]?.['2fa_url'] as string) ?? null;
+    } catch {
+      /* link is best-effort — the cancellation request itself succeeded */
+    }
+    res.json({
+      orderId,
+      status: 'CANCEL_PENDING_INVESTOR_2FA',
+      twoFaUrl,
+      isMock: false,
+    });
   } catch (err) {
     next(err);
   }
