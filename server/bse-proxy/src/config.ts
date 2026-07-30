@@ -33,6 +33,8 @@ export interface ProxyConfig {
   webhookAllowedIps: string[];
   /** Set false only for local smoke tests. */
   requireAuth: boolean;
+  /** Public origin of this proxy, for showing the webhook URL in diagnostics. */
+  publicBaseUrl: string | null;
   /* --- Cashfree Verification relay (PAN). This droplet's static IP is what
    * Cashfree whitelists; the /verify/pan route forwards to Cashfree from here.
    * The Supabase edge function calls it with x-relay-secret. All optional so
@@ -64,6 +66,7 @@ export function loadConfig(): ProxyConfig {
       .map((s) => s.trim())
       .filter(Boolean),
     requireAuth: process.env.REQUIRE_AUTH !== 'false',
+    publicBaseUrl: process.env.PUBLIC_BASE_URL || 'https://api.niyomwealth.com',
     panRelaySecret: process.env.PAN_RELAY_SECRET || null,
     cashfreeVerifyClientId: process.env.CASHFREE_VERIFY_CLIENT_ID || null,
     cashfreeVerifySecret: process.env.CASHFREE_VERIFY_SECRET_KEY || null,
