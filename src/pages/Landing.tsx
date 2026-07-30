@@ -217,9 +217,16 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                   Opens a portal chooser rather than going straight to the client
                   portal: clients and distribution partners each have their own
                   login, and a bare "Client Login" left partners with no way in. */}
-              <div className={isLoaded ? 'animate-slideDown animate-delay-200' : 'opacity-0'}>
-                <LoginMenu triggerClassName="px-7 py-3" />
-              </div>
+              {/* The entrance animation goes on the TRIGGER, never on a wrapper
+                  around the menu: slideDown animates transform with
+                  fill-mode:forwards, so the element keeps a non-none transform
+                  and becomes a stacking context — which would trap the panel's
+                  z-50 inside it and let the nav-links row (later in DOM order)
+                  paint over the open dropdown. Same reason the Employee Login
+                  menu animates its button rather than its relative wrapper. */}
+              <LoginMenu
+                triggerClassName={`px-7 py-3 ${isLoaded ? 'animate-slideDown animate-delay-200' : 'opacity-0'}`}
+              />
             </div>
 
             {/* Mobile top-bar controls — the theme toggle must live here (not
