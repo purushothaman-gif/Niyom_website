@@ -25,6 +25,9 @@ import {
   toSwitch,
   toSxpRegister,
   toAddUcc,
+  toMandateRegister,
+  toAppMandateResult,
+  type AppMandateRequest,
   toAppUccResult,
   type AppUccRequest,
   type AppOrderRequest,
@@ -294,15 +297,63 @@ app.post('/ucc/2fa-link', async (req, res, next) => {
   }
 });
 
+/* ------------------------------- Mandates --------------------------------- */
+
+/**
+ * Register a mandate (auto-debit authority) — required before SIPs can run.
+ * Verified live 30-Jul-2026 for both E-NACH and UPI.
+ */
 app.post('/mandate', async (req, res, next) => {
   try {
-    const result = await bse.post<Record<string, unknown>>('/mandate_register', req.body);
-    res.json({
-      mandateId: String(result.exch_mandate_id ?? result.id ?? ''),
-      status: String(result.status ?? 'PENDING'),
-      authUrl: (result.enach_url as string) ?? undefined, // UAT-VERIFY key
-      isMock: false,
+    const body = req.body as AppMandateRequest;
+    const result = await bse.post<Record<string, unknown>>(
+      '/mandate_register',
+      toMandateRegister(body, cfg.bseMemberCode),
+    );
+    res.json(toAppMandateResult(result));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Single mandate by BSE id. `exch_mandate_id` must be a NUMBER, not a string. */
+app.get('/mandate/:mandateId', async (req, res, next) => {
+  try {
+    const result = await bse.post<Record<string, unknown>>('/mandate_get', {
+      exch_mandate_id: Number(req.params.mandateId),
     });
+    res.json({ ...toAppMandateResult(result), raw: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** All mandates, newest first — optionally filtered to one client. */
+app.get('/mandates', async (req, res, next) => {
+  try {
+    const clientCode = typeof req.query.clientCode === 'string' ? req.query.clientCode : null;
+    const result = await bse.post<Record<string, unknown>>('/mandate_list', {
+      start: 0,
+      length: 200,
+      fields: ['ALL'],
+      count_only: false,
+    });
+    const rows = ((result.lists ?? result.list ?? []) as Record<string, unknown>[]) || [];
+    const mapped = rows
+      .filter((r) => !clientCode || String(r.ucc ?? '') === clientCode)
+      .map((r) => ({
+        mandateId: String(r.exch_mandate_id ?? ''),
+        clientCode: String(r.ucc ?? ''),
+        amount: Number(r.amount ?? 0),
+        bank: { name: String(r.bank_name ?? ''), ifsc: String(r.ifsc ?? ''), accountNumber: String(r.acct_no ?? '') },
+        mode: String(r.mode ?? ''),
+        umrn: String(r.umrn ?? ''),
+        isVerified: Boolean(r.is_verified),
+        isActive: Boolean(r.is_active),
+        validTill: String(r.valid_till ?? ''),
+        isMock: false,
+      }));
+    res.json(mapped);
   } catch (err) {
     next(err);
   }

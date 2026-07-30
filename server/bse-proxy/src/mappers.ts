@@ -388,3 +388,80 @@ export function toAppUccResult(bse: Record<string, unknown>, fallbackCode: strin
     isMock: false,
   };
 }
+
+/* ============================== Mandates =================================== */
+
+/** Mandate kinds BSE accepts. 'N' = E-NACH, 'U' = UPI AutoPay, 'X' = NACH. */
+export type AppMandateType = 'ENACH' | 'UPI' | 'NACH';
+
+export interface AppMandateRequest {
+  clientCode: string;              // BSE UCC
+  amount: number;                  // max debit amount
+  type?: AppMandateType;           // default ENACH
+  startDate?: string;              // YYYY-MM-DD, default today
+  validTill?: string;              // YYYY-MM-DD, default +10y
+  bank: { accountNumber: string; ifsc: string; accountType?: string; name?: string; branch?: string };
+  vpa?: string;                    // UPI only (e.g. name@okicici)
+  redirectUrl?: string;            // where BSE returns the investor after E-NACH
+}
+
+const BSE_MANDATE_TYPE: Record<AppMandateType, string> = { ENACH: 'N', UPI: 'U', NACH: 'X' };
+
+function plusYears(iso: string, years: number): string {
+  const d = new Date(iso);
+  d.setFullYear(d.getFullYear() + years);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * App view-model -> BSE `/mandate_register`. Verified live on the demo
+ * (30-Jul-2026): both E-NACH and UPI mandates registered successfully.
+ *
+ * BSE pairs type and mode strictly, and rejects mismatches:
+ *   E-NACH ('N') -> mode 'ACH', and `vpa` must NOT be sent ("not_allowed").
+ *   UPI    ('U') -> mode 'DD',  and `vpa` is what the collect request goes to.
+ * NOTE the endpoint is /mandate_register — NOT under /v2.
+ */
+export function toMandateRegister(req: AppMandateRequest, memberCode: string) {
+  const kind = req.type ?? 'ENACH';
+  const isUpi = kind === 'UPI';
+  const start = req.startDate ?? isoDate();
+  const bank: Record<string, unknown> = {
+    ifsc: req.bank.ifsc.toUpperCase(),
+    no: req.bank.accountNumber,
+    type: req.bank.accountType ?? 'SB',
+    name: req.bank.name ?? '',
+    branch: req.bank.branch ?? '',
+  };
+  // vpa is UPI-only — sending it on an E-NACH mandate is rejected outright.
+  if (isUpi && req.vpa) bank.vpa = [req.vpa];
+
+  return {
+    investor: { ucc: req.clientCode },
+    member: memberCode,
+    investor_bank_details: bank,
+    amount: req.amount,
+    start_date: start,
+    valid_till: req.validTill ?? plusYears(start, 10),
+    reg_date: isoDate(),
+    type: BSE_MANDATE_TYPE[kind],
+    mode: isUpi ? 'DD' : 'ACH',
+    frequency: 'AS AND WHEN PRESENTED',
+    request_type: 'REGISTRATION',
+    ...(req.redirectUrl ? { redirect_url: req.redirectUrl } : {}),
+  };
+}
+
+/**
+ * BSE mandate_register response -> app MandateRegistrationResult.
+ * E-NACH returns `link` — the BSE-hosted page where the INVESTOR authorises the
+ * mandate; UPI returns no link (the collect request goes to their UPI app).
+ */
+export function toAppMandateResult(bse: Record<string, unknown>) {
+  return {
+    mandateId: String(bse.exch_mandate_id ?? ''),
+    status: 'PENDING' as const,
+    authUrl: (bse.link as string) || undefined,
+    isMock: false,
+  };
+}
