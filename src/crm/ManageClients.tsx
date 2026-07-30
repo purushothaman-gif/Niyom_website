@@ -49,11 +49,34 @@ function InlineField({ label, children }: { label: string; children: React.React
   );
 }
 
+/**
+ * Fields BSE StAR MF needs before a client can be registered as a UCC.
+ * Surfaced per row so gaps are visible while working a list, rather than being
+ * discovered when a registration is rejected.
+ */
+const BSE_REQUIRED: [keyof NWClient, string][] = [
+  ['pan', 'PAN'],
+  ['dob', 'DOB'],
+  ['gender', 'gender'],
+  ['email', 'email'],
+  ['phone', 'mobile'],
+  ['pincode', 'pincode'],
+  ['bank_account', 'bank a/c'],
+  ['bank_ifsc', 'IFSC'],
+];
+
+function missingForBse(c: NWClient): string[] {
+  return BSE_REQUIRED.filter(([k]) => !String((c as never)[k] ?? '').trim()).map(([, label]) => label);
+}
+
 export default function ManageClients({ employee, onNavigate }: Props) {
   const [clients, setClients] = useState<NWClient[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
+  // Clients missing a field BSE StAR MF needs to register a UCC. Filtered
+  // server-side so it stays correct across pages.
+  const [bseReadyFilter, setBseReadyFilter] = useState<'all' | 'incomplete'>('all');
   const [employeeFilter, setEmployeeFilter] = useState<string>('all');
   const [employees, setEmployees] = useState<{ id: string; full_name: string; employee_code: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,6 +131,14 @@ export default function ManageClients({ employee, onNavigate }: Props) {
 
     if (search) query = query.or(`full_name.ilike.%${search}%,client_code.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,pan.ilike.%${search}%`);
 
+    if (bseReadyFilter === 'incomplete') {
+      // Any of these blank means BSE's add_ucc would be rejected.
+      query = query.or(
+        'gender.is.null,gender.eq.,pan.is.null,pan.eq.,dob.is.null,pincode.is.null,pincode.eq.,' +
+          'bank_account.is.null,bank_account.eq.,bank_ifsc.is.null,bank_ifsc.eq.',
+      );
+    }
+
     if (!isAdmin) {
       query = query.eq('employee_id', employee.id);
     } else if (employeeFilter === 'unassigned') {
@@ -125,7 +156,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   }, [page, search, employeeFilter, isAdmin, employee.id]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(0); }, [search, employeeFilter]);
+  useEffect(() => { setPage(0); }, [search, employeeFilter, bseReadyFilter]);
 
   const checkEditDuplicate = useCallback(async (field: 'pan' | 'phone' | 'email', value: string, excludeId: string) => {
     if (!value || value.length < 3) { setEditDupWarnings(w => ({ ...w, [field]: null })); return; }
@@ -466,6 +497,18 @@ export default function ManageClients({ employee, onNavigate }: Props) {
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
           />
         </div>
+        <div className="relative flex-shrink-0">
+          <select
+            value={bseReadyFilter}
+            onChange={e => setBseReadyFilter(e.target.value as 'all' | 'incomplete')}
+            className="pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', minWidth: '190px' }}
+            title="Clients missing a field BSE StAR MF needs to register a UCC"
+          >
+            <option value="all">All clients</option>
+            <option value="incomplete">Incomplete for BSE</option>
+          </select>
+        </div>
         {isAdmin && (
           <div className="relative flex-shrink-0">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: 'var(--text-faint)' }} />
@@ -506,6 +549,18 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                   <td className="px-5 py-3.5">
                     <p className="text-sm font-medium text-text-primary">{c.full_name}</p>
                     <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{c.phone || c.email || '—'}</p>
+                    {(() => {
+                      const gaps = missingForBse(c);
+                      return gaps.length > 0 ? (
+                        <span
+                          className="mt-1 inline-block text-[10px] px-1.5 py-0.5 rounded cursor-help"
+                          style={{ background: 'var(--warning-soft, rgba(234,179,8,0.12))', color: 'var(--warning)' }}
+                          title={`Cannot register at BSE — missing: ${gaps.join(', ')}`}
+                        >
+                          BSE: {gaps.length} missing
+                        </span>
+                      ) : null;
+                    })()}
                   </td>
                   <td className="px-5 py-3.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{c.client_code}</span></td>
                   {isAdmin && <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{(c.employee as any)?.full_name || 'Admin'}</td>}
