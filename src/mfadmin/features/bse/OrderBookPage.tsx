@@ -1,6 +1,6 @@
 /** Order Book — live orders from BSE StAR MF via the NIYOM proxy. */
 import { ListChecks } from 'lucide-react';
-import { fmt } from '../../../crm/utils';
+import { fmt, fmtDate } from '../../../crm/utils';
 import { StatusPill } from '../../../portal/components/StatusPill';
 import { BseOpsService, type BseOrderRow } from '../../services/BseOpsService';
 import { useBseData } from '../../hooks/useBseData';
@@ -17,6 +17,8 @@ function tone(status: string): 'success' | 'warning' | 'danger' | 'muted' {
 }
 
 const ORDER_TYPE: Record<string, string> = { p: 'Purchase', r: 'Redemption', s: 'Switch' };
+
+const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 export function OrderBookPage() {
   const { data, loading, error, refresh } = useBseData<BseOrderRow[]>(() => BseOpsService.orders());
@@ -37,11 +39,11 @@ export function OrderBookPage() {
           <thead>
             <tr>
               <TH>Order ID</TH>
-              <TH>UCC</TH>
+              <TH>Client</TH>
               <TH>Scheme</TH>
               <TH>Type</TH>
               <TH right>Amount</TH>
-              <TH>Folio</TH>
+              <TH>Placed</TH>
               <TH>Status</TH>
             </tr>
           </thead>
@@ -51,13 +53,27 @@ export function OrderBookPage() {
                 <TD>
                   <span className="font-mono">{o.orderId}</span>
                 </TD>
-                <TD>{o.clientCode || '—'}</TD>
-                <TD>{o.schemeCode || '—'}</TD>
+                <TD>
+                  <span className="font-medium">{o.clientName.trim() || o.clientCode || '—'}</span>
+                  {o.clientName.trim() && (
+                    <span className="ml-1.5 font-mono text-text-faint">{o.clientCode}</span>
+                  )}
+                </TD>
+                <TD>
+                  <span title={o.schemeName}>
+                    {o.schemeName ? truncate(o.schemeName, 34) : o.schemeCode || '—'}
+                  </span>
+                </TD>
                 <TD>{ORDER_TYPE[o.type] ?? o.type ?? '—'}</TD>
                 <TD right>{fmt(o.amount)}</TD>
-                <TD>{o.folio || '—'}</TD>
+                <TD>{o.placedAt ? fmtDate(o.placedAt) : '—'}</TD>
                 <TD>
                   <StatusPill tone={tone(o.status)}>{o.status || 'unknown'}</StatusPill>
+                  {o.rejectionReason && (
+                    <span className="ml-1.5 text-text-faint" title={o.rejectionReason}>
+                      ⓘ
+                    </span>
+                  )}
                 </TD>
               </tr>
             ))}

@@ -38,15 +38,28 @@ export function AdminDashboardPage({ data }: { data: AdminDashboardData }) {
 
       {/* Secondary KPIs */}
       <Card padding="lg">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div className="grid flex-1 grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
             <KpiStat label="Overall Return" value={`${gainUp ? '+' : ''}${data.mfGainPercent.toFixed(2)}%`} color={gainUp ? 'var(--success)' : 'var(--danger)'} />
             <KpiStat label="Orders Today" value={String(data.todaysOrders)} />
-            <KpiStat label="Trail Brokerage (MTD)" value={fmt(data.trailMtd)} color="var(--accent)" />
-            <KpiStat label="AMCs" value={String(data.amcSplit.length)} />
+            <KpiStat label="Trail Brokerage (MTD)" value={fmt(data.trailMtd)} color="var(--accent)" sub="estimated" />
+            <KpiStat
+              label="UCCs at BSE"
+              value={data.isMockOps ? '—' : String(data.uccTotal)}
+              sub={data.isMockOps ? undefined : `${data.uccActive} able to transact`}
+            />
           </div>
-          {data.isMockOps && <StatusPill tone="muted">Ops metrics sample</StatusPill>}
+          {data.isMockOps ? (
+            <StatusPill tone="warning">Ops metrics sample</StatusPill>
+          ) : (
+            <StatusPill tone="success">Live from BSE</StatusPill>
+          )}
         </div>
+        {data.isMockOps && data.opsError && (
+          <p className="mt-3 border-t border-border pt-3 text-[11px] text-text-faint">
+            SIP, order and UCC figures are illustrative — BSE could not be reached: {data.opsError}
+          </p>
+        )}
       </Card>
 
       {/* AMC AUM + Recent orders */}
