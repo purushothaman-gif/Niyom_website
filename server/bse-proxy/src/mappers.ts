@@ -465,3 +465,75 @@ export function toAppMandateResult(bse: Record<string, unknown>) {
     isMock: false,
   };
 }
+
+/* ============================== SXP (SIP / SWP / STP) ====================== */
+
+export type AppSxpType = 'SIP' | 'SWP' | 'STP' | 'TOPUP' | 'SPROD';
+/** m=monthly w=weekly d=daily f=fortnightly q=quarterly h=half-yearly y=yearly */
+export type AppSxpFreq = 'm' | 'w' | 'd' | 'f' | 'q' | 'h' | 'y';
+
+export interface AppSxpRequest {
+  clientCode: string;              // BSE UCC
+  schemeCode: string;              // source BSE scheme code
+  destSchemeCode?: string;         // STP only — must be same AMC
+  amount: number;
+  type?: AppSxpType;               // default SIP
+  frequency?: AppSxpFreq;          // default 'm'
+  startDate: string;               // YYYY-MM-DD
+  installments?: number;           // or endDate
+  endDate?: string;                // mandatory when frequency = 'd'
+  txnDate?: number;                // day of month (or 1-5 weekday when freq='w')
+  folioNumber?: string;
+  mandateId?: string | number;     // exch_mandate_id — REQUIRED for XSIP
+  isUnits?: boolean;               // SWP/STP in units rather than rupees
+}
+
+/**
+ * App view-model -> BSE `/sxp_register`. Endpoint is NOT under /v2 (that 404s).
+ *
+ * `mem_sxp_ref_id` accepts ONLY digits and hyphens (letters are rejected with
+ * errcode `invalid`) — memRefId() already satisfies that, do not prefix it.
+ */
+export function toSxpRegister2(req: AppSxpRequest, memberCode: string) {
+  const freq = req.frequency ?? 'm';
+  return {
+    sxp_type: req.type ?? 'SIP',
+    mem_sxp_ref_id: memRefId(),
+    investor: { ucc: req.clientCode },
+    member: memberCode,
+    src_scheme: req.schemeCode,
+    ...(req.destSchemeCode ? { dest_scheme: req.destSchemeCode } : {}),
+    amount: req.amount,
+    cur: 'INR',
+    ...(req.isUnits ? { isunits: true } : {}),
+    is_fresh: !req.folioNumber,
+    ...(req.folioNumber ? { src_folio: req.folioNumber } : {}),
+    phys_or_demat: 'p' as const,
+    start_date: req.startDate,
+    freq,
+    // freq 'd' (daily) needs end_date and ignores txn_date; everything else
+    // takes ninstallments + txn_date.
+    ...(freq === 'd'
+      ? { end_date: req.endDate ?? req.startDate }
+      : {
+          ...(req.installments ? { ninstallments: req.installments } : {}),
+          ...(req.endDate ? { end_date: req.endDate } : {}),
+          txn_date: req.txnDate ?? Number(req.startDate.slice(8, 10)),
+        }),
+    ...(req.mandateId ? { exch_mandate_id: Number(req.mandateId) } : {}),
+    is_nomination_opted: false,
+  };
+}
+
+export function toAppSxpResult(bse: Record<string, unknown>, req: AppSxpRequest) {
+  return {
+    sxpRegNum: String(bse.sxp_reg_num ?? bse.id ?? ''),
+    type: req.type ?? 'SIP',
+    schemeCode: req.schemeCode,
+    amount: req.amount,
+    frequency: req.frequency ?? 'm',
+    startDate: req.startDate,
+    status: 'REGISTERED' as const,
+    isMock: false,
+  };
+}

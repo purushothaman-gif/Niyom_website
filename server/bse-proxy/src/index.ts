@@ -26,6 +26,9 @@ import {
   toSxpRegister,
   toAddUcc,
   toMandateRegister,
+  toSxpRegister2,
+  toAppSxpResult,
+  type AppSxpRequest,
   toAppMandateResult,
   type AppMandateRequest,
   toAppUccResult,
@@ -183,14 +186,44 @@ app.get('/schemes/:code', async (req, res, next) => {
   }
 });
 
-/** Lumpsum or SIP placement. */
+/**
+ * Lumpsum purchase, or a SIP (routed to SXP registration).
+ *
+ * SAFETY — do not remove: BSE's /order_new answers `{"status":"success",
+ * "data":{}}` with NO order id and creates NOTHING when the UCC is not
+ * transaction-ready (verified live 30-Jul-2026 against order_list, which showed
+ * zero orders). A bare `status: success` therefore does NOT mean the order was
+ * placed. We require a real order id and fail loudly otherwise, so we can never
+ * report a phantom order to a client who has paid.
+ */
 app.post('/order', async (req, res, next) => {
   try {
     const body = req.body as AppOrderRequest & { schemeName?: string };
-    const result =
-      body.type === 'sip'
-        ? await bse.post<Record<string, unknown>>('/v2/sxp_register', toSxpRegister(body, cfg.bseMemberCode))
-        : await bse.post<Record<string, unknown>>('/v2/order_new', toOrderNew(body, cfg.bseMemberCode));
+    if (body.type === 'sip') {
+      const sxp = await bse.post<Record<string, unknown>>(
+        '/sxp_register',
+        toSxpRegister(body, cfg.bseMemberCode),
+      );
+      const regNum = String(sxp.sxp_reg_num ?? sxp.id ?? '');
+      if (!regNum) {
+        throw new BseError('BSE accepted the SIP but returned no registration number', 502, sxp);
+      }
+      return res.json(toAppOrderResult({ ...sxp, id: regNum }, body, body.schemeName ?? body.schemeCode));
+    }
+    // NOTE: /order_new — NOT /v2/order_new, which 404s on the live platform.
+    const result = await bse.post<Record<string, unknown>>(
+      '/order_new',
+      toOrderNew(body, cfg.bseMemberCode),
+    );
+    const orderId = String(result.id ?? result.order_id ?? '');
+    if (!orderId) {
+      throw new BseError(
+        'BSE returned success but no order id — the order was NOT placed. The UCC is ' +
+          'most likely not transaction-ready (KYC/PAN verification pending).',
+        502,
+        result,
+      );
+    }
     res.json(toAppOrderResult(result, body, body.schemeName ?? body.schemeCode));
   } catch (err) {
     next(err);
@@ -377,6 +410,76 @@ app.post('/payment/status', async (req, res, next) => {
       status: String(result.status ?? 'PENDING').toUpperCase(),
       isMock: false,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* --------------------------------- SXP ------------------------------------ */
+
+/**
+ * Register a systematic plan (SIP / SWP / STP / TOPUP). Endpoint is
+ * /sxp_register — NOT under /v2. An XSIP needs `mandateId` (exch_mandate_id).
+ * Requires a transaction-ready UCC; BSE otherwise returns errcode
+ * incomplete_operation on field phys_ucc.
+ */
+app.post('/sxp', async (req, res, next) => {
+  try {
+    const body = req.body as AppSxpRequest;
+    const result = await bse.post<Record<string, unknown>>(
+      '/sxp_register',
+      toSxpRegister2(body, cfg.bseMemberCode),
+    );
+    const regNum = String(result.sxp_reg_num ?? result.id ?? '');
+    if (!regNum) {
+      throw new BseError('BSE returned success but no sxp_reg_num — nothing was registered', 502, result);
+    }
+    res.json(toAppSxpResult(result, body));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** All systematic plans, optionally filtered to one client. */
+app.get('/sxp', async (req, res, next) => {
+  try {
+    const clientCode = typeof req.query.clientCode === 'string' ? req.query.clientCode : null;
+    const result = await bse.post<Record<string, unknown>>('/sxp_list', {
+      start: 0,
+      length: 200,
+      fields: ['ALL'],
+      count_only: false,
+    });
+    const rows = ((result.lists ?? result.list ?? []) as Record<string, unknown>[]) || [];
+    res.json(
+      rows
+        .filter((r) => !clientCode || String((r.investor as Record<string, unknown>)?.ucc ?? r.ucc ?? '') === clientCode)
+        .map((r) => ({
+          sxpRegNum: String(r.sxp_reg_num ?? r.id ?? ''),
+          clientCode: String((r.investor as Record<string, unknown>)?.ucc ?? r.ucc ?? ''),
+          type: String(r.sxp_type ?? ''),
+          schemeCode: String(r.src_scheme ?? ''),
+          amount: Number(r.amount ?? 0),
+          frequency: String(r.freq ?? ''),
+          startDate: String(r.start_date ?? ''),
+          status: String(r.status ?? ''),
+          isMock: false,
+        })),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Cancel a systematic plan. */
+app.post('/sxp/cancel', async (req, res, next) => {
+  try {
+    const { sxpRegNum } = req.body as { sxpRegNum: string };
+    const result = await bse.post<Record<string, unknown>>('/sxp_cancel', {
+      sxp_reg_num: sxpRegNum,
+      member: cfg.bseMemberCode,
+    });
+    res.json({ sxpRegNum, status: 'CANCEL_REQUESTED', raw: result, isMock: false });
   } catch (err) {
     next(err);
   }
