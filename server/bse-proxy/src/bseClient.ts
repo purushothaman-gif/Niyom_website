@@ -69,6 +69,14 @@ export class BseClient {
    * POST a BSE v2 endpoint with the {"data": …} envelope. Retries once on 401
    * with a fresh login (expired token).
    */
+  /**
+   * Same as post(), but `data` is sent verbatim — for endpoints whose envelope
+   * is an ARRAY rather than an object (e.g. /v2/get_2fa_link).
+   */
+  async postRaw<T>(route: string, data: unknown): Promise<T> {
+    return this.post<T>(route, data);
+  }
+
   async post<T>(route: string, data: unknown, retry = true): Promise<T> {
     const token = await this.getToken();
     const res = await fetch(`${this.cfg.bseBaseUrl}${route}`, {
