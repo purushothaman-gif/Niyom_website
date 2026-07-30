@@ -32,6 +32,7 @@ import { AdminPlaceholder } from './features/AdminPlaceholder';
 import { OrderBookPage } from './features/bse/OrderBookPage';
 import { UccBookPage } from './features/bse/UccBookPage';
 import { SxpBookPage } from './features/bse/SxpBookPage';
+import { PurchasePage } from './features/bse/PurchasePage';
 
 export default function MfAdminApp() {
   const [employee, setEmployee] = useState<NWEmployee | null>(null);
@@ -126,6 +127,8 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
       // Live BSE StAR MF surfaces (via the NIYOM proxy).
       case 'orders':
         return <OrderBookPage />;
+      case 'purchase':
+        return <PurchasePage />;
       case 'ucc':
         return <UccBookPage />;
       case 'sip':
