@@ -347,14 +347,72 @@ app.post('/ucc', async (req, res, next) => {
   }
 });
 
-/** Current UCC status (PENDING_AUTH -> PENDING_VERIFICATION -> ACTIVE ...). */
+/**
+ * Current UCC status plus the full verification breakdown.
+ *
+ * BSE nests each check inside ucc_status_object; flattening it here is what
+ * lets the console answer "why is this client not ACTIVE yet?" without every
+ * page having to know BSE's shape. Per BSE's webhook docs, bank verification
+ * does NOT block activation, and FATCA can sit PENDING on an ACTIVE UCC —
+ * both are surfaced but marked non-blocking so staff don't chase them.
+ */
 app.get('/ucc/:clientCode', async (req, res, next) => {
   try {
     const result = await bse.post<Record<string, unknown>>('/v2/get_ucc', {
       investor: { client_code: req.params.clientCode },
       fields: ['ALL'],
     });
-    res.json(toAppUccResult(result, req.params.clientCode));
+    const so = (result.ucc_status_object as Record<string, unknown>) ?? {};
+    const holder = ((so.holders as Record<string, unknown>[]) ?? [{}])[0] ?? {};
+    const txnReady = ((so.transaction_ready as Record<string, unknown>[]) ?? [{}])[0] ?? {};
+
+    /** BSE reports state as "TRUE"/"FALSE"/""/PENDING across different keys. */
+    const state = (v: unknown): 'pass' | 'fail' | 'pending' => {
+      const s = String(v ?? '').toUpperCase();
+      if (s === 'TRUE') return 'pass';
+      if (s === 'FALSE') return 'fail';
+      return 'pending';
+    };
+    const check = (
+      key: string,
+      label: string,
+      raw: Record<string, unknown> | undefined,
+      blocking: boolean,
+      statusKey = 'verified_status',
+    ) => ({
+      key,
+      label,
+      blocking,
+      state: state(raw?.[statusKey]),
+      reason: String(raw?.verification_failed_reason ?? ''),
+      at: String(raw?.verified_at ?? raw?.accepted_at ?? ''),
+    });
+
+    const fatca = (holder.fatca_status as Record<string, unknown>[]) ?? [];
+    const checks = [
+      check('pan', 'PAN verification', holder.pan_verification as Record<string, unknown>, true),
+      check('kyc', 'KYC (KRA/CKYC)', holder.kyc_status as Record<string, unknown>, true),
+      check('elog', 'Investor e-log / AOF', holder.elog as Record<string, unknown>, true, 'status'),
+      check('nominee', 'Nominee authorisation', holder.nominee_2fa as Record<string, unknown>, true),
+      ...fatca.map((f, i) =>
+        check(`fatca_${i}`, `FATCA · ${String(f.rta_type ?? 'RTA')}`, f, false),
+      ),
+      ...(((so.bank_account as Record<string, unknown>[]) ?? []).map((b, i) =>
+        // Explicitly non-blocking: BSE's webhook doc states bank verification
+        // does not affect activation.
+        check(`bank_${i}`, `Bank ${String(b.bank_acc_num ?? '')}`, b, false),
+      )),
+    ];
+
+    res.json({
+      ...toAppUccResult(result, req.params.clientCode),
+      transactionReady: state(txnReady.verified_status) === 'pass',
+      transactionReadyReason: String(txnReady.verification_failed_reason ?? ''),
+      mode: String(txnReady.mode ?? ''),
+      pan: String(holder.holder_pan ?? ''),
+      checks,
+      blockedBy: checks.filter((c) => c.blocking && c.state !== 'pass').map((c) => c.label),
+    });
   } catch (err) {
     next(err);
   }
