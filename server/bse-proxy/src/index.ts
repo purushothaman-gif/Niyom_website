@@ -69,6 +69,27 @@ async function requireSupabaseUser(req: Request, res: Response, next: NextFuncti
   }
 }
 
+/**
+ * BSE answers order_new with {"status":"success","data":{}} — no id, nothing
+ * created — when it silently refuses an order (UCC not transaction-ready,
+ * scheme/mode mismatch, or a payload it could not use). Treating that as
+ * success would tell a client their money moved when it did not, so every
+ * order-placing route must assert a real id came back.
+ */
+function assertOrderPlaced(result: Record<string, unknown>, what: string): void {
+  const items = (result.items as Record<string, unknown>[] | undefined) ?? [];
+  const id = String(items[0]?.id ?? result.id ?? result.order_id ?? '');
+  if (!id) {
+    throw new BseError(
+      `BSE returned success but no order id — the ${what} was NOT placed. Common causes: ` +
+        'the folio does not exist, the UCC is not transaction-ready, or the scheme does not ' +
+        'allow this mode (physical vs demat).',
+      502,
+      result,
+    );
+  }
+}
+
 /* --------------------------------- routes --------------------------------- */
 
 app.get('/health', (_req, res) => {
@@ -240,7 +261,10 @@ app.post('/order', async (req, res, next) => {
 app.post('/redemption', async (req, res, next) => {
   try {
     const body = req.body as AppRedemptionRequest;
-    const result = await bse.post<Record<string, unknown>>('/order_new', { orders: [toRedemption(body, cfg.bseMemberCode)] });
+    const result = await bse.post<Record<string, unknown>>('/order_new', {
+      orders: [toRedemption(body, cfg.bseMemberCode)],
+    });
+    assertOrderPlaced(result, 'redemption');
     const detail =
       body.mode === 'all' ? `Full redemption · ${body.units.toFixed(3)} units` : `₹${body.amount} redeemed`;
     res.json(toAppTxnResult(result, 'redeem', body.schemeName, detail, body.amount));
@@ -253,6 +277,7 @@ app.post('/switch', async (req, res, next) => {
   try {
     const body = req.body as AppSwitchRequest;
     const result = await bse.post<Record<string, unknown>>('/order_new', { orders: [toSwitch(body, cfg.bseMemberCode)] });
+    assertOrderPlaced(result, 'switch');
     res.json(
       toAppTxnResult(result, 'switch', body.fromSchemeName, `Switched ₹${body.amount} to ${body.toSchemeName}`, body.amount),
     );
@@ -543,6 +568,122 @@ app.get('/uccs', async (_req, res, next) => {
           isMock: false,
         };
       }),
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Client holdings, netted from the order book.
+ *
+ * BSE exposes no holdings/folio API to us — `get_mis_detail` exists but our
+ * member tier is not entitled to it (errcode `authz`), and there is no
+ * folio_list endpoint. So positions are derived: allotted purchases add units
+ * on a (folio, scheme) pair, redemptions and switch-outs remove them.
+ *
+ * A folio only exists once an order is ALLOTTED, so an order still sitting at
+ * "received" contributes nothing — which is why redemption and switch are
+ * unavailable until settlement.
+ */
+app.get('/holdings', async (req, res, next) => {
+  try {
+    const clientCode = typeof req.query.clientCode === 'string' ? req.query.clientCode : null;
+    const fetchSide = async (openClose: 'o' | 'c') => {
+      const r = await bse.post<Record<string, unknown>>('/order_list', {
+        start: 0,
+        length: 500,
+        fields: ['ALL'],
+        count_only: false,
+        filter_param: { open_close: openClose },
+      });
+      return ((r.lists ?? r.list ?? []) as Record<string, unknown>[]) || [];
+    };
+    const rows = [...(await fetchSide('o')), ...(await fetchSide('c'))].filter(
+      (r) => !clientCode || String((r.investor as Record<string, unknown>)?.ucc ?? '') === clientCode,
+    );
+
+    // key: ucc|folio|scheme
+    const positions = new Map<
+      string,
+      {
+        clientCode: string;
+        folio: string;
+        schemeCode: string;
+        schemeName: string;
+        units: number;
+        invested: number;
+        lastNav: number;
+        lastDate: string;
+      }
+    >();
+
+    const bump = (
+      r: Record<string, unknown>,
+      folio: string,
+      units: number,
+      amount: number,
+      nav: number,
+      date: string,
+    ) => {
+      if (!folio || !units) return;
+      const ucc = String((r.investor as Record<string, unknown>)?.ucc ?? '');
+      const schemeCode = String(r.scheme ?? '');
+      const key = `${ucc}|${folio}|${schemeCode}`;
+      const cur =
+        positions.get(key) ??
+        {
+          clientCode: ucc,
+          folio,
+          schemeCode,
+          schemeName: String(r.src_scheme_name ?? ''),
+          units: 0,
+          invested: 0,
+          lastNav: 0,
+          lastDate: '',
+        };
+      cur.units += units;
+      cur.invested += amount;
+      if (nav) cur.lastNav = nav;
+      if (date && date > cur.lastDate) cur.lastDate = date;
+      positions.set(key, cur);
+    };
+
+    for (const r of rows) {
+      const allot = (r.allotment_details as Record<string, unknown>) ?? {};
+      const redeem = (r.redempt_details as Record<string, unknown>) ?? {};
+      if (allot.folio) {
+        bump(
+          r,
+          String(allot.folio),
+          Number(allot.allotment_units ?? 0),
+          Number(allot.allotment_amount ?? 0),
+          Number(allot.allotment_nav ?? 0),
+          String(allot.allotment_date ?? ''),
+        );
+      }
+      if (redeem.folio) {
+        bump(
+          r,
+          String(redeem.folio),
+          -Number(redeem.redempt_units ?? 0),
+          -Number(redeem.redempt_amount ?? 0),
+          Number(redeem.redempt_nav ?? 0),
+          String(redeem.redempt_date ?? ''),
+        );
+      }
+    }
+
+    res.json(
+      [...positions.values()]
+        .filter((p) => p.units > 0) // fully exited positions are not redeemable
+        .map((p) => ({
+          ...p,
+          units: Number(p.units.toFixed(3)),
+          value: Number((p.units * (p.lastNav || 0)).toFixed(2)),
+          isMock: false,
+        }))
+        .sort((a, b) => b.value - a.value),
     );
   } catch (err) {
     next(err);
