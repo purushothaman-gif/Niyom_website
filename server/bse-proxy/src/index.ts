@@ -483,13 +483,24 @@ app.get('/orders', async (req, res, next) => {
           orderId: String(r.id ?? ''),
           memberRef: String(r.mem_ord_ref_id ?? ''),
           clientCode: String((r.investor as Record<string, unknown>)?.ucc ?? ''),
+          // BSE gives us readable names alongside the codes — surface both so
+          // the console doesn't force staff to decode scheme/UCC codes.
+          clientName: String(r.ucc_full_name ?? ''),
           schemeCode: String(r.scheme ?? ''),
+          schemeName: String(r.src_scheme_name ?? ''),
           amount: Number(r.amount ?? 0),
           type: String(r.type ?? ''),
           status: String(r.status ?? ''),
           side: String(r.__side ?? ''),
           folio: String(r.folio_num ?? r.folio ?? ''),
-          placedAt: String(r.created_at ?? r.order_date ?? ''),
+          // NOTE the field is `placed_at` (not created_at/order_date, which do
+          // not exist — reading those made every order look undated).
+          placedAt: String(r.placed_at ?? ''),
+          // rta_remark / rejection_reason can be objects — only take plain
+          // strings, otherwise we'd render "[object Object]" at staff.
+          rejectionReason: [r.rta_remark, r.rejection_reason].find(
+            (v) => typeof v === 'string' && v.trim() !== '',
+          ) as string ?? '',
           isMock: false,
         }))
         .sort((a, b) => (a.orderId < b.orderId ? 1 : -1)),
