@@ -10,15 +10,17 @@
  * Demat, joint holders and NRI are not offered rather than half-supported.
  */
 import { useState } from 'react';
-import { ExternalLink, UserPlus, Users } from 'lucide-react';
+import { BadgeCheck, ExternalLink, Search, UserPlus, Users } from 'lucide-react';
 import { Card } from '../../../portal/components/Card';
 import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { StatusPill } from '../../../portal/components/StatusPill';
 import {
+  BseOpsExtra,
   BseOpsService,
   isBseConfigured,
   type BseUccRow,
 } from '../../services/BseOpsService';
+import { CrmImportService, type CrmClientLookup } from '../../services/CrmImportService';
 import { useBseData } from '../../hooks/useBseData';
 import {
   ConfirmBox,
@@ -101,6 +103,14 @@ export function ClientOnboardingPage() {
   const uccs = useBseData<BseUccRow[]>(() => BseOpsService.uccs());
   const [form, setForm] = useState<Form>(EMPTY);
   const [touched, setTouched] = useState(false);
+  // CRM import is a source of typing only — see CrmImportService.
+  const [term, setTerm] = useState('');
+  const [results, setResults] = useState<CrmClientLookup[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [importedFrom, setImportedFrom] = useState<string | null>(null);
+  // PAN check against Cashfree — its registered name is what BSE's KYC compares.
+  const [panCheck, setPanCheck] = useState<{ state: 'ok' | 'bad'; name?: string; msg?: string } | null>(null);
+  const [panBusy, setPanBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +125,70 @@ export function ClientOnboardingPage() {
   const codeTaken = (uccs.data ?? []).some(
     (u) => u.clientCode.toLowerCase() === form.clientCode.trim().toLowerCase(),
   );
+
+  const search = async () => {
+    setSearching(true);
+    try {
+      setResults(await CrmImportService.search(term));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  /** Copy a CRM client into the form. Preferring pan_name is the whole point:
+   *  BSE's KYC compares the holder name to the PAN-registered one. */
+  const importClient = (c: CrmClientLookup) => {
+    const source = (c.panName?.trim() || c.fullName).trim();
+    const [first, ...rest] = source.split(/\s+/);
+    setForm({
+      clientCode: c.clientCode,
+      pan: c.pan,
+      firstName: first ?? source,
+      middleName: rest.length > 1 ? rest.slice(0, -1).join(' ') : '',
+      lastName: rest.length ? rest[rest.length - 1] : '',
+      dob: c.dob,
+      gender: (c.gender as Form['gender']) || 'M',
+      email: c.email,
+      mobile: c.phone.replace(/\D/g, '').slice(-10),
+      line1: c.address || c.city,
+      city: c.city,
+      state: c.state,
+      pincode: c.pincode,
+      accountNumber: c.bankAccount,
+      ifsc: c.bankIfsc,
+      accountType: 'SB',
+    });
+    setImportedFrom(`${c.fullName} (${c.clientCode})`);
+    setPanCheck(c.panVerified && c.panName ? { state: 'ok', name: c.panName } : null);
+    setResults(null);
+    setTerm('');
+    setTouched(false);
+  };
+
+  const checkPan = async () => {
+    setPanBusy(true);
+    setPanCheck(null);
+    try {
+      const r = await BseOpsExtra.verifyPan(form.pan.trim().toUpperCase());
+      if (r.valid && r.registered_name) {
+        // Adopt the registered name verbatim — a near-miss still fails BSE KYC.
+        const [first, ...rest] = r.registered_name.trim().split(/\s+/);
+        setForm((f) => ({
+          ...f,
+          firstName: first ?? f.firstName,
+          middleName: rest.length > 1 ? rest.slice(0, -1).join(' ') : '',
+          lastName: rest.length ? rest[rest.length - 1] : '',
+        }));
+        setPanCheck({ state: 'ok', name: r.registered_name });
+      } else {
+        setPanCheck({ state: 'bad', msg: r.message ?? 'PAN could not be verified.' });
+      }
+    } catch (e) {
+      setPanCheck({ state: 'bad', msg: e instanceof Error ? e.message : 'Verification failed.' });
+    } finally {
+      setPanBusy(false);
+    }
+  };
 
   const submit = async () => {
     setBusy(true);
@@ -207,6 +281,77 @@ export function ClientOnboardingPage() {
 
         {error && <ErrorNote title="The client was not registered." message={error} />}
 
+        {/* Optional import. The console works fine without it — this only saves
+            typing, and using the PAN-registered name avoids the mismatch that
+            leaves a UCC stuck in KYC. */}
+        <div className="mb-4 rounded-token-md border border-border bg-bg-base p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Search className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+            <input
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && void search()}
+              placeholder="Prefill from an existing client — name, code or PAN"
+              className="min-w-0 flex-1 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-faint"
+            />
+            <button
+              type="button"
+              onClick={() => void search()}
+              disabled={searching || term.trim().length < 2}
+              className="shrink-0 rounded-token-md border border-border bg-bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-primary hover:text-accent disabled:opacity-50"
+            >
+              {searching ? 'Searching…' : 'Search'}
+            </button>
+          </div>
+
+          {results && results.length === 0 && (
+            <p className="mt-2 text-[11px] text-text-faint">
+              No match — enter the details manually below.
+            </p>
+          )}
+
+          {results && results.length > 0 && (
+            <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+              {results.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => importClient(c)}
+                    className="flex w-full items-center gap-2 rounded-token-md px-2 py-1.5 text-left hover:bg-bg-surface"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium text-text-primary">
+                        {c.fullName || c.clientCode}
+                        {c.panVerified && (
+                          <BadgeCheck className="ml-1 inline h-3 w-3 align-[-2px] text-success" />
+                        )}
+                      </span>
+                      <span className="block truncate font-mono text-[10px] text-text-faint">
+                        {c.clientCode} · {c.pan || 'no PAN'}
+                      </span>
+                    </span>
+                    {c.missing.length > 0 && (
+                      <span
+                        className="shrink-0 text-[10px] text-warning"
+                        title={`Missing: ${c.missing.join(', ')}`}
+                      >
+                        {c.missing.length} missing
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {importedFrom && (
+            <p className="mt-2 text-[11px] text-success">
+              Prefilled from {importedFrom}. Review everything below — BSE is the record that
+              counts.
+            </p>
+          )}
+        </div>
+
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Client code (UCC)">
@@ -229,6 +374,29 @@ export function ClientOnboardingPage() {
                 className={`${inputCls} font-mono`}
               />
               {err('pan') && <p className="mt-1 text-[11px] text-danger">{err('pan')}</p>}
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void checkPan()}
+                  disabled={panBusy || !PAN_RE.test(form.pan.trim().toUpperCase())}
+                  className="rounded-token-md border border-border bg-bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-primary hover:text-accent disabled:opacity-50"
+                >
+                  {panBusy ? 'Verifying…' : 'Verify PAN'}
+                </button>
+                {panCheck?.state === 'ok' && (
+                  <span className="text-[11px] text-success">
+                    <BadgeCheck className="mr-0.5 inline h-3 w-3 align-[-2px]" />
+                    {panCheck.name}
+                  </span>
+                )}
+                {panCheck?.state === 'bad' && (
+                  <span className="text-[11px] text-danger">{panCheck.msg}</span>
+                )}
+              </div>
+              <p className="mt-1 text-[10px] text-text-faint">
+                Verifying fills the name exactly as registered against the PAN — which is what
+                BSE&rsquo;s KYC check compares.
+              </p>
             </Field>
           </div>
 
