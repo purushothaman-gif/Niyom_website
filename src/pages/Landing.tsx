@@ -6,6 +6,7 @@ import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
 import { BrandFilm } from '../components/BrandFilm';
 import { Reveal } from '../components/Reveal';
+import { LoginMenu, LOGIN_PORTALS } from '../components/LoginMenu';
 
 interface LandingProps {
   onGetStarted: () => void;
@@ -211,17 +212,14 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                   scale, on a gradient fill so it reads as brushed metal rather
                   than a flat swatch. Text stays near-black in both themes: the
                   --text-on-accent token turns white in light mode, which is the
-                  weaker contrast of the two against this gold. */}
-              <button
-                onClick={() => window.open('/client-login', '_blank')}
-                className={`cta-glow-sm gold-sheen press flex items-center gap-2 rounded-xl px-7 py-3 font-semibold text-black hover:brightness-[1.06] ${isLoaded ? 'animate-slideDown animate-delay-200' : 'opacity-0'}`}
-                style={{
-                  background: 'linear-gradient(135deg, rgb(var(--accent-soft-rgb)) 0%, rgb(var(--accent-rgb)) 100%)',
-                }}
-              >
-                <LogIn size={16} />
-                Client Login
-              </button>
+                  weaker contrast of the two against this gold.
+
+                  Opens a portal chooser rather than going straight to the client
+                  portal: clients and distribution partners each have their own
+                  login, and a bare "Client Login" left partners with no way in. */}
+              <div className={isLoaded ? 'animate-slideDown animate-delay-200' : 'opacity-0'}>
+                <LoginMenu triggerClassName="px-7 py-3" />
+              </div>
             </div>
 
             {/* Mobile top-bar controls — the theme toggle must live here (not
@@ -383,19 +381,36 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               >
                 Contact
               </button>
-              <button
-                onClick={() => {
-                  window.open('/client-login', '_blank');
-                  setIsMobileMenuOpen(false);
-                }}
-                className="cta-glow-sm press flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold text-black"
-                style={{
-                  background: 'linear-gradient(135deg, rgb(var(--accent-soft-rgb)) 0%, rgb(var(--accent-rgb)) 100%)',
-                }}
-              >
-                <LogIn size={16} />
-                Client Login
-              </button>
+              {/* No dropdown on mobile — a sheet already has the room, so both
+                  portals are laid out directly. Same LOGIN_PORTALS source as the
+                  desktop menu, so the two can't drift. */}
+              <div className="border-t border-accent-soft/20 my-2 pt-3">
+                <div className="flex items-center gap-2 px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-soft/80">
+                  <LogIn size={13} />
+                  Choose your portal
+                </div>
+                <div className="space-y-2">
+                  {LOGIN_PORTALS.map(({ label, hint, icon: Icon, href }) => (
+                    <button
+                      key={label}
+                      onClick={() => {
+                        window.open(href, '_blank');
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition-colors hover:border-accent-soft/40 hover:bg-accent-soft/10"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft/10 text-accent-soft ring-1 ring-inset ring-accent-soft/20">
+                        <Icon size={17} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-white">{label}</span>
+                        <span className="block text-[11px] text-white/45">{hint}</span>
+                      </span>
+                      <ArrowUpRight size={14} className="text-white/25" />
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}

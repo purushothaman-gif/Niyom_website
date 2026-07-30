@@ -3,6 +3,7 @@ import { ArrowLeft, Home } from 'lucide-react';
 import { Logo } from '../../components/Logo';
 import { ThemeToggle } from '../../theme/ThemeToggle';
 import { HeroBackground } from '../../components/HeroBackground';
+import { LoginMenu } from '../../components/LoginMenu';
 
 /**
  * Shared chrome for the public marketing pages (Learning, News, MF Research,
@@ -93,12 +94,9 @@ export function PublicPageChrome({
             >
               <Home size={16} /> Home
             </button>
-            <button
-              onClick={() => window.open('/client-login', '_blank')}
-              className="lift press bg-accent-soft hover:bg-accent-soft-deep text-black px-4 sm:px-6 py-2.5 rounded-xl font-semibold shadow-md text-sm sm:text-base"
-            >
-              Client Login
-            </button>
+            {/* Portal chooser (clients + distribution partners), matching the
+                landing header so the two never diverge. */}
+            <LoginMenu triggerClassName="px-4 sm:px-6 py-2.5 text-sm sm:text-base shadow-md" />
           </div>
         </nav>
       </header>
