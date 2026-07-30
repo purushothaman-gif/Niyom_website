@@ -227,8 +227,10 @@ const CTA_BLOCK = 86;
  * than 0.50 for optical centring — a block sitting on the exact mathematical
  * centre reads as slightly low.
  */
-function centreOffset(g: Geometry, contentTop: number, blockHeight: number): number {
-  const available = g.h - g.margin - FOOTER_BAND * g.scale - contentTop;
+function centreOffset(
+  g: Geometry, contentTop: number, blockHeight: number, bottomReserve = FOOTER_BAND * g.scale,
+): number {
+  const available = g.h - g.margin - bottomReserve - contentTop;
   return Math.max(0, (available - blockHeight) * 0.4);
 }
 
@@ -250,15 +252,26 @@ const boldStatement: TemplateSpec = {
     const chipH = 42 * g.scale;
     const headTop = topY + chipH + 46 * g.scale;
 
-    // Reserve room for body + CTA + footer, then let the headline own the rest.
-    const footerH = FOOTER_BAND * g.scale;
-    const ctaH = input.cta ? 70 * g.scale : 0;
-    // Generous: the body column is narrow (the illustration owns the right of
-    // this band), so the same word count needs more lines than a full-width
-    // column would. Too tight here and fitText falls through to ellipsising
-    // mid-sentence, which loses content the reader needed.
-    const bodyH = bodyText ? (g.isWide ? 130 : 264) * g.scale : 0;
-    const headMax = g.h - headTop - bodyH - ctaH - footerH - g.margin;
+    // Vertical budget. Every term the stack will actually occupy is subtracted
+    // here, so whatever is left is genuinely available to the headline.
+    //
+    // This used to under-reserve by ~94px: it counted 70 for the CTA while the
+    // stack used CTA_BLOCK (86), and omitted the two inter-block gaps entirely.
+    // The headline then grew into space that was already committed, the stack
+    // overran, and the panel's lower edge came down on top of the footer emblem
+    // — the type cleared the logo but the surface under it did not. Reserving
+    // honestly is what keeps the panel inside its frame for any length of copy.
+    const gapHeadBody = 34 * g.scale;
+    const gapBodyCta = 44 * g.scale;
+    // Footer band plus the panel's own bottom padding.
+    const footerH = (FOOTER_BAND + PANEL_PAD) * g.scale;
+    const ctaH = input.cta ? CTA_BLOCK * g.scale + gapBodyCta : 0;
+    // The body column is narrow (the illustration owns the right of this band),
+    // so a given word count needs more lines than a full-width column would.
+    // Too tight and fitText falls through to ellipsising mid-sentence.
+    const bodyH = bodyText ? (g.isWide ? 130 : 210) * g.scale : 0;
+    const bodyBlockH = bodyText ? bodyH + gapHeadBody : 0;
+    const headMax = g.h - headTop - bodyBlockH - ctaH - footerH - g.margin;
 
     // Art geometry is resolved first, because the text column is derived from
     // it. Guessing a fraction of the content width is what let body copy run
@@ -301,12 +314,10 @@ const boldStatement: TemplateSpec = {
 
     // Stack headline -> body -> CTA as one block and centre it vertically, so
     // the composition fills the frame instead of hugging the top edge.
-    const gapHeadBody = 34 * g.scale;
-    const gapBodyCta = 44 * g.scale;
     const blockH = head.height
       + (body ? gapHeadBody + body.height : 0)
       + (input.cta ? gapBodyCta + CTA_BLOCK * g.scale : 0);
-    const stackTop = headTop + centreOffset(g, headTop, blockH);
+    const stackTop = headTop + centreOffset(g, headTop, blockH, footerH);
 
     const headBaseline = stackTop + head.fontSize * 0.86;
     const bodyTop = stackTop + head.height + gapHeadBody;
