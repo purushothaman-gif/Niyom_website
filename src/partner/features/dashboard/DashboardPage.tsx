@@ -38,7 +38,10 @@ export function DashboardPage({ snapshot, onNavigate }: Props) {
       {/* Greeting */}
       <div>
         <h2 className="font-display text-2xl font-bold text-text-primary">
-          Welcome, {profile?.full_name?.split(' ')[0] ?? 'Partner'}
+          {/* Full name, not a first-name split: many partners are firms or HUFs
+              ("KATHARE WEALTH ADVISORS", "SHIVAM GUPTA (HUF)") and initialled
+              names like "B K M GANESH BABU" would greet the partner as "B". */}
+          Welcome, {profile?.full_name ?? 'Partner'}
         </h2>
         <p className="mt-1 text-sm text-text-muted">
           Partner code <span className="font-mono text-text-secondary">{profile?.dsa_code}</span>

@@ -7,7 +7,7 @@ import {
   Handshake, Plus, X, Upload, CheckCircle2, AlertCircle,
   Search, Phone, Mail, CreditCard, Building2, User, Eye,
   ToggleLeft, ToggleRight, Trash2, ChevronDown, Pencil,
-  KeyRound, ShieldOff, Copy, RefreshCw,
+  KeyRound, ShieldOff, ShieldCheck, Copy, RefreshCw,
 } from 'lucide-react';
 
 /** Policy-compliant temp password (8+, upper, lower, digit, symbol). */
@@ -358,10 +358,20 @@ export default function DSAManagement({ employee }: Props) {
     setLoginBusy(false);
   };
 
-  const disableLogin = async (dsa: NWDSA) => {
-    // nw_current_dsa_id() requires dsa_login_enabled, so this takes effect on
-    // the partner's very next query — no waiting for their JWT to expire.
-    await supabase.from('nw_dsa').update({ dsa_login_enabled: false }).eq('id', dsa.id);
+  // Enable/disable portal access for a login that already exists. Goes through
+  // nw_partner_set_login_enabled() rather than a direct UPDATE so the change is
+  // audited in the same transaction — nw_dsa_login_audit has no INSERT policy
+  // (service-role only), so a client-side UPDATE could never record itself, and
+  // a guard trigger now rejects that path outright.
+  //
+  // nw_current_dsa_id() requires dsa_login_enabled, so a disable takes effect on
+  // the partner's very next query — no waiting for their JWT to expire.
+  const setLoginEnabled = async (dsa: NWDSA, enabled: boolean) => {
+    const { error } = await supabase.rpc('nw_partner_set_login_enabled', {
+      p_dsa_id: dsa.id,
+      p_enabled: enabled,
+    });
+    if (error) { alert(error.message); return; }
     fetchDSAs();
   };
 
@@ -773,7 +783,7 @@ export default function DSAManagement({ employee }: Props) {
                       }}>
                       {dsa.status}
                     </span>
-                    {dsa.dsa_login_enabled && (
+                    {dsa.dsa_login_enabled ? (
                       <span className="text-xs px-1.5 py-0.5 rounded-md font-semibold inline-flex items-center gap-1"
                         style={{
                           background: dsa.dsa_password_changed ? 'rgba(var(--accent-rgb),0.1)' : 'rgba(245,158,11,0.12)',
@@ -783,7 +793,16 @@ export default function DSAManagement({ employee }: Props) {
                         <KeyRound className="w-3 h-3" />
                         {dsa.dsa_password_changed ? 'Portal' : 'Temp pw'}
                       </span>
-                    )}
+                    ) : dsa.dsa_auth_user_id ? (
+                      /* Provisioned but switched off — distinct from "never had
+                         a login", because restoring it reuses their password. */
+                      <span className="text-xs px-1.5 py-0.5 rounded-md font-semibold inline-flex items-center gap-1"
+                        style={{ background: 'rgba(107,107,107,0.12)', color: 'var(--text-muted)' }}
+                        title="Partner portal access is switched off. Restoring it keeps the password they already set.">
+                        <ShieldOff className="w-3 h-3" />
+                        Portal off
+                      </span>
+                    ) : null}
                   </div>
                   <p className="text-xs font-mono font-bold" style={{ color: 'var(--accent)' }}>{dsa.dsa_code}</p>
                   {dsa.employee && <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>by {dsa.employee.full_name}</p>}
@@ -828,12 +847,25 @@ export default function DSAManagement({ employee }: Props) {
                       nw_current_dsa_id() requires status='active' anyway. */}
                   {(isAdmin || dsa.employee_id === employee.id) && (
                     dsa.dsa_login_enabled ? (
-                      <button onClick={() => disableLogin(dsa)} title="Disable partner portal login"
+                      <button onClick={() => setLoginEnabled(dsa, false)} title="Disable partner portal login"
                         className="p-2 rounded-lg transition-colors"
                         style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', color: 'var(--accent)' }}
                         onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')}
                         onMouseLeave={e => (e.currentTarget.style.color = 'var(--accent)')}>
                         <ShieldOff className="w-4 h-4" />
+                      </button>
+                    ) : dsa.dsa_auth_user_id ? (
+                      /* Login exists but is switched off. create-partner-login
+                         refuses once an auth user exists (409), so restoring
+                         access must flip the flag rather than reissue
+                         credentials — the partner keeps the password they set. */
+                      <button onClick={() => setLoginEnabled(dsa, true)} disabled={dsa.status !== 'active'}
+                        title={dsa.status === 'active' ? 'Restore partner portal login' : 'Reactivate the DSA before restoring login'}
+                        className="p-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', color: 'var(--warning)' }}
+                        onMouseEnter={e => { if (dsa.status === 'active') e.currentTarget.style.color = 'var(--accent)'; }}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--warning)')}>
+                        <ShieldCheck className="w-4 h-4" />
                       </button>
                     ) : (
                       <button onClick={() => openLoginModal(dsa)} disabled={dsa.status !== 'active'}
