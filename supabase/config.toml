@@ -498,6 +498,27 @@ verify_jwt = false
 [functions.mkt-expire-content]
 verify_jwt = false
 
+# --- Partner Portal (DSA login) --------------------------------------------
+# Resolves a partner's PAN to the email their auth user is registered under, so
+# the browser can then call signInWithPassword. Public verify_jwt because it runs
+# before any session exists — exactly like client-pan-login. Every failure path
+# returns the same generic 401 so it cannot be used to probe which PANs belong
+# to a partner, and it additionally throttles per-IP server-side (the login
+# screen's own limiter is client-side only and trivially bypassed with curl).
+[functions.partner-pan-login]
+verify_jwt = false
+
+# Partner refers a prospect from the portal. Public verify_jwt: runs with the
+# partner's own bearer token and re-reads nw_dsa inside to confirm they are an
+# enabled, active partner (metadata is never trusted), mirroring the shape of
+# the public-onboard-* and raise-support-ticket functions.
+[functions.partner-submit-lead]
+verify_jwt = false
+
+# create-partner-login is intentionally absent from this file: it keeps the
+# default verify_jwt = true (an RM/admin calls it with their own bearer token)
+# and additionally re-checks active-employee status and DSA ownership inside.
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

@@ -2,11 +2,31 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWDSA } from './types';
+import { isPasswordStrong, passwordChecks, passwordError } from '../lib/passwordPolicy';
 import {
   Handshake, Plus, X, Upload, CheckCircle2, AlertCircle,
   Search, Phone, Mail, CreditCard, Building2, User, Eye,
   ToggleLeft, ToggleRight, Trash2, ChevronDown, Pencil,
+  KeyRound, ShieldOff, Copy, RefreshCw,
 } from 'lucide-react';
+
+/** Policy-compliant temp password (8+, upper, lower, digit, symbol). */
+function generatePassword(): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnpqrstuvwxyz';
+  const digit = '23456789';
+  const symbol = '!@#$%&*?';
+  const all = upper + lower + digit + symbol;
+  const pick = (s: string) => s[Math.floor(Math.random() * s.length)];
+  const chars = [pick(upper), pick(lower), pick(digit), pick(symbol)];
+  while (chars.length < 12) chars.push(pick(all));
+  // Fisher-Yates so the guaranteed characters aren't always in the first four slots.
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
 
 interface Props { employee: NWEmployee; }
 
@@ -90,6 +110,13 @@ export default function DSAManagement({ employee }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [empList, setEmpList] = useState<{ id: string; full_name: string; employee_code: string }[]>([]);
   const [empFilter, setEmpFilter] = useState('all');
+  // Partner Portal login provisioning
+  const [loginDSA, setLoginDSA] = useState<NWDSA | null>(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPw, setLoginPw] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [loginDone, setLoginDone] = useState(false);
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
 
@@ -264,6 +291,77 @@ export default function DSAManagement({ employee }: Props) {
   const toggleStatus = async (dsa: NWDSA) => {
     const newStatus = dsa.status === 'active' ? 'inactive' : 'active';
     await supabase.from('nw_dsa').update({ status: newStatus }).eq('id', dsa.id);
+    fetchDSAs();
+  };
+
+  // ── Partner Portal login ────────────────────────────────────────────────
+  // Issuing credentials is a distinct, audited action, so it gets its own modal
+  // rather than a field in the save-everything edit form (which would invite an
+  // accidental credential reissue on an unrelated edit).
+
+  const openLoginModal = (dsa: NWDSA) => {
+    setLoginDSA(dsa);
+    setLoginEmail(dsa.email || '');
+    setLoginPw(generatePassword());
+    setLoginError('');
+    setLoginDone(false);
+  };
+
+  const handleEnableLogin = async () => {
+    if (!loginDSA) return;
+    setLoginError('');
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail.trim())) {
+      setLoginError('Enter a valid email address for the partner.');
+      return;
+    }
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test((loginDSA.pan || '').toUpperCase())) {
+      setLoginError('This DSA has an invalid PAN. Fix it on the DSA record first — PAN is the login ID.');
+      return;
+    }
+    if (!isPasswordStrong(loginPw)) {
+      setLoginError(passwordError(loginPw) || 'Password does not meet the policy.');
+      return;
+    }
+
+    setLoginBusy(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-partner-login`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sess.session?.access_token ?? ''}`,
+            Apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            dsa_id: loginDSA.id,
+            email: loginEmail.trim().toLowerCase(),
+            pan: loginDSA.pan,
+            initial_password: loginPw,
+          }),
+        },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLoginError(body?.error || 'Could not enable partner login.');
+        setLoginBusy(false);
+        return;
+      }
+      setLoginDone(true);
+      fetchDSAs();
+    } catch {
+      setLoginError('Network error. Please try again.');
+    }
+    setLoginBusy(false);
+  };
+
+  const disableLogin = async (dsa: NWDSA) => {
+    // nw_current_dsa_id() requires dsa_login_enabled, so this takes effect on
+    // the partner's very next query — no waiting for their JWT to expire.
+    await supabase.from('nw_dsa').update({ dsa_login_enabled: false }).eq('id', dsa.id);
     fetchDSAs();
   };
 
@@ -462,6 +560,118 @@ export default function DSAManagement({ employee }: Props) {
         </div>
       )}
 
+      {/* Enable Partner Portal login */}
+      {loginDSA && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'var(--overlay)', backdropFilter: 'blur(4px)' }}>
+          <div className="w-full max-w-md rounded-2xl p-6" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <KeyRound className="w-5 h-5" style={{ color: 'var(--accent)' }} />
+                <h3 className="text-base font-bold text-text-primary">Enable Partner Login</h3>
+              </div>
+              <button onClick={() => setLoginDSA(null)} style={{ color: 'var(--text-faint)' }}><X className="w-5 h-5" /></button>
+            </div>
+
+            {loginDone ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl flex items-start gap-2.5" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                  <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--success)' }} />
+                  <p className="text-sm" style={{ color: 'var(--success)' }}>
+                    Partner login enabled for {loginDSA.full_name}.
+                  </p>
+                </div>
+                <div className="p-4 rounded-xl space-y-3" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}>
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>Share these credentials</p>
+                  <div>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Sign in at</p>
+                    <p className="text-sm font-mono text-text-primary">niyomwealth.com/partner-login</p>
+                  </div>
+                  <div>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Login ID (PAN)</p>
+                    <p className="text-sm font-mono text-text-primary">{loginDSA.pan}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Temporary password</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-mono font-bold flex-1" style={{ color: 'var(--accent)' }}>{loginPw}</p>
+                      <button onClick={() => navigator.clipboard?.writeText(loginPw)} title="Copy"
+                        className="p-1.5 rounded-lg" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                    This password is shown once. The partner must set their own password on first sign-in.
+                  </p>
+                </div>
+                <button onClick={() => setLoginDSA(null)} className="w-full py-2.5 rounded-xl text-sm font-bold text-on-accent"
+                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                  Done
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Give <span className="font-semibold text-text-primary">{loginDSA.full_name}</span>{' '}
+                  (<span className="font-mono" style={{ color: 'var(--accent)' }}>{loginDSA.dsa_code}</span>)
+                  access to the Partner Portal. They sign in with their PAN and a temporary password.
+                </p>
+
+                {loginError && (
+                  <div className="p-3 rounded-xl flex items-start gap-2.5" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--danger)' }} />
+                    <p className="text-sm" style={{ color: 'var(--danger)' }}>{loginError}</p>
+                  </div>
+                )}
+
+                <Field label="Login ID (PAN)">
+                  <Input value={loginDSA.pan} readOnly className="font-mono" style={{ opacity: 0.7 }} />
+                </Field>
+
+                <Field label="Partner Email" required>
+                  <Input value={loginEmail} onChange={e => setLoginEmail(e.target.value)}
+                    placeholder="partner@example.com" type="email" />
+                </Field>
+                <p className="text-xs -mt-2" style={{ color: 'var(--text-faint)' }}>
+                  Must not be an email that already has a client login — partner and client
+                  logins are kept separate.
+                </p>
+
+                <Field label="Temporary Password" required>
+                  <div className="flex items-center gap-2">
+                    <Input value={loginPw} onChange={e => setLoginPw(e.target.value)} className="font-mono flex-1" />
+                    <button type="button" onClick={() => setLoginPw(generatePassword())} title="Generate a new password"
+                      className="p-2.5 rounded-xl" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                  </div>
+                </Field>
+                <div className="space-y-1">
+                  {passwordChecks(loginPw).map(r => (
+                    <p key={r.text} className="text-xs flex items-center gap-1.5" style={{ color: r.met ? 'var(--success)' : 'var(--text-faint)' }}>
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: r.met ? 'var(--success)' : 'var(--text-faint)' }} />
+                      {r.text}
+                    </p>
+                  ))}
+                </div>
+
+                <div className="flex gap-3 pt-1">
+                  <button onClick={() => setLoginDSA(null)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                    style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                    Cancel
+                  </button>
+                  <button onClick={handleEnableLogin} disabled={loginBusy || !isPasswordStrong(loginPw)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                    {loginBusy ? 'Enabling…' : 'Enable Login'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Delete confirmation modal */}
       {deleteDSA && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
@@ -516,6 +726,7 @@ export default function DSAManagement({ employee }: Props) {
             { label: 'Total', value: dsas.length, color: 'var(--accent)' },
             { label: 'Active', value: dsas.filter(d => d.status === 'active').length, color: 'var(--success)' },
             { label: 'Inactive', value: dsas.filter(d => d.status === 'inactive').length, color: 'var(--text-muted)' },
+            { label: 'Portal', value: dsas.filter(d => d.dsa_login_enabled).length, color: 'var(--accent)' },
           ].map(s => (
             <div key={s.label} className="px-4 py-2 rounded-xl text-center" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
               <p className="text-xs font-bold" style={{ color: s.color }}>{s.value}</p>
@@ -562,6 +773,17 @@ export default function DSAManagement({ employee }: Props) {
                       }}>
                       {dsa.status}
                     </span>
+                    {dsa.dsa_login_enabled && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-md font-semibold inline-flex items-center gap-1"
+                        style={{
+                          background: dsa.dsa_password_changed ? 'rgba(var(--accent-rgb),0.1)' : 'rgba(245,158,11,0.12)',
+                          color: dsa.dsa_password_changed ? 'var(--accent)' : 'var(--warning)',
+                        }}
+                        title={dsa.dsa_password_changed ? 'Partner portal access is active' : 'Temporary password not yet changed by the partner'}>
+                        <KeyRound className="w-3 h-3" />
+                        {dsa.dsa_password_changed ? 'Portal' : 'Temp pw'}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs font-mono font-bold" style={{ color: 'var(--accent)' }}>{dsa.dsa_code}</p>
                   {dsa.employee && <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>by {dsa.employee.full_name}</p>}
@@ -599,6 +821,30 @@ export default function DSAManagement({ employee }: Props) {
                       onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
                       <Pencil className="w-4 h-4" />
                     </button>
+                  )}
+                  {/* Partner Portal login — stewardship: assigned employee or
+                      admin, matching the ownership check inside
+                      create-partner-login. Disabled for inactive DSAs, since
+                      nw_current_dsa_id() requires status='active' anyway. */}
+                  {(isAdmin || dsa.employee_id === employee.id) && (
+                    dsa.dsa_login_enabled ? (
+                      <button onClick={() => disableLogin(dsa)} title="Disable partner portal login"
+                        className="p-2 rounded-lg transition-colors"
+                        style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', color: 'var(--accent)' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--accent)')}>
+                        <ShieldOff className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button onClick={() => openLoginModal(dsa)} disabled={dsa.status !== 'active'}
+                        title={dsa.status === 'active' ? 'Enable partner portal login' : 'Reactivate the DSA before enabling login'}
+                        className="p-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+                        onMouseEnter={e => { if (dsa.status === 'active') e.currentTarget.style.color = 'var(--accent)'; }}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+                        <KeyRound className="w-4 h-4" />
+                      </button>
+                    )
                   )}
                   {/* Status toggle — stewardship: assigned employee or admin
                       (non-destructive). */}

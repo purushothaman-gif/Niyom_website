@@ -23,3 +23,15 @@ export const clientSupabase = createClient(supabaseUrl, supabaseAnonKey, {
     storageKey: 'nw-client-portal-auth',
   },
 });
+
+// Partner-portal (DSA) auth session — ISOLATED storage key, third of three.
+// A staff member, a client and a partner can all be signed in on the same
+// browser origin; each needs its own token slot or they overwrite one another
+// (a CRM session leaking into the partner portal makes nw_current_dsa_id()
+// return NULL, so every RPC raises "Partner access required"). EVERY partner
+// path (auth + data + storage + edge functions) must use this instance.
+export const partnerSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storageKey: 'nw-partner-portal-auth',
+  },
+});
