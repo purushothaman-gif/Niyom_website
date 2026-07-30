@@ -119,3 +119,6 @@ export function ConfirmBox({
     </div>
   );
 }
+
+/** Re-export so form pages can pull table chrome from one place. */
+export { TableScroll as TableScrollX } from './BsePanel';

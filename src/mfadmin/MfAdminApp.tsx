@@ -35,6 +35,7 @@ import { SxpBookPage } from './features/bse/SxpBookPage';
 import { PurchasePage } from './features/bse/PurchasePage';
 import { RedeemPage } from './features/bse/RedeemPage';
 import { SwitchPage } from './features/bse/SwitchPage';
+import { ClientManagementPage } from './features/bse/ClientManagementPage';
 
 export default function MfAdminApp() {
   const [employee, setEmployee] = useState<NWEmployee | null>(null);
@@ -135,6 +136,8 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
         return <RedeemPage />;
       case 'switch':
         return <SwitchPage />;
+      case 'clients':
+        return <ClientManagementPage />;
       case 'ucc':
         return <UccBookPage />;
       case 'sip':
