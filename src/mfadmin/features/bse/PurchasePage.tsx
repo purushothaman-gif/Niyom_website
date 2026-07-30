@@ -15,7 +15,6 @@ import { Clock, ShoppingCart } from 'lucide-react';
 import { fmt } from '../../../crm/utils';
 import { Card } from '../../../portal/components/Card';
 import { SectionHeader } from '../../../portal/components/SectionHeader';
-import { StatusPill } from '../../../portal/components/StatusPill';
 import { LogoLoader } from '../../../components/LogoLoader';
 import {
   BseOpsService,
@@ -24,6 +23,7 @@ import {
   type BseUccRow,
 } from '../../services/BseOpsService';
 import { useBseData } from '../../hooks/useBseData';
+import { EnvBadge, envNote, useBseEnv } from './EnvBadge';
 import {
   ConfirmBox,
   ErrorNote,
@@ -43,6 +43,7 @@ interface Placed {
 }
 
 export function PurchasePage() {
+  const env = useBseEnv();
   const uccs = useBseData<BseUccRow[]>(() => BseOpsService.uccs());
   const schemes = useBseData<BseSchemeRow[]>(() => BseOpsService.schemes());
 
@@ -259,7 +260,7 @@ export function PurchasePage() {
       </Card>
 
       <p className="text-center text-[11px] text-text-faint">
-        <StatusPill tone="success">Live</StatusPill> Orders are placed directly with BSE StAR MF.
+        <EnvBadge env={env} /> {envNote(env)}
       </p>
     </div>
   );

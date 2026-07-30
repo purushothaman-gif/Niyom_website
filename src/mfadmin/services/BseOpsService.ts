@@ -272,6 +272,34 @@ async function post<T>(route: string, body: unknown): Promise<T> {
   return JSON.parse(text) as T;
 }
 
+/**
+ * Which BSE environment the proxy is actually pointed at.
+ *
+ * Read from the proxy rather than hardcoded, so the console can never claim to
+ * be live while talking to the sandbox — or keep saying "Demo" after we cut
+ * over to production. `/health` is public (it sits before the auth gate), so
+ * this works before any BSE call is made.
+ */
+export type BseEnv = 'demo' | 'prod' | 'unknown';
+
+let envCache: { at: number; env: BseEnv } | null = null;
+
+export async function bseEnvironment(): Promise<BseEnv> {
+  if (envCache && Date.now() - envCache.at < 5 * 60 * 1000) return envCache.env;
+  const baseUrl = proxyBaseUrl();
+  if (!baseUrl) return 'unknown';
+  try {
+    const res = await fetch(`${baseUrl}/health`);
+    if (!res.ok) return 'unknown';
+    const body = (await res.json()) as { env?: string };
+    const env: BseEnv = body.env === 'prod' ? 'prod' : body.env === 'demo' ? 'demo' : 'unknown';
+    envCache = { at: Date.now(), env };
+    return env;
+  } catch {
+    return 'unknown';
+  }
+}
+
 export const BseOpsService = {
   /** Order book across all clients (open + closed), newest first. */
   orders: (clientCode?: string) =>
