@@ -110,7 +110,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
     const rl = getRl();
     if (rl.lockedUntil > Date.now()) {
       const mins = Math.ceil((rl.lockedUntil - Date.now()) / 60000);
-      setError(`Too many attempts. Try again in ${mins} minute${mins > 1 ? 's' : ''}.`);
+      setError(`Too many tries. Please try again in ${mins} minute${mins > 1 ? 's' : ''}.`);
       return;
     }
 
@@ -124,8 +124,8 @@ export default function MfAdminLogin({ onLogin }: Props) {
         const { locked, remaining } = recordFailure();
         setError(
           locked
-            ? 'Too many failed attempts. Locked for 5 minutes.'
-            : `Invalid email or password. ${remaining} attempt${remaining === 1 ? '' : 's'} left.`,
+            ? 'Too many tries. Please wait 5 minutes before trying again.'
+            : `That email or password didn't match. ${remaining} ${remaining === 1 ? 'try' : 'tries'} left.`,
         );
         return;
       }
@@ -133,7 +133,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
       const emp = await loadEmployee(data.user.id);
       if (!emp) {
         await supabase.auth.signOut();
-        setError('This console is for active NIYOM employees only.');
+        setError('This sign-in is for current Niyom staff only.');
         return;
       }
 
@@ -141,7 +141,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
       // employee is refused here — before the MFA gate — the same way !emp is.
       if (!employeeIsPrivileged(emp)) {
         await supabase.auth.signOut();
-        setError('The MF Admin console is restricted to administrators.');
+        setError('Only administrators can open Mutual Fund Admin. Ask an admin if you need access.');
         return;
       }
 
@@ -162,7 +162,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
       if (gate === 'enroll') {
         await supabase.auth.signOut();
         setError(
-          'Two-factor setup is pending for this account. Complete the one-time TOTP enrolment via the CRM sign-in, then return here.',
+          'You need to set up your authenticator app first. Sign in to the CRM once to finish setup, then come back here.',
         );
         return;
       }
@@ -171,7 +171,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
       const factors = await listVerifiedTotpFactors();
       if (!factors.length) {
         await supabase.auth.signOut();
-        setError('No verified authenticator found. Complete TOTP enrolment via the CRM sign-in.');
+        setError('No authenticator app is set up for this account yet. Set one up from the CRM sign-in, then come back here.');
         return;
       }
       pendingEmployee.current = emp;
@@ -212,9 +212,9 @@ export default function MfAdminLogin({ onLogin }: Props) {
         {/* Brand */}
         <div className="mb-8 text-center">
           <img src="/niyomlogo.png" alt="Niyom Wealth" className="mx-auto h-12 w-auto object-contain" />
-          <h1 className="mt-4 font-display text-2xl font-bold text-text-primary">MF Admin Console</h1>
+          <h1 className="mt-4 font-display text-2xl font-bold text-text-primary">Mutual Fund Admin</h1>
           <p className="mt-1 text-sm text-text-secondary">
-            NIYOM Wealth · Mutual Fund Operations
+            Niyom Wealth · Staff sign in
           </p>
         </div>
 
@@ -223,7 +223,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
             <form onSubmit={submitLogin} className="space-y-4">
               <div className="mb-2 flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-accent" />
-                <h2 className="text-sm font-bold text-text-primary">Employee Sign In</h2>
+                <h2 className="text-sm font-bold text-text-primary">Sign in</h2>
               </div>
 
               {error && (
@@ -239,7 +239,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Work email"
+                  placeholder="Your work email"
                   required
                   autoComplete="email"
                   className={inputCls}
@@ -279,18 +279,18 @@ export default function MfAdminLogin({ onLogin }: Props) {
 
               <p className="pt-1 text-center text-[11px] text-text-faint">
                 <KeyRound className="mr-1 inline h-3 w-3 align-[-2px]" />
-                Forgot your password? Reset it via the CRM sign-in — both consoles share your
-                employee account.
+                Forgot your password? Reset it on the CRM sign-in page — it&rsquo;s the same
+                Niyom account.
               </p>
             </form>
           ) : (
             <form onSubmit={submitCode} className="space-y-4">
               <div className="mb-2 flex items-center gap-2">
                 <Smartphone className="h-4 w-4 text-accent" />
-                <h2 className="text-sm font-bold text-text-primary">Two-Factor Verification</h2>
+                <h2 className="text-sm font-bold text-text-primary">Enter your security code</h2>
               </div>
               <p className="text-xs text-text-secondary">
-                Enter the 6-digit code from your authenticator app.
+                Open your authenticator app and type the 6-digit code it shows.
               </p>
 
               {error && (
@@ -320,7 +320,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
                   style={{ accentColor: 'var(--accent)' }}
                 />
                 <span className="text-xs text-text-secondary">
-                  Trust this device for {TRUSTED_DEVICE_DAYS} days — skip the code next time. Personal devices only.
+                  Remember this device for {TRUSTED_DEVICE_DAYS} days, so you won't need a code next time. Only on your own device — never a shared one.
                 </span>
               </label>
 
@@ -330,7 +330,7 @@ export default function MfAdminLogin({ onLogin }: Props) {
                 className="w-full rounded-token-md py-3 text-sm font-bold text-on-accent disabled:opacity-60"
                 style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
               >
-                {busy ? 'Verifying…' : 'Verify & Sign In'}
+                {busy ? 'Checking…' : 'Continue'}
               </button>
 
               <button
@@ -345,14 +345,14 @@ export default function MfAdminLogin({ onLogin }: Props) {
                 }}
                 className="w-full text-center text-xs font-semibold text-text-muted hover:text-accent"
               >
-                Back to sign in
+                Back
               </button>
             </form>
           )}
         </div>
 
         <p className="mt-6 text-center text-[11px] text-text-faint">
-          Authorized NIYOM personnel only · All actions are logged
+          Niyom staff only · Everything you do here is recorded
         </p>
       </div>
     </div>
