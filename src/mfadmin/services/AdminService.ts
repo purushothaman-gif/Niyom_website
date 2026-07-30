@@ -8,7 +8,52 @@
  */
 import { supabase } from '../../lib/supabase';
 import { ALLOCATION_PALETTE } from '../../portal/services/palette';
+import { BseOpsService, isBseConfigured } from './BseOpsService';
 import type { AdminDashboardData, AdminOrderRow, AumBucket, ClientAum } from '../types';
+
+/** BSE order states that are still in flight (i.e. not done/rejected/cancelled). */
+function isPendingOrder(status: string): boolean {
+  const s = status.toLowerCase();
+  if (s === 'done' || s.includes('reject') || s.includes('cancel') || s.includes('settled')) {
+    return false;
+  }
+  return true;
+}
+
+interface BseOps {
+  liveSips: number;
+  pendingOrders: number;
+  todaysOrders: number;
+  uccTotal: number;
+  uccActive: number;
+}
+
+/**
+ * Live operational counts from BSE, via the proxy. Returns null (rather than
+ * throwing) when BSE is unreachable or unconfigured, so a BSE outage degrades
+ * the ops tiles instead of taking down the whole dashboard.
+ */
+async function loadBseOps(): Promise<{ ops: BseOps | null; error?: string }> {
+  if (!isBseConfigured()) return { ops: null, error: 'BSE proxy is not configured.' };
+  try {
+    const [orders, sxp, uccs] = await Promise.all([
+      BseOpsService.orders(),
+      BseOpsService.sxp(),
+      BseOpsService.uccs(),
+    ]);
+    return {
+      ops: {
+        liveSips: sxp.filter((s) => s.status.toLowerCase() === 'active').length,
+        pendingOrders: orders.filter((o) => isPendingOrder(o.status)).length,
+        todaysOrders: orders.filter((o) => o.placedAt && sameDay(o.placedAt)).length,
+        uccTotal: uccs.length,
+        uccActive: uccs.filter((u) => u.status.toUpperCase() === 'ACTIVE').length,
+      },
+    };
+  } catch (err) {
+    return { ops: null, error: err instanceof Error ? err.message : 'BSE is unreachable.' };
+  }
+}
 
 interface HoldingLite {
   client_id: string;
@@ -32,7 +77,7 @@ const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 :
 
 export const AdminService = {
   async getDashboard(): Promise<AdminDashboardData> {
-    const [holdingsRes, txnRes, clientCountRes] = await Promise.all([
+    const [holdingsRes, txnRes, clientCountRes, bse] = await Promise.all([
       supabase
         .from('nw_holdings')
         .select('client_id, current_value, invested_amount, fund_house, trail_percent, client:nw_clients(full_name, client_code)')
@@ -44,6 +89,7 @@ export const AdminService = {
         .order('txn_date', { ascending: false })
         .limit(8),
       supabase.from('nw_clients').select('id', { count: 'exact', head: true }),
+      loadBseOps(),
     ]);
 
     const holdings = (holdingsRes.data as unknown as HoldingLite[]) ?? [];
@@ -121,12 +167,16 @@ export const AdminService = {
       amcSplit,
       topClients,
       recentOrders,
-      // Mock ops metrics until BSE gateway lands.
-      liveSips: Math.round(clientMap.size * 1.6),
-      pendingOrders: Math.min(9, Math.round(clientMap.size * 0.2)),
-      todaysOrders: recentOrders.filter((o) => sameDay(o.date)).length,
+      // Ops metrics: live from BSE when the proxy answers, else clearly flagged
+      // as illustrative rather than quietly showing invented numbers.
+      liveSips: bse.ops?.liveSips ?? Math.round(clientMap.size * 1.6),
+      pendingOrders: bse.ops?.pendingOrders ?? Math.min(9, Math.round(clientMap.size * 0.2)),
+      todaysOrders: bse.ops?.todaysOrders ?? recentOrders.filter((o) => sameDay(o.date)).length,
+      uccTotal: bse.ops?.uccTotal ?? 0,
+      uccActive: bse.ops?.uccActive ?? 0,
       trailMtd: trailAnnual / 12,
-      isMockOps: true,
+      isMockOps: bse.ops === null,
+      opsError: bse.error,
     };
   },
 };

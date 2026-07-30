@@ -52,11 +52,27 @@ export interface AdminDashboardData {
   topClients: ClientAum[];
   recentOrders: AdminOrderRow[];
 
-  /* Mock — BSE-side operational metrics until the gateway is wired. */
+  /* BSE-side operational metrics — live from the proxy when it is reachable. */
+  /** SXP registrations currently `active` at BSE. */
   liveSips: number;
+  /** Orders still working their way through the BSE lifecycle. */
   pendingOrders: number;
+  /** Orders placed at BSE today. */
   todaysOrders: number;
-  /** Estimated trail brokerage month-to-date. */
+  /** UCCs registered at BSE, and how many can actually transact. */
+  uccTotal: number;
+  uccActive: number;
+  /**
+   * Estimated trail brokerage month-to-date. Derived from CRM holdings
+   * (real trail_percent) — BSE does not expose accrued trail, so this stays an
+   * estimate even when the ops metrics above are live.
+   */
   trailMtd: number;
+  /**
+   * True when the BSE ops metrics could NOT be loaded and the figures above are
+   * illustrative. The UI must say so rather than passing them off as live.
+   */
   isMockOps: boolean;
+  /** Why BSE data is unavailable, when it is. */
+  opsError?: string;
 }

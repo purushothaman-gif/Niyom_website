@@ -16,13 +16,17 @@ export interface BseOrderRow {
   orderId: string;
   memberRef: string;
   clientCode: string;
+  clientName: string;
   schemeCode: string;
+  schemeName: string;
   amount: number;
   type: string;
   status: string;
   side: string;
   folio: string;
+  /** ISO timestamp from BSE's `placed_at`. */
   placedAt: string;
+  rejectionReason: string;
   isMock: boolean;
 }
 
