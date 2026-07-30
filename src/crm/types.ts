@@ -24,9 +24,13 @@ export interface NWClient {
   phone: string;
   pan: string;
   dob: string;
+  /** M | F | O — required by BSE StAR MF when registering a UCC. */
+  gender?: string | null;
   address: string;
   city: string;
   state: string;
+  /** Added by migration 20260522204200; was missing from this interface. */
+  pincode?: string | null;
   demat_account: string;
   dp_name: string;
   depository: string;

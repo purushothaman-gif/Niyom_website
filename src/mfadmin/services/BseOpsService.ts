@@ -419,7 +419,22 @@ export interface BseDiagnostics {
   serverTime: string;
 }
 
+export interface PanVerifyResult {
+  valid: boolean;
+  /** The name the PAN is registered under — what BSE's KYC check compares to. */
+  registered_name: string | null;
+  message: string | null;
+}
+
 export const BseOpsExtra = {
+  /**
+   * Verify a PAN and get the name it is registered under. Worth doing before
+   * registering a UCC: BSE's KYC check compares the holder name against this
+   * exact value, so a mismatch is the difference between ACTIVE and stuck.
+   */
+  verifyPan: (pan: string, name?: string) =>
+    post<PanVerifyResult>('/pan/verify', name ? { pan, name } : { pan }),
+
   events: (limit = 200) => get<BseEventRow[]>(`/webhooks/events?limit=${limit}`),
   diagnostics: () => get<BseDiagnostics>('/diagnostics'),
 };
