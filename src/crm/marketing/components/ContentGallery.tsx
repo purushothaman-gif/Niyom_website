@@ -14,7 +14,7 @@
 
 import { useState } from 'react';
 import {
-  ArrowLeft, Copy, Check, Download, Hash, Link2, Sparkles, Search, Share2,
+  ArrowLeft, Copy, Check, Download, Hash, Link2, Music, Sparkles, Search, Share2,
 } from 'lucide-react';
 import { NWEmployee } from '../../types';
 import {
@@ -262,6 +262,23 @@ function GalleryCard({ content, employee, refCode, channel, linkFor, copied, cop
               label={downloading === a.id ? 'Saving…' : a.kind === 'video' ? 'Video' : a.variant.replace('carousel_', 'Slide ')} />
           ))}
         </div>
+
+        {/*
+          Videos are rendered without an audio track on purpose: adding a track
+          in Instagram or Facebook at upload uses their licensed library, which
+          avoids the copyright exposure of baking music into the file and tends
+          to reach further than uploaded audio. Nobody does that unless told, so
+          the card says so wherever a video is actually offered.
+        */}
+        {assets.some(a => a.kind === 'video') && (
+          <p className="text-xs mt-2.5 flex items-start gap-1.5" style={{ color: 'var(--text-faint)' }}>
+            <Music className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>
+              This video has no sound. Add a track from the app&apos;s own music library
+              when you post — it reaches further than uploaded audio.
+            </span>
+          </p>
+        )}
       </div>
     </div>
   );
