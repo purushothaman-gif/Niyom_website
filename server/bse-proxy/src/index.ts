@@ -536,6 +536,102 @@ app.post('/payment/status', async (req, res, next) => {
   }
 });
 
+/* --------------------------- Ops / diagnostics ---------------------------- */
+
+/**
+ * BSE's own callbacks, newest first — the audit trail of what BSE told us.
+ * Served through the proxy (which owns the table and the service-role key) so
+ * the console keeps reading only one backend.
+ */
+app.get('/webhooks/events', async (req, res, next) => {
+  try {
+    if (!cfg.supabaseServiceRoleKey) return res.json([]);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+    const r = await fetch(
+      `${cfg.supabaseUrl}/rest/v1/bse_webhook_events` +
+        `?select=received_at,event_type,event,client_code,order_id,sxp_reg_num,mandate_id,msgcode,request_id` +
+        `&order=received_at.desc&limit=${limit}`,
+      {
+        headers: {
+          apikey: cfg.supabaseServiceRoleKey,
+          Authorization: `Bearer ${cfg.supabaseServiceRoleKey}`,
+        },
+      },
+    );
+    if (!r.ok) throw new BseError(`Event store unavailable (${r.status})`, 502);
+    return res.json(await r.json());
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * Our outbound IP — the one BSE whitelists, so worth showing plainly. Cached
+ * for an hour (a droplet's IP does not move) and tried against several echo
+ * services, since any single one can be down or rate-limited.
+ */
+let egressIpCache: { at: number; ip: string } | null = null;
+
+async function resolveEgressIp(): Promise<string> {
+  if (egressIpCache && Date.now() - egressIpCache.at < 60 * 60 * 1000) return egressIpCache.ip;
+  const sources = ['https://ifconfig.me/ip', 'https://icanhazip.com', 'https://api.ipify.org'];
+  for (const url of sources) {
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 5000);
+      const r = await fetch(url, { signal: ctl.signal });
+      clearTimeout(timer);
+      if (!r.ok) continue;
+      const ip = (await r.text()).trim();
+      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+        egressIpCache = { at: Date.now(), ip };
+        return ip;
+      }
+    } catch {
+      /* try the next source */
+    }
+  }
+  return '';
+}
+
+/**
+ * Connection diagnostics for the console's Settings screen: which BSE we talk
+ * to, as which member, from which egress IP (the one BSE whitelists), and
+ * whether a login currently succeeds.
+ */
+app.get('/diagnostics', async (_req, res, next) => {
+  try {
+    const egressIp = await resolveEgressIp();
+
+    let bseReachable = false;
+    let bseError = '';
+    try {
+      await bse.post('/master_scheme_list', { start: 0, length: 1, fields: ['ALL'], count_only: true });
+      bseReachable = true;
+    } catch (err) {
+      bseError = err instanceof Error ? err.message : 'unknown';
+    }
+
+    res.json({
+      environment: cfg.bseEnv,
+      bseBaseUrl: cfg.bseBaseUrl,
+      memberCode: cfg.bseMemberCode,
+      // Never the password — only whether one is configured.
+      credentialsConfigured: Boolean(cfg.bseUsername && cfg.bsePassword),
+      egressIp,
+      bseReachable,
+      bseError,
+      webhookUrl: `${cfg.publicBaseUrl ?? ''}/webhooks/starmf`,
+      webhookPersistence: Boolean(cfg.supabaseServiceRoleKey),
+      requireAuth: cfg.requireAuth,
+      allowedOrigins: cfg.allowedOrigins,
+      serverTime: new Date().toISOString(),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /* ------------------------- Read models for the console --------------------- */
 
 /**
