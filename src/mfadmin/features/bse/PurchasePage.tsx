@@ -11,7 +11,7 @@
  *  - the order is confirmed in a second step, showing exactly what will be sent.
  */
 import { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock, ShoppingCart } from 'lucide-react';
+import { Clock, ShoppingCart } from 'lucide-react';
 import { fmt } from '../../../crm/utils';
 import { Card } from '../../../portal/components/Card';
 import { SectionHeader } from '../../../portal/components/SectionHeader';
@@ -24,6 +24,16 @@ import {
   type BseUccRow,
 } from '../../services/BseOpsService';
 import { useBseData } from '../../hooks/useBseData';
+import {
+  ConfirmBox,
+  ErrorNote,
+  Field,
+  NotConfigured,
+  SuccessCard,
+  WarnNote,
+  inputCls,
+  selectCls,
+} from './formBits';
 
 interface Placed {
   orderId: string;
@@ -66,10 +76,15 @@ export function PurchasePage() {
   const amountError = (() => {
     if (!amount.trim()) return null;
     if (!Number.isFinite(amt) || amt <= 0) return 'Enter a valid amount.';
-    if (scheme?.purchase && amt < scheme.purchase.min)
-      return `Minimum for this scheme is ${fmt(scheme.purchase.min)}.`;
-    if (scheme?.purchase && scheme.purchase.max > 0 && amt > scheme.purchase.max)
-      return `Maximum for this scheme is ${fmt(scheme.purchase.max)}.`;
+    const rule = scheme?.purchase;
+    if (!rule) return null;
+    if (amt < rule.min) return `Minimum for this scheme is ${fmt(rule.min)}.`;
+    if (rule.max > 0 && amt > rule.max) return `Maximum for this scheme is ${fmt(rule.max)}.`;
+    // BSE also requires the amount to be a MULTIPLE of the scheme's step
+    // (errcode amt_not_multiple_of_min_amt) — e.g. a Rs 500 scheme rejects 800.
+    const step = rule.minAdditional > 0 ? rule.minAdditional : rule.min;
+    if (step > 0 && amt % step !== 0)
+      return `Must be a multiple of ${fmt(step)} — try ${fmt(Math.round(amt / step) * step || step)}.`;
     return null;
   })();
 
@@ -103,17 +118,7 @@ export function PurchasePage() {
     }
   };
 
-  if (!isBseConfigured()) {
-    return (
-      <Card padding="lg" className="mx-auto max-w-lg text-center">
-        <h2 className="font-display text-xl font-bold text-text-primary">Purchase</h2>
-        <p className="mt-2 text-sm text-text-secondary">
-          Live ordering isn’t connected in this environment. Set{' '}
-          <code className="rounded bg-bg-base px-1 py-0.5 text-[11px]">VITE_BSE_PROXY_URL</code>.
-        </p>
-      </Card>
-    );
-  }
+  if (!isBseConfigured()) return <NotConfigured title="Purchase" />;
 
   const loading = uccs.loading || schemes.loading;
   const loadError = uccs.error ?? schemes.error;
@@ -121,21 +126,15 @@ export function PurchasePage() {
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       {placed && (
-        <Card padding="lg" className="border-success/30 bg-success/5">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
-            <div className="min-w-0">
-              <p className="font-semibold text-text-primary">Order placed at BSE</p>
-              <p className="mt-1 text-sm text-text-secondary">
-                {fmt(placed.amount)} into {placed.schemeName} for {placed.clientCode}.
-              </p>
-              <p className="mt-2 text-xs text-text-secondary">
-                Order ID <span className="font-mono font-semibold">{placed.orderId}</span> — track it
-                in the Order Book.
-              </p>
-            </div>
-          </div>
-        </Card>
+        <SuccessCard title="Order placed at BSE">
+          <p className="mt-1 text-sm text-text-secondary">
+            {fmt(placed.amount)} into {placed.schemeName} for {placed.clientCode}.
+          </p>
+          <p className="mt-2 text-xs text-text-secondary">
+            Order ID <span className="font-mono font-semibold">{placed.orderId}</span> — track it in
+            the Order Book.
+          </p>
+        </SuccessCard>
       )}
 
       <Card>
@@ -148,22 +147,16 @@ export function PurchasePage() {
         )}
 
         {!loading && loadError && (
-          <div className="flex items-start gap-2 rounded-token-md border border-danger-soft/20 bg-danger-soft/10 p-3 text-xs text-danger-soft">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>{loadError}</span>
-          </div>
+          <ErrorNote title="Couldn’t load from BSE." message={loadError} />
         )}
 
         {!loading && !loadError && (
           <div className="space-y-4">
             {activeUccs.length === 0 && (
-              <div className="flex items-start gap-2 rounded-token-md border border-warning/20 bg-warning/10 p-3 text-xs text-warning">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>
-                  No transaction-ready clients. A UCC must reach <strong>ACTIVE</strong> at BSE
-                  (KYC, PAN and investor 2FA complete) before it can transact.
-                </span>
-              </div>
+              <WarnNote>
+                No transaction-ready clients. A UCC must reach <strong>ACTIVE</strong> at BSE (KYC,
+                PAN and investor 2FA complete) before it can transact.
+              </WarnNote>
             )}
 
             <Field label="Client (UCC)">
@@ -230,15 +223,7 @@ export function PurchasePage() {
               {amountError && <p className="mt-1 text-[11px] text-danger">{amountError}</p>}
             </Field>
 
-            {error && (
-              <div className="flex items-start gap-2 rounded-token-md border border-danger-soft/20 bg-danger-soft/10 p-3 text-xs text-danger-soft">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <div>
-                  <p className="font-semibold">The order was not placed.</p>
-                  <p className="mt-0.5 opacity-90">{error}</p>
-                </div>
-              </div>
-            )}
+            {error && <ErrorNote title="The order was not placed." message={error} />}
 
             {!confirming ? (
               <button
@@ -255,40 +240,19 @@ export function PurchasePage() {
                 Review Order
               </button>
             ) : (
-              <div className="rounded-token-md border border-accent/30 bg-accent/5 p-4">
-                <p className="text-sm font-semibold text-text-primary">Confirm this order</p>
-                <dl className="mt-3 space-y-1.5 text-xs">
-                  <Row label="Client" value={`${client?.name?.trim() || ''} (${clientCode})`} />
-                  <Row label="Scheme" value={scheme?.name ?? ''} />
-                  <Row label="Amount" value={fmt(amt)} />
-                  <Row label="Type" value="Lumpsum purchase · Physical" />
-                </dl>
-                <p className="mt-3 text-[11px] text-text-secondary">
-                  This places a real order with BSE StAR MF. It can be cancelled from the Order Book
-                  before settlement, subject to the investor’s approval.
-                </p>
-                <div className="mt-4 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setConfirming(false)}
-                    disabled={submitting}
-                    className="flex-1 rounded-token-md border border-border bg-bg-surface py-2.5 text-xs font-semibold text-text-primary disabled:opacity-50"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    onClick={submit}
-                    disabled={submitting}
-                    className="flex-1 rounded-token-md py-2.5 text-xs font-bold text-on-accent disabled:opacity-60"
-                    style={{
-                      background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))',
-                    }}
-                  >
-                    {submitting ? 'Placing…' : 'Place Order'}
-                  </button>
-                </div>
-              </div>
+              <ConfirmBox
+                rows={[
+                  { label: 'Client', value: `${client?.name?.trim() || ''} (${clientCode})` },
+                  { label: 'Scheme', value: scheme?.name ?? '' },
+                  { label: 'Amount', value: fmt(amt) },
+                  { label: 'Type', value: 'Lumpsum purchase · Physical' },
+                ]}
+                note="This places a real order with BSE StAR MF. It can be cancelled from the Order Book before settlement, subject to the investor’s approval."
+                busy={submitting}
+                submitLabel="Place Order"
+                onBack={() => setConfirming(false)}
+                onConfirm={submit}
+              />
             )}
           </div>
         )}
@@ -301,24 +265,5 @@ export function PurchasePage() {
   );
 }
 
-const selectCls =
-  'w-full rounded-token-md border border-border bg-bg-base px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-50';
-const inputCls = selectCls;
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold text-text-primary">{label}</span>
-      {children}
-    </label>
-  );
-}
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4">
-      <dt className="text-text-secondary">{label}</dt>
-      <dd className="min-w-0 truncate text-right font-medium text-text-primary">{value}</dd>
-    </div>
-  );
-}

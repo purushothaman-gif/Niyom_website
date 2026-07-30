@@ -33,6 +33,8 @@ import { OrderBookPage } from './features/bse/OrderBookPage';
 import { UccBookPage } from './features/bse/UccBookPage';
 import { SxpBookPage } from './features/bse/SxpBookPage';
 import { PurchasePage } from './features/bse/PurchasePage';
+import { RedeemPage } from './features/bse/RedeemPage';
+import { SwitchPage } from './features/bse/SwitchPage';
 
 export default function MfAdminApp() {
   const [employee, setEmployee] = useState<NWEmployee | null>(null);
@@ -129,6 +131,10 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
         return <OrderBookPage />;
       case 'purchase':
         return <PurchasePage />;
+      case 'redeem':
+        return <RedeemPage />;
+      case 'switch':
+        return <SwitchPage />;
       case 'ucc':
         return <UccBookPage />;
       case 'sip':

@@ -83,6 +83,60 @@ export interface PlaceOrderResult {
   isMock: boolean;
 }
 
+/**
+ * A netted position. BSE gives us no holdings API (get_mis_detail is not
+ * entitled to our member tier), so the proxy derives these from allotted
+ * orders — meaning a position only appears once an order has SETTLED.
+ */
+export interface BseHoldingRow {
+  clientCode: string;
+  folio: string;
+  schemeCode: string;
+  schemeName: string;
+  units: number;
+  invested: number;
+  lastNav: number;
+  lastDate: string;
+  value: number;
+  isMock: boolean;
+}
+
+export type RedeemMode = 'amount' | 'units' | 'all';
+
+export interface RedeemInput {
+  clientCode: string;
+  schemeCode: string;
+  schemeName: string;
+  folio: string;
+  mode: RedeemMode;
+  amount: number;
+  units: number;
+}
+
+export interface SwitchInput {
+  clientCode: string;
+  fromSchemeCode: string;
+  fromSchemeName: string;
+  toSchemeCode: string;
+  toSchemeName: string;
+  folio: string;
+  mode: RedeemMode;
+  amount: number;
+  units: number;
+}
+
+export interface TxnResultRow {
+  orderId: string;
+  kind: string;
+  schemeName: string;
+  detail: string;
+  amount: number;
+  status: string;
+  placedAt: string;
+  expectedNavDate: string;
+  isMock: boolean;
+}
+
 export interface BseSxpRow {
   sxpRegNum: string;
   clientCode: string;
@@ -191,6 +245,43 @@ export const BseOpsService = {
 
   /** Scheme master, with the trading rules the order form gates on. */
   schemes: (limit = 500) => get<BseSchemeRow[]>(`/schemes?limit=${limit}`),
+
+  /**
+   * Netted positions, derived by the proxy from allotted orders. Empty until an
+   * order actually settles — redemption and switch both need a real folio.
+   */
+  holdings: (clientCode?: string) =>
+    get<BseHoldingRow[]>(
+      `/holdings${clientCode ? `?clientCode=${encodeURIComponent(clientCode)}` : ''}`,
+    ),
+
+  /** Redeem units or rupees from a folio. */
+  redeem: (input: RedeemInput) =>
+    post<TxnResultRow>('/redemption', {
+      clientId: input.clientCode,
+      clientCode: input.clientCode,
+      schemeCode: input.schemeCode,
+      schemeName: input.schemeName,
+      folioNumber: input.folio,
+      mode: input.mode,
+      amount: input.amount,
+      units: input.units,
+    }),
+
+  /** Switch between two schemes of the SAME AMC (BSE rejects cross-AMC). */
+  switch: (input: SwitchInput) =>
+    post<TxnResultRow>('/switch', {
+      clientId: input.clientCode,
+      clientCode: input.clientCode,
+      fromSchemeCode: input.fromSchemeCode,
+      fromSchemeName: input.fromSchemeName,
+      toSchemeCode: input.toSchemeCode,
+      toSchemeName: input.toSchemeName,
+      folioNumber: input.folio,
+      mode: input.mode,
+      amount: input.amount,
+      units: input.units,
+    }),
 
   /**
    * Place a real lumpsum purchase. The proxy fails loudly if BSE returns
