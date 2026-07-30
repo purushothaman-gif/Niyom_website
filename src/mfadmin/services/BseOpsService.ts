@@ -104,6 +104,30 @@ export interface BseHoldingRow {
 }
 
 /** What the proxy's toAddUcc mapper needs to register a client at BSE. */
+/** One verification step BSE runs on a UCC. */
+export interface UccCheck {
+  key: string;
+  label: string;
+  /** Whether failing this prevents the UCC going ACTIVE. */
+  blocking: boolean;
+  state: 'pass' | 'fail' | 'pending';
+  reason: string;
+  at: string;
+}
+
+export interface UccDetail {
+  clientCode: string;
+  status: string;
+  pan: string;
+  mode: string;
+  transactionReady: boolean;
+  transactionReadyReason: string;
+  checks: UccCheck[];
+  /** Labels of the blocking checks not yet passed — empty means good to go. */
+  blockedBy: string[];
+  isMock: boolean;
+}
+
 export interface RegisterUccInput {
   clientCode: string;
   pan: string;
@@ -279,6 +303,10 @@ export const BseOpsService = {
    */
   registerUcc: (input: RegisterUccInput) =>
     post<{ clientCode: string; status: string; isMock: boolean }>('/ucc', input),
+
+  /** One UCC with its full verification breakdown (what's blocking activation). */
+  uccDetail: (clientCode: string) =>
+    get<UccDetail>(`/ucc/${encodeURIComponent(clientCode)}`),
 
   /** Investor 2FA approval link(s) for a UCC — needed to progress onboarding. */
   uccTwoFaLink: (clientCode: string, event = 'ucc_auth') =>
