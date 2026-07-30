@@ -35,6 +35,12 @@ import { SxpBookPage } from './features/bse/SxpBookPage';
 import { PurchasePage } from './features/bse/PurchasePage';
 import { RedeemPage } from './features/bse/RedeemPage';
 import { SwitchPage } from './features/bse/SwitchPage';
+import { SettingsPage } from './features/bse/SettingsPage';
+import { AuditPage } from './features/bse/AuditPage';
+import { NotificationsPage } from './features/bse/NotificationsPage';
+import { ReportsPage } from './features/bse/ReportsPage';
+import { NoBseDataPage } from './features/bse/NoBseDataPage';
+import { ClientOnboardingPage } from './features/bse/ClientOnboardingPage';
 import { KycPage } from './features/bse/KycPage';
 
 export default function MfAdminApp() {
@@ -136,6 +142,8 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
         return <RedeemPage />;
       case 'switch':
         return <SwitchPage />;
+      case 'clients':
+        return <ClientOnboardingPage />;
       case 'ucc':
         return <UccBookPage />;
       case 'kyc':
@@ -146,6 +154,25 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
         return <SxpBookPage title="Systematic Transfer Plan" icon={Repeat} only="STP" />;
       case 'swp':
         return <SxpBookPage title="Systematic Withdrawal Plan" icon={ArrowDownUp} only="SWP" />;
+
+      // Ops surfaces.
+      case 'reports':
+        return <ReportsPage />;
+      case 'audit':
+        return <AuditPage />;
+      case 'notifications':
+        return <NotificationsPage />;
+      case 'settings':
+        return <SettingsPage />;
+
+      // BSE will not serve these to our member tier — say so rather than
+      // showing estimates, or CRM figures, under a BSE heading.
+      case 'brokerage':
+        return <NoBseDataPage title="Brokerage" needs={['get_mis_detail', 'get_payment_detail']} />;
+      case 'commission':
+        return (
+          <NoBseDataPage title="Commission" needs={['get_mis_detail', 'list_payment_detail']} />
+        );
 
       default:
         return <AdminPlaceholder title={ADMIN_VIEW_TITLES[view]} />;
