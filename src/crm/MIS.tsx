@@ -119,19 +119,39 @@ export default function MIS({ employee }: Props) {
           && ((t as any).transfer_stage === 'transferred' || (t as any).deal_confirmation_id)) {
         const landingRaw = (t as any).landing_cost;
         const qty = t.quantity || 0;
-        const price =
-          client?.sourced_via === 'dsa'
-            ? ((t as any).dsa_price || 0)
-            : ((t as any).per_unit_price || 0);
-        if (landingRaw === null || landingRaw === undefined || landingRaw === '') {
-          // Landing cost was never entered — revenue is NOT the whole settlement.
-          // Show the row as pending (₹0) so it doesn't inflate MIS; the user
-          // enters the landing cost on the transaction to compute real revenue.
+
+        // The rate the client transacted at: DSA-sourced clients settle at
+        // dsa_price (net to Niyom after the DSA's cut), everyone else at
+        // per_unit_price.
+        const isDsa = client?.sourced_via === 'dsa';
+        const priceLabel = isDsa ? 'DSA price' : 'Client price';
+        const priceRaw = isDsa ? (t as any).dsa_price : (t as any).per_unit_price;
+        const price = Number(priceRaw);
+
+        // A missing rate is NOT zero. Defaulting it to zero prices the whole
+        // position at nothing and books the entire landing cost as a loss, so
+        // one un-entered field can drag a whole month negative. Treat it
+        // exactly like a missing landing cost — pending at ₹0, never computed.
+        const priceMissing = priceRaw === null || priceRaw === undefined || priceRaw === ''
+          || !Number.isFinite(price) || price <= 0;
+        const landingMissing = landingRaw === null || landingRaw === undefined || landingRaw === '';
+
+        if (priceMissing || landingMissing) {
+          // Revenue is NOT the whole settlement. Show the row as pending (₹0)
+          // so it doesn't distort MIS; the user enters the missing field on the
+          // transaction to compute real revenue.
+          const pending = [priceMissing ? priceLabel : null, landingMissing ? 'Landing cost' : null]
+            .filter(Boolean).join(' and ');
+          const known = [
+            priceMissing ? null : `Price ${fmt(price)}`,
+            landingMissing ? null : `Landing Cost ${fmt(Number(landingRaw))}`,
+            `Qty ${qty}`,
+          ].filter(Boolean).join(' | ');
           computed.push({
             ...baseRow,
             revenue_type: 'landing_cost',
             revenue: 0,
-            notes: `⚠ Landing cost pending — enter it on this transaction to compute revenue (Price ${fmt(price)} × Qty ${qty})`,
+            notes: `⚠ ${pending} pending — enter on this transaction to compute revenue (${known})`,
           });
         } else {
           const landingCost = Number(landingRaw);
@@ -188,9 +208,6 @@ export default function MIS({ employee }: Props) {
     // here (de-duplicated against booked deals, which are already counted
     // above via their transaction).
     // ---------------------------------------------------------------------
-    const bookedDealIds = new Set(
-      txns.map(t => (t as any).deal_confirmation_id).filter(Boolean) as string[],
-    );
     const DEAL_TYPE: Record<string, ProductType> = {
       'Unlisted Share': 'unlisted_share',
       'Secondary Bond': 'secondary_bond',
@@ -210,8 +227,27 @@ export default function MIS({ employee }: Props) {
         .in('client_id', clientIds)
         .gte('deal_date', startDate)
         .lte('deal_date', endDate);
+      const deals = (dealData ?? []) as any[];
 
-      for (const d of (dealData ?? []) as any[]) {
+      // A deal is "booked" once ANY transaction references it — including one
+      // dated in a later month, which is normal: a deal confirmed on the 29th
+      // is often transferred and booked in the following month. Deriving this
+      // from the selected period's transactions alone made such a deal look
+      // unbooked whenever its own month was viewed, so it reappeared here as a
+      // phantom "awaiting booking" row in the deal month while its real revenue
+      // was already counted in the month it was booked — one deal, two months.
+      const bookedDealIds = new Set<string>();
+      if (deals.length > 0) {
+        const { data: bookedRows } = await supabase
+          .from('nw_transactions')
+          .select('deal_confirmation_id')
+          .in('deal_confirmation_id', deals.map(d => d.id));
+        for (const b of (bookedRows ?? []) as any[]) {
+          if (b.deal_confirmation_id) bookedDealIds.add(b.deal_confirmation_id);
+        }
+      }
+
+      for (const d of deals) {
         if (!paidDealIds.has(d.id)) continue;   // only fully-paid deals
         if (bookedDealIds.has(d.id)) continue;  // already counted via its transaction
         const prodNorm = DEAL_TYPE[d.product_type as string];
@@ -220,7 +256,11 @@ export default function MIS({ employee }: Props) {
         if (!client) continue;
 
         const qty = d.quantity || 0;
-        const price = d.base_rate || 0;         // client pays base rate × qty
+        const price = Number(d.base_rate);      // client pays base rate × qty
+        // Same guard as the transaction branch above: a missing base rate must
+        // not be read as zero, or the landing cost is reported as a pure loss.
+        const priceMissing = d.base_rate === null || d.base_rate === undefined || d.base_rate === ''
+          || !Number.isFinite(price) || price <= 0;
         const baseRow = {
           client_id: d.client_id,
           client_name: client.full_name,
@@ -230,14 +270,22 @@ export default function MIS({ employee }: Props) {
           product_name: d.security_name,
         };
 
-        if (d.landing_cost === null || d.landing_cost === undefined) {
-          // Paid but no landing cost yet — show it so it isn't lost, without
-          // guessing revenue. Enter the landing cost (book it) to compute it.
+        const landingMissing = d.landing_cost === null || d.landing_cost === undefined;
+        if (priceMissing || landingMissing) {
+          // Paid but not fully priced yet — show it so it isn't lost, without
+          // guessing revenue. Enter the missing field (book it) to compute it.
+          const pending = [priceMissing ? 'Base rate' : null, landingMissing ? 'landing cost' : null]
+            .filter(Boolean).join(' and ');
+          const known = [
+            priceMissing ? null : `Price ${fmt(price)}`,
+            landingMissing ? null : `Landing ${fmt(Number(d.landing_cost))}`,
+            `Qty ${qty}`,
+          ].filter(Boolean).join(' | ');
           computed.push({
             ...baseRow,
             revenue_type: 'landing_cost',
             revenue: 0,
-            notes: `⚠ Paid, awaiting booking — enter landing cost to compute revenue (Price ${fmt(price)} × Qty ${qty})`,
+            notes: `⚠ Paid, awaiting booking — enter ${pending} to compute revenue (${known})`,
           });
         } else {
           const landing = Number(d.landing_cost);

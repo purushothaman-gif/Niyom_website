@@ -335,12 +335,14 @@ export default function DealConfirmation({ employee }: Props) {
     // a clickable Payment Status pill without extra round-trips per row.
     // Single query with IN() — no N+1. The DB view is the sole source of truth.
     setPaySummariesLoaded(false);
-    // Include pending/viewed deals too — an admin may record payment before the
-    // client digitally accepts (out-of-reach clients who have paid), which then
-    // makes the deal transferable via the Transfer Queue admin override.
-    const summaryIds = rows
-      .filter(r => ['accepted', 'pending', 'viewed'].includes(r.acceptance_status))
-      .map(r => r.id);
+    // Fetch for EVERY listed deal, whatever its acceptance state. Payment is
+    // independent of signing: an admin may record payment before the client
+    // digitally accepts (out-of-reach clients who have paid), and a signing link
+    // can expire — or a deal be rejected — after the money has already arrived.
+    // Restricting this to accepted/pending/viewed dropped those deals from the
+    // map, so the pill fell back to 'not_paid' and contradicted the payments
+    // page, which reads the same view without any acceptance filter.
+    const summaryIds = rows.map(r => r.id);
     if (summaryIds.length) {
       const { data: sums } = await supabase
         .from('nw_deal_payment_summary')
