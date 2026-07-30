@@ -12,7 +12,11 @@ import { renderPaymentReceiptPdf } from './paymentReceipt';
 // Types
 // ---------------------------------------------------------------------------
 
-type PaymentStatus = 'not_paid' | 'partially_paid' | 'fully_paid';
+// Must mirror nw_deal_payment_summary.payment_status, which returns 'over_paid'
+// whenever active payments exceed the settlement amount. Omitting it here left
+// STATUS_STYLES without that key, so StatusPill dereferenced undefined and took
+// the whole payment ledger down to a blank screen.
+type PaymentStatus = 'not_paid' | 'partially_paid' | 'fully_paid' | 'over_paid';
 
 type PaymentMode =
   | 'imps' | 'neft' | 'rtgs' | 'upi' | 'cheque' | 'cash'
@@ -124,10 +128,13 @@ const STATUS_STYLES: Record<PaymentStatus, { label: string; bg: string; color: s
   not_paid:       { label: 'Not Paid',       bg: 'rgba(107,107,107,0.10)', color: 'var(--text-secondary)', border: 'rgba(107,107,107,0.25)' },
   partially_paid: { label: 'Partially Paid', bg: 'rgba(245,158,11,0.10)',  color: 'var(--warning)',        border: 'rgba(245,158,11,0.25)' },
   fully_paid:     { label: 'Fully Paid',     bg: 'rgba(16,185,129,0.10)',  color: 'var(--success)',        border: 'rgba(16,185,129,0.25)' },
+  over_paid:      { label: 'Over Paid',      bg: 'rgba(239,68,68,0.10)',   color: 'var(--danger)',         border: 'rgba(239,68,68,0.25)' },
 };
 
 function StatusPill({ status }: { status: PaymentStatus }) {
-  const s = STATUS_STYLES[status];
+  // Fall back rather than crash: a status the DB view gains before this file
+  // knows about it should degrade to a plain pill, never blank the page.
+  const s = STATUS_STYLES[status] ?? STATUS_STYLES.not_paid;
   return (
     <span
       className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg uppercase tracking-wider"
@@ -598,7 +605,8 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         </div>
       )}
 
-      {/* Excess-payment note (status remains fully_paid; excess is informational) */}
+      {/* Excess-payment note. The status pill reads 'Over Paid' in this case;
+          this spells out the amount and the refund follow-up. */}
       {summary && summary.outstanding_amount < 0 && (
         <div
           className="rounded-xl px-4 py-3 flex items-start gap-2 text-sm"
