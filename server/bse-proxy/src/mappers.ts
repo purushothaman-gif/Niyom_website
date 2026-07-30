@@ -258,3 +258,133 @@ export function toAppScheme(row: Record<string, unknown>) {
     isMock: false,
   };
 }
+
+/* ============================== UCC (client onboarding) ==================== */
+
+/** App-side UCC registration request (what the portal/CRM posts to the proxy). */
+export interface AppUccRequest {
+  clientCode: string;            // our UCC id for this client (<=20 chars)
+  pan: string;
+  firstName: string;
+  middleName?: string;
+  lastName?: string;
+  dob: string;                   // YYYY-MM-DD
+  gender: 'M' | 'F' | 'O';
+  email: string;
+  mobile: string;
+  occupationCode?: string;       // occ_code, default '02' (service)
+  taxCode?: string;              // default '01' (resident individual)
+  holdingNature?: string;        // default 'SI' (single)
+  kycType?: string;              // default 'C' (CKYC)
+  ckycNumber?: string;
+  address: { line1: string; line2?: string; line3?: string; city: string; state: string; pincode: string; country?: string };
+  bank: { accountNumber: string; ifsc: string; accountType?: string };
+  fatca?: { placeOfBirth?: string; countryOfBirth?: string; fatherName?: string; incomeSlab?: string; wealthSource?: string; politicallyExposed?: boolean };
+}
+
+/**
+ * App view-model -> BSE `/v2/add_ucc` payload. Shapes verified live against the
+ * StARMF 2.0 demo (30-Jul-2026): a physical (non-demat) resident individual UCC
+ * registered successfully with this exact structure.
+ *
+ * NOTE BSE validates the PAN's 4th char by entity type — 'P' for an individual
+ * person. A malformed PAN fails with errcode invalid_data on holder.identifier.
+ */
+export function toAddUcc(req: AppUccRequest, memberCode: string) {
+  const fatca = req.fatca ?? {};
+  const fullName = [req.firstName, req.middleName, req.lastName].filter(Boolean).join(' ');
+  const occ = req.occupationCode ?? '02';
+  return {
+    member: { member_id: memberCode },
+    investor: { client_code: req.clientCode },
+    holding_nature: req.holdingNature ?? 'SI',
+    tax_code: req.taxCode ?? '01',
+    rdmp_idcw_pay_mode: '01',
+    is_client_physical: true,
+    is_client_demat: false,
+    is_nomination_opted: false,
+    nomination_auth_mode: 'O',
+    comm_mode: 'E',
+    onboarding: 'Z',
+    holder: [
+      {
+        holder_rank: '1',
+        occ_code: occ,
+        auth_mode: 'M',
+        is_pan_exempt: false,
+        pan_exempt_category: '',
+        identifier: [{ identifier_type: 'pan', identifier_number: req.pan.toUpperCase() }],
+        // BSE rejects kyc_type 'C' (CKYC) unless a ckyc_number is supplied, so
+        // default to 'K' (KRA) when we don't have one. Verified live.
+        kyc_type: req.kycType ?? (req.ckycNumber ? 'C' : 'K'),
+        ckyc_number: req.ckycNumber ?? '',
+        person: {
+          first_name: req.firstName,
+          middle_name: req.middleName ?? '',
+          last_name: req.lastName ?? '',
+          dob: req.dob,
+          gender: req.gender,
+        },
+        contact: [
+          {
+            contact_number: req.mobile,
+            country_code: '91',
+            whose_contact_number: 'SE',
+            email_address: req.email,
+            whose_email_address: 'SE',
+            contact_type: 'PR',
+          },
+        ],
+      },
+    ],
+    comm_addr: {
+      address_line_1: req.address.line1,
+      address_line_2: req.address.line2 ?? '',
+      address_line_3: req.address.line3 ?? '',
+      postalcode: req.address.pincode,
+      city: req.address.city,
+      state: req.address.state,
+      country: req.address.country ?? 'IND',
+    },
+    bank_account: [
+      {
+        ifsc_code: req.bank.ifsc.toUpperCase(),
+        bank_acc_num: req.bank.accountNumber,
+        bank_acc_type: req.bank.accountType ?? 'SB',
+        account_owner: 'SELF',
+        identifier: [],
+      },
+    ],
+    fatca: [
+      {
+        HolderRank: '1',
+        client_name: fullName,
+        place_of_birth: fatca.placeOfBirth ?? req.address.city,
+        country_of_birth: fatca.countryOfBirth ?? 'IND',
+        investor_type: 'Individual',
+        dob: req.dob,
+        father_name: fatca.fatherName ?? '',
+        address_type: '1',
+        occ_code: occ,
+        occ_type: 'B',
+        tax_status: 'Individual',
+        data_source: 'P',
+        wealth_source: fatca.wealthSource ?? '1',
+        income_slab: fatca.incomeSlab ?? '31',
+        politically_exposed: fatca.politicallyExposed ? 'Y' : 'N',
+        is_self_declared: true,
+        identifier: { identifier_type: 'pan', identifier_number: req.pan.toUpperCase() },
+      },
+    ],
+    identifiers: [],
+  };
+}
+
+/** BSE add_ucc / get_ucc response -> the app's UccRegistrationResult shape. */
+export function toAppUccResult(bse: Record<string, unknown>, fallbackCode: string) {
+  return {
+    clientCode: String(bse.client_code ?? bse.ucc ?? fallbackCode),
+    status: String(bse.status ?? bse.ucc_status ?? 'PENDING_AUTH'),
+    isMock: false,
+  };
+}

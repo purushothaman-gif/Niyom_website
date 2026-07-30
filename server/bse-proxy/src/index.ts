@@ -24,6 +24,9 @@ import {
   toRedemption,
   toSwitch,
   toSxpRegister,
+  toAddUcc,
+  toAppUccResult,
+  type AppUccRequest,
   type AppOrderRequest,
   type AppRedemptionRequest,
   type AppSwitchRequest,
@@ -225,18 +228,67 @@ app.post('/cancel', async (req, res, next) => {
   }
 });
 
-/** UCC registration — payload passthrough of the app's UccRegistrationRequest. */
+/* --------------------------------- UCC ------------------------------------ */
+
+/**
+ * UCC registration. Verified live on the demo (30-Jul-2026) — a physical
+ * resident-individual UCC registered and returned status APPROVED, then settled
+ * to PENDING_AUTH pending the investor's 2FA (see /ucc/2fa-link below).
+ */
 app.post('/ucc', async (req, res, next) => {
   try {
-    // UAT-VERIFY: field-by-field mapping of add_ucc (holder/bank/address/FATCA
-    // objects) once the sandbox is available; passthrough gets the errors back
-    // verbatim for mapping work.
-    const result = await bse.post<Record<string, unknown>>('/v2/add_ucc', req.body);
-    res.json({
-      clientCode: String(result.ucc ?? result.client_code ?? ''),
-      status: String(result.status ?? 'PENDING_APPROVAL'),
-      isMock: false,
+    const body = req.body as AppUccRequest;
+    const result = await bse.post<Record<string, unknown>>(
+      '/v2/add_ucc',
+      toAddUcc(body, cfg.bseMemberCode),
+    );
+    res.json(toAppUccResult(result, body.clientCode));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Current UCC status (PENDING_AUTH -> PENDING_VERIFICATION -> ACTIVE ...). */
+app.get('/ucc/:clientCode', async (req, res, next) => {
+  try {
+    const result = await bse.post<Record<string, unknown>>('/v2/get_ucc', {
+      investor: { client_code: req.params.clientCode },
+      fields: ['ALL'],
     });
+    res.json(toAppUccResult(result, req.params.clientCode));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Investor 2FA link. BSE requires the INVESTOR to approve onboarding/txns on a
+ * BSE-hosted page; we hand the URL to the client. NOTE this endpoint's envelope
+ * is an ARRAY (not the usual object) and events are lowercase — both verified
+ * live; `UCC_ELOG` (as printed in the docs) returns record_not_found.
+ */
+app.post('/ucc/2fa-link', async (req, res, next) => {
+  try {
+    const { clientCode, event } = req.body as { clientCode: string; event?: string };
+    const rows = await bse.postRaw<Record<string, unknown>[]>('/v2/get_2fa_link', [
+      {
+        event: event ?? 'ucc_auth',
+        investor: { client_code: clientCode, pan_holder: [''], holding_nature: '' },
+        parent_client_code: '',
+        member_code: cfg.bseMemberCode,
+      },
+    ]);
+    const links = (rows ?? []).flatMap((r) => {
+      const action = (r.action ?? {}) as Record<string, unknown>;
+      const objs = (action.event_object ?? []) as Record<string, unknown>[];
+      return objs.map((o) => ({
+        event: String(action.event ?? ''),
+        pan: String(o.pan ?? ''),
+        holderRank: String(o.holder_rank ?? ''),
+        url: String(o['2fa_url'] ?? ''),
+      }));
+    });
+    res.json({ clientCode, links, isMock: false });
   } catch (err) {
     next(err);
   }
