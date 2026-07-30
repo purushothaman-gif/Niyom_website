@@ -140,6 +140,9 @@ const SCHEME_FIELDS = [
   'scheme_sub_category', 'scheme_isin', 'scheme_plan', 'scheme_option',
   'scheme_benchmark', 'scheme_exit_load', 'scheme_exit_load_remarks',
   'scheme_offer_status', 'is_active',
+  // Nested blocks the console's order form gates on: which modes the scheme
+  // accepts (physical vs demat) and per-transaction min/max + cut-off times.
+  'scheme_transaction_mode_allowed', 'lumpsum',
 ];
 
 /** 28k schemes change rarely — cache mapped pages for 6h. */
