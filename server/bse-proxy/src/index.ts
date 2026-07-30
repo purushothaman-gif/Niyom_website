@@ -749,9 +749,18 @@ app.get('/mandates', async (req, res, next) => {
  *   amount, currency  both required; amount must be > 0
  *   payment_details   required object — vpa_id for upi, bank for netbanking
  *
- * IMPORTANT: BSE answers `record_not_found` for the order until the INVESTOR has
- * approved it (order carries mem_2fa 'p' until then). Payment is therefore the
- * step AFTER approval, not a parallel one — surface the 2FA link first.
+ * Sequencing: BSE answers `record_not_found` until the INVESTOR has approved the
+ * order (it carries mem_2fa 'p' until then, moving to 'd' and status
+ * payment_pending once approved). Payment is the step AFTER approval — verified
+ * by approving order 5001203478 and watching record_not_found disappear.
+ *
+ * ⚠️ MEMBER 66899 IS NOT ENTITLED TO BSE PG. With a fully correct payload both
+ * upi and netbanking return errcode `not_allowed` on field `member`. Per BSE's
+ * webhook documentation we are a "BSE PG Service excluded member": no payment
+ * events fire and orders move payment_pending -> match_pending directly, i.e.
+ * the money is expected to reach the AMC by another route (our own gateway or a
+ * direct transfer). Either BSE enables PG for the member code, or client
+ * payment is collected outside BSE and this route stays unused.
  */
 app.post('/payment/link', async (req, res, next) => {
   try {
@@ -762,6 +771,8 @@ app.post('/payment/link', async (req, res, next) => {
       mode?: 'netbanking' | 'upi' | 'mandate';
       vpa?: string;
       bankCode?: string;
+      bankAccount?: string;
+      bankIfsc?: string;
       returnUrl?: string;
     };
     const ucc = scopedUcc(req, body.clientCode);
@@ -773,6 +784,11 @@ app.post('/payment/link', async (req, res, next) => {
     if (mode === 'upi' && body.vpa) details.vpa_id = body.vpa;
     if (mode === 'netbanking' && body.bankCode) details.bank_code = body.bankCode;
     if (body.returnUrl) details.return_url = body.returnUrl;
+    // bank_account belongs INSIDE payment_details — at top level BSE still
+    // reports it missing. Required for netbanking.
+    if (body.bankAccount && body.bankIfsc) {
+      details.bank_account = { account_number: body.bankAccount, ifsc: body.bankIfsc };
+    }
 
     const result = await bse.post<Record<string, unknown>>('/send_payment_info', {
       payment_mode: mode,
@@ -784,6 +800,7 @@ app.post('/payment/link', async (req, res, next) => {
     });
 
     // Response carries links[] with rel 'redirect' (netbanking) or 'collect' (upi).
+    // (Unreachable while the member is PG-excluded — see the note above.)
     const links = (result.links as Record<string, unknown>[] | undefined) ?? [];
     res.json({
       paymentUrl: String(links[0]?.href ?? ''),
