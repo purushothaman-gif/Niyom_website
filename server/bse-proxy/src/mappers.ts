@@ -210,6 +210,45 @@ export function toAppTxnResult(
  * master carries identity + AMC + plan/option; NAV, returns, AUM, expense and
  * risk are NOT in this feed (NAV comes from nav_master_list) — enrich later.
  */
+/**
+ * Trading rules a scheme imposes, dug out of the nested `lumpsum` array.
+ * The console needs these BEFORE staff can place an order: BSE rejects a
+ * physical UCC on a demat-only scheme (this is exactly what made 007-DP fail),
+ * and each transaction type carries its own min/max and cut-off time.
+ */
+function schemeModes(row: Record<string, unknown>): { physical: boolean; demat: boolean } {
+  const modes = (row.scheme_transaction_mode_allowed as Record<string, unknown>[]) ?? [];
+  const vals = modes
+    .map((m) => String(m?.scheme_transaction_mode_demat_physical_allowed ?? '').toLowerCase())
+    .join(' ');
+  return { physical: vals.includes('physical'), demat: vals.includes('demat') };
+}
+
+export interface SchemeTxnRule {
+  min: number;
+  max: number;
+  minAdditional: number;
+  cutoffTime: string;
+}
+
+/** Limits for one transaction type: Purchase / Redemption / Switch-IN / Switch-OUT. */
+function schemeTxnRule(row: Record<string, unknown>, type: string): SchemeTxnRule | null {
+  const entries = (row.lumpsum as Record<string, unknown>[]) ?? [];
+  const hit = entries.find(
+    (e) => String(e?.scheme_transaction_type ?? '').toLowerCase() === type.toLowerCase(),
+  );
+  if (!hit) return null;
+  const amt =
+    ((hit.scheme_transaction_single_details as Record<string, unknown>)
+      ?.scheme_transaction_amt as Record<string, unknown>) ?? {};
+  return {
+    min: Number(amt.scheme_transaction_min_amt ?? 0),
+    max: Number(amt.scheme_transaction_max_amt ?? 0),
+    minAdditional: Number(amt.scheme_transaction_min_adtnl_amt ?? 0),
+    cutoffTime: String(hit.scheme_transaction_cutoff_time ?? ''),
+  };
+}
+
 export function toAppScheme(row: Record<string, unknown>) {
   const s = (keys: string[], fb = ''): string => {
     for (const k of keys) {
@@ -254,7 +293,7 @@ export function toAppScheme(row: Record<string, unknown>) {
     returns: { '1M': 0, '6M': 0, '1Y': 0, '3Y': 0, '5Y': 0 },
     expenseRatio: 0,
     aum: 0,
-    minLumpsum: 0, // nested in `lumpsum` array — enrich later
+    minLumpsum: schemeTxnRule(row, 'Purchase')?.min ?? 0,
     minSip: 0, // nested in `systematic` array — enrich later
     exitLoad,
     fundManager: '—',
@@ -262,6 +301,12 @@ export function toAppScheme(row: Record<string, unknown>) {
     rating: 0,
     plans,
     isin: s(['scheme_isin']),
+    // Trading rules — the console gates its order form on these.
+    allowsPhysical: schemeModes(row).physical,
+    allowsDemat: schemeModes(row).demat,
+    isOpen: s(['scheme_offer_status']).toUpperCase() === 'OPEN',
+    purchase: schemeTxnRule(row, 'Purchase'),
+    redemption: schemeTxnRule(row, 'Redemption'),
     isMock: false,
   };
 }
