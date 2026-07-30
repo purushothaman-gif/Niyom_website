@@ -192,7 +192,14 @@ export function toAppTxnResult(
   amount: number,
 ) {
   return {
-    orderId: String(bse.id ?? bse.order_id ?? ''),
+    // Same envelope as order_new: the id lives in data.items[], NOT data.id.
+    // Reading only bse.id produced an empty orderId on every redemption/switch.
+    orderId: String(
+      ((bse.items as Record<string, unknown>[] | undefined) ?? [])[0]?.id ??
+        bse.id ??
+        bse.order_id ??
+        '',
+    ),
     kind,
     schemeName,
     detail,
