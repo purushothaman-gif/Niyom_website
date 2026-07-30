@@ -107,6 +107,57 @@ app.use('/webhooks', webhookRouter(cfg));
  * The edge function keeps all app logic (ownership, dedup, DB write); this route
  * is a thin pass-through that adds the static IP + holds the Cashfree keys.
  */
+/**
+ * Verify a PAN with Cashfree and return the name it is registered under.
+ *
+ * Shared by two routes with different callers: /verify/pan (Supabase edge
+ * functions, authenticated by a relay secret) and /pan/verify (the MF Admin
+ * console, authenticated by the employee's session). Same logic, so the two
+ * can never disagree about whether a PAN is valid.
+ */
+async function verifyPanWithCashfree(
+  pan: string,
+  name?: string,
+): Promise<{ ok: boolean; status: number; body: Record<string, unknown> }> {
+  if (!cfg.cashfreeVerifyClientId || !cfg.cashfreeVerifySecret) {
+    return { ok: false, status: 503, body: { error: 'Cashfree verification not configured' } };
+  }
+  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+    return { ok: false, status: 400, body: { error: 'Invalid PAN format' } };
+  }
+  const base =
+    cfg.cashfreeVerifyEnv === 'sandbox'
+      ? 'https://sandbox.cashfree.com'
+      : 'https://api.cashfree.com';
+  const cf = await fetch(`${base}/verification/pan`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-client-id': cfg.cashfreeVerifyClientId,
+      'x-client-secret': cfg.cashfreeVerifySecret,
+    },
+    body: JSON.stringify(name ? { pan, name } : { pan }),
+  });
+  const data = (await cf.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!cf.ok) {
+    return {
+      ok: false,
+      status: cf.status,
+      body: { valid: false, error: (data.message as string) || 'PAN verification failed' },
+    };
+  }
+  const valid = data.valid === true || String(data.pan_status ?? '').toUpperCase() === 'VALID';
+  return {
+    ok: true,
+    status: 200,
+    body: {
+      valid,
+      registered_name: valid ? (data.registered_name ?? data.name_provided ?? null) : null,
+      message: data.message ?? null,
+    },
+  };
+}
+
 app.post('/verify/pan', async (req: Request, res: Response) => {
   if (!cfg.panRelaySecret || req.header('x-relay-secret') !== cfg.panRelaySecret) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -531,6 +582,26 @@ app.post('/payment/status', async (req, res, next) => {
       status: String(result.status ?? 'PENDING').toUpperCase(),
       isMock: false,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PAN verification for the console's client-onboarding form.
+ *
+ * Sits behind the employee-session gate (this is registered after
+ * requireSupabaseUser), unlike /verify/pan which serves edge functions with a
+ * relay secret. Returning the name a PAN is registered under matters: BSE's own
+ * KYC check compares the holder name against exactly this, so onboarding with a
+ * name that differs is the difference between ACTIVE and stuck.
+ */
+app.post('/pan/verify', async (req, res, next) => {
+  try {
+    const pan = String(req.body?.pan ?? '').trim().toUpperCase();
+    const name = req.body?.name ? String(req.body.name).trim() : undefined;
+    const out = await verifyPanWithCashfree(pan, name);
+    res.status(out.status).json(out.body);
   } catch (err) {
     next(err);
   }
