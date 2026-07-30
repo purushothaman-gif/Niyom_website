@@ -176,7 +176,19 @@ export function ClientManagementPage() {
                       <TD>{r.crm.onboarding_status?.replace(/_/g, ' ') || '—'}</TD>
                       <TD>
                         {r.ucc ? (
-                          <span className="font-mono">{r.ucc.clientCode}</span>
+                          <>
+                            <span className="font-mono">{r.ucc.clientCode}</span>
+                            {r.linkedByPan && (
+                              // Inferred, not stored — flagged so a wrong PAN
+                              // match is visible rather than silently trusted.
+                              <span
+                                className="ml-1.5 cursor-help text-[10px] text-warning"
+                                title="Matched by PAN, not a stored link. Saving it now — refresh to confirm."
+                              >
+                                ~PAN
+                              </span>
+                            )}
+                          </>
                         ) : (
                           <span className="text-text-faint">—</span>
                         )}

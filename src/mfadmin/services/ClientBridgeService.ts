@@ -1,11 +1,11 @@
 /**
  * ClientBridgeService — joins NIYOM's CRM clients to their BSE UCCs.
  *
- * There is no stored link between the two: `nw_clients` has no UCC column, so
- * we match on PAN, which both sides carry and which BSE treats as the holder's
- * identity. That is a heuristic — a client whose CRM PAN is blank or differs
- * from the one registered at BSE will show as "not registered". Storing the UCC
- * on the client row is the durable fix (needs a migration).
+ * The link is stored on `nw_clients.bse_ucc` (migration 20260731003000) and is
+ * authoritative. PAN matching remains as a FALLBACK only, for clients that were
+ * registered at BSE before the column existed — it is a heuristic (a blank or
+ * mismatched PAN reads as "not registered"), so whenever the fallback resolves
+ * a client we persist the link, and the next load uses the stored value.
  */
 import { supabase } from '../../lib/supabase';
 import { BseOpsService, type BseUccRow } from './BseOpsService';
@@ -29,12 +29,17 @@ export interface CrmClientLite {
   onboarding_status: string;
   verification_status: string;
   pan_verified: boolean;
+  /** Stored BSE link (migration 20260731003000). Null until registered. */
+  bse_ucc: string | null;
+  bse_ucc_status: string | null;
 }
 
 export interface BridgedClient {
   crm: CrmClientLite;
-  /** The matching BSE UCC, if this client's PAN is registered. */
+  /** The client's BSE UCC, resolved from the stored link or (legacy) by PAN. */
   ucc: BseUccRow | null;
+  /** True when the link came from PAN matching rather than the stored column. */
+  linkedByPan: boolean;
   /** Everything BSE needs is present, so registration can be attempted. */
   canRegister: boolean;
   /** What's missing when it can't. */
@@ -65,7 +70,7 @@ export const ClientBridgeService = {
       supabase
         .from('nw_clients')
         .select(
-          'id, client_code, full_name, email, phone, pan, dob, address, city, state, pincode, bank_account, bank_ifsc, onboarding_status, verification_status, pan_verified',
+          'id, client_code, full_name, email, phone, pan, dob, address, city, state, pincode, bank_account, bank_ifsc, onboarding_status, verification_status, pan_verified, bse_ucc, bse_ucc_status',
         )
         .order('created_at', { ascending: false })
         .limit(500),
@@ -74,17 +79,48 @@ export const ClientBridgeService = {
     ]);
     if (error) throw new Error(error.message);
 
+    const byCode = new Map(uccs.map((u) => [u.clientCode, u]));
     const byPan = new Map(uccs.filter((u) => norm(u.pan)).map((u) => [norm(u.pan), u]));
 
-    return ((data as CrmClientLite[]) ?? []).map((crm) => {
+    const rows = ((data as CrmClientLite[]) ?? []).map((crm) => {
       const missing = missingFields(crm);
+      // Stored link wins; PAN is only a fallback for pre-migration clients.
+      const stored = crm.bse_ucc ? (byCode.get(crm.bse_ucc) ?? null) : null;
+      const guessed = stored ? null : (byPan.get(norm(crm.pan)) ?? null);
       return {
         crm,
-        ucc: byPan.get(norm(crm.pan)) ?? null,
+        ucc: stored ?? guessed,
+        linkedByPan: Boolean(guessed),
         canRegister: missing.length === 0,
         missing,
       };
     });
+
+    // Backfill: persist any link we had to infer, so it is stored next time.
+    void this.backfillLinks(rows);
+    return rows;
+  },
+
+  /**
+   * Persist links that had to be inferred from PAN. Best-effort and silent —
+   * this is an optimisation, never a reason to fail the page.
+   */
+  async backfillLinks(rows: BridgedClient[]): Promise<void> {
+    const pending = rows.filter((r) => r.linkedByPan && r.ucc);
+    for (const r of pending) {
+      try {
+        await supabase
+          .from('nw_clients')
+          .update({
+            bse_ucc: r.ucc!.clientCode,
+            bse_ucc_status: r.ucc!.status,
+            bse_ucc_synced_at: new Date().toISOString(),
+          })
+          .eq('id', r.crm.id);
+      } catch {
+        /* ignore — the PAN fallback still resolves it next load */
+      }
+    }
   },
 
   /**
@@ -93,7 +129,7 @@ export const ClientBridgeService = {
    */
   async registerAtBse(c: CrmClientLite) {
     const [first, ...rest] = c.full_name.trim().split(/\s+/);
-    return BseOpsService.registerUcc({
+    const result = await BseOpsService.registerUcc({
       // BSE's client_code must be unique per member; the CRM code is already so.
       clientCode: c.client_code,
       pan: norm(c.pan),
@@ -112,5 +148,21 @@ export const ClientBridgeService = {
       },
       bank: { accountNumber: c.bank_account.trim(), ifsc: c.bank_ifsc.trim().toUpperCase() },
     });
+
+    // Store the link immediately — losing it would strand the client in a
+    // "not registered" state even though BSE now holds their UCC.
+    try {
+      await supabase
+        .from('nw_clients')
+        .update({
+          bse_ucc: result.clientCode,
+          bse_ucc_status: result.status,
+          bse_ucc_synced_at: new Date().toISOString(),
+        })
+        .eq('id', c.id);
+    } catch {
+      /* BSE registration succeeded; the PAN fallback will resolve it meanwhile */
+    }
+    return result;
   },
 };
