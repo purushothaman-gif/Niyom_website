@@ -242,7 +242,10 @@ export default function DSAPayout({ employee }: Props) {
       // a regenerated note (new number) for the same period takes their place.
       // A future audit/history view can query cancelled notes separately.
       .neq('status', 'cancelled')
-      .order('debit_note_number', { ascending: true });
+      // Date-wise listing, most recent first. debit_note_number breaks ties for
+      // notes generated in the same instant (bulk generate writes several rows).
+      .order('created_at', { ascending: false })
+      .order('debit_note_number', { ascending: false });
     setDebitNotes((data as NWDSADebitNote[]) || []);
   }, [selectedYear, month]);
 
