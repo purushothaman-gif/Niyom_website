@@ -74,10 +74,13 @@ function sipSchedule(req: AppOrderRequest): { start_date: string; freq: 'm' | 'q
 /** Lumpsum purchase → POST /v2/order_new. */
 export function toOrderNew(req: AppOrderRequest, memberCode: string) {
   return {
-    member: { code: memberCode }, // UAT-VERIFY: member object shape
-    investor: { client_code: req.clientCode ?? req.clientId }, // UAT-VERIFY key name
+    // VERIFIED LIVE: order_new takes `member` as a STRING (add_ucc takes an
+    // object) and the investor key is `ucc` (add_ucc uses client_code).
+    member: memberCode,
+    investor: { ucc: req.clientCode ?? req.clientId },
     mem_ord_ref_id: memRefId(),
     type: 'p' as const,
+    phys_or_demat: 'p' as const, // physical (non-demat) — required by order_new
     scheme: req.schemeCode,
     amount: req.amount,
     cur: 'INR',
@@ -89,10 +92,11 @@ export function toOrderNew(req: AppOrderRequest, memberCode: string) {
 /** Redemption → POST /v2/order_new (type 'r'). */
 export function toRedemption(req: AppRedemptionRequest, memberCode: string) {
   return {
-    member: { code: memberCode },
-    investor: { client_code: req.clientCode ?? req.clientId },
+    member: memberCode,
+    investor: { ucc: req.clientCode ?? req.clientId },
     mem_ord_ref_id: memRefId(),
     type: 'r' as const,
+    phys_or_demat: 'p' as const, // physical (non-demat) — required by order_new
     scheme: req.schemeCode ?? '',
     cur: 'INR',
     is_fresh: false,
@@ -108,10 +112,11 @@ export function toRedemption(req: AppRedemptionRequest, memberCode: string) {
 /** Switch → POST /v2/order_new (type 's'; same-AMC only per BSE docs). */
 export function toSwitch(req: AppSwitchRequest, memberCode: string) {
   return {
-    member: { code: memberCode },
-    investor: { client_code: req.clientCode ?? req.clientId },
+    member: memberCode,
+    investor: { ucc: req.clientCode ?? req.clientId },
     mem_ord_ref_id: memRefId(),
     type: 's' as const,
+    phys_or_demat: 'p' as const, // physical (non-demat) — required by order_new
     scheme: req.fromSchemeCode ?? '',
     dest_scheme: req.toSchemeCode, // UAT-VERIFY key name for switch target
     cur: 'INR',
@@ -160,7 +165,9 @@ export function toAppOrderResult(
   req: AppOrderRequest,
   schemeName: string,
 ) {
-  const orderId = String(bse.id ?? bse.order_id ?? bse.sxp_reg_num ?? '');
+  // VERIFIED LIVE: order_new answers { items: [ { mem_ord_ref_id, id } ] }.
+  const items = (bse.items as Record<string, unknown>[] | undefined) ?? [];
+  const orderId = String(items[0]?.id ?? bse.id ?? bse.order_id ?? bse.sxp_id ?? bse.sxp_reg_num ?? '');
   return {
     orderId,
     schemeCode: req.schemeCode,
@@ -527,7 +534,8 @@ export function toSxpRegister2(req: AppSxpRequest, memberCode: string) {
 
 export function toAppSxpResult(bse: Record<string, unknown>, req: AppSxpRequest) {
   return {
-    sxpRegNum: String(bse.sxp_reg_num ?? bse.id ?? ''),
+    // VERIFIED LIVE: the field is `sxp_id` (docs say sxp_reg_num).
+    sxpRegNum: String(bse.sxp_id ?? bse.sxp_reg_num ?? bse.id ?? ''),
     type: req.type ?? 'SIP',
     schemeCode: req.schemeCode,
     amount: req.amount,

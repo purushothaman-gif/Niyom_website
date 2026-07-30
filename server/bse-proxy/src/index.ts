@@ -204,22 +204,26 @@ app.post('/order', async (req, res, next) => {
         '/sxp_register',
         toSxpRegister(body, cfg.bseMemberCode),
       );
-      const regNum = String(sxp.sxp_reg_num ?? sxp.id ?? '');
+      const regNum = String(sxp.sxp_id ?? sxp.sxp_reg_num ?? sxp.id ?? '');
       if (!regNum) {
         throw new BseError('BSE accepted the SIP but returned no registration number', 502, sxp);
       }
       return res.json(toAppOrderResult({ ...sxp, id: regNum }, body, body.schemeName ?? body.schemeCode));
     }
     // NOTE: /order_new — NOT /v2/order_new, which 404s on the live platform.
-    const result = await bse.post<Record<string, unknown>>(
-      '/order_new',
-      toOrderNew(body, cfg.bseMemberCode),
-    );
-    const orderId = String(result.id ?? result.order_id ?? '');
+    // VERIFIED LIVE: order_new wraps orders in an ARRAY under `orders`. Sending
+    // a bare order object returns {"status":"success","data":{}} and silently
+    // places NOTHING — which is the trap the guard below exists for.
+    const result = await bse.post<Record<string, unknown>>('/order_new', {
+      orders: [toOrderNew(body, cfg.bseMemberCode)],
+    });
+    const items = (result.items as Record<string, unknown>[] | undefined) ?? [];
+    const orderId = String(items[0]?.id ?? result.id ?? result.order_id ?? '');
     if (!orderId) {
       throw new BseError(
-        'BSE returned success but no order id — the order was NOT placed. The UCC is ' +
-          'most likely not transaction-ready (KYC/PAN verification pending).',
+        'BSE returned success but no order id — the order was NOT placed. Common causes: ' +
+          'the UCC is not transaction-ready, the scheme does not allow this mode ' +
+          '(physical vs demat), or a malformed payload BSE swallowed silently.',
         502,
         result,
       );
@@ -233,7 +237,7 @@ app.post('/order', async (req, res, next) => {
 app.post('/redemption', async (req, res, next) => {
   try {
     const body = req.body as AppRedemptionRequest;
-    const result = await bse.post<Record<string, unknown>>('/v2/order_new', toRedemption(body, cfg.bseMemberCode));
+    const result = await bse.post<Record<string, unknown>>('/order_new', { orders: [toRedemption(body, cfg.bseMemberCode)] });
     const detail =
       body.mode === 'all' ? `Full redemption · ${body.units.toFixed(3)} units` : `₹${body.amount} redeemed`;
     res.json(toAppTxnResult(result, 'redeem', body.schemeName, detail, body.amount));
@@ -245,7 +249,7 @@ app.post('/redemption', async (req, res, next) => {
 app.post('/switch', async (req, res, next) => {
   try {
     const body = req.body as AppSwitchRequest;
-    const result = await bse.post<Record<string, unknown>>('/v2/order_new', toSwitch(body, cfg.bseMemberCode));
+    const result = await bse.post<Record<string, unknown>>('/order_new', { orders: [toSwitch(body, cfg.bseMemberCode)] });
     res.json(
       toAppTxnResult(result, 'switch', body.fromSchemeName, `Switched ₹${body.amount} to ${body.toSchemeName}`, body.amount),
     );
@@ -257,7 +261,7 @@ app.post('/switch', async (req, res, next) => {
 app.post('/cancel', async (req, res, next) => {
   try {
     const { orderId } = req.body as { orderId: string };
-    const result = await bse.post<Record<string, unknown>>('/v2/order_cancel', { id: Number(orderId) || orderId });
+    const result = await bse.post<Record<string, unknown>>('/order_cancel', { id: Number(orderId) || orderId });
     res.json(toAppTxnResult(result, 'redeem', '—', `Order ${orderId} cancelled`, 0));
   } catch (err) {
     next(err);
@@ -430,7 +434,7 @@ app.post('/sxp', async (req, res, next) => {
       '/sxp_register',
       toSxpRegister2(body, cfg.bseMemberCode),
     );
-    const regNum = String(result.sxp_reg_num ?? result.id ?? '');
+    const regNum = String(result.sxp_id ?? result.sxp_reg_num ?? result.id ?? '');
     if (!regNum) {
       throw new BseError('BSE returned success but no sxp_reg_num — nothing was registered', 502, result);
     }
