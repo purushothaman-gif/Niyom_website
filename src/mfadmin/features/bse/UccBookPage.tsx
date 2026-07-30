@@ -55,9 +55,15 @@ export function UccBookPage() {
                 </TD>
                 <TD>{HOLDING[u.holdingNature] ?? u.holdingNature ?? '—'}</TD>
                 <TD>
-                  <StatusPill tone={u.isPanVerified ? 'success' : 'muted'}>
-                    {u.isPanVerified ? 'Yes' : 'Pending'}
-                  </StatusPill>
+                  {u.isPanExempt ? (
+                    // Nothing is outstanding for an exempt holder — "Pending"
+                    // would be a permanent, misleading state.
+                    <StatusPill tone="muted">Exempt</StatusPill>
+                  ) : (
+                    <StatusPill tone={u.isPanVerified ? 'success' : 'warning'}>
+                      {u.isPanVerified ? 'Yes' : 'Pending'}
+                    </StatusPill>
+                  )}
                 </TD>
                 <TD>
                   <StatusPill tone={tone(u.status)}>{u.status || 'unknown'}</StatusPill>

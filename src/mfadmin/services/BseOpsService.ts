@@ -37,6 +37,8 @@ export interface BseUccRow {
   status: string;
   holdingNature: string;
   isPanVerified: boolean;
+  /** PAN-exempt holders have no PAN to verify — never show them as "pending". */
+  isPanExempt: boolean;
   isMock: boolean;
 }
 
@@ -99,6 +101,21 @@ export interface BseHoldingRow {
   lastDate: string;
   value: number;
   isMock: boolean;
+}
+
+/** What the proxy's toAddUcc mapper needs to register a client at BSE. */
+export interface RegisterUccInput {
+  clientCode: string;
+  pan: string;
+  firstName: string;
+  middleName?: string;
+  lastName?: string;
+  dob: string;
+  gender: 'M' | 'F' | 'O';
+  email: string;
+  mobile: string;
+  address: { line1: string; city: string; state: string; pincode: string };
+  bank: { accountNumber: string; ifsc: string; accountType?: string };
 }
 
 export type RedeemMode = 'amount' | 'units' | 'all';
@@ -253,6 +270,21 @@ export const BseOpsService = {
   holdings: (clientCode?: string) =>
     get<BseHoldingRow[]>(
       `/holdings${clientCode ? `?clientCode=${encodeURIComponent(clientCode)}` : ''}`,
+    ),
+
+  /**
+   * Register a client at BSE as a physical, resident-individual UCC.
+   * Returns the assigned client code and its initial status (PENDING_AUTH —
+   * the investor must then complete a 2FA link before verification starts).
+   */
+  registerUcc: (input: RegisterUccInput) =>
+    post<{ clientCode: string; status: string; isMock: boolean }>('/ucc', input),
+
+  /** Investor 2FA approval link(s) for a UCC — needed to progress onboarding. */
+  uccTwoFaLink: (clientCode: string, event = 'ucc_auth') =>
+    post<{ clientCode: string; links: { event: string; pan: string; url: string }[] }>(
+      '/ucc/2fa-link',
+      { clientCode, event },
     ),
 
   /** Redeem units or rupees from a folio. */
