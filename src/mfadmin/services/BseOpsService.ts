@@ -95,9 +95,24 @@ export interface BseSxpRow {
   isMock: boolean;
 }
 
+/**
+ * Where the NIYOM BSE proxy lives.
+ *
+ * Defaults to the production droplet because that host is the ONLY BSE proxy we
+ * run, it is not a secret (this value ships inside the client bundle either
+ * way), and requiring a build-time env var meant the deployed console showed
+ * "not connected" until someone remembered to set it in Vercel.
+ *
+ * Override with VITE_BSE_PROXY_URL to point at a different proxy; set it to
+ * "none" to deliberately run the console with BSE panels disabled.
+ */
+const DEFAULT_PROXY_URL = 'https://api.niyomwealth.com';
+
 function proxyBaseUrl(): string | null {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
-  return env.VITE_BSE_PROXY_URL?.replace(/\/$/, '') || null;
+  const configured = env.VITE_BSE_PROXY_URL?.trim();
+  if (configured?.toLowerCase() === 'none') return null;
+  return (configured || DEFAULT_PROXY_URL).replace(/\/$/, '');
 }
 
 /** True when the console can reach BSE at all — drives the "not wired" notices. */
