@@ -320,6 +320,29 @@ async function assertOwnsByUcc(req: Request, ownerUcc: string | null | undefined
   }
 }
 
+/**
+ * The BSE-hosted link the INVESTOR must approve for a transaction to proceed.
+ *
+ * BSE requires per-transaction approval, so an order that is "placed" but never
+ * approved simply never happens. Fetching the link at placement means the
+ * client sees it while they are still on the screen, instead of discovering
+ * days later that nothing moved. Best-effort: the order is already placed, so a
+ * missing link must not turn a success into an error.
+ */
+async function fetchTwoFaUrl(event: string, key: 'order' | 'sxp', id: string): Promise<string | null> {
+  if (!id) return null;
+  try {
+    const rows = await bse.postRaw<Record<string, unknown>[]>('/v2/get_2fa_link', [
+      { event, [key]: String(id), member_code: cfg.bseMemberCode },
+    ]);
+    const action = ((rows ?? [])[0]?.action ?? {}) as Record<string, unknown>;
+    const objs = (action.event_object ?? []) as Record<string, unknown>[];
+    return (objs[0]?.['2fa_url'] as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 app.use(requireCaller);
 
 /* ----------------------------- scheme master ------------------------------ */
@@ -406,7 +429,11 @@ app.post('/order', async (req, res, next) => {
       if (!regNum) {
         throw new BseError('BSE accepted the SIP but returned no registration number', 502, sxp);
       }
-      return res.json(toAppOrderResult({ ...sxp, id: regNum }, body, body.schemeName ?? body.schemeCode));
+      const sipTwoFa = await fetchTwoFaUrl('verify_sxp_reg', 'sxp', regNum);
+      return res.json({
+        ...toAppOrderResult({ ...sxp, id: regNum }, body, body.schemeName ?? body.schemeCode),
+        twoFaUrl: sipTwoFa,
+      });
     }
     // NOTE: /order_new — NOT /v2/order_new, which 404s on the live platform.
     // VERIFIED LIVE: order_new wraps orders in an ARRAY under `orders`. Sending
@@ -426,7 +453,11 @@ app.post('/order', async (req, res, next) => {
         result,
       );
     }
-    res.json(toAppOrderResult(result, body, body.schemeName ?? body.schemeCode));
+    const twoFaUrl = await fetchTwoFaUrl('verify_order_new', 'order', orderId);
+    res.json({
+      ...toAppOrderResult(result, body, body.schemeName ?? body.schemeCode),
+      twoFaUrl,
+    });
   } catch (err) {
     next(err);
   }
@@ -442,7 +473,8 @@ app.post('/redemption', async (req, res, next) => {
     assertOrderPlaced(result, 'redemption');
     const detail =
       body.mode === 'all' ? `Full redemption · ${body.units.toFixed(3)} units` : `₹${body.amount} redeemed`;
-    res.json(toAppTxnResult(result, 'redeem', body.schemeName, detail, body.amount));
+    const txnTwoFa = await fetchTwoFaUrl('verify_order_new', 'order', String(((result.items as Record<string, unknown>[] | undefined) ?? [])[0]?.id ?? ''));
+    res.json({ ...toAppTxnResult(result, 'redeem', body.schemeName, detail, body.amount), twoFaUrl: txnTwoFa });
   } catch (err) {
     next(err);
   }
@@ -708,12 +740,61 @@ app.get('/mandates', async (req, res, next) => {
   }
 });
 
+/**
+ * Start a payment for one or more placed orders (BSE Payment Gateway).
+ *
+ * Shape established against the live demo — the docs do not spell it out:
+ *   payment_mode      netbanking | upi | mandate   (lowercase; UPPER is rejected)
+ *   ucc, order_ids    top level; order_ids are NUMBERS, strings fail to unmarshal
+ *   amount, currency  both required; amount must be > 0
+ *   payment_details   required object — vpa_id for upi, bank for netbanking
+ *
+ * IMPORTANT: BSE answers `record_not_found` for the order until the INVESTOR has
+ * approved it (order carries mem_2fa 'p' until then). Payment is therefore the
+ * step AFTER approval, not a parallel one — surface the 2FA link first.
+ */
 app.post('/payment/link', async (req, res, next) => {
   try {
-    const body = req.body as Record<string, unknown>;
-    body.clientCode = scopedUcc(req, body.clientCode as string | undefined);
-    const result = await bse.post<Record<string, unknown>>('/v2/get_payment_detail', body);
-    res.json({ paymentUrl: String(result.payment_url ?? result.url ?? ''), isMock: false });
+    const body = req.body as {
+      clientCode?: string;
+      orderIds?: (string | number)[];
+      amount?: number;
+      mode?: 'netbanking' | 'upi' | 'mandate';
+      vpa?: string;
+      bankCode?: string;
+      returnUrl?: string;
+    };
+    const ucc = scopedUcc(req, body.clientCode);
+    const orderIds = (body.orderIds ?? []).map((id) => Number(id)).filter((n) => Number.isFinite(n));
+    if (!orderIds.length) throw new BseError('At least one order id is required.', 400);
+    const mode = body.mode ?? 'upi';
+
+    const details: Record<string, unknown> = {};
+    if (mode === 'upi' && body.vpa) details.vpa_id = body.vpa;
+    if (mode === 'netbanking' && body.bankCode) details.bank_code = body.bankCode;
+    if (body.returnUrl) details.return_url = body.returnUrl;
+
+    const result = await bse.post<Record<string, unknown>>('/send_payment_info', {
+      payment_mode: mode,
+      ucc,
+      order_ids: orderIds,
+      amount: Number(body.amount ?? 0),
+      currency: 'INR',
+      payment_details: details,
+    });
+
+    // Response carries links[] with rel 'redirect' (netbanking) or 'collect' (upi).
+    const links = (result.links as Record<string, unknown>[] | undefined) ?? [];
+    res.json({
+      paymentUrl: String(links[0]?.href ?? ''),
+      method: String(links[0]?.method ?? ''),
+      rel: String(links[0]?.rel ?? ''),
+      parameters: links[0]?.parameters ?? {},
+      paymentRefId: String(result.payment_ref_id ?? ''),
+      status: String(result.status ?? ''),
+      message: String(result.message ?? ''),
+      isMock: false,
+    });
   } catch (err) {
     next(err);
   }
