@@ -31,6 +31,16 @@ export interface ProxyConfig {
    */
   bseOrgId: string | null;
   /**
+   * Encrypt request payloads with JOSE (spec §6.1.7). Production mandates it;
+   * demo accepts plain JSON, which is why this is switchable rather than
+   * always-on — it lets the same build talk to both.
+   */
+  bseJose: boolean;
+  /** Our private key — signs requests, decrypts responses. Never leaves the box. */
+  bseJosePrivateKeyPath: string;
+  /** BSE's public key — encrypts to them, verifies their responses. */
+  bseJoseRemoteKeyPath: string;
+  /**
    * EUIN used when the caller has none: an employee without an EUIN, or a
    * client placing their own order from the portal. SEBI expects an EUIN on
    * distributor-executed transactions, so there is always one.
@@ -69,6 +79,11 @@ export function loadConfig(): ProxyConfig {
     bsePassword: required('BSE_PASSWORD'),
     bseMemberCode: required('BSE_MEMBER_CODE'),
     bseOrgId: process.env.BSE_ORG_ID || null,
+    bseJose: process.env.BSE_JOSE === 'true',
+    bseJosePrivateKeyPath:
+      process.env.BSE_JOSE_PRIVATE_KEY || '/home/niyom/bse-keys/bse_jose_private.pem',
+    bseJoseRemoteKeyPath:
+      process.env.BSE_JOSE_REMOTE_KEY || '/home/niyom/bse-keys/bse_public_demo_prod.pem',
     bseDefaultEuin: process.env.BSE_DEFAULT_EUIN || 'E124361',
     allowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
       .split(',')
