@@ -11,8 +11,6 @@
  */
 import { useState } from 'react';
 import { BadgeCheck, ExternalLink, Paperclip, Plus, Search, Trash2, UserPlus, Users } from 'lucide-react';
-import { Card } from '../../../portal/components/Card';
-import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { StatusPill } from '../../../portal/components/StatusPill';
 import {
   BseOpsExtra,
@@ -32,6 +30,7 @@ import {
   inputCls,
   selectCls,
 } from './formBits';
+import { PageHead, Panel, PanelHead } from '../../ui/Surface';
 
 interface Form {
   clientCode: string;
@@ -440,7 +439,9 @@ export function ClientOnboardingPage() {
   const err = (k: keyof Form) => (touched ? errors[k] : undefined);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-2xl">
+      <PageHead title="Client Management" subtitle="Register a physical, resident-individual UCC at BSE StAR MF." />
+      <div className="space-y-5">
       {done && (
         <SuccessCard title="Client registered at BSE">
           <p className="mt-1 text-sm text-text-secondary">
@@ -480,9 +481,9 @@ export function ClientOnboardingPage() {
         </SuccessCard>
       )}
 
-      <Card>
+      <Panel>
         <div className="flex items-start justify-between gap-3">
-          <SectionHeader title="Register a client at BSE" icon={UserPlus} />
+          <PanelHead title="Register a client at BSE" icon={UserPlus} />
           <StatusPill tone="muted">
             <Users className="mr-1 inline h-3 w-3 align-[-2px]" />
             {uccs.data?.length ?? 0} registered
@@ -987,8 +988,7 @@ export function ClientOnboardingPage() {
                 if (valid && !codeTaken) setConfirming(true);
               }}
               disabled={touched && (!valid || codeTaken)}
-              className="w-full rounded-token-md py-3 text-sm font-bold text-on-accent disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+              className="w-full rounded-token-md bg-accent py-2.5 text-sm font-bold text-on-accent transition-colors hover:bg-accent-strong disabled:opacity-50"
             >
               Review Registration
             </button>
@@ -1030,7 +1030,8 @@ export function ClientOnboardingPage() {
             />
           )}
         </div>
-      </Card>
+      </Panel>
+      </div>
     </div>
   );
 }

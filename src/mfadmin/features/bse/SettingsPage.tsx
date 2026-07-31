@@ -8,13 +8,12 @@
  * BSE see?" are answerable without SSH.
  */
 import { Activity, Globe, KeyRound, Server, Settings as SettingsIcon, Webhook } from 'lucide-react';
-import { Card } from '../../../portal/components/Card';
-import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { StatusPill } from '../../../portal/components/StatusPill';
 import { LogoLoader } from '../../../components/LogoLoader';
 import { BseOpsExtra, isBseConfigured, type BseDiagnostics } from '../../services/BseOpsService';
 import { useBseData } from '../../hooks/useBseData';
 import { ErrorNote, NotConfigured } from './formBits';
+import { PageHead, Panel, PanelHead } from '../../ui/Surface';
 
 function Line({
   label,
@@ -66,10 +65,12 @@ export function SettingsPage() {
   const isProd = data.environment === 'prod';
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
-      <Card>
+    <div className="mx-auto max-w-3xl">
+      <PageHead title="Settings" subtitle="Read-only diagnostics for the console’s connection to BSE. Credentials live in the proxy’s .env on the droplet." />
+      <div className="space-y-5">
+      <Panel>
         <div className="flex items-start justify-between gap-3">
-          <SectionHeader title="BSE connection" icon={Server} />
+          <PanelHead title="BSE connection" icon={Server} />
           <div className="flex items-center gap-2">
             <StatusPill tone={data.bseReachable ? 'success' : 'danger'}>
               {data.bseReachable ? 'Connected' : 'Unreachable'}
@@ -99,10 +100,10 @@ export function SettingsPage() {
         {!data.bseReachable && data.bseError && (
           <Line label="Last error" value={data.bseError} tone="danger" />
         )}
-      </Card>
+      </Panel>
 
-      <Card>
-        <SectionHeader title="Network" icon={Globe} />
+      <Panel>
+        <PanelHead title="Network" icon={Globe} />
         <Line
           label="Outbound IP (whitelisted by BSE)"
           value={data.egressIp || 'could not determine'}
@@ -114,20 +115,20 @@ export function SettingsPage() {
           BSE only accepts API calls from explicitly whitelisted IPs. If the outbound IP above ever
           changes, BSE must be told or every call will fail.
         </p>
-      </Card>
+      </Panel>
 
-      <Card>
-        <SectionHeader title="Webhooks" icon={Webhook} />
+      <Panel>
+        <PanelHead title="Webhooks" icon={Webhook} />
         <Line label="Callback URL registered with BSE" value={data.webhookUrl} mono />
         <Line
           label="Event persistence"
           value={data.webhookPersistence ? 'Enabled' : 'Disabled — events are logged only'}
           tone={data.webhookPersistence ? 'success' : 'warning'}
         />
-      </Card>
+      </Panel>
 
-      <Card>
-        <SectionHeader title="Security" icon={KeyRound} />
+      <Panel>
+        <PanelHead title="Security" icon={KeyRound} />
         <Line
           label="Caller authentication"
           value={data.requireAuth ? 'Required (employee session)' : 'DISABLED'}
@@ -138,12 +139,13 @@ export function SettingsPage() {
           Proxy time {new Date(data.serverTime).toLocaleString('en-IN')}. Credentials and keys live
           in the proxy’s environment on the droplet and are never exposed here or to the browser.
         </p>
-      </Card>
+      </Panel>
 
       <p className="text-center text-[11px] text-text-faint">
         <SettingsIcon className="mr-1 inline h-3 w-3 align-[-2px]" />
         Read-only. Change these on the droplet, then re-test above.
       </p>
+      </div>
     </div>
   );
 }

@@ -9,9 +9,6 @@
 import { useMemo, useState } from 'react';
 import { Undo2 } from 'lucide-react';
 import { fmt } from '../../../crm/utils';
-import { Card } from '../../../portal/components/Card';
-import { SectionHeader } from '../../../portal/components/SectionHeader';
-import { LogoLoader } from '../../../components/LogoLoader';
 import {
   BseOpsService,
   isBseConfigured,
@@ -30,6 +27,8 @@ import {
   inputCls,
   selectCls,
 } from './formBits';
+import { PageHead, Panel, PanelHead } from '../../ui/Surface';
+import { Loading } from '../../ui/controls';
 import { useCallerEuin } from '../../hooks/useCallerEuin';
 
 export function RedeemPage() {
@@ -103,7 +102,9 @@ export function RedeemPage() {
   const loadError = uccs.error ?? holdings.error;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-2xl">
+      <PageHead title="Redeem" subtitle="Sell units from an allotted folio. A folio exists only after an order settles." />
+      <div className="space-y-5">
       {done && (
         <SuccessCard title="Redemption placed at BSE">
           <p className="mt-1 text-sm text-text-secondary">{done.detail}</p>
@@ -114,14 +115,10 @@ export function RedeemPage() {
         </SuccessCard>
       )}
 
-      <Card>
-        <SectionHeader title="Redeem Units" icon={Undo2} />
+      <Panel>
+        <PanelHead title="Redeem Units" icon={Undo2} />
 
-        {loading && (
-          <div className="flex min-h-[200px] items-center justify-center">
-            <LogoLoader size={44} />
-          </div>
-        )}
+        {loading && <Loading />}
 
         {!loading && loadError && <ErrorNote title="Couldn’t load from BSE." message={loadError} />}
 
@@ -223,8 +220,7 @@ export function RedeemPage() {
                   setDone(null);
                   setConfirming(true);
                 }}
-                className="w-full rounded-token-md py-3 text-sm font-bold text-on-accent disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+                className="w-full rounded-token-md bg-accent py-2.5 text-sm font-bold text-on-accent transition-colors hover:bg-accent-strong disabled:opacity-50"
               >
                 Review Redemption
               </button>
@@ -256,7 +252,8 @@ export function RedeemPage() {
             )}
           </div>
         )}
-      </Card>
+      </Panel>
+      </div>
     </div>
   );
 }

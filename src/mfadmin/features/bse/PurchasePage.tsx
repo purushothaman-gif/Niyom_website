@@ -13,9 +13,6 @@
 import { useMemo, useState } from 'react';
 import { Clock, ShoppingCart } from 'lucide-react';
 import { fmt } from '../../../crm/utils';
-import { Card } from '../../../portal/components/Card';
-import { SectionHeader } from '../../../portal/components/SectionHeader';
-import { LogoLoader } from '../../../components/LogoLoader';
 import {
   BseOpsService,
   isBseConfigured,
@@ -34,6 +31,8 @@ import {
   inputCls,
   selectCls,
 } from './formBits';
+import { PageHead, Panel, PanelHead } from '../../ui/Surface';
+import { Loading } from '../../ui/controls';
 import { useCallerEuin } from '../../hooks/useCallerEuin';
 
 interface Placed {
@@ -128,7 +127,9 @@ export function PurchasePage() {
   const loadError = uccs.error ?? schemes.error;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-2xl">
+      <PageHead title="Lumpsum Purchase" subtitle="Place a real lumpsum order at BSE. Gated on ACTIVE clients and schemes open for physical purchase." />
+      <div className="space-y-5">
       {placed && (
         <SuccessCard title="Order placed at BSE">
           <p className="mt-1 text-sm text-text-secondary">
@@ -141,14 +142,10 @@ export function PurchasePage() {
         </SuccessCard>
       )}
 
-      <Card>
-        <SectionHeader title="New Purchase" icon={ShoppingCart} />
+      <Panel>
+        <PanelHead title="New Purchase" icon={ShoppingCart} />
 
-        {loading && (
-          <div className="flex min-h-[200px] items-center justify-center">
-            <LogoLoader size={44} />
-          </div>
-        )}
+        {loading && <Loading />}
 
         {!loading && loadError && (
           <ErrorNote title="Couldn’t load from BSE." message={loadError} />
@@ -238,8 +235,7 @@ export function PurchasePage() {
                   setPlaced(null);
                   setConfirming(true);
                 }}
-                className="w-full rounded-token-md py-3 text-sm font-bold text-on-accent disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+                className="w-full rounded-token-md bg-accent py-2.5 text-sm font-bold text-on-accent transition-colors hover:bg-accent-strong disabled:opacity-50"
               >
                 Review Order
               </button>
@@ -261,11 +257,12 @@ export function PurchasePage() {
             )}
           </div>
         )}
-      </Card>
+      </Panel>
 
       <p className="text-center text-[11px] text-text-faint">
         <EnvBadge env={env} /> {envNote(env)}
       </p>
+      </div>
     </div>
   );
 }

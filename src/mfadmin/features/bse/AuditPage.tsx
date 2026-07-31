@@ -12,8 +12,6 @@
  */
 import { useMemo, useState } from 'react';
 import { ScrollText } from 'lucide-react';
-import { Card } from '../../../portal/components/Card';
-import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { StatusPill } from '../../../portal/components/StatusPill';
 import { EmptyState } from '../../../portal/components/EmptyState';
 import { LogoLoader } from '../../../components/LogoLoader';
@@ -21,6 +19,7 @@ import { BseOpsExtra, isBseConfigured, type BseEventRow } from '../../services/B
 import { useBseData } from '../../hooks/useBseData';
 import { ErrorNote, NotConfigured } from './formBits';
 import { TableScroll, TH, TD } from './BsePanel';
+import { PageHead, Panel, PanelHead } from '../../ui/Surface';
 
 /** BSE event names are lifecycle states; colour the terminal ones. */
 function tone(event: string): 'success' | 'warning' | 'danger' | 'muted' {
@@ -45,9 +44,14 @@ export function AuditPage() {
   if (!isBseConfigured()) return <NotConfigured title="Audit Log" />;
 
   return (
-    <Card>
+    <>
+      <PageHead
+        title="Audit Log"
+        subtitle="Callbacks BSE has sent us. Empty until BSE registers our webhook URL."
+      />
+      <Panel>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <SectionHeader title="BSE event log" icon={ScrollText} />
+        <PanelHead title="BSE event log" icon={ScrollText} />
         <div className="flex flex-wrap items-center gap-1.5">
           {types.length > 0 && (
             <>
@@ -148,6 +152,7 @@ export function AuditPage() {
           </p>
         </>
       )}
-    </Card>
+    </Panel>
+    </>
   );
 }
