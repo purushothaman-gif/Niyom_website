@@ -57,6 +57,8 @@ export interface CasInvestor {
   email: string;
   mobile: string;
   address: string;
+  /** Empty when the statement masks it (BYXXXXXX5E) — better none than wrong. */
+  pan: string;
 }
 
 export interface CasParseResult {
@@ -114,8 +116,75 @@ const HEAD = /^(\S+)\s+([\d,]+\.\d{2})(\S.*)$/;
 /** "Total 216,883.66194,580.90" — two amounts with no separator. */
 const TOTAL = /^Total\s+([\d,]+\.\d{2})([\d,]+\.\d{2})\s*$/;
 
+/**
+ * Collapse runs of whitespace so the shape-anchored patterns can rely on single
+ * spaces. Empty lines are kept — parseCas uses them to bound a holding.
+ */
+export function normalizeLines(text: string): string[] {
+  return text.split('\n').map((l) => l.replace(/\s+/g, ' ').trim());
+}
+
+/**
+ * The totals the document prints for itself — the reconciliation anchor, and
+ * the only thing that can tell us the parse missed a holding.
+ *
+ * Shared with the detailed parse path, which sums per-scheme figures and needs
+ * the same independent check. Returns null when the statement prints no total,
+ * which callers must treat as unreconcilable rather than as agreement.
+ */
+export function readStatedTotals(
+  lines: string[],
+): { marketValue: number; costValue: number } | null {
+  for (const line of lines) {
+    const t = TOTAL.exec(line);
+    if (t) return { marketValue: num(t[1]), costValue: num(t[2]) };
+  }
+  return null;
+}
+
+/**
+ * Every PAN the statement states, in the order printed (first = first holder).
+ *
+ * Used to confirm a statement belongs to the client it is being imported for.
+ * Statements sometimes mask the PAN ("BYXXXXXX5E"), which cannot match this
+ * shape at all — so an absent PAN means "unknown", never "different".
+ */
+export function readInvestorPans(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/\bPAN\s*:?\s*([A-Z]{5}\d{4}[A-Z])\b/g)) {
+    if (!out.includes(m[1])) out.push(m[1]);
+  }
+  return out;
+}
+
+/**
+ * Who the statement is for. Both variants print the same block, so the detailed
+ * path reads it from here rather than keeping a second copy of these patterns.
+ */
+export function readInvestor(text: string): CasInvestor {
+  const lines = normalizeLines(text);
+  const emailIdx = lines.findIndex((l) => /^Email Id:/i.test(l));
+  return {
+    email: /Email Id:\s*(\S+@\S+)/i.exec(text)?.[1] ?? '',
+    mobile: /Mobile:\s*(\+?\d[\d\s-]{7,})/i.exec(text)?.[1]?.trim() ?? '',
+    // The investor's name is the line immediately after the email line.
+    name: emailIdx >= 0 ? (lines[emailIdx + 1] ?? '').trim() : '',
+    address: emailIdx >= 0 ? lines.slice(emailIdx + 2, emailIdx + 6).join(', ') : '',
+    pan: readInvestorPans(text)[0] ?? '',
+  };
+}
+
+/** "01-Jan-1931 To 01-Aug-2026" — the period a detailed statement covers. */
+export function readStatementPeriod(text: string): { from: string; to: string } | null {
+  const m = /(\d{2}-[A-Za-z]{3}-\d{4})\s*To\s*(\d{2}-[A-Za-z]{3}-\d{4})/i.exec(text);
+  if (!m) return null;
+  const from = toIso(m[1]);
+  const to = toIso(m[2]);
+  return from && to ? { from, to } : null;
+}
+
 export function parseCas(text: string): CasParseResult {
-  const lines = text.split('\n').map((l) => l.replace(/\s+/g, ' ').trim());
+  const lines = normalizeLines(text);
   const warnings: string[] = [];
 
   const variant: 'summary' | 'detailed' = /Consolidated Account Summary/i.test(text)
@@ -123,12 +192,7 @@ export function parseCas(text: string): CasParseResult {
     : 'detailed';
 
   /* ------------------------------------------------------------- investor */
-  const email = /Email Id:\s*(\S+@\S+)/i.exec(text)?.[1] ?? '';
-  const mobile = /Mobile:\s*(\+?\d[\d\s-]{7,})/i.exec(text)?.[1]?.trim() ?? '';
-  // The investor's name is the line immediately after the email line.
-  const emailIdx = lines.findIndex((l) => /^Email Id:/i.test(l));
-  const name = emailIdx >= 0 ? (lines[emailIdx + 1] ?? '').trim() : '';
-  const address = emailIdx >= 0 ? lines.slice(emailIdx + 2, emailIdx + 6).join(', ') : '';
+  const investor = readInvestor(text);
 
   const statementDate = toIso(
     /As on\s+(\d{2}-[A-Za-z]{3}-\d{4})/i.exec(text)?.[1] ?? '',
@@ -186,15 +250,14 @@ export function parseCas(text: string): CasParseResult {
   }
 
   /* -------------------------------------------------------- reconciliation */
-  const totalLine = lines.find((l) => TOTAL.test(l));
-  const t = totalLine ? TOTAL.exec(totalLine) : null;
-  const statedMarketValue = t ? num(t[1]) : null;
-  const statedCostValue = t ? num(t[2]) : null;
+  const stated = readStatedTotals(lines);
+  const statedMarketValue = stated ? stated.marketValue : null;
+  const statedCostValue = stated ? stated.costValue : null;
 
   const parsedMarketValue = holdings.reduce((s, h) => s + h.marketValue, 0);
   const parsedCostValue = holdings.reduce((s, h) => s + h.costValue, 0);
 
-  if (!t) {
+  if (!stated) {
     warnings.push(
       'No total line was found, so this parse could not be checked against the document. Treating it as unreconciled.',
     );
@@ -206,7 +269,7 @@ export function parseCas(text: string): CasParseResult {
     near(parsedMarketValue, statedMarketValue) &&
     near(parsedCostValue, statedCostValue);
 
-  if (t && !reconciled) {
+  if (stated && !reconciled) {
     warnings.push(
       `Totals do not match the statement: market ${parsedMarketValue.toFixed(2)} vs ${statedMarketValue?.toFixed(2)}, ` +
         `cost ${parsedCostValue.toFixed(2)} vs ${statedCostValue?.toFixed(2)}. Some holdings were probably missed.`,
@@ -222,7 +285,7 @@ export function parseCas(text: string): CasParseResult {
   return {
     variant,
     statementDate,
-    investor: { name, email, mobile, address },
+    investor,
     holdings,
     statedMarketValue,
     statedCostValue,

@@ -16,6 +16,7 @@ import cors from 'cors';
 import { loadConfig } from './config.js';
 import { BseClient, BseError } from './bseClient.js';
 import { webhookRouter } from './webhooks.js';
+import { casRouter } from './cas/import.js';
 import {
   toAppOrderResult,
   toAppScheme,
@@ -69,6 +70,8 @@ interface Caller {
   /** Clients only. The ONLY UCC this caller may read or transact on. */
   ucc: string | null;
   clientId?: string;
+  /** Staff only — stamped on records they create on a client's behalf. */
+  employeeId?: string | null;
   /**
    * The EUIN to stamp on transactions this caller places. Staff carry their
    * own; a client placing their own order has none and takes the default.
@@ -137,6 +140,7 @@ async function requireCaller(req: Request, res: Response, next: NextFunction) {
       authUserId,
       ucc: null,
       euin: (staff[0].euin as string) || null,
+      employeeId: (staff[0].id as string) || null,
     };
     return next();
   }
@@ -370,6 +374,15 @@ async function fetchTwoFaUrl(event: string, key: 'order' | 'sxp', id: string): P
 }
 
 app.use(requireCaller);
+
+/* ------------------------- Portfolio import (CAS) -------------------------- */
+
+/**
+ * Importing a client's own Consolidated Account Statement. Nothing to do with
+ * BSE — it sits here because this is the Node host that holds the service-role
+ * key, and a CAS must never leave our infrastructure to be parsed.
+ */
+app.use('/cas', casRouter(cfg));
 
 /* ----------------------------- scheme master ------------------------------ */
 
