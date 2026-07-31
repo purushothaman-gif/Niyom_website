@@ -82,6 +82,15 @@ export interface PlaceOrderResult {
   status: string;
   placedAt: string;
   expectedNavDate: string;
+  /** BSE-hosted approval page. The order does not progress until the investor completes it. */
+  twoFaUrl?: string | null;
+  isMock: boolean;
+}
+
+export interface PaymentLinkResult {
+  paymentUrl: string;
+  modes: { mode: string; label: string; banks: number }[];
+  noBankOnFile: boolean;
   isMock: boolean;
 }
 
@@ -444,6 +453,17 @@ export const BseOpsService = {
       type: 'lumpsum',
       plan: 'Growth',
       amount: input.amount,
+    }),
+
+  /**
+   * BSE's hosted payment page for placed orders. Only available once the
+   * investor has approved them — BSE returns record_not_found before that.
+   */
+  paymentLink: (clientCode: string, orderIds: (string | number)[]) =>
+    post<PaymentLinkResult>('/payment/link', {
+      clientCode,
+      orderIds,
+      returnUrl: `${window.location.origin}/mf-admin`,
     }),
 };
 

@@ -200,13 +200,22 @@ export interface MandateRegistrationResult {
 }
 
 export interface PaymentLinkRequest {
-  clientCode: string;
-  orderId: string;
+  /** Ignored for a client caller — the proxy resolves their own UCC. */
+  clientCode?: string;
+  /** One or more placed orders to pay for together, as BSE's own page does. */
+  orderIds: (string | number)[];
   returnUrl: string;
 }
 
 export interface PaymentLinkResult {
+  /** BSE-hosted payment page. Empty is treated as a failure upstream. */
   paymentUrl: string;
+  modes: { mode: string; label: string; banks: number }[];
+  /**
+   * No payment mode has a bank on file, so BSE's page will offer nothing to
+   * pay with. Almost always a UCC without a verified bank account.
+   */
+  noBankOnFile: boolean;
   isMock: boolean;
 }
 

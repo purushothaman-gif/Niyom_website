@@ -34,12 +34,15 @@ import {
 import { PageHead, Panel, PanelHead } from '../../ui/Surface';
 import { Loading } from '../../ui/controls';
 import { useCallerEuin } from '../../hooks/useCallerEuin';
+import { ClientLinks } from './CopyLink';
 
 interface Placed {
   orderId: string;
   amount: number;
   schemeName: string;
   clientCode: string;
+  /** BSE approval page — the order does not move until the investor completes it. */
+  twoFaUrl?: string | null;
 }
 
 export function PurchasePage() {
@@ -109,6 +112,7 @@ export function PurchasePage() {
         amount: amt,
         schemeName: scheme.name,
         clientCode: client.clientCode,
+        twoFaUrl: result.twoFaUrl,
       });
       setConfirming(false);
       setAmount('');
@@ -139,6 +143,9 @@ export function PurchasePage() {
             Order ID <span className="font-mono font-semibold">{placed.orderId}</span> — track it in
             the Order Book.
           </p>
+          {/* Placing the order is only the first of three steps. Staff need both
+              links to send the client, or the order sits unfunded forever. */}
+          <ClientLinks placed={placed} />
         </SuccessCard>
       )}
 
