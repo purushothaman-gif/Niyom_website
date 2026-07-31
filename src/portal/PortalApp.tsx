@@ -42,8 +42,8 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
   const hasData = !!refreshedAt; // first load completed
 
   const dashboardData = useMemo(
-    () => (hasData ? buildDashboardData(snapshot, clientId) : null),
-    [hasData, snapshot, clientId],
+    () => (hasData ? buildDashboardData(snapshot) : null),
+    [hasData, snapshot],
   );
   const portfolioData = useMemo(
     () => (hasData ? PortfolioService.buildPortfolioData(snapshot.holdings) : null),
@@ -64,7 +64,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
       );
     if (view === 'transactions') return <TransactionsPage clientId={clientId} client={client} />;
     if (view === 'documents') return <DocumentsPage clientId={clientId} />;
-    if (view === 'notifications') return <NotificationsPage clientId={clientId} />;
+    if (view === 'notifications') return <NotificationsPage client={client} onNavigate={navigate} />;
     if (view === 'support') return <SupportPage clientId={clientId} />;
 
     // Snapshot-backed views (need the client record / holdings).
@@ -117,7 +117,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
           />
         );
       case 'sip':
-        return <SipPage clientId={clientId} holdings={snapshot.holdings} onNavigate={navigate} />;
+        return <SipPage onNavigate={navigate} />;
       default:
         return null;
     }

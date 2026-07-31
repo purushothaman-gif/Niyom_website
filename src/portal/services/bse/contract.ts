@@ -221,8 +221,29 @@ export interface PaymentStatusResult {
  * (proxy, later) both implement it — swapping is a config change, not a rewrite.
  * Every method keeps the app's existing view models so callers never change.
  */
+/**
+ * A systematic plan the client actually holds at BSE.
+ *
+ * The proxy scopes /sxp to the caller's own UCC, so a client can only ever
+ * receive their own registrations — the request carries no client code.
+ */
+export interface SystematicPlan {
+  regNum: string;
+  /** SIP | STP | SWP */
+  type: string;
+  schemeCode: string;
+  schemeName: string;
+  amount: number;
+  frequency: string;
+  startDate: string;
+  status: string;
+  isMock: boolean;
+}
+
 export interface BseGateway {
   getSchemes(): Promise<FundScheme[]>;
+  /** The client's own systematic plans, live from BSE. */
+  getSystematicPlans(): Promise<SystematicPlan[]>;
   getScheme(schemeCode: string): Promise<FundScheme | null>;
   placeOrder(req: OrderRequest): Promise<OrderResult>;
   placeRedemption(req: RedemptionRequest): Promise<TxnResult>;
@@ -247,11 +268,12 @@ export const BSE_PROXY_ROUTES = {
   cancel: '/cancel',
   ucc: '/ucc',
   mandate: '/mandate',
+  sxp: '/sxp',
   paymentLink: '/payment/link',
   paymentStatus: '/payment/status',
 } as const;
 
-/** Runtime mode. `mock` (default) keeps the app fully offline-demoable. */
+/** Runtime mode. `live` is the default; `mock` is for local work without the proxy. */
 export type BseMode = 'mock' | 'live';
 
 export interface BseProxyConfig {

@@ -177,10 +177,10 @@ export interface DashboardData {
   summary: PortfolioSummary;
   mutualFunds: MutualFundSummary;
   recentTransactions: RecentTransaction[];
-  dailyChange: DailyChange;
-  xirr: XirrEstimate;
-  upcomingSips: UpcomingSip[];
-  goals: GoalProgress[];
-  marketUpdates: MarketUpdate[];
-  notices: Notice[];
+  /**
+   * Money-weighted return from the client's own cash flows, or null when it
+   * cannot be computed. Null is meaningful — it means "not enough history",
+   * which is different from a return of zero.
+   */
+  xirrPercent: number | null;
 }

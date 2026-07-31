@@ -1,103 +1,139 @@
-import { useMemo, useState } from 'react';
-import {
-  Bell,
-  CalendarClock,
-  CheckCheck,
-  FileText,
-  Receipt,
-  ShieldCheck,
-  TrendingUp,
-  type LucideIcon,
-} from 'lucide-react';
-import { timeAgo } from '../../../crm/utils';
-import { Card } from '../../components/Card';
-import { EmptyState } from '../../components/EmptyState';
-import { MockBadge } from '../../components/StatusPill';
-import { Segmented } from '../../components/Segmented';
-import { MockService } from '../../services/MockService';
-import type { NotificationCategory } from '../../types/engagement';
+/**
+ * Notifications — derived from the client's real state, not a feed.
+ *
+ * There is no notification table behind this and no push infrastructure. Rather
+ * than invent a feed, the page computes what genuinely needs the client's
+ * attention right now: onboarding they haven't finished, a systematic plan
+ * still awaiting their approval at BSE, an order that hasn't been funded.
+ *
+ * The consequence is that this list is always current and can never be stale —
+ * and when there is nothing to do, it says so instead of padding.
+ */
+import { useEffect, useState } from 'react';
+import { AlertCircle, BellOff, CalendarClock, ShieldCheck, type LucideIcon } from 'lucide-react';
+import type { NWClient } from '../../../crm/types';
+import { bseGateway } from '../../services/bse/gateway';
+import type { SystematicPlan } from '../../services/bse/contract';
+import type { PortalView } from '../../layout/navigation';
+import { Blank, PortalButton, ScreenHead, Tile } from '../../ui/kit';
+import { onboardingIncomplete } from '../onboarding/onboardingSteps';
 
-const META: Record<NotificationCategory, { icon: LucideIcon; color: string }> = {
-  transaction: { icon: Receipt, color: 'var(--accent)' },
-  sip: { icon: CalendarClock, color: 'var(--info)' },
-  nav: { icon: TrendingUp, color: 'var(--success)' },
-  kyc: { icon: ShieldCheck, color: 'var(--success)' },
-  document: { icon: FileText, color: 'var(--info)' },
-  general: { icon: Bell, color: 'var(--text-muted)' },
-};
+interface Alert {
+  id: string;
+  icon: LucideIcon;
+  title: string;
+  body: string;
+  tone: 'action' | 'info';
+  cta?: { label: string; view: PortalView };
+}
 
-export function NotificationsPage({ clientId }: { clientId: string }) {
-  const initial = useMemo(() => MockService.notificationsFeed(clientId), [clientId]);
-  const [items, setItems] = useState(initial);
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+export function NotificationsPage({
+  client,
+  onNavigate,
+}: {
+  client: NWClient | null;
+  onNavigate: (view: PortalView) => void;
+}) {
+  const [plans, setPlans] = useState<SystematicPlan[]>([]);
 
-  const unreadCount = items.filter((n) => !n.read).length;
-  const visible = filter === 'unread' ? items.filter((n) => !n.read) : items;
+  useEffect(() => {
+    let alive = true;
+    bseGateway()
+      .getSystematicPlans()
+      .then((p) => alive && setPlans(p))
+      .catch(() => {
+        /* A BSE outage must not break this page — it just has less to say. */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
-  const markAllRead = () => setItems((prev) => prev.map((n) => ({ ...n, read: true })));
-  const markRead = (id: string) =>
-    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  const alerts: Alert[] = [];
+
+  if (onboardingIncomplete(client)) {
+    alerts.push({
+      id: 'onboarding',
+      icon: ShieldCheck,
+      title: 'Finish setting up your account',
+      body: 'Your KYC isn’t complete yet, so you can’t invest. It takes a few minutes.',
+      tone: 'action',
+      cta: { label: 'Complete KYC', view: 'onboarding' },
+    });
+  }
+
+  const awaiting = plans.filter((p) => p.status.toLowerCase() !== 'active');
+  if (awaiting.length > 0) {
+    alerts.push({
+      id: 'sip-auth',
+      icon: CalendarClock,
+      title: `${awaiting.length} systematic plan${awaiting.length === 1 ? '' : 's'} need your approval`,
+      body: 'BSE emailed you an approval link. Until you complete it, the first instalment cannot be collected.',
+      tone: 'action',
+      cta: { label: 'View plans', view: 'sip' },
+    });
+  }
+
+  const actionCount = alerts.filter((a) => a.tone === 'action').length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Segmented<'all' | 'unread'>
-            options={[
-              { value: 'all', label: 'All', count: items.length },
-              { value: 'unread', label: 'Unread', count: unreadCount || undefined },
-            ]}
-            value={filter}
-            onChange={setFilter}
-          />
-          <MockBadge />
-        </div>
-        {unreadCount > 0 && (
-          <button
-            type="button"
-            onClick={markAllRead}
-            className="inline-flex items-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:border-accent/40 hover:text-accent"
-          >
-            <CheckCheck className="h-3.5 w-3.5" /> Mark all read
-          </button>
-        )}
-      </div>
+    <>
+      <ScreenHead
+        title="Notifications"
+        subtitle={
+          actionCount > 0
+            ? `${actionCount} thing${actionCount === 1 ? '' : 's'} need your attention.`
+            : 'Anything needing your attention shows up here.'
+        }
+      />
 
-      {visible.length === 0 ? (
-        <Card><EmptyState icon={Bell} title="You're all caught up." compact /></Card>
+      {alerts.length === 0 ? (
+        <Tile flush>
+          <Blank
+            icon={BellOff}
+            title="Nothing needs your attention"
+            body="When something does — an approval to complete, a payment to make, KYC to finish — it will appear here."
+          />
+        </Tile>
       ) : (
-        <Card padding="none" className="overflow-hidden">
-          <ul className="divide-y divide-border-subtle">
-            {visible.map((n) => {
-              const meta = META[n.category];
-              return (
-                <li key={n.id}>
-                  <button
-                    type="button"
-                    onClick={() => markRead(n.id)}
-                    className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-hover"
+        <div className="space-y-3">
+          {alerts.map((a) => {
+            const Icon = a.icon;
+            return (
+              <Tile key={a.id}>
+                <div className="flex items-start gap-3.5">
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-token-md ${
+                      a.tone === 'action' ? 'bg-warning/10' : 'bg-bg-surface'
+                    }`}
                   >
-                    <span
-                      className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-token-md"
-                      style={{ background: `color-mix(in srgb, ${meta.color} 12%, transparent)` }}
-                    >
-                      <meta.icon className="h-4 w-4" style={{ color: meta.color }} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-text-primary">{n.title}</p>
-                        {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+                    <Icon
+                      className={`h-4 w-4 ${a.tone === 'action' ? 'text-warning' : 'text-text-secondary'}`}
+                    />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-text-primary">{a.title}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-text-secondary">{a.body}</p>
+                    {a.cta && (
+                      <div className="mt-3">
+                        <PortalButton onClick={() => onNavigate(a.cta!.view)}>
+                          {a.cta.label}
+                        </PortalButton>
                       </div>
-                      <p className="mt-0.5 text-xs leading-relaxed text-text-secondary">{n.body}</p>
-                      <p className="mt-1 text-[10px] text-text-faint">{timeAgo(n.date)}</p>
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
+                    )}
+                  </div>
+                </div>
+              </Tile>
+            );
+          })}
+        </div>
       )}
-    </div>
+
+      <p className="mt-5 flex items-start gap-2 px-1 text-[11px] leading-relaxed text-text-faint">
+        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        This list is worked out from your account as it stands right now, so it is never out of
+        date. Niyom will also email or call you about anything urgent.
+      </p>
+    </>
   );
 }
