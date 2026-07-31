@@ -334,6 +334,39 @@ export function toAppScheme(row: Record<string, unknown>) {
 
 /* ============================== UCC (client onboarding) ==================== */
 
+/**
+ * A supporting document. BSE carries these on identifier blocks as base64, and
+ * caps each at 10240 KB (§7.4.20). `docNumber` is the identifier_number BSE
+ * requires alongside the blob — the account number for a cancelled cheque, the
+ * client code for an AOF.
+ */
+export interface AppUccDocument {
+  docNumber: string;
+  fileName: string;
+  fileSize: number;              // bytes
+  fileBlob: string;              // base64, no data: prefix
+}
+
+/**
+ * One nominee. BSE takes nominees under the FIRST holder only, at most 3, and
+ * the percentages must total exactly 100 (§6.2.2.2.4).
+ *
+ * `relation` is a nomination_relation code, not a label — 3 = Daughter,
+ * 5 = Father, 11 = Husband, 18 = Son, 21 = Wife (§7.4.18).
+ */
+export interface AppNominee {
+  firstName: string;
+  middleName?: string;
+  lastName?: string;
+  dob?: string;
+  relation: string;
+  percent: number;
+  identifierType: 'pan' | 'aadhaar' | 'passport';
+  identifierNumber: string;
+  isMinor?: boolean;
+  guardian?: { firstName: string; middleName?: string; lastName?: string; dob: string; pan: string };
+}
+
 /** App-side UCC registration request (what the portal/CRM posts to the proxy). */
 export interface AppUccRequest {
   clientCode: string;            // our UCC id for this client (<=20 chars)
@@ -352,7 +385,71 @@ export interface AppUccRequest {
   ckycNumber?: string;
   address: { line1: string; line2?: string; line3?: string; city: string; state: string; pincode: string; country?: string };
   bank: { accountNumber: string; ifsc: string; accountType?: string };
-  fatca?: { placeOfBirth?: string; countryOfBirth?: string; fatherName?: string; incomeSlab?: string; wealthSource?: string; politicallyExposed?: boolean };
+  fatca?: { placeOfBirth?: string; countryOfBirth?: string; fatherName?: string; spouseName?: string; incomeSlab?: string; wealthSource?: string; politicallyExposed?: boolean };
+  /** Empty or absent means the client has declined to nominate. */
+  nominees?: AppNominee[];
+  documents?: {
+    bankProof?: AppUccDocument;
+    bankProofType?: 'cancel_cheque' | 'bank_statement';
+    aof?: AppUccDocument;
+  };
+}
+
+/** Identifier block carrying a document, in the shape BSE expects (§7.3.15). */
+function toDocIdentifier(identifierType: string, doc: AppUccDocument) {
+  return {
+    identifier_type: identifierType,
+    identifier_number: doc.docNumber,
+    file_name: doc.fileName,
+    file_size: doc.fileSize,
+    file_blob: doc.fileBlob,
+  };
+}
+
+/**
+ * One nominee -> BSE's nomination block (§7.3.10). BSE requires comm_addr and
+ * contact on every nominee; the form doesn't ask for them because BSE's own
+ * worked example reuses the holder's, so they are passed in from the holder.
+ */
+function toNomination(
+  n: AppNominee,
+  holderAddr: Record<string, unknown>,
+  holderContact: Record<string, unknown>,
+) {
+  return {
+    person: {
+      first_name: n.firstName,
+      middle_name: n.middleName ?? '',
+      last_name: n.lastName ?? '',
+      ...(n.dob ? { dob: n.dob } : {}),
+    },
+    comm_addr: holderAddr,
+    contact: holderContact,
+    nomination_percent: n.percent,
+    nomination_relation: n.relation,
+    // BSE: this field must always be false for a nominee.
+    is_pan_exempt: false,
+    pan_exempt_category: '',
+    ...(n.isMinor ? { is_minor: true } : {}),
+    identifier: [
+      { identifier_type: n.identifierType, identifier_number: n.identifierNumber },
+    ],
+    ...(n.isMinor && n.guardian
+      ? {
+          guardian: {
+            first_name: n.guardian.firstName,
+            middle_name: n.guardian.middleName ?? '',
+            last_name: n.guardian.lastName ?? '',
+            dob: n.guardian.dob,
+            is_pan_exempt: false,
+            pan_exempt_category: '',
+            identifier: [
+              { identifier_type: 'pan', identifier_number: n.guardian.pan.toUpperCase() },
+            ],
+          },
+        }
+      : {}),
+  };
 }
 
 /**
@@ -367,6 +464,28 @@ export function toAddUcc(req: AppUccRequest, memberCode: string) {
   const fatca = req.fatca ?? {};
   const fullName = [req.firstName, req.middleName, req.lastName].filter(Boolean).join(' ');
   const occ = req.occupationCode ?? '02';
+  const pan = req.pan.toUpperCase();
+  const nominees = req.nominees ?? [];
+  const docs = req.documents ?? {};
+
+  const commAddr = {
+    address_line_1: req.address.line1,
+    address_line_2: req.address.line2 ?? '',
+    address_line_3: req.address.line3 ?? '',
+    postalcode: req.address.pincode,
+    city: req.address.city,
+    state: req.address.state,
+    country: req.address.country ?? 'IND',
+  };
+  const contact = {
+    contact_number: req.mobile,
+    country_code: '91',
+    whose_contact_number: 'SE',
+    email_address: req.email,
+    whose_email_address: 'SE',
+    contact_type: 'PR',
+  };
+
   return {
     member: { member_id: memberCode },
     investor: { client_code: req.clientCode },
@@ -375,8 +494,11 @@ export function toAddUcc(req: AppUccRequest, memberCode: string) {
     rdmp_idcw_pay_mode: '01',
     is_client_physical: true,
     is_client_demat: false,
-    is_nomination_opted: false,
+    // No nominees means the client has declined to nominate — a deliberate
+    // opt-out, which is what SEBI requires be recorded either way.
+    is_nomination_opted: nominees.length > 0,
     nomination_auth_mode: 'O',
+    ...(nominees.length > 0 ? { nominee_soa: true } : {}),
     comm_mode: 'E',
     onboarding: 'Z',
     holder: [
@@ -386,7 +508,7 @@ export function toAddUcc(req: AppUccRequest, memberCode: string) {
         auth_mode: 'M',
         is_pan_exempt: false,
         pan_exempt_category: '',
-        identifier: [{ identifier_type: 'pan', identifier_number: req.pan.toUpperCase() }],
+        identifier: [{ identifier_type: 'pan', identifier_number: pan }],
         // BSE rejects kyc_type 'C' (CKYC) unless a ckyc_number is supplied, so
         // default to 'K' (KRA) when we don't have one. Verified live.
         kyc_type: req.kycType ?? (req.ckycNumber ? 'C' : 'K'),
@@ -398,45 +520,41 @@ export function toAddUcc(req: AppUccRequest, memberCode: string) {
           dob: req.dob,
           gender: req.gender,
         },
-        contact: [
-          {
-            contact_number: req.mobile,
-            country_code: '91',
-            whose_contact_number: 'SE',
-            email_address: req.email,
-            whose_email_address: 'SE',
-            contact_type: 'PR',
-          },
-        ],
+        contact: [contact],
+        // Nominees hang off the first holder only (§7.3.4).
+        ...(nominees.length > 0
+          ? { nomination: nominees.map((n) => toNomination(n, commAddr, contact)) }
+          : {}),
       },
     ],
-    comm_addr: {
-      address_line_1: req.address.line1,
-      address_line_2: req.address.line2 ?? '',
-      address_line_3: req.address.line3 ?? '',
-      postalcode: req.address.pincode,
-      city: req.address.city,
-      state: req.address.state,
-      country: req.address.country ?? 'IND',
-    },
+    comm_addr: commAddr,
     bank_account: [
       {
         ifsc_code: req.bank.ifsc.toUpperCase(),
         bank_acc_num: req.bank.accountNumber,
         bank_acc_type: req.bank.accountType ?? 'SB',
         account_owner: 'SELF',
-        identifier: [],
+        // A cancelled cheque is what lets BSE's bank verification actually
+        // pass — without it the check sits at "Verification failed" forever.
+        identifier: docs.bankProof
+          ? [toDocIdentifier(docs.bankProofType ?? 'cancel_cheque', docs.bankProof)]
+          : [],
       },
     ],
     fatca: [
       {
+        // BSE's own worked example capitalises this key; their field table says
+        // holder_rank. The example is what the API actually accepts.
         HolderRank: '1',
         client_name: fullName,
         place_of_birth: fatca.placeOfBirth ?? req.address.city,
         country_of_birth: fatca.countryOfBirth ?? 'IND',
         investor_type: 'Individual',
         dob: req.dob,
-        father_name: fatca.fatherName ?? '',
+        // Both are conditional with a 2-character minimum, so send them only
+        // when we have them rather than passing an empty string.
+        ...(fatca.fatherName ? { father_name: fatca.fatherName } : {}),
+        ...(fatca.spouseName ? { spouse_name: fatca.spouseName } : {}),
         address_type: '1',
         occ_code: occ,
         occ_type: 'B',
@@ -446,10 +564,15 @@ export function toAddUcc(req: AppUccRequest, memberCode: string) {
         income_slab: fatca.incomeSlab ?? '31',
         politically_exposed: fatca.politicallyExposed ? 'Y' : 'N',
         is_self_declared: true,
-        identifier: { identifier_type: 'pan', identifier_number: req.pan.toUpperCase() },
+        identifier: { identifier_type: 'pan', identifier_number: pan },
+        // Mandatory per §7.3.16 and present in BSE's worked example. For a
+        // resident individual the tax id is the PAN — tax_id_type 'C' is
+        // "PAN Card" in fatca_identifier_type (§7.4.35), NOT 'A' (Passport).
+        tax_residency: [{ country: 'IND', tax_id_no: pan, tax_id_type: 'C' }],
       },
     ],
-    identifiers: [],
+    ...(docs.aof ? { aof: { is_aof_submitted: true } } : {}),
+    identifiers: docs.aof ? [toDocIdentifier('aof', docs.aof)] : [],
   };
 }
 
