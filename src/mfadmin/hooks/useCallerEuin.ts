@@ -14,9 +14,6 @@ import { supabase } from '../../lib/supabase';
 /** Keep in step with BSE_DEFAULT_EUIN on the proxy. */
 export const DEFAULT_EUIN = 'E124361';
 
-/** NIYOM's ARN — member-level and constant. Keep in step with BSE_ARN. */
-export const NIYOM_ARN = '362707';
-
 export function useCallerEuin(): string {
   const [euin, setEuin] = useState(DEFAULT_EUIN);
 

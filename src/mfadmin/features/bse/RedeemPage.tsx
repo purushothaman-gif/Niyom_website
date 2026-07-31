@@ -30,7 +30,7 @@ import {
   inputCls,
   selectCls,
 } from './formBits';
-import { NIYOM_ARN, useCallerEuin } from '../../hooks/useCallerEuin';
+import { useCallerEuin } from '../../hooks/useCallerEuin';
 
 export function RedeemPage() {
   // Display only — the proxy resolves the real EUIN from the session.
@@ -235,7 +235,7 @@ export function RedeemPage() {
                     { label: 'Client', value: holding.clientCode },
                     { label: 'Scheme', value: holding.schemeName || holding.schemeCode },
                     { label: 'Folio', value: holding.folio },
-                    { label: 'EUIN · ARN', value: `${euin} · ${NIYOM_ARN}` },
+                    { label: 'EUIN', value: euin },
                     {
                       label: 'Redeeming',
                       value:

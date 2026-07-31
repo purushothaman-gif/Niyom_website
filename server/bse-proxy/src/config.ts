@@ -22,8 +22,6 @@ export interface ProxyConfig {
   bsePassword: string;
   /** NIYOM's BSE member code — stamped into order/SXP payloads. */
   bseMemberCode: string;
-  /** NIYOM's ARN — member-level and constant, sent as subbr_arn on orders. */
-  bseArn: string;
   /**
    * EUIN used when the caller has none: an employee without an EUIN, or a
    * client placing their own order from the portal. SEBI expects an EUIN on
@@ -62,7 +60,6 @@ export function loadConfig(): ProxyConfig {
     bseUsername: required('BSE_USERNAME'),
     bsePassword: required('BSE_PASSWORD'),
     bseMemberCode: required('BSE_MEMBER_CODE'),
-    bseArn: process.env.BSE_ARN || '362707',
     bseDefaultEuin: process.env.BSE_DEFAULT_EUIN || 'E124361',
     allowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
       .split(',')

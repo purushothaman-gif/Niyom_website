@@ -31,7 +31,7 @@ import {
   inputCls,
   selectCls,
 } from './formBits';
-import { NIYOM_ARN, useCallerEuin } from '../../hooks/useCallerEuin';
+import { useCallerEuin } from '../../hooks/useCallerEuin';
 
 export function SwitchPage() {
   // Display only — the proxy resolves the real EUIN from the session.
@@ -260,7 +260,7 @@ export function SwitchPage() {
                       value: destinations.find((d) => d.schemeCode === toScheme)?.name ?? toScheme,
                     },
                     { label: 'Folio', value: holding.folio },
-                    { label: 'EUIN · ARN', value: `${euin} · ${NIYOM_ARN}` },
+                    { label: 'EUIN', value: euin },
                     {
                       label: 'Switching',
                       value:
