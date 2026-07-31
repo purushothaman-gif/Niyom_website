@@ -135,6 +135,10 @@ export interface NWDSADebitNote {
   dsa?: { full_name: string; dsa_code: string };
   paid_by_employee?: { full_name: string } | null;
   cancelled_by_employee?: { full_name: string } | null;
+  // PostgREST embedded aggregate: [{ count: n }]. Regenerate rebuilds a note
+  // from its OWN covered transactions, so the line count is what decides
+  // whether regeneration is possible — see DSAPayout.regenerateOne.
+  dsa_debit_note_lines?: { count: number }[];
 }
 
 export interface NWClientDocument {

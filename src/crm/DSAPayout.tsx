@@ -231,10 +231,18 @@ export default function DSAPayout({ employee }: Props) {
   const [payDate, setPayDate] = useState('');
   const [payError, setPayError] = useState('');
 
+  /** How many transactions a note covers. PostgREST returns the embedded
+   *  aggregate as [{ count: n }]; older notes raised before
+   *  dsa_debit_note_lines existed (pre-20260718100000) have none. */
+  const noteLineCount = (note: NWDSADebitNote) => note.dsa_debit_note_lines?.[0]?.count ?? 0;
+
   const loadDebitNotes = useCallback(async () => {
     const { data } = await supabase
       .from('dsa_debit_notes')
-      .select('*, dsa:nw_dsa(full_name, dsa_code), paid_by_employee:nw_employees!paid_by(full_name), cancelled_by_employee:nw_employees!cancelled_by(full_name)')
+      // dsa_debit_note_lines(count) tells the row whether Regenerate is possible:
+      // regenerateOne rebuilds from the note's own lines, so a note with none
+      // cannot be regenerated at all.
+      .select('*, dsa:nw_dsa(full_name, dsa_code), paid_by_employee:nw_employees!paid_by(full_name), cancelled_by_employee:nw_employees!cancelled_by(full_name), dsa_debit_note_lines(count)')
       .eq('year', selectedYear)
       .eq('month', month)
       // Default operational listing shows only ACTIVE notes. Cancelled notes
@@ -852,9 +860,20 @@ export default function DSAPayout({ employee }: Props) {
                         {/* Regenerate / Cancel — disabled once signed or cancelled */}
                         {note.status === 'generated' && !signed && (
                           <>
+                            {/* Gated on the note's OWN line count, not on the
+                                pending payout groups. regenerateOne rebuilds
+                                from dsa_debit_note_lines, and a note's covered
+                                transactions are excluded from `groups` by
+                                definition — so gating on `groups` disabled the
+                                button for every note that had actually been
+                                generated, which is all of them. A note with no
+                                lines genuinely cannot be regenerated; that is
+                                the only real precondition. */}
                             <button onClick={() => regenerateOne(note)}
-                              disabled={regenDsaId === note.dsa_id || !groups.some(g => g.dsa_id === note.dsa_id)}
-                              title={groups.some(g => g.dsa_id === note.dsa_id) ? 'Regenerate PDF' : 'Recalculate payout to regenerate'}
+                              disabled={regenDsaId === note.dsa_id || !noteLineCount(note)}
+                              title={noteLineCount(note)
+                                ? 'Regenerate PDF from this note’s covered transactions'
+                                : 'This note has no linked transactions to regenerate from'}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-40"
                               style={{ background: 'rgba(var(--accent-rgb),0.08)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
                               {regenDsaId === note.dsa_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
