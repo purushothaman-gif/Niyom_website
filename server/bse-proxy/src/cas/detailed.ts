@@ -101,6 +101,23 @@ function joinWrappedHeaders(lines: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
+
+    /*
+     * A long name can also wrap just BEFORE the "(Demat)" marker, leaving the
+     * ISIN on a line that begins with it:
+     *
+     *   HGFGT-HDFC Balanced Advantage Fund - Direct Plan - Growth Option (form...
+     *   (Non-Demat) - ISIN: INF179K01WA6(Advisor: INZ000208032)
+     *
+     * That second line satisfies SCHEME_HEAD on its own — reading "(Non" as the
+     * RTA code and "Demat)" as the entire scheme name — so the check below
+     * never fires, and the scheme is kept under a meaningless name rather than
+     * being dropped. It has to be rejoined before anything else looks at it.
+     */
+    if (/^\(\s*(?:Non[\s-]*)?Demat\s*\)\s*-\s*ISIN:/i.test(line) && out.length) {
+      line = `${out.pop()} ${line}`;
+    }
+
     if (/-\s*ISIN:\s*[A-Z0-9]{12}/.test(line) && !SCHEME_HEAD.test(line)) {
       // Absorb continuations until the header parses, stopping at the folio
       // line so a genuinely malformed header cannot swallow the block.
@@ -122,6 +139,25 @@ const SCHEME_HEAD =
   /^(\S+?)-(.+?)\s*-\s*ISIN:\s*([A-Z0-9]{12})(?:\(Advisor:\s*([^)]*)\))?\s*(?:Registrar\s*:\s*(\S+)?)?\s*$/;
 
 const TXN = /^(\d{2}-[A-Za-z]{3}-\d{4})\s+(\(?[\d,]+\.\d{2}\)?)\s+(.*)$/;
+
+/**
+ * Entries printed between asterisks rather than as a normal ledger row:
+ *
+ *   18-Jan-2019 0.01*** STT Paid ***
+ *   24-Jul-2018 903.90***IDCW @ Rs.0.19478990 per unit***
+ *   01-Jul-2024***Cancelled***
+ *
+ * TXN cannot match these — it requires whitespace after the amount and these
+ * run the asterisks straight onto it — so without this they were skipped
+ * wholesale, taking every dividend payout and every stamp duty and STT charge
+ * with them. They carry no units, which is why the unit checks never noticed.
+ *
+ * The amount is optional, and that is the distinction that matters: a row with
+ * one is money moving and belongs in the ledger, while a row without one
+ * ("Cancelled", "Registration of Nominee") is an account event and does not.
+ */
+const MARKER =
+  /^(\d{2}-[A-Za-z]{3}-\d{4})\s*(\(?[\d,]+\.\d{2}\)?)?\s*\*{2,}\s*(.+?)\s*\*{2,}$/;
 
 /**
  * Split "26.66187.547" into price and units using the balance identity.
@@ -222,9 +258,13 @@ export function parseDetailedSchemes(text: string): CasDetailedScheme[] {
       continue;
     }
 
-    // Registrar sometimes wraps onto its own line after "Registrar :".
-    if (!cur.registrar && /^(CAMS|KFINTECH)$/i.test(line)) {
-      cur.registrar = line.toUpperCase();
+    // The registrar sometimes sits on its own line — either bare, after a
+    // "Registrar :" left stranded on the header, or carrying the label itself.
+    const reg = cur.registrar
+      ? null
+      : /^(?:Registrar\s*:\s*)?(CAMS|KFINTECH)$/i.exec(line);
+    if (reg) {
+      cur.registrar = reg[1].toUpperCase();
       continue;
     }
 
@@ -271,6 +311,18 @@ export function parseDetailedSchemes(text: string): CasDetailedScheme[] {
       continue;
     }
 
+    const marker = MARKER.exec(line);
+    if (marker) {
+      if (marker[2]) {
+        const { type, description } = classify(marker[3]);
+        cur.transactions.push({
+          date: iso(marker[1]), type, description,
+          amount: money(marker[2]), units: 0, nav: 0, balanceUnits: running,
+        });
+      }
+      continue;
+    }
+
     const txn = TXN.exec(line);
     if (txn) {
       const amount = money(txn[2]);
@@ -289,10 +341,17 @@ export function parseDetailedSchemes(text: string): CasDetailedScheme[] {
 
       // "26.66187.547Purchase 187.547" — fused numbers, then the type, then
       // optionally the balance on the same line.
-      const body = /^([\d,.()]+?)([A-Za-z].*)$/.exec(rest);
+      //
+      // A redemption made "less STT" carries a footnote asterisk between the
+      // two — "(155.315)*Redemption-BSE ... , less STT" — and without allowing
+      // for it the line matched nothing and was skipped. That is expensive
+      // twice over: the redemption vanishes, AND the running balance stays
+      // where it was, so the NEXT transaction's price/units split no longer
+      // satisfies the balance identity and its units are lost too.
+      const body = /^([\d,.()]+?)(\*?[A-Za-z].*)$/.exec(rest);
       if (!body) continue;
       const fused = body[1];
-      const tail = body[2];
+      const tail = body[2].replace(/^\*+/, '');
       const trailing = /\s([\d,]+\.\d{3})\s*$/.exec(tail);
 
       const { type, description } = classify(trailing ? tail.slice(0, trailing.index) : tail);

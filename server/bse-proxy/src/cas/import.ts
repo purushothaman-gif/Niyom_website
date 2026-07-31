@@ -503,6 +503,8 @@ export function casRouter(cfg: ProxyConfig): Router {
 
       let recon: Reconciliation;
       let build: (importId: string) => ImportRows;
+      // A summary statement states a single "As on" date rather than a period.
+      let statementTo = period?.to ?? null;
 
       if (isDetailed) {
         const schemes = parseDetailedSchemes(text);
@@ -511,6 +513,7 @@ export function casRouter(cfg: ProxyConfig): Router {
       } else {
         const parsed = parseCas(text);
         recon = reconcileSummary(parsed);
+        statementTo = parsed.statementDate ?? statementTo;
         build = (id) => rowsFromHoldings(parsed.holdings, id, clientId);
       }
       warnings.push(...recon.warnings);
@@ -530,7 +533,7 @@ export function casRouter(cfg: ProxyConfig): Router {
           source: caller.kind === 'staff' ? 'staff_upload' : 'client_upload',
           cas_type: 'CAMS_KFINTECH',
           statement_from: period?.from ?? null,
-          statement_to: period?.to ?? null,
+          statement_to: statementTo,
           file_name: body.fileName ?? null,
           file_sha256: sha256,
           status,
@@ -570,7 +573,7 @@ export function casRouter(cfg: ProxyConfig): Router {
         status,
         variant: isDetailed ? 'detailed' : 'summary',
         statementFrom: period?.from ?? null,
-        statementTo: period?.to ?? null,
+        statementTo,
         counts: {
           folios: rows.folios.length,
           schemes: rows.schemes.length,
