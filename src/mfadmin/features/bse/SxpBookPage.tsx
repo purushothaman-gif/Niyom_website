@@ -12,7 +12,7 @@ import { Chip, PageHead, StatTile } from '../../ui/Surface';
 import { DataTable, type Column } from '../../ui/DataTable';
 import { ErrorBlock, Loading } from '../../ui/controls';
 import { NotConfigured } from './formBits';
-import { humanise, inr, inrCompact, num, shortDate } from '../../ui/format';
+import { humanise, inr, inrCompact, num, shortDate } from '../../../lib/money';
 
 const FREQ: Record<string, string> = {
   m: 'Monthly',

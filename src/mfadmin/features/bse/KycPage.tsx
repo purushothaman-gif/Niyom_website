@@ -21,7 +21,7 @@ import { useBseData } from '../../hooks/useBseData';
 import { Chip, PageHead, Panel, PanelHead } from '../../ui/Surface';
 import { Button, ErrorBlock, Loading } from '../../ui/controls';
 import { NotConfigured } from './formBits';
-import { shortDate } from '../../ui/format';
+import { shortDate } from '../../../lib/money';
 
 function CheckIcon({ state }: { state: UccCheck['state'] }) {
   if (state === 'pass') return <Check className="h-3.5 w-3.5 text-success" />;

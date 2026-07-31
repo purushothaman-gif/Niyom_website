@@ -14,7 +14,7 @@ import { useBseData } from '../../hooks/useBseData';
 import { Chip, PageHead, Panel } from '../../ui/Surface';
 import { Button, ErrorBlock, Loading, Segmented, fieldCls } from '../../ui/controls';
 import { NotConfigured } from '../bse/formBits';
-import { inr } from '../../ui/format';
+import { inr } from '../../../lib/money';
 import type { AdminView } from '../../layout/adminNav';
 
 type ModeFilter = 'all' | 'physical' | 'demat';

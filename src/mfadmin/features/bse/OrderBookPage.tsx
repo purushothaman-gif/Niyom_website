@@ -12,7 +12,7 @@ import { Chip, PageHead, StatTile, statusTone } from '../../ui/Surface';
 import { DataTable, type Column } from '../../ui/DataTable';
 import { ErrorBlock, Loading } from '../../ui/controls';
 import { NotConfigured } from './formBits';
-import { dateTime, humanise, inr, inrCompact, num } from '../../ui/format';
+import { dateTime, humanise, inr, inrCompact, num } from '../../../lib/money';
 
 const ORDER_TYPE: Record<string, string> = { p: 'Purchase', r: 'Redemption', s: 'Switch' };
 

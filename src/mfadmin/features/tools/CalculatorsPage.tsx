@@ -15,7 +15,7 @@ import { Info } from 'lucide-react';
 import { CALCULATORS, type CalculatorDef } from '../../layout/adminNav';
 import { PageHead, Panel, StatTile } from '../../ui/Surface';
 import { SubNav, fieldCls } from '../../ui/controls';
-import { inr, inrCompact } from '../../ui/format';
+import { inr, inrCompact } from '../../../lib/money';
 
 /** Future value of a lumpsum at an annual rate. */
 const grow = (pv: number, rate: number, years: number) => pv * Math.pow(1 + rate / 100, years);
