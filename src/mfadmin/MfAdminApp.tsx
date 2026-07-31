@@ -42,6 +42,10 @@ import { ReportsPage } from './features/bse/ReportsPage';
 import { NoBseDataPage } from './features/bse/NoBseDataPage';
 import { ClientOnboardingPage } from './features/bse/ClientOnboardingPage';
 import { KycPage } from './features/bse/KycPage';
+import { ExploreFundsPage } from './features/funds/ExploreFundsPage';
+import { CalculatorsPage } from './features/tools/CalculatorsPage';
+import { HoldingsPage } from './features/reports/HoldingsPage';
+import { NoData } from './ui/controls';
 
 export default function MfAdminApp() {
   const [employee, setEmployee] = useState<NWEmployee | null>(null);
@@ -130,7 +134,7 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
       case 'dashboard':
         if (loading && !data) return <Spinner />;
         if (error) return <ErrorState message={error} onRetry={refresh} />;
-        if (data) return <AdminDashboardPage data={data} />;
+        if (data) return <AdminDashboardPage data={data} onNavigate={navigate} />;
         return <Spinner />;
 
       // Live BSE StAR MF surfaces (via the NIYOM proxy).
@@ -155,6 +159,14 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
       case 'swp':
         return <SxpBookPage title="Systematic Withdrawal Plan" icon={ArrowDownUp} only="SWP" />;
 
+      // Fund discovery and planning.
+      case 'explore':
+        return <ExploreFundsPage onNavigate={navigate} />;
+      case 'calculators':
+        return <CalculatorsPage />;
+      case 'holdings':
+        return <HoldingsPage />;
+
       // Ops surfaces.
       case 'reports':
         return <ReportsPage />;
@@ -172,6 +184,37 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
       case 'commission':
         return (
           <NoBseDataPage title="Commission" needs={['get_mis_detail', 'list_payment_detail']} />
+        );
+      case 'performance':
+        return (
+          <NoData
+            title="Scheme Performance"
+            reason="BSE's scheme master carries no returns, AUM or expense-ratio data, and the MIS endpoints that might are not entitled to our member code. Rather than source performance figures from elsewhere and show them on a screen staff trade from, this page stays empty until BSE exposes them."
+            apis={['master_scheme_list (no returns)', 'get_mis_detail']}
+          />
+        );
+      case 'nav':
+        return (
+          <NoData
+            title="Scheme NAV"
+            reason="BSE serves NAVs from nav_master_list, which the proxy does not expose yet. This is ours to build, not a BSE restriction."
+            apis={['nav_master_list']}
+          />
+        );
+      case 'nfo':
+        return (
+          <NoData
+            title="New Fund Offers"
+            reason="NFO flags and open/close dates sit in scheme fields the proxy does not request yet. Like Scheme NAV, this is a proxy gap rather than a BSE one."
+            apis={['master_scheme_list (NFO date fields)']}
+          />
+        );
+      case 'forms':
+        return (
+          <NoData
+            title="MF Forms"
+            reason="A document library for AMC forms — nothing to serve until the files are uploaded. BSE does not distribute these through the API."
+          />
         );
 
       default:
