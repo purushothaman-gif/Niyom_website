@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Wallet } from 'lucide-react';
+import { Download, Wallet } from 'lucide-react';
 import { fmt } from '../../../crm/utils';
 import type { ProductType } from '../../../crm/types';
 import { Card } from '../../components/Card';
@@ -8,6 +8,7 @@ import { Segmented } from '../../components/Segmented';
 import { EmptyState } from '../../components/EmptyState';
 import type { PortfolioData } from '../../types';
 import { HoldingsTable, type SortKey } from './HoldingsTable';
+import { ImportPortfolioModal } from './ImportPortfolioModal';
 
 type Filter = ProductType | 'all';
 
@@ -18,11 +19,12 @@ const SORTERS: Record<SortKey, (a: PortfolioData['rows'][number], b: PortfolioDa
   name: (a, b) => a.name.localeCompare(b.name),
 };
 
-export function PortfolioPage({ data }: { data: PortfolioData }) {
+export function PortfolioPage({ data, onImported }: { data: PortfolioData; onImported?: () => void }) {
   const { summary, rows } = data;
   const [filter, setFilter] = useState<Filter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('value');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [importing, setImporting] = useState(false);
 
   const filterOptions = useMemo(() => {
     const opts: Array<{ value: Filter; label: string; count: number }> = [
@@ -49,11 +51,34 @@ export function PortfolioPage({ data }: { data: PortfolioData }) {
     }
   };
 
+  const modal = importing ? (
+    <ImportPortfolioModal
+      onClose={() => setImporting(false)}
+      onImported={() => onImported?.()}
+    />
+  ) : null;
+
+  /**
+   * An investor with nothing here has almost always invested elsewhere — an
+   * empty portfolio is far more often "we cannot see it yet" than "there is
+   * nothing". So the empty state offers the import rather than waiting for them
+   * to start from scratch with us.
+   */
   if (rows.length === 0) {
     return (
-      <Card>
-        <EmptyState icon={Wallet} title="No holdings yet." hint="Your investments will appear here once you start." />
-      </Card>
+      <>
+        <Card>
+          <EmptyState
+            icon={Wallet}
+            title="No holdings yet."
+            hint="Already invest elsewhere? Import your existing mutual funds from a Consolidated Account Statement."
+          />
+          <div className="flex justify-center pb-2">
+            <ImportButton onClick={() => setImporting(true)} primary />
+          </div>
+        </Card>
+        {modal}
+      </>
     );
   }
 
@@ -61,6 +86,10 @@ export function PortfolioPage({ data }: { data: PortfolioData }) {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <ImportButton onClick={() => setImporting(true)} />
+      </div>
+
       {/* Summary bar */}
       <Card padding="lg">
         <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
@@ -85,6 +114,34 @@ export function PortfolioPage({ data }: { data: PortfolioData }) {
           Showing {visibleRows.length} of {rows.length} holdings
         </p>
       </div>
+
+      {modal}
     </div>
+  );
+}
+
+function ImportButton({ onClick, primary }: { onClick: () => void; primary?: boolean }) {
+  if (primary) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="press inline-flex items-center gap-2 rounded-token-md px-5 py-2.5 text-sm font-bold text-text-on-accent"
+        style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+      >
+        <Download className="h-4 w-4" />
+        Import existing portfolio
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-2 rounded-token-md border border-border bg-bg-surface px-3.5 py-2 text-xs font-semibold text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary"
+    >
+      <Download className="h-3.5 w-3.5" />
+      Import existing portfolio
+    </button>
   );
 }

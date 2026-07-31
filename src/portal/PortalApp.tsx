@@ -102,7 +102,11 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
           />
         );
       case 'portfolio':
-        return portfolioData ? <PortfolioPage data={portfolioData} /> : <LoadingState />;
+        return portfolioData ? (
+          <PortfolioPage data={portfolioData} onImported={refresh} />
+        ) : (
+          <LoadingState />
+        );
       case 'allocation':
         return portfolioData ? <AllocationPage data={portfolioData} /> : <LoadingState />;
       case 'reports':
