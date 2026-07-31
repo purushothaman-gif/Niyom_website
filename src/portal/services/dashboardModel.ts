@@ -24,16 +24,30 @@ import { portfolioXirr } from './xirr';
 import type { DashboardData } from '../types';
 
 export function buildDashboardData(snapshot: ClientWealthSnapshot): DashboardData {
-  const { holdings, transactions } = snapshot;
+  const { holdings, transactions, casFlows, mfSource } = snapshot;
   const summary = PortfolioService.buildSummary(holdings);
+
+  /*
+   * Cash flows must line up with the holdings they produced, or the return is
+   * measured against the wrong money.
+   *
+   * Once a statement supplies the mutual funds, its ledger supplies their flows
+   * — every purchase since inception, not just the handful we recorded — and
+   * the mutual fund rows in nw_transactions have to come out, because the same
+   * purchase is now present in both and would be counted twice.
+   */
+  const otherTxns =
+    mfSource === 'cas' ? transactions.filter((t) => t.product_type !== 'mutual_fund') : transactions;
 
   return {
     summary,
     mutualFunds: PortfolioService.buildMutualFundSummary(holdings),
+    // The visible activity list stays as we recorded it: it is what the client
+    // did WITH US, and a since-inception statement ledger would bury it.
     recentTransactions: PortfolioService.buildRecentTransactions(transactions),
     // Real money-weighted return from the client's own cash flows. Null when it
     // cannot be computed — too few flows, or nothing realised yet — and the UI
     // then shows nothing rather than 0%, which would read as "flat".
-    xirrPercent: portfolioXirr(transactions, summary.netWorth),
+    xirrPercent: portfolioXirr(otherTxns, summary.netWorth, casFlows),
   };
 }

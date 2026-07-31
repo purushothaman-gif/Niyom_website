@@ -100,6 +100,12 @@ export function xirr(flows: CashFlow[]): number | null {
 export function portfolioXirr(
   transactions: { txn_type: 'buy' | 'sell'; consolidated_amount: number; txn_date: string }[],
   currentValue: number,
+  /**
+   * Extra flows already signed from the investor's point of view — the ledger
+   * of an imported statement. Kept separate from `transactions` because a CAS
+   * states amounts the fund's way round and has already been converted.
+   */
+  extra: { amount: number; date: string }[] = [],
 ): number | null {
   const flows: CashFlow[] = [];
 
@@ -109,6 +115,12 @@ export function portfolioXirr(
     const amount = Number(t.consolidated_amount) || 0;
     if (amount === 0) continue;
     flows.push({ amount: t.txn_type === 'buy' ? -amount : amount, date });
+  }
+
+  for (const e of extra) {
+    const date = new Date(e.date);
+    if (Number.isNaN(date.getTime()) || !e.amount) continue;
+    flows.push({ amount: e.amount, date });
   }
 
   if (flows.length === 0) return null;

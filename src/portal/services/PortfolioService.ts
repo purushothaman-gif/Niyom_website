@@ -43,7 +43,11 @@ function assetClassOf(h: NWHolding): AssetClass {
     case 'unlisted_share':
       return 'Equity';
     case 'mutual_fund': {
-      const s = (h.scheme_type || '').toLowerCase();
+      // A CAS states no scheme category, so fall back to the scheme name, which
+      // reliably carries it ("… Liquid Fund", "… Balanced Advantage"). Without
+      // this every imported holding would take the Equity default, and a
+      // client's debt allocation would read as zero.
+      const s = (h.scheme_type || h.product_name || '').toLowerCase();
       if (/hybrid|balanced|multi[- ]?asset|advantage/.test(s)) return 'Hybrid';
       if (/debt|liquid|gilt|bond|money|overnight|income|duration/.test(s)) return 'Debt';
       if (/equity|flexi|large|mid|small|index|elss|value|focus|cap/.test(s)) return 'Equity';
@@ -56,7 +60,10 @@ function assetClassOf(h: NWHolding): AssetClass {
 
 /** Category label used for the category breakdown. */
 function categoryOf(h: NWHolding): string {
-  if (h.product_type === 'mutual_fund') return h.scheme_type ? titleCase(h.scheme_type) : 'Uncategorised';
+  // Imported funds have no stated category, and bucketing them all as
+  // "Uncategorised" would make the breakdown one meaningless slice — the asset
+  // class is coarser but true.
+  if (h.product_type === 'mutual_fund') return h.scheme_type ? titleCase(h.scheme_type) : assetClassOf(h);
   if (h.product_type === 'insurance') return h.insurance_type ? titleCase(h.insurance_type) : 'Insurance';
   return PRODUCT_LABELS[h.product_type];
 }
