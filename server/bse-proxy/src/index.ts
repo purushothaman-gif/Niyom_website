@@ -183,15 +183,15 @@ function scopedUcc(req: Request, requested?: string | null): string {
 }
 
 /**
- * The SEBI identifiers to stamp on a transaction.
+ * The EUIN to stamp on a transaction: the signed-in employee's, falling back to
+ * the configured default when they hold none or when a client is placing their
+ * own order from the portal. Never empty — SEBI expects an EUIN declaration on
+ * every distributor-executed transaction.
  *
- * The EUIN is the signed-in employee's, falling back to the configured default
- * when they hold none or when a client is placing their own order from the
- * portal. Never empty — SEBI expects an EUIN declaration on every
- * distributor-executed transaction. The ARN is member-level and constant.
+ * The ARN is not sent; BSE derives it from the member record.
  */
 function mem(req: Request): AppMemDetails {
-  return { euin: req.caller?.euin || cfg.bseDefaultEuin, arn: cfg.bseArn };
+  return { euin: req.caller?.euin || cfg.bseDefaultEuin };
 }
 
 /* --------------------------------- routes --------------------------------- */

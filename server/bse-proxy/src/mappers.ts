@@ -86,25 +86,30 @@ function sipSchedule(req: AppOrderRequest): { start_date: string; freq: 'm' | 'q
 /* ------------------------------ to BSE ------------------------------------ */
 
 /**
- * SEBI identifiers for a transaction. The ARN is member-level and constant;
- * the EUIN is the individual who executed it — resolved from the signed-in
- * employee, never from the client record.
+ * The EUIN to declare on a transaction — the individual who executed it,
+ * resolved from the signed-in employee and never from the client record.
+ *
+ * There is deliberately no ARN here. BSE derives `broker_code` from the member
+ * record itself (demo returns `ARN-657458` for member 66899 without us sending
+ * anything), and `sub_br_arn` means a SUB-broker's ARN — putting our own ARN
+ * there would declare NIYOM as its own sub-broker.
  */
 export interface AppMemDetails {
   euin: string;
-  arn: string;
 }
 
 /**
  * mem_details (§7.3.34). Optional at BSE — nothing rejects without it — but
  * SEBI expects an EUIN declaration on distributor-executed transactions.
  *
- * euin_flag 'Y' means an EUIN is being declared. 'N' is the execution-only
- * case where the investor confirms no advice was given; we always declare an
- * EUIN, so it is never 'N'.
+ * VERIFIED LIVE against demo (order 5001203566): `euin_flag` is a **boolean**,
+ * despite the spec describing it as "(Y | N)" — sending the string 'Y' fails
+ * the whole payload with errcode `invalid_json`. true means an EUIN is being
+ * declared; false is the execution-only case where the investor confirms no
+ * advice was given. We always declare one, so it is never false.
  */
 function toMemDetails(mem: AppMemDetails) {
-  return { euin: mem.euin, euin_flag: 'Y', subbr_arn: mem.arn };
+  return { euin_flag: true, euin: mem.euin };
 }
 
 /** Lumpsum purchase → POST /v2/order_new. */

@@ -34,7 +34,7 @@ import {
   inputCls,
   selectCls,
 } from './formBits';
-import { NIYOM_ARN, useCallerEuin } from '../../hooks/useCallerEuin';
+import { useCallerEuin } from '../../hooks/useCallerEuin';
 
 interface Placed {
   orderId: string;
@@ -250,7 +250,7 @@ export function PurchasePage() {
                   { label: 'Scheme', value: scheme?.name ?? '' },
                   { label: 'Amount', value: fmt(amt) },
                   { label: 'Type', value: 'Lumpsum purchase · Physical' },
-                  { label: 'EUIN · ARN', value: `${euin} · ${NIYOM_ARN}` },
+                  { label: 'EUIN', value: euin },
                 ]}
                 note="This places a real order with BSE StAR MF. It can be cancelled from the Order Book before settlement, subject to the investor’s approval."
                 busy={submitting}
