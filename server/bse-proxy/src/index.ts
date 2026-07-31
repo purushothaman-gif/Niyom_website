@@ -806,75 +806,97 @@ app.get('/mandates', async (req, res, next) => {
 });
 
 /**
- * Start a payment for one or more placed orders (BSE Payment Gateway).
+ * Hand back BSE's hosted payment page for one or more placed orders.
  *
- * Shape established against the live demo — the docs do not spell it out:
- *   payment_mode      netbanking | upi | mandate   (lowercase; UPPER is rejected)
- *   ucc, order_ids    top level; order_ids are NUMBERS, strings fail to unmarshal
- *   amount, currency  both required; amount must be > 0
- *   payment_details   required object — vpa_id for upi, bank for netbanking
+ * `get_exchpg_service` is the entry point, NOT `send_payment_info`. That
+ * distinction cost us a long detour: driving send_payment_info directly returns
+ * errcode `not_allowed` on field `member`, which read as "member 66899 is not
+ * entitled to the payment gateway". It is not — it is the inner call, and it
+ * expects bank/VPA details we do not hold. Asking get_exchpg_service for a page
+ * link works on the same member code, and produces the same "Check Orders and
+ * Make Payment" screen BSE shows in its own portal.
  *
- * Sequencing: BSE answers `record_not_found` until the INVESTOR has approved the
- * order (it carries mem_2fa 'p' until then, moving to 'd' and status
- * payment_pending once approved). Payment is the step AFTER approval — verified
- * by approving order 5001203478 and watching record_not_found disappear.
+ * Two request shapes (§6.2.13.1), both verified live on demo:
+ *   requested_method 'exch_pg_page'      -> data.exch_pg_page_link
+ *   requested_method 'payment_info_data' -> data.payment_information[] (modes
+ *                                           plus the investor's bank rows)
  *
- * ⚠️ MEMBER 66899 IS NOT ENTITLED TO BSE PG. With a fully correct payload both
- * upi and netbanking return errcode `not_allowed` on field `member`. Per BSE's
- * webhook documentation we are a "BSE PG Service excluded member": no payment
- * events fire and orders move payment_pending -> match_pending directly, i.e.
- * the money is expected to reach the AMC by another route (our own gateway or a
- * direct transfer). Either BSE enables PG for the member code, or client
- * payment is collected outside BSE and this route stays unused.
+ * Sequencing: BSE answers `record_not_found` until the INVESTOR has approved
+ * the order (it carries mem_2fa 'p' until then, moving to 'd' and status
+ * payment_pending once approved). Payment is the step AFTER approval, never
+ * parallel with it.
+ *
+ * If the client has no verified bank account on their UCC, the modes come back
+ * with `get_bank_account_details_row: null` and BSE's page offers no bank to
+ * pick — so `banks` is surfaced here rather than swallowed, and the caller can
+ * say why the page looks empty.
  */
 app.post('/payment/link', async (req, res, next) => {
   try {
     const body = req.body as {
       clientCode?: string;
       orderIds?: (string | number)[];
-      amount?: number;
-      mode?: 'netbanking' | 'upi' | 'mandate';
-      vpa?: string;
-      bankCode?: string;
-      bankAccount?: string;
-      bankIfsc?: string;
       returnUrl?: string;
     };
     const ucc = scopedUcc(req, body.clientCode);
     const orderIds = (body.orderIds ?? []).map((id) => Number(id)).filter((n) => Number.isFinite(n));
     if (!orderIds.length) throw new BseError('At least one order id is required.', 400);
-    const mode = body.mode ?? 'upi';
 
-    const details: Record<string, unknown> = {};
-    if (mode === 'upi' && body.vpa) details.vpa_id = body.vpa;
-    if (mode === 'netbanking' && body.bankCode) details.bank_code = body.bankCode;
-    if (body.returnUrl) details.return_url = body.returnUrl;
-    // bank_account belongs INSIDE payment_details — at top level BSE still
-    // reports it missing. Required for netbanking.
-    if (body.bankAccount && body.bankIfsc) {
-      details.bank_account = { account_number: body.bankAccount, ifsc: body.bankIfsc };
-    }
-
-    const result = await bse.post<Record<string, unknown>>('/send_payment_info', {
-      payment_mode: mode,
-      ucc,
+    const m = mem(req);
+    const base = {
+      mem_details: {
+        member: cfg.bseMemberCode,
+        euin: m.euin,
+        euin_flag: true,
+        sub_br_code: '',
+        sub_br_arn: '',
+        partner_id: '',
+      },
+      investor: { ucc },
       order_ids: orderIds,
-      amount: Number(body.amount ?? 0),
-      currency: 'INR',
-      payment_details: details,
+      payment_mode: ['upi', 'netbanking', 'mandate'],
+      ...(body.returnUrl ? { redirection_url: body.returnUrl } : {}),
+    };
+
+    const page = await bse.post<Record<string, unknown>>('/get_exchpg_service', {
+      ...base,
+      requested_method: 'exch_pg_page',
     });
 
-    // Response carries links[] with rel 'redirect' (netbanking) or 'collect' (upi).
-    // (Unreachable while the member is PG-excluded — see the note above.)
-    const links = (result.links as Record<string, unknown>[] | undefined) ?? [];
+    const paymentUrl = String(page.exch_pg_page_link ?? '');
+    if (!paymentUrl) {
+      throw new BseError(
+        'BSE did not return a payment page for these orders. The usual cause is that ' +
+          'the investor has not approved them yet — payment is only available once the ' +
+          '2FA approval is complete.',
+        502,
+        page,
+      );
+    }
+
+    // Which modes the investor can actually use. Best-effort: a page link is
+    // the thing that matters, and losing the mode list must not fail the call.
+    let modes: { mode: string; label: string; banks: number }[] = [];
+    try {
+      const info = await bse.post<Record<string, unknown>>('/get_exchpg_service', {
+        ...base,
+        requested_method: 'payment_info_data',
+      });
+      const rows = (info.payment_information as Record<string, unknown>[] | undefined) ?? [];
+      modes = rows.map((r) => ({
+        mode: String(r.payment_mode ?? ''),
+        label: String(r.mode_additional_info ?? r.payment_mode ?? ''),
+        banks: ((r.get_bank_account_details_row as unknown[] | null) ?? []).length,
+      }));
+    } catch {
+      /* page link already obtained — the mode list is a nicety */
+    }
+
     res.json({
-      paymentUrl: String(links[0]?.href ?? ''),
-      method: String(links[0]?.method ?? ''),
-      rel: String(links[0]?.rel ?? ''),
-      parameters: links[0]?.parameters ?? {},
-      paymentRefId: String(result.payment_ref_id ?? ''),
-      status: String(result.status ?? ''),
-      message: String(result.message ?? ''),
+      paymentUrl,
+      modes,
+      /** True when no mode has a bank row — BSE's page will have nothing to offer. */
+      noBankOnFile: modes.length > 0 && modes.every((x) => x.banks === 0),
       isMock: false,
     });
   } catch (err) {
