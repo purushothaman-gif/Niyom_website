@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:proxy": "npm --prefix server/bse-proxy ci && npm --prefix server/bse-proxy run build",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",

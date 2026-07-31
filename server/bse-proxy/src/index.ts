@@ -11,7 +11,7 @@
  *     verified against ${SUPABASE_URL}/auth/v1/user on every request.
  *   - CORS restricted to the NIYOM app origins.
  */
-import express, { type NextFunction, type Request, type Response } from 'express';
+import express, { type NextFunction, type Request, type Response, type Router } from 'express';
 import cors from 'cors';
 import { loadConfig } from './config.js';
 import { BseClient, BseError } from './bseClient.js';
@@ -200,12 +200,42 @@ function mem(req: Request): AppMemDetails {
 
 /* --------------------------------- routes --------------------------------- */
 
+/**
+ * Optional feature routers, recorded AS THEY MOUNT.
+ *
+ * Exists because "is the new build actually running?" was not answerable from
+ * outside this box. Every route sits behind the Supabase-JWT gate, which runs
+ * before route matching, so an unauthenticated probe of a real route and of a
+ * route that does not exist both answer 401 — identically. The only way to tell
+ * a deployed build from a stale one was to log into the server.
+ *
+ * Recorded through this helper rather than as a hand-written list so /health
+ * cannot advertise a feature that failed to mount: the mounting IS the
+ * registration.
+ */
+const mountedFeatures: string[] = [];
+
+function mountFeature(path: string, name: string, router: Router): void {
+  app.use(path, router);
+  mountedFeatures.push(name);
+}
+
+/** When this process came up — a restart after deploying is visible here. */
+const startedAt = new Date().toISOString();
+
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, env: cfg.bseEnv, ts: new Date().toISOString() });
+  res.json({
+    ok: true,
+    env: cfg.bseEnv,
+    ts: new Date().toISOString(),
+    startedAt,
+    // Public on purpose: names of mounted routes, nothing about what they do.
+    features: mountedFeatures,
+  });
 });
 
 // Public — BSE calls this, so it must sit BEFORE the Supabase-JWT gate.
-app.use('/webhooks', webhookRouter(cfg));
+mountFeature('/webhooks', 'webhooks', webhookRouter(cfg));
 
 /**
  * Cashfree PAN verification relay. Called server-to-server by the Supabase edge
@@ -381,8 +411,11 @@ app.use(requireCaller);
  * Importing a client's own Consolidated Account Statement. Nothing to do with
  * BSE — it sits here because this is the Node host that holds the service-role
  * key, and a CAS must never leave our infrastructure to be parsed.
+ *
+ * Mounted through mountFeature so GET /health reports it — the only way to
+ * confirm from outside that a droplet is running a build containing this route.
  */
-app.use('/cas', casRouter(cfg));
+mountFeature('/cas', 'cas', casRouter(cfg));
 
 /* ----------------------------- scheme master ------------------------------ */
 
