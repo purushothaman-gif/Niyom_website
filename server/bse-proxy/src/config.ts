@@ -23,6 +23,14 @@ export interface ProxyConfig {
   /** NIYOM's BSE member code — stamped into order/SXP payloads. */
   bseMemberCode: string;
   /**
+   * X-API-Org-ID, required by BSE PRODUCTION on every authenticated call
+   * (demo does not ask for it). Format `member/<code>:<base64 SHA-256 of our
+   * SPKI DER public key>`. Omitting it returns errcode `invalid_org_header`;
+   * sending a well-formed value for a key BSE has not registered for this
+   * environment returns `org_key_not_found`.
+   */
+  bseOrgId: string | null;
+  /**
    * EUIN used when the caller has none: an employee without an EUIN, or a
    * client placing their own order from the portal. SEBI expects an EUIN on
    * distributor-executed transactions, so there is always one.
@@ -60,6 +68,7 @@ export function loadConfig(): ProxyConfig {
     bseUsername: required('BSE_USERNAME'),
     bsePassword: required('BSE_PASSWORD'),
     bseMemberCode: required('BSE_MEMBER_CODE'),
+    bseOrgId: process.env.BSE_ORG_ID || null,
     bseDefaultEuin: process.env.BSE_DEFAULT_EUIN || 'E124361',
     allowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
       .split(',')

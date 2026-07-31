@@ -99,6 +99,9 @@ export class BseClient {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        // Production rejects every authenticated call without this; demo never
+        // asks for it. Login itself does NOT need it — verified against prod.
+        ...(this.cfg.bseOrgId ? { 'X-API-Org-ID': this.cfg.bseOrgId } : {}),
       },
       body: JSON.stringify({ data }),
     });
