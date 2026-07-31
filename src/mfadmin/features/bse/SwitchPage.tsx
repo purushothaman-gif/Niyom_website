@@ -31,8 +31,11 @@ import {
   inputCls,
   selectCls,
 } from './formBits';
+import { NIYOM_ARN, useCallerEuin } from '../../hooks/useCallerEuin';
 
 export function SwitchPage() {
+  // Display only — the proxy resolves the real EUIN from the session.
+  const euin = useCallerEuin();
   const holdings = useBseData<BseHoldingRow[]>(() => BseOpsService.holdings());
   const schemes = useBseData<BseSchemeRow[]>(() => BseOpsService.schemes());
 
@@ -257,6 +260,7 @@ export function SwitchPage() {
                       value: destinations.find((d) => d.schemeCode === toScheme)?.name ?? toScheme,
                     },
                     { label: 'Folio', value: holding.folio },
+                    { label: 'EUIN · ARN', value: `${euin} · ${NIYOM_ARN}` },
                     {
                       label: 'Switching',
                       value:

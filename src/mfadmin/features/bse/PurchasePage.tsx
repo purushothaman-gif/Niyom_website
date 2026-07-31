@@ -34,6 +34,7 @@ import {
   inputCls,
   selectCls,
 } from './formBits';
+import { NIYOM_ARN, useCallerEuin } from '../../hooks/useCallerEuin';
 
 interface Placed {
   orderId: string;
@@ -43,6 +44,8 @@ interface Placed {
 }
 
 export function PurchasePage() {
+  // Display only — the proxy resolves the real EUIN from the session.
+  const euin = useCallerEuin();
   const env = useBseEnv();
   const uccs = useBseData<BseUccRow[]>(() => BseOpsService.uccs());
   const schemes = useBseData<BseSchemeRow[]>(() => BseOpsService.schemes());
@@ -247,6 +250,7 @@ export function PurchasePage() {
                   { label: 'Scheme', value: scheme?.name ?? '' },
                   { label: 'Amount', value: fmt(amt) },
                   { label: 'Type', value: 'Lumpsum purchase · Physical' },
+                  { label: 'EUIN · ARN', value: `${euin} · ${NIYOM_ARN}` },
                 ]}
                 note="This places a real order with BSE StAR MF. It can be cancelled from the Order Book before settlement, subject to the investor’s approval."
                 busy={submitting}
