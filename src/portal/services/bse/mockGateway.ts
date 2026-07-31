@@ -163,7 +163,10 @@ export const mockGateway: BseGateway = {
   },
 
   async getPaymentLink(req: PaymentLinkRequest): Promise<PaymentLinkResult> {
-    return delay({ paymentUrl: `${req.returnUrl}#mock-payment`, isMock: true }, 400);
+    return delay(
+      { paymentUrl: `${req.returnUrl}#mock-payment`, modes: [], noBankOnFile: false, isMock: true },
+      400,
+    );
   },
 
   async getPaymentStatus(orderId: string): Promise<PaymentStatusResult> {
