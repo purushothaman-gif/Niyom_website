@@ -15,7 +15,7 @@ import { PageHead, StatTile } from '../../ui/Surface';
 import { DataTable, type Column } from '../../ui/DataTable';
 import { ErrorBlock, Loading } from '../../ui/controls';
 import { NotConfigured } from '../bse/formBits';
-import { inr, inrCompact, num } from '../../ui/format';
+import { inr, inrCompact, num } from '../../../lib/money';
 
 export function HoldingsPage() {
   const holdings = useBseData<BseHoldingRow[]>(() => BseOpsService.holdings());

@@ -88,6 +88,20 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/**
+ * The five destinations that earn a permanent slot in the mobile tab bar.
+ *
+ * Chosen by what an investor opens repeatedly — check the portfolio, invest,
+ * watch the SIP — not by mirroring the sidebar. Everything else lives behind
+ * "More", which is where infrequent-but-necessary screens belong.
+ */
+export const PRIMARY_VIEWS: { view: PortalView; label: string; icon: LucideIcon }[] = [
+  { view: 'dashboard', label: 'Home', icon: LayoutDashboard },
+  { view: 'portfolio', label: 'Portfolio', icon: Wallet },
+  { view: 'mutual-funds', label: 'Invest', icon: TrendingUp },
+  { view: 'sip', label: 'SIP', icon: CalendarClock },
+];
+
 /** Human-readable titles for the topbar breadcrumb. */
 export const VIEW_TITLES: Record<PortalView, string> = {
   dashboard: 'Wealth Dashboard',

@@ -11,7 +11,7 @@ import { ArrowUpRight, CalendarClock, Clock, Hash, ListChecks, TrendingUp } from
 import type { AdminDashboardData, AdminOrderRow } from '../../types';
 import { Chip, PageHead, Panel, PanelHead, StatTile, statusTone } from '../../ui/Surface';
 import { DataTable, type Column } from '../../ui/DataTable';
-import { humanise, inr, inrCompact, num, shortDate } from '../../ui/format';
+import { humanise, inr, inrCompact, num, shortDate } from '../../../lib/money';
 import type { AdminView } from '../../layout/adminNav';
 
 export function AdminDashboardPage({

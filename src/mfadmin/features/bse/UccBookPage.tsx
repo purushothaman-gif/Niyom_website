@@ -11,7 +11,7 @@ import { Chip, PageHead, StatTile } from '../../ui/Surface';
 import { DataTable, type Column } from '../../ui/DataTable';
 import { ErrorBlock, Loading } from '../../ui/controls';
 import { NotConfigured } from './formBits';
-import { humanise, num } from '../../ui/format';
+import { humanise, num } from '../../../lib/money';
 
 const HOLDING: Record<string, string> = { SI: 'Single', JO: 'Joint', AS: 'Anyone or Survivor' };
 
