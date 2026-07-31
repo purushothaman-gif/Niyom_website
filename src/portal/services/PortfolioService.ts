@@ -7,6 +7,7 @@
  * require zero changes here when they go live.
  */
 import type { NWHolding, NWTransaction, ProductType } from '../../crm/types';
+import type { PortalHolding } from '../types/cas';
 import { PRODUCT_LABELS, PRODUCT_CHART_COLORS } from '../../crm/utils';
 import { ASSET_CLASS_COLOR, paletteColor } from './palette';
 import type {
@@ -168,7 +169,7 @@ export const PortfolioService = {
   },
 
   /** Normalize every holding into a product-agnostic table row (Phase 2). */
-  buildHoldingRows(holdings: NWHolding[]): HoldingRow[] {
+  buildHoldingRows(holdings: PortalHolding[]): HoldingRow[] {
     return holdings
       .map((h) => {
         const value = holdingValue(h);
@@ -176,6 +177,11 @@ export const PortfolioService = {
         const gain = value - invested;
         return {
           id: h.id,
+          // Only statement-sourced mutual funds carry an ownership state. A
+          // manually held row proves nothing about whose ARN it sits under, so
+          // it is left undefined rather than assumed to be ours.
+          ownership: h.cas?.ownership,
+          cas: h.cas,
           productType: h.product_type,
           productLabel: PRODUCT_LABELS[h.product_type] ?? h.product_type,
           productColor: PRODUCT_CHART_COLORS[h.product_type] ?? '#7688A4',
@@ -233,7 +239,7 @@ export const PortfolioService = {
   },
 
   /** Full aggregate for the Portfolio & Allocation pages. */
-  buildPortfolioData(holdings: NWHolding[]): PortfolioData {
+  buildPortfolioData(holdings: PortalHolding[]): PortfolioData {
     const rows = this.buildHoldingRows(holdings);
     return {
       summary: this.buildSummary(holdings),

@@ -1,0 +1,23 @@
+import { defineConfig } from 'vitest/config';
+
+/**
+ * Test config, kept separate from vite.config.ts.
+ *
+ * The app build carries manualChunks and a dynamic-import layout that matter
+ * for what ships to a browser and mean nothing to a test run; loading them here
+ * only creates a way for a build tweak to break the tests, or the reverse.
+ *
+ * Node environment on purpose: everything under test is pure domain logic —
+ * source selection, cash-flow signs, XIRR, classification, staleness. None of
+ * it touches the DOM, and none of it should need to.
+ */
+export default defineConfig({
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+    // Explicit imports of describe/it/expect rather than globals, so the test
+    // files typecheck under the app's existing tsconfig with no extra `types`
+    // entry and no ambient declarations.
+    globals: false,
+  },
+});

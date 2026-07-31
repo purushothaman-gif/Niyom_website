@@ -106,7 +106,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
           <PortfolioPage
             data={portfolioData}
             onImported={refresh}
-            statementTo={snapshot.casStatementTo}
+            freshness={snapshot.casFreshness}
           />
         ) : (
           <LoadingState />
