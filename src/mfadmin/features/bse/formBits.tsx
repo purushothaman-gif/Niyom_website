@@ -4,13 +4,13 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { Card } from '../../../portal/components/Card';
 
 export const selectCls =
-  'w-full rounded-token-md border border-border bg-bg-base px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent disabled:opacity-50';
+  'w-full rounded-token-md border border-border bg-bg-base px-3 py-2 text-sm text-text-primary outline-none transition-colors focus:border-accent placeholder:text-text-faint disabled:opacity-50';
 export const inputCls = selectCls;
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold text-text-primary">{label}</span>
+      <span className="mb-1.5 block text-[11px] font-semibold text-text-primary">{label}</span>
       {children}
     </label>
   );
@@ -89,8 +89,8 @@ export function ConfirmBox({
   onConfirm: () => void;
 }) {
   return (
-    <div className="rounded-token-md border border-accent/30 bg-accent/5 p-4">
-      <p className="text-sm font-semibold text-text-primary">Confirm this transaction</p>
+    <div className="rounded-token-lg border border-accent/30 bg-accent/5 p-4">
+      <p className="font-display text-sm font-bold text-text-primary">Confirm this transaction</p>
       <dl className="mt-3 space-y-1.5 text-xs">
         {rows.map((r) => (
           <Row key={r.label} label={r.label} value={r.value} />
@@ -110,8 +110,7 @@ export function ConfirmBox({
           type="button"
           onClick={onConfirm}
           disabled={busy}
-          className="flex-1 rounded-token-md py-2.5 text-xs font-bold text-on-accent disabled:opacity-60"
-          style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+          className="flex-1 rounded-token-md bg-accent py-2.5 text-xs font-bold text-on-accent transition-colors hover:bg-accent-strong disabled:opacity-60"
         >
           {busy ? 'Submitting…' : submitLabel}
         </button>
@@ -119,6 +118,3 @@ export function ConfirmBox({
     </div>
   );
 }
-
-/** Re-export so form pages can pull table chrome from one place. */
-export { TableScroll as TableScrollX } from './BsePanel';

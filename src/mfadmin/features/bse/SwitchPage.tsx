@@ -10,9 +10,6 @@
 import { useMemo, useState } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import { fmt } from '../../../crm/utils';
-import { Card } from '../../../portal/components/Card';
-import { SectionHeader } from '../../../portal/components/SectionHeader';
-import { LogoLoader } from '../../../components/LogoLoader';
 import {
   BseOpsService,
   isBseConfigured,
@@ -31,6 +28,8 @@ import {
   inputCls,
   selectCls,
 } from './formBits';
+import { PageHead, Panel, PanelHead } from '../../ui/Surface';
+import { Loading } from '../../ui/controls';
 import { useCallerEuin } from '../../hooks/useCallerEuin';
 
 export function SwitchPage() {
@@ -121,7 +120,9 @@ export function SwitchPage() {
   const loadError = holdings.error ?? schemes.error;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-2xl">
+      <PageHead title="Switch" subtitle="Move a holding into another scheme. BSE allows switches within the same AMC only." />
+      <div className="space-y-5">
       {done && (
         <SuccessCard title="Switch placed at BSE">
           <p className="mt-1 text-sm text-text-secondary">{done.detail}</p>
@@ -132,14 +133,10 @@ export function SwitchPage() {
         </SuccessCard>
       )}
 
-      <Card>
-        <SectionHeader title="Switch Between Schemes" icon={ArrowLeftRight} />
+      <Panel>
+        <PanelHead title="Switch Between Schemes" icon={ArrowLeftRight} />
 
-        {loading && (
-          <div className="flex min-h-[200px] items-center justify-center">
-            <LogoLoader size={44} />
-          </div>
-        )}
+        {loading && <Loading />}
 
         {!loading && loadError && <ErrorNote title="Couldn’t load from BSE." message={loadError} />}
 
@@ -244,8 +241,7 @@ export function SwitchPage() {
                   setDone(null);
                   setConfirming(true);
                 }}
-                className="w-full rounded-token-md py-3 text-sm font-bold text-on-accent disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+                className="w-full rounded-token-md bg-accent py-2.5 text-sm font-bold text-on-accent transition-colors hover:bg-accent-strong disabled:opacity-50"
               >
                 Review Switch
               </button>
@@ -281,7 +277,8 @@ export function SwitchPage() {
             )}
           </div>
         )}
-      </Card>
+      </Panel>
+      </div>
     </div>
   );
 }

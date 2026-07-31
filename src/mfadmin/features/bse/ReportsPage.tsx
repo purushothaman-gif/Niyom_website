@@ -9,10 +9,10 @@
  */
 import { useState } from 'react';
 import { Download, FileText, Info } from 'lucide-react';
-import { Card } from '../../../portal/components/Card';
-import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { BseOpsService, isBseConfigured } from '../../services/BseOpsService';
-import { ErrorNote, NotConfigured } from './formBits';
+import { NotConfigured } from './formBits';
+import { PageHead, Panel, PanelHead } from '../../ui/Surface';
+import { ErrorBlock } from '../../ui/controls';
 
 /** RFC4180-ish escaping — commas, quotes and newlines all appear in scheme names. */
 function toCsv(rows: Record<string, unknown>[], headers: [string, string][]): string {
@@ -149,11 +149,16 @@ export function ReportsPage() {
   if (!isBseConfigured()) return <NotConfigured title="Reports" />;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
-      {error && <ErrorNote title="Export" message={error} />}
+    <div className="mx-auto max-w-3xl">
+      <PageHead
+        title="Exports"
+        subtitle="Pulled live from BSE the moment you click, so a spreadsheet and the screen can never disagree."
+      />
+      <div className="space-y-5">
+        {error && <ErrorBlock message={error} />}
 
-      <Card>
-        <SectionHeader title="Export from BSE" icon={FileText} />
+        <Panel>
+          <PanelHead title="Export from BSE" icon={FileText} />
         <ul className="divide-y divide-border/60">
           {REPORTS.map((r) => (
             <li key={r.key} className="flex items-start gap-4 py-3.5">
@@ -180,15 +185,16 @@ export function ReportsPage() {
             </li>
           ))}
         </ul>
-      </Card>
+        </Panel>
 
-      <div className="flex items-start gap-2 rounded-token-md border border-border bg-bg-surface p-3 text-xs text-text-secondary">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-        <span>
+        <div className="flex items-start gap-2 rounded-token-md border border-border-subtle bg-bg-base p-3 text-[11px] leading-relaxed text-text-faint">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
           Exports are pulled live from BSE at the moment you click, so they always match the
           screens. There is no brokerage or AUM report: BSE does not expose those to this member
           code.
-        </span>
+          </span>
+        </div>
       </div>
     </div>
   );

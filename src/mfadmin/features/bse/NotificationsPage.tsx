@@ -8,8 +8,6 @@
  * moved — which is what someone opening this screen wants to know.
  */
 import { AlertTriangle, Bell, CheckCircle2, Clock, Hash, ListChecks } from 'lucide-react';
-import { Card } from '../../../portal/components/Card';
-import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { StatusPill } from '../../../portal/components/StatusPill';
 import { LogoLoader } from '../../../components/LogoLoader';
 import {
@@ -21,6 +19,7 @@ import {
 } from '../../services/BseOpsService';
 import { useBseData } from '../../hooks/useBseData';
 import { ErrorNote, NotConfigured } from './formBits';
+import { PageHead, Panel, PanelHead } from '../../ui/Surface';
 
 interface Alert {
   id: string;
@@ -151,10 +150,12 @@ export function NotificationsPage() {
   const needsAction = alerts.filter((a) => a.severity === 'action').length;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
-      <Card>
+    <div className="mx-auto max-w-3xl">
+      <PageHead title="Notifications" subtitle="Derived from live BSE state — there is no queue behind this, so nothing can go stale." />
+      <div className="space-y-5">
+      <Panel>
         <div className="flex items-start justify-between gap-3">
-          <SectionHeader title="What needs attention" icon={Bell} />
+          <PanelHead title="What needs attention" icon={Bell} />
           <StatusPill tone={needsAction > 0 ? 'warning' : 'success'}>
             {needsAction > 0 ? `${needsAction} needing action` : 'All clear'}
           </StatusPill>
@@ -192,17 +193,17 @@ export function NotificationsPage() {
             })}
           </ul>
         )}
-      </Card>
+      </Panel>
 
       <div className="grid grid-cols-3 gap-4">
-        <Card padding="md">
+        <Panel>
           <p className="text-[11px] text-text-secondary">Clients</p>
           <p className="mt-1 text-lg font-bold text-text-primary">
             {data.uccs.filter((u) => u.status.toUpperCase() === 'ACTIVE').length}
             <span className="text-xs font-normal text-text-faint"> / {data.uccs.length} ready</span>
           </p>
-        </Card>
-        <Card padding="md">
+        </Panel>
+        <Panel>
           <p className="text-[11px] text-text-secondary">
             <ListChecks className="mr-1 inline h-3 w-3 align-[-2px]" />
             Orders open
@@ -210,8 +211,8 @@ export function NotificationsPage() {
           <p className="mt-1 text-lg font-bold text-text-primary">
             {data.orders.filter((o) => o.status.toLowerCase() === 'received').length}
           </p>
-        </Card>
-        <Card padding="md">
+        </Panel>
+        <Panel>
           <p className="text-[11px] text-text-secondary">
             <Hash className="mr-1 inline h-3 w-3 align-[-2px]" />
             SIPs active
@@ -219,13 +220,14 @@ export function NotificationsPage() {
           <p className="mt-1 text-lg font-bold text-text-primary">
             {data.sxp.filter((s) => s.status.toLowerCase() === 'active').length}
           </p>
-        </Card>
+        </Panel>
       </div>
 
       <p className="text-center text-[11px] text-text-faint">
         Derived from live BSE state. BSE has not registered our webhook yet, so nothing is pushed —
         this recomputes on each visit.
       </p>
+      </div>
     </div>
   );
 }

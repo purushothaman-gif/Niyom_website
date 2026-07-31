@@ -10,10 +10,6 @@
  */
 import { useEffect, useState } from 'react';
 import { Check, ChevronRight, ExternalLink, Minus, ShieldCheck, X } from 'lucide-react';
-import { Card } from '../../../portal/components/Card';
-import { SectionHeader } from '../../../portal/components/SectionHeader';
-import { StatusPill } from '../../../portal/components/StatusPill';
-import { LogoLoader } from '../../../components/LogoLoader';
 import {
   BseOpsService,
   isBseConfigured,
@@ -22,7 +18,10 @@ import {
   type UccDetail,
 } from '../../services/BseOpsService';
 import { useBseData } from '../../hooks/useBseData';
-import { ErrorNote, NotConfigured } from './formBits';
+import { Chip, PageHead, Panel, PanelHead } from '../../ui/Surface';
+import { Button, ErrorBlock, Loading } from '../../ui/controls';
+import { NotConfigured } from './formBits';
+import { shortDate } from '../../ui/format';
 
 function CheckIcon({ state }: { state: UccCheck['state'] }) {
   if (state === 'pass') return <Check className="h-3.5 w-3.5 text-success" />;
@@ -38,6 +37,7 @@ export function KycPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
   const [linkBusy, setLinkBusy] = useState(false);
+  const [filter, setFilter] = useState('');
 
   // Default to the first client that isn't yet transaction-ready — that's who
   // staff are actually here to look at.
@@ -76,155 +76,185 @@ export function KycPage() {
     }
   };
 
-  if (!isBseConfigured()) return <NotConfigured title="KYC" />;
+  const all = uccs.data ?? [];
+  const q = filter.trim().toLowerCase();
+  const rows = q
+    ? all.filter((u) => `${u.name} ${u.clientCode} ${u.pan}`.toLowerCase().includes(q))
+    : all;
+  const blocked = all.filter((u) => u.status.toUpperCase() !== 'ACTIVE').length;
 
-  const rows = uccs.data ?? [];
+  if (!isBseConfigured()) return <NotConfigured title="KYC & Verification" />;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
-      {/* Client list */}
-      <Card>
-        <SectionHeader title="Clients" icon={ShieldCheck} />
-        {uccs.loading && (
-          <div className="flex min-h-[200px] items-center justify-center">
-            <LogoLoader size={36} />
+    <>
+      <PageHead
+        title="KYC & Verification"
+        subtitle={
+          // "All clear" would be a lie when the list simply hasn't loaded or
+          // nobody is registered yet — those are different states.
+          all.length === 0
+            ? 'No clients registered at BSE yet.'
+            : blocked > 0
+              ? `${blocked} client${blocked === 1 ? '' : 's'} cannot transact yet — select one to see what is blocking it.`
+              : 'Every registered client has cleared BSE’s blocking checks.'
+        }
+      />
+
+      <div className="grid gap-5 lg:grid-cols-[290px_minmax(0,1fr)]">
+        {/* Client list */}
+        <Panel flush>
+          <div className="border-b border-border-subtle p-3">
+            <input
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter clients…"
+              className="w-full rounded-token-md border border-border bg-bg-base px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent placeholder:text-text-faint"
+            />
           </div>
-        )}
-        {!uccs.loading && uccs.error && (
-          <ErrorNote title="Couldn’t load from BSE." message={uccs.error} />
-        )}
-        {!uccs.loading && !uccs.error && (
-          <ul className="-mx-2 max-h-[560px] space-y-0.5 overflow-y-auto px-2">
-            {rows.map((u) => {
-              const active = u.status.toUpperCase() === 'ACTIVE';
-              return (
-                <li key={u.clientCode}>
-                  <button
-                    type="button"
-                    onClick={() => setSelected(u.clientCode)}
-                    className={`flex w-full items-center gap-2 rounded-token-md px-2.5 py-2 text-left transition-colors ${
-                      selected === u.clientCode ? 'bg-accent/10' : 'hover:bg-bg-base/60'
-                    }`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                        active ? 'bg-success' : 'bg-warning'
-                      }`}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-medium text-text-primary">
-                        {u.name?.trim() || u.clientCode}
-                      </span>
-                      <span className="block truncate font-mono text-[10px] text-text-faint">
-                        {u.clientCode}
-                      </span>
-                    </span>
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-faint" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
 
-      {/* Verification detail */}
-      <Card>
-        <SectionHeader title={selected ? `Verification · ${selected}` : 'Verification'} icon={ShieldCheck} />
-
-        {loadingDetail && (
-          <div className="flex min-h-[240px] items-center justify-center">
-            <LogoLoader size={44} />
-          </div>
-        )}
-        {!loadingDetail && detailError && (
-          <ErrorNote title="Couldn’t load verification detail." message={detailError} />
-        )}
-
-        {!loadingDetail && !detailError && detail && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <StatusPill tone={detail.transactionReady ? 'success' : 'warning'}>
-                {detail.transactionReady ? 'Able to transact' : 'Not transaction-ready'}
-              </StatusPill>
-              <StatusPill tone="muted">{detail.status}</StatusPill>
-              {detail.pan && <span className="font-mono text-xs text-text-secondary">{detail.pan}</span>}
-              {detail.mode && <span className="text-xs text-text-faint">{detail.mode}</span>}
+          {uccs.loading && <Loading />}
+          {!uccs.loading && uccs.error && (
+            <div className="p-3">
+              <ErrorBlock message={uccs.error} onRetry={uccs.refresh} />
             </div>
+          )}
+          {!uccs.loading && !uccs.error && (
+            <ul className="max-h-[600px] overflow-y-auto p-2">
+              {rows.length === 0 && (
+                <li className="px-2 py-8 text-center text-xs text-text-faint">
+                  {all.length === 0 ? 'No clients registered at BSE yet.' : 'No client matches.'}
+                </li>
+              )}
+              {rows.map((u) => {
+                const active = u.status.toUpperCase() === 'ACTIVE';
+                return (
+                  <li key={u.clientCode}>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(u.clientCode)}
+                      className={`flex w-full items-center gap-2.5 rounded-token-md px-2.5 py-2 text-left transition-colors ${
+                        selected === u.clientCode ? 'bg-accent/10' : 'hover:bg-bg-surface'
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                          active ? 'bg-success' : 'bg-warning'
+                        }`}
+                        title={active ? 'Able to transact' : 'Not transaction-ready'}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-medium text-text-primary">
+                          {u.name?.trim() || u.clientCode}
+                        </span>
+                        <span className="block truncate font-mono text-[10px] text-text-faint">
+                          {u.clientCode}
+                        </span>
+                      </span>
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-faint" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
 
-            {detail.blockedBy.length > 0 ? (
-              <div className="rounded-token-md border border-warning/20 bg-warning/10 p-3 text-xs text-warning">
-                <p className="font-semibold">
-                  Blocked by: {detail.blockedBy.join(', ')}
-                </p>
-                {detail.transactionReadyReason && (
-                  <p className="mt-0.5 opacity-90">{detail.transactionReadyReason}</p>
+        {/* Verification detail */}
+        <Panel>
+          <PanelHead
+            title={selected ? `Verification · ${selected}` : 'Verification'}
+            icon={ShieldCheck}
+          />
+
+          {loadingDetail && <Loading label="Reading verification state from BSE…" />}
+          {!loadingDetail && detailError && <ErrorBlock message={detailError} />}
+
+          {!loadingDetail && !detailError && detail && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Chip tone={detail.transactionReady ? 'success' : 'warning'}>
+                  {detail.transactionReady ? 'Able to transact' : 'Not transaction-ready'}
+                </Chip>
+                <Chip>{detail.status}</Chip>
+                {detail.pan && (
+                  <span className="font-mono text-xs text-text-secondary">{detail.pan}</span>
                 )}
+                {detail.mode && <span className="text-xs text-text-faint">{detail.mode}</span>}
               </div>
-            ) : (
-              <div className="rounded-token-md border border-success/20 bg-success/10 p-3 text-xs text-success">
-                All blocking checks have passed.
-              </div>
-            )}
 
-            <ul className="divide-y divide-border/60">
-              {detail.checks.map((c) => (
-                <li key={c.key} className="flex items-start gap-3 py-2.5">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-bg-base">
-                    <CheckIcon state={c.state} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium text-text-primary">{c.label}</span>
-                      {!c.blocking && (
-                        <span className="rounded bg-bg-base px-1.5 py-0.5 text-[10px] text-text-faint">
-                          doesn’t block activation
+              {detail.blockedBy.length > 0 ? (
+                <div className="rounded-token-md border border-warning/20 bg-warning/10 p-3 text-xs text-warning">
+                  <p className="font-semibold">Blocked by: {detail.blockedBy.join(', ')}</p>
+                  {detail.transactionReadyReason && (
+                    <p className="mt-0.5 opacity-90">{detail.transactionReadyReason}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-token-md border border-success/20 bg-success/10 p-3 text-xs text-success">
+                  All blocking checks have passed.
+                </div>
+              )}
+
+              <ul className="divide-y divide-border-subtle">
+                {detail.checks.map((c) => (
+                  <li key={c.key} className="flex items-start gap-3 py-2.5">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-bg-base">
+                      <CheckIcon state={c.state} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium text-text-primary">{c.label}</span>
+                        {!c.blocking && (
+                          <span className="rounded bg-bg-base px-1.5 py-0.5 text-[10px] text-text-faint">
+                            doesn’t block activation
+                          </span>
+                        )}
+                      </span>
+                      {c.reason && (
+                        <span className="mt-0.5 block text-[11px] text-text-secondary">
+                          {c.reason}
                         </span>
                       )}
                     </span>
-                    {c.reason && <span className="mt-0.5 block text-[11px] text-text-secondary">{c.reason}</span>}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-text-faint">{c.at ? c.at.slice(0, 10) : ''}</span>
-                </li>
-              ))}
-            </ul>
+                    <span className="shrink-0 whitespace-nowrap text-[10px] text-text-faint">
+                      {c.at ? shortDate(c.at) : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
 
-            {/* The investor's own step — surfaced when authorisation is outstanding. */}
-            {!detail.transactionReady && (
-              <div className="border-t border-border pt-4">
-                {link ? (
-                  <p className="text-xs text-text-secondary">
-                    Send the investor this approval link:{' '}
-                    <a
-                      href={link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 font-semibold text-accent hover:underline"
-                    >
-                      Open 2FA link <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </p>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={fetchLink}
-                    disabled={linkBusy}
-                    className="rounded-token-md border border-border bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary hover:text-accent disabled:opacity-50"
-                  >
-                    {linkBusy ? 'Fetching…' : 'Get investor 2FA link'}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+              {/* The investor's own step — surfaced when authorisation is outstanding. */}
+              {!detail.transactionReady && (
+                <div className="border-t border-border-subtle pt-4">
+                  {link ? (
+                    <p className="text-xs text-text-secondary">
+                      Send the investor this approval link:{' '}
+                      <a
+                        href={link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 font-semibold text-accent hover:underline"
+                      >
+                        Open 2FA link <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </p>
+                  ) : (
+                    <Button onClick={fetchLink} disabled={linkBusy}>
+                      {linkBusy ? 'Fetching…' : 'Get investor 2FA link'}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-        {!loadingDetail && !detailError && !detail && (
-          <p className="py-12 text-center text-sm text-text-secondary">
-            Select a client to see their verification status.
-          </p>
-        )}
-      </Card>
-    </div>
+          {!loadingDetail && !detailError && !detail && (
+            <p className="py-14 text-center text-sm text-text-secondary">
+              Select a client to see their verification status.
+            </p>
+          )}
+        </Panel>
+      </div>
+    </>
   );
 }
