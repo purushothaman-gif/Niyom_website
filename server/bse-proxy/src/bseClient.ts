@@ -9,6 +9,7 @@
  * against the live sandbox is marked UAT-VERIFY.
  */
 import type { ProxyConfig } from './config.js';
+import { decryptPayload, encryptPayload, loadJoseKeys, type JoseKeys } from './jose.js';
 
 /** BSE response envelope (documented shape: status/data/messages). */
 interface BseEnvelope<T> {
@@ -35,7 +36,18 @@ export class BseClient {
   /** Conservative token lifetime; UAT-VERIFY the real expiry (likely JWT exp). */
   private static TOKEN_TTL_MS = 45 * 60 * 1000;
 
+  /** Loaded once, lazily — reading keys off disk on every call would be silly. */
+  private joseKeys: Promise<JoseKeys> | null = null;
+
   constructor(private readonly cfg: ProxyConfig) {}
+
+  private keys(): Promise<JoseKeys> {
+    this.joseKeys ??= loadJoseKeys(
+      this.cfg.bseJosePrivateKeyPath,
+      this.cfg.bseJoseRemoteKeyPath,
+    );
+    return this.joseKeys;
+  }
 
   private async login(): Promise<string> {
     const res = await fetch(`${this.cfg.bseBaseUrl}/login`, {
@@ -94,16 +106,24 @@ export class BseClient {
 
   async post<T>(route: string, data: unknown, retry = true): Promise<T> {
     const token = await this.getToken();
+    const jose = this.cfg.bseJose;
+
+    // Login stays plain even under JOSE — verified against production, where a
+    // plain login succeeds and only the authenticated calls are rejected.
+    const requestBody = jose
+      ? await encryptPayload({ data }, await this.keys())
+      : JSON.stringify({ data });
+
     const res = await fetch(`${this.cfg.bseBaseUrl}${route}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': jose ? 'application/jose' : 'application/json',
         Authorization: `Bearer ${token}`,
         // Production rejects every authenticated call without this; demo never
         // asks for it. Login itself does NOT need it — verified against prod.
         ...(this.cfg.bseOrgId ? { 'X-API-Org-ID': this.cfg.bseOrgId } : {}),
       },
-      body: JSON.stringify({ data }),
+      body: requestBody,
     });
 
     if (res.status === 401 && retry) {
@@ -118,23 +138,29 @@ export class BseClient {
     }
 
     const text = await res.text();
-    let body: BseEnvelope<T> | null = null;
+    let parsed: BseEnvelope<T> | null = null;
     try {
-      body = JSON.parse(text) as BseEnvelope<T>;
+      // An encrypted response is a compact JWS — three base64url parts, no
+      // braces. Errors can still come back as plain JSON, so sniff rather than
+      // assume, and never let a decrypt failure hide the real error text.
+      parsed =
+        jose && res.ok && !text.trimStart().startsWith('{')
+          ? await decryptPayload<BseEnvelope<T>>(text, await this.keys())
+          : (JSON.parse(text) as BseEnvelope<T>);
     } catch {
-      /* non-JSON error body */
+      /* non-JSON / undecryptable error body */
     }
 
     if (!res.ok) {
       throw new BseError(
         `BSE ${route} failed (${res.status})`,
         res.status,
-        body?.messages ?? text.slice(0, 500),
+        parsed?.messages ?? text.slice(0, 500),
       );
     }
-    if (body && body.status && body.status !== 'success') {
-      throw new BseError(`BSE ${route} returned status=${body.status}`, 502, body.messages);
+    if (parsed && parsed.status && parsed.status !== 'success') {
+      throw new BseError(`BSE ${route} returned status=${parsed.status}`, 502, parsed.messages);
     }
-    return (body?.data ?? (JSON.parse(text) as T)) as T;
+    return (parsed?.data ?? (parsed as unknown as T)) as T;
   }
 }
