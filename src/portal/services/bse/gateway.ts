@@ -12,10 +12,17 @@ import { mockGateway } from './mockGateway';
 import { createLiveGateway } from './liveGateway';
 import type { BseGateway, BseMode, BseProxyConfig } from './contract';
 
+/** Where the NIYOM proxy runs. Not a secret — it ships in the client bundle. */
+const DEFAULT_PROXY = 'https://api.niyomwealth.com';
+
 function readConfig(): BseProxyConfig {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
-  const mode: BseMode = env.VITE_BSE_MODE === 'live' ? 'live' : 'mock';
-  return { mode, baseUrl: env.VITE_BSE_PROXY_URL ?? null };
+  // Live by default. The proxy holds the BSE credentials, so nothing secret
+  // depends on this; defaulting to mock only meant production silently showed
+  // illustrative funds whenever the Vercel env var was missing.
+  const mode: BseMode = env.VITE_BSE_MODE === 'mock' ? 'mock' : 'live';
+  const baseUrl = env.VITE_BSE_PROXY_URL ?? DEFAULT_PROXY;
+  return { mode, baseUrl: baseUrl === 'none' ? null : baseUrl };
 }
 
 let cached: BseGateway | null = null;

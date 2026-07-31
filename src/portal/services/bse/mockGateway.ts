@@ -64,6 +64,9 @@ function expectedNavDate(): string {
 }
 
 export const mockGateway: BseGateway = {
+  /** No sample plans — an invented SIP on a client's own screen is the worst
+   *  kind of placeholder, so the mock returns nothing rather than fiction. */
+  getSystematicPlans: async () => [],
   async getSchemes() {
     return delay(SCHEME_MASTER);
   },

@@ -2,19 +2,28 @@
  * dashboardModel
  * -----------------------------------------------------------------------------
  * Pure assembly of the Wealth Dashboard view model from a client snapshot.
- * Combines REAL aggregates (PortfolioService) with typed placeholders
- * (MockService). Extracted so both the hook layer and any future SSR/preview
- * can build the same model without React.
+ *
+ * Everything here now comes from the client's real holdings and transactions.
+ * The placeholders that used to fill this model out were removed rather than
+ * left behind a "sample data" chip: this screen shows someone their own money,
+ * and a plausible invented number is worse than an absent one.
+ *
+ * What went and why:
+ *   - dailyChange   needs NAV history. BSE serves NAVs via nav_master_list,
+ *                   which the proxy does not expose yet, so there is no source.
+ *   - goals         needs a goals table and a client who has set one. Neither
+ *                   exists.
+ *   - marketUpdates needs an index feed we do not subscribe to.
+ *   - notices       needed an editorial source; there was none.
+ *   - upcomingSips  now comes from real BSE registrations on the SIP screen
+ *                   rather than a guess derived from holdings.
  */
 import type { ClientWealthSnapshot } from './HoldingService';
 import { PortfolioService } from './PortfolioService';
-import { MockService } from './MockService';
+import { portfolioXirr } from './xirr';
 import type { DashboardData } from '../types';
 
-export function buildDashboardData(
-  snapshot: ClientWealthSnapshot,
-  clientId: string,
-): DashboardData {
+export function buildDashboardData(snapshot: ClientWealthSnapshot): DashboardData {
   const { holdings, transactions } = snapshot;
   const summary = PortfolioService.buildSummary(holdings);
 
@@ -22,11 +31,9 @@ export function buildDashboardData(
     summary,
     mutualFunds: PortfolioService.buildMutualFundSummary(holdings),
     recentTransactions: PortfolioService.buildRecentTransactions(transactions),
-    dailyChange: MockService.dailyChange(summary, clientId),
-    xirr: MockService.xirr(summary, clientId),
-    upcomingSips: MockService.upcomingSips(holdings, clientId),
-    goals: MockService.goals(summary),
-    marketUpdates: MockService.marketUpdates(),
-    notices: MockService.notices(),
+    // Real money-weighted return from the client's own cash flows. Null when it
+    // cannot be computed — too few flows, or nothing realised yet — and the UI
+    // then shows nothing rather than 0%, which would read as "flat".
+    xirrPercent: portfolioXirr(transactions, summary.netWorth),
   };
 }

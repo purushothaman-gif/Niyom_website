@@ -25,6 +25,7 @@ import type {
 } from '../../types/funds';
 import {
   BSE_PROXY_ROUTES,
+  type SystematicPlan,
   type BseGateway,
   type MandateRegistrationRequest,
   type MandateRegistrationResult,
@@ -77,6 +78,9 @@ export function createLiveGateway(baseUrl: string | null): BseGateway {
 
   return {
     getSchemes: () => proxyGet<FundScheme[]>(baseUrl, BSE_PROXY_ROUTES.schemes),
+    // No client code in the request: the proxy resolves the caller's own UCC
+    // from their session and ignores anything the browser might send.
+    getSystematicPlans: () => proxyGet<SystematicPlan[]>(baseUrl, BSE_PROXY_ROUTES.sxp),
     getScheme: async (schemeCode) =>
       proxyGet<FundScheme | null>(baseUrl, `${BSE_PROXY_ROUTES.schemes}/${schemeCode}`),
     placeOrder: (req: OrderRequest) =>
