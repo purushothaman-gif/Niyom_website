@@ -75,9 +75,11 @@ const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 
 function validate(f: Form): Partial<Record<keyof Form, string>> {
   const e: Partial<Record<keyof Form, string>> = {};
+  // BSE accepts more than plain alphanumerics here — hyphenated codes such as
+  // NW-002-0001 were confirmed against live BSE — so the code is passed through
+  // as typed. Only length is enforced; BSE is the authority on the rest.
   if (!f.clientCode.trim()) e.clientCode = 'Required — must be unique for this member.';
-  else if (!/^[A-Za-z0-9]{1,20}$/.test(f.clientCode.trim()))
-    e.clientCode = 'Letters and numbers only, up to 20 characters.';
+  else if (f.clientCode.trim().length > 20) e.clientCode = 'Up to 20 characters.';
 
   const pan = f.pan.trim().toUpperCase();
   if (!pan) e.pan = 'Required.';
