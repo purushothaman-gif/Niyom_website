@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle, ArrowRight, CheckCircle2, Download, FileText, Loader2, Lock, ShieldCheck, Upload, X,
 } from 'lucide-react';
@@ -47,6 +47,16 @@ type Step = 'how' | 'upload' | 'done';
 
 export function ImportPortfolioModal({ onClose, onImported }: Props) {
   const [step, setStep] = useState<Step>('how');
+  /**
+   * Set as soon as the client navigates, so the asynchronous "have they done
+   * this before?" answer can never yank the screen out from under someone who
+   * has already started reading or typing.
+   */
+  const navigated = useRef(false);
+  const goTo = (next: Step) => {
+    navigated.current = true;
+    setStep(next);
+  };
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -57,7 +67,17 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
   useEffect(() => {
     let alive = true;
     void CasImportService.listImports().then((rows) => {
-      if (alive) setPrevious(rows);
+      if (!alive) return;
+      setPrevious(rows);
+      /*
+       * A returning client already knows how to request a statement and is
+       * holding the file — the five-step guide is a wall in front of the one
+       * thing they came to do. Skip straight to the upload; the guide stays one
+       * click away for when they need it again.
+       */
+      if (!navigated.current && rows.some((r) => r.status === 'reconciled')) {
+        setStep('upload');
+      }
     });
     return () => {
       alive = false;
@@ -97,7 +117,7 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
         {step === 'how' && (
           <HowToRequest
             lastGood={lastGood}
-            onContinue={() => setStep('upload')}
+            onContinue={() => goTo('upload')}
             onClose={onClose}
           />
         )}
@@ -108,6 +128,13 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
               Upload the statement exactly as the registrar emailed it, and enter the password you
               chose when you requested it.
             </p>
+
+            {lastGood && (
+              <p className="text-xs text-text-faint">
+                You last imported on {fmtDate(lastGood.created_at)}
+                {lastGood.scheme_count ? `, covering ${lastGood.scheme_count} schemes` : ''}.
+              </p>
+            )}
 
             {error && (
               <div className="flex items-start gap-2.5 rounded-token-md border border-danger-soft/20 bg-danger-soft/10 px-3.5 py-3">
@@ -180,10 +207,10 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
             <div className="flex justify-between gap-3 pt-1">
               <button
                 type="button"
-                onClick={() => setStep('how')}
+                onClick={() => goTo('how')}
                 className="rounded-token-md border border-border bg-bg-raised px-4 py-2 text-sm text-text-muted"
               >
-                Back
+                How do I request one?
               </button>
               <button
                 onClick={submit}
@@ -205,7 +232,7 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
             onAnother={() => {
               setOutcome(null);
               setFile(null);
-              setStep('how');
+              goTo('upload');
             }}
           />
         )}
