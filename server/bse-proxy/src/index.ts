@@ -36,6 +36,7 @@ import {
   type AppOrderRequest,
   type AppRedemptionRequest,
   type AppSwitchRequest,
+  type AppMemDetails,
 } from './mappers.js';
 
 const cfg = loadConfig();
@@ -68,6 +69,11 @@ interface Caller {
   /** Clients only. The ONLY UCC this caller may read or transact on. */
   ucc: string | null;
   clientId?: string;
+  /**
+   * The EUIN to stamp on transactions this caller places. Staff carry their
+   * own; a client placing their own order has none and takes the default.
+   */
+  euin?: string | null;
 }
 
 declare global {
@@ -123,10 +129,15 @@ async function requireCaller(req: Request, res: Response, next: NextFunction) {
 
   // Staff first — the MF Admin console keeps full reach.
   const staff = await sbSelect(
-    `nw_employees?select=id&status=eq.active&auth_user_id=eq.${encodeURIComponent(authUserId)}&limit=1`,
+    `nw_employees?select=id,euin&status=eq.active&auth_user_id=eq.${encodeURIComponent(authUserId)}&limit=1`,
   );
   if (staff.length) {
-    req.caller = { kind: 'staff', authUserId, ucc: null };
+    req.caller = {
+      kind: 'staff',
+      authUserId,
+      ucc: null,
+      euin: (staff[0].euin as string) || null,
+    };
     return next();
   }
 
@@ -169,6 +180,18 @@ function scopedUcc(req: Request, requested?: string | null): string {
     );
   }
   return c.ucc;
+}
+
+/**
+ * The SEBI identifiers to stamp on a transaction.
+ *
+ * The EUIN is the signed-in employee's, falling back to the configured default
+ * when they hold none or when a client is placing their own order from the
+ * portal. Never empty — SEBI expects an EUIN declaration on every
+ * distributor-executed transaction. The ARN is member-level and constant.
+ */
+function mem(req: Request): AppMemDetails {
+  return { euin: req.caller?.euin || cfg.bseDefaultEuin, arn: cfg.bseArn };
 }
 
 /* --------------------------------- routes --------------------------------- */
@@ -426,7 +449,7 @@ app.post('/order', async (req, res, next) => {
     if (body.type === 'sip') {
       const sxp = await bse.post<Record<string, unknown>>(
         '/sxp_register',
-        toSxpRegister(body, cfg.bseMemberCode),
+        toSxpRegister(body, cfg.bseMemberCode, mem(req)),
       );
       const regNum = String(sxp.sxp_id ?? sxp.sxp_reg_num ?? sxp.id ?? '');
       if (!regNum) {
@@ -443,7 +466,7 @@ app.post('/order', async (req, res, next) => {
     // a bare order object returns {"status":"success","data":{}} and silently
     // places NOTHING — which is the trap the guard below exists for.
     const result = await bse.post<Record<string, unknown>>('/order_new', {
-      orders: [toOrderNew(body, cfg.bseMemberCode)],
+      orders: [toOrderNew(body, cfg.bseMemberCode, mem(req))],
     });
     const items = (result.items as Record<string, unknown>[] | undefined) ?? [];
     const orderId = String(items[0]?.id ?? result.id ?? result.order_id ?? '');
@@ -471,7 +494,7 @@ app.post('/redemption', async (req, res, next) => {
     const body = req.body as AppRedemptionRequest;
     body.clientCode = scopedUcc(req, body.clientCode);
     const result = await bse.post<Record<string, unknown>>('/order_new', {
-      orders: [toRedemption(body, cfg.bseMemberCode)],
+      orders: [toRedemption(body, cfg.bseMemberCode, mem(req))],
     });
     assertOrderPlaced(result, 'redemption');
     const detail =
@@ -487,7 +510,7 @@ app.post('/switch', async (req, res, next) => {
   try {
     const body = req.body as AppSwitchRequest;
     body.clientCode = scopedUcc(req, body.clientCode);
-    const result = await bse.post<Record<string, unknown>>('/order_new', { orders: [toSwitch(body, cfg.bseMemberCode)] });
+    const result = await bse.post<Record<string, unknown>>('/order_new', { orders: [toSwitch(body, cfg.bseMemberCode, mem(req))] });
     assertOrderPlaced(result, 'switch');
     res.json(
       toAppTxnResult(result, 'switch', body.fromSchemeName, `Switched ₹${body.amount} to ${body.toSchemeName}`, body.amount),
@@ -1238,7 +1261,7 @@ app.post('/sxp', async (req, res, next) => {
     body.clientCode = scopedUcc(req, body.clientCode);
     const result = await bse.post<Record<string, unknown>>(
       '/sxp_register',
-      toSxpRegister2(body, cfg.bseMemberCode),
+      toSxpRegister2(body, cfg.bseMemberCode, mem(req)),
     );
     const regNum = String(result.sxp_id ?? result.sxp_reg_num ?? result.id ?? '');
     if (!regNum) {

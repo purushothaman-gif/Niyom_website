@@ -85,9 +85,32 @@ function sipSchedule(req: AppOrderRequest): { start_date: string; freq: 'm' | 'q
 
 /* ------------------------------ to BSE ------------------------------------ */
 
+/**
+ * SEBI identifiers for a transaction. The ARN is member-level and constant;
+ * the EUIN is the individual who executed it — resolved from the signed-in
+ * employee, never from the client record.
+ */
+export interface AppMemDetails {
+  euin: string;
+  arn: string;
+}
+
+/**
+ * mem_details (§7.3.34). Optional at BSE — nothing rejects without it — but
+ * SEBI expects an EUIN declaration on distributor-executed transactions.
+ *
+ * euin_flag 'Y' means an EUIN is being declared. 'N' is the execution-only
+ * case where the investor confirms no advice was given; we always declare an
+ * EUIN, so it is never 'N'.
+ */
+function toMemDetails(mem: AppMemDetails) {
+  return { euin: mem.euin, euin_flag: 'Y', subbr_arn: mem.arn };
+}
+
 /** Lumpsum purchase → POST /v2/order_new. */
-export function toOrderNew(req: AppOrderRequest, memberCode: string) {
+export function toOrderNew(req: AppOrderRequest, memberCode: string, mem: AppMemDetails) {
   return {
+    mem_details: toMemDetails(mem),
     // VERIFIED LIVE: order_new takes `member` as a STRING (add_ucc takes an
     // object) and the investor key is `ucc` (add_ucc uses client_code).
     member: memberCode,
@@ -104,8 +127,9 @@ export function toOrderNew(req: AppOrderRequest, memberCode: string) {
 }
 
 /** Redemption → POST /v2/order_new (type 'r'). */
-export function toRedemption(req: AppRedemptionRequest, memberCode: string) {
+export function toRedemption(req: AppRedemptionRequest, memberCode: string, mem: AppMemDetails) {
   return {
+    mem_details: toMemDetails(mem),
     member: memberCode,
     investor: { ucc: req.clientCode ?? req.clientId },
     mem_ord_ref_id: memRefId(),
@@ -124,8 +148,9 @@ export function toRedemption(req: AppRedemptionRequest, memberCode: string) {
 }
 
 /** Switch → POST /v2/order_new (type 's'; same-AMC only per BSE docs). */
-export function toSwitch(req: AppSwitchRequest, memberCode: string) {
+export function toSwitch(req: AppSwitchRequest, memberCode: string, mem: AppMemDetails) {
   return {
+    mem_details: toMemDetails(mem),
     member: memberCode,
     investor: { ucc: req.clientCode ?? req.clientId },
     mem_ord_ref_id: memRefId(),
@@ -141,9 +166,10 @@ export function toSwitch(req: AppSwitchRequest, memberCode: string) {
 }
 
 /** SIP → POST /v2/sxp_register (documented checklist). */
-export function toSxpRegister(req: AppOrderRequest, memberCode: string) {
+export function toSxpRegister(req: AppOrderRequest, memberCode: string, mem: AppMemDetails) {
   const { start_date, freq } = sipSchedule(req);
   return {
+    mem_details: toMemDetails(mem),
     sxp_type: 'SIP' as const,
     mem_sxp_ref_id: memRefId(),
     investor: { client_code: req.clientCode ?? req.clientId },
@@ -690,9 +716,10 @@ export interface AppSxpRequest {
  * `mem_sxp_ref_id` accepts ONLY digits and hyphens (letters are rejected with
  * errcode `invalid`) — memRefId() already satisfies that, do not prefix it.
  */
-export function toSxpRegister2(req: AppSxpRequest, memberCode: string) {
+export function toSxpRegister2(req: AppSxpRequest, memberCode: string, mem: AppMemDetails) {
   const freq = req.frequency ?? 'm';
   return {
+    mem_details: toMemDetails(mem),
     sxp_type: req.type ?? 'SIP',
     mem_sxp_ref_id: memRefId(),
     investor: { ucc: req.clientCode },
