@@ -16,7 +16,14 @@ interface SnapshotState {
   refreshedAt: Date | null;
 }
 
-const EMPTY: ClientWealthSnapshot = { client: null, holdings: [], transactions: [] };
+const EMPTY: ClientWealthSnapshot = {
+  client: null,
+  holdings: [],
+  transactions: [],
+  mfSource: 'manual',
+  casStatementTo: null,
+  casFlows: [],
+};
 
 export function useClientSnapshot(clientId: string) {
   const [state, setState] = useState<SnapshotState>({

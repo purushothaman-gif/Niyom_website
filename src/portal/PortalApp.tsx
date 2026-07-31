@@ -103,7 +103,11 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
         );
       case 'portfolio':
         return portfolioData ? (
-          <PortfolioPage data={portfolioData} onImported={refresh} />
+          <PortfolioPage
+            data={portfolioData}
+            onImported={refresh}
+            statementTo={snapshot.casStatementTo}
+          />
         ) : (
           <LoadingState />
         );

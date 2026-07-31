@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Download, Wallet } from 'lucide-react';
-import { fmt } from '../../../crm/utils';
+import { fmt, fmtDate } from '../../../crm/utils';
 import type { ProductType } from '../../../crm/types';
 import { Card } from '../../components/Card';
 import { KpiStat } from '../../components/KpiStat';
@@ -19,7 +19,16 @@ const SORTERS: Record<SortKey, (a: PortfolioData['rows'][number], b: PortfolioDa
   name: (a, b) => a.name.localeCompare(b.name),
 };
 
-export function PortfolioPage({ data, onImported }: { data: PortfolioData; onImported?: () => void }) {
+export function PortfolioPage({
+  data,
+  onImported,
+  statementTo,
+}: {
+  data: PortfolioData;
+  onImported?: () => void;
+  /** Set when mutual funds come from an imported statement, so we can date them. */
+  statementTo?: string | null;
+}) {
   const { summary, rows } = data;
   const [filter, setFilter] = useState<Filter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('value');
@@ -86,7 +95,19 @@ export function PortfolioPage({ data, onImported }: { data: PortfolioData; onImp
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {/*
+          Imported funds are valued as at the statement date, not today. Saying
+          so is the difference between a figure a client can rely on and one
+          they will query when it does not match their fund house.
+        */}
+        {statementTo ? (
+          <p className="text-xs text-text-faint">
+            Mutual funds as per your statement of {fmtDate(statementTo)}
+          </p>
+        ) : (
+          <span />
+        )}
         <ImportButton onClick={() => setImporting(true)} />
       </div>
 
