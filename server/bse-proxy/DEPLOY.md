@@ -66,6 +66,12 @@ Point a DNS A-record (e.g. `api.niyomwealth.com`) at the droplet IP, then:
 sudo tee /etc/nginx/sites-available/bse-proxy <<'NGINX'
 server {
     server_name api.niyomwealth.com;
+
+    # Required. UCC registration carries the cancelled cheque and AOF inline as
+    # base64, and Express accepts 10mb. Without this nginx applies its own 1m
+    # default and returns 413 before the request ever reaches the app.
+    client_max_body_size 12m;
+
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
