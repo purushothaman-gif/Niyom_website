@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { fmt } from '../../../crm/utils';
 import { StatusPill } from '../../components/StatusPill';
+import { OwnershipBadge } from '../../components/OwnershipBadge';
 import type { HoldingRow } from '../../types';
 
 export type SortKey = 'value' | 'gain' | 'invested' | 'name';
@@ -80,7 +81,11 @@ export function HoldingsTable({ rows, sortKey, sortDir, onSort }: HoldingsTableP
                       style={{ background: r.productColor }}
                     />
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-text-primary">{r.name}</p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="truncate text-sm font-medium text-text-primary">{r.name}</p>
+                        {/* Renders nothing unless this is a statement-sourced fund. */}
+                        <OwnershipBadge ownership={r.ownership} />
+                      </div>
                       <p className="truncate text-[11px] text-text-secondary">
                         {r.productLabel}
                         {r.meta ? ` · ${r.meta}` : ''}

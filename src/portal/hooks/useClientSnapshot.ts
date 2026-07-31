@@ -22,6 +22,7 @@ const EMPTY: ClientWealthSnapshot = {
   transactions: [],
   mfSource: 'manual',
   casStatementTo: null,
+  casFreshness: { state: 'none', statementTo: null, latestOwnMfTxnDate: null },
   casFlows: [],
 };
 

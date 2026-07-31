@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Download, Wallet } from 'lucide-react';
-import { fmt, fmtDate } from '../../../crm/utils';
+import { fmt } from '../../../crm/utils';
 import type { ProductType } from '../../../crm/types';
 import { Card } from '../../components/Card';
 import { KpiStat } from '../../components/KpiStat';
 import { Segmented } from '../../components/Segmented';
 import { EmptyState } from '../../components/EmptyState';
+import { CasStatusNote } from '../../components/CasStatusNote';
 import type { PortfolioData } from '../../types';
+import type { CasFreshness } from '../../types/cas';
 import { HoldingsTable, type SortKey } from './HoldingsTable';
 import { ImportPortfolioModal } from './ImportPortfolioModal';
 
@@ -22,12 +24,12 @@ const SORTERS: Record<SortKey, (a: PortfolioData['rows'][number], b: PortfolioDa
 export function PortfolioPage({
   data,
   onImported,
-  statementTo,
+  freshness,
 }: {
   data: PortfolioData;
   onImported?: () => void;
-  /** Set when mutual funds come from an imported statement, so we can date them. */
-  statementTo?: string | null;
+  /** How current the imported mutual fund picture is; absent until one exists. */
+  freshness?: CasFreshness;
 }) {
   const { summary, rows } = data;
   const [filter, setFilter] = useState<Filter>('all');
@@ -95,19 +97,18 @@ export function PortfolioPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {/*
-          Imported funds are valued as at the statement date, not today. Saying
-          so is the difference between a figure a client can rely on and one
-          they will query when it does not match their fund house.
-        */}
-        {statementTo ? (
-          <p className="text-xs text-text-faint">
-            Mutual funds as per your statement of {fmtDate(statementTo)}
-          </p>
-        ) : (
-          <span />
-        )}
+      {/*
+        Imported funds are valued as at the statement date, not today, and a
+        client who has transacted since then is looking at figures we already
+        know are behind. Saying so is the difference between a number they can
+        rely on and one they will query when it does not match their fund house.
+      */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {freshness && (
+            <CasStatusNote freshness={freshness} onImport={() => setImporting(true)} />
+          )}
+        </div>
         <ImportButton onClick={() => setImporting(true)} />
       </div>
 

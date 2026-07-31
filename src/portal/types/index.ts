@@ -10,6 +10,8 @@
  * render an honest indicator.
  */
 import type { ProductType } from '../../crm/types';
+import type { CasHoldingMeta } from './cas';
+import type { MfOwnership } from './ownership';
 
 /** A single row on the six-way asset-allocation ring. */
 export interface AllocationSlice {
@@ -145,6 +147,18 @@ export interface HoldingRow {
   value: number;
   gain: number;
   gainPercent: number;
+  /**
+   * Mutual funds only, and only once a statement has been imported: whether the
+   * holding sits under our ARN. Absent for every other asset class, which has
+   * no such notion — we sold it, so the question does not arise.
+   */
+  ownership?: MfOwnership;
+  /**
+   * The statement row behind this holding. Carried through to the UI so the
+   * badge needs no second lookup, and so a future ARN migration can act on a
+   * folio without re-reading the client's CAS.
+   */
+  cas?: CasHoldingMeta;
 }
 
 /** One slice of an allocation breakdown along a chosen dimension. */
