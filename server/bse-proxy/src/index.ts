@@ -42,7 +42,10 @@ const cfg = loadConfig();
 const bse = new BseClient(cfg);
 const app = express();
 
-app.use(express.json({ limit: '1mb' }));
+// 10mb, not 1mb: UCC registration carries supporting documents (cancelled
+// cheque, AOF) inline as base64, and base64 inflates by a third. Callers are
+// capped at 3mb per document, so two documents plus the payload fit inside it.
+app.use(express.json({ limit: '10mb' }));
 app.use(
   cors({
     origin: cfg.allowedOrigins,
@@ -552,9 +555,48 @@ app.post('/cancel', async (req, res, next) => {
  * resident-individual UCC registered and returned status APPROVED, then settled
  * to PENDING_AUTH pending the investor's 2FA (see /ucc/2fa-link below).
  */
+/**
+ * BSE rejects a malformed nomination set with a generic error, and a UCC that
+ * gets that far has already consumed its client code. Checking here — the one
+ * place every caller goes through — fails fast with something actionable.
+ */
+const MAX_DOC_BYTES = 3 * 1024 * 1024;
+
+function assertUccPayload(body: AppUccRequest) {
+  const nominees = body.nominees ?? [];
+  if (nominees.length > 3) {
+    throw new BseError('BSE allows at most 3 nominees.', 400);
+  }
+  if (nominees.length > 0) {
+    const total = nominees.reduce((sum, n) => sum + Number(n.percent || 0), 0);
+    if (total !== 100) {
+      throw new BseError(
+        `Nomination percentages must total exactly 100 — they currently total ${total}.`,
+        400,
+      );
+    }
+    const minorWithoutGuardian = nominees.find((n) => n.isMinor && !n.guardian?.pan);
+    if (minorWithoutGuardian) {
+      throw new BseError(
+        `${minorWithoutGuardian.firstName} is a minor, so a guardian with a PAN is required.`,
+        400,
+      );
+    }
+  }
+  for (const [label, doc] of [
+    ['Bank proof', body.documents?.bankProof],
+    ['Account opening form', body.documents?.aof],
+  ] as const) {
+    if (doc && doc.fileSize > MAX_DOC_BYTES) {
+      throw new BseError(`${label} is larger than the 3 MB limit.`, 400);
+    }
+  }
+}
+
 app.post('/ucc', staffOnly, async (req, res, next) => {
   try {
     const body = req.body as AppUccRequest;
+    assertUccPayload(body);
     const result = await bse.post<Record<string, unknown>>(
       '/v2/add_ucc',
       toAddUcc(body, cfg.bseMemberCode),

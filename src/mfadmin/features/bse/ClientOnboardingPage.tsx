@@ -10,7 +10,7 @@
  * Demat, joint holders and NRI are not offered rather than half-supported.
  */
 import { useState } from 'react';
-import { BadgeCheck, ExternalLink, Search, UserPlus, Users } from 'lucide-react';
+import { BadgeCheck, ExternalLink, Paperclip, Plus, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import { Card } from '../../../portal/components/Card';
 import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { StatusPill } from '../../../portal/components/StatusPill';
@@ -18,6 +18,7 @@ import {
   BseOpsExtra,
   BseOpsService,
   isBseConfigured,
+  NOMINEE_RELATIONS,
   type BseUccRow,
 } from '../../services/BseOpsService';
 import { CrmImportService, type CrmClientLookup } from '../../services/CrmImportService';
@@ -49,7 +50,53 @@ interface Form {
   accountNumber: string;
   ifsc: string;
   accountType: string;
+  fatherName: string;
+  spouseName: string;
+  /** 'pending' until staff actively choose — an opt-out must be deliberate. */
+  nominationChoice: 'pending' | 'nominate' | 'decline';
+  nominees: NomineeDraft[];
+  bankProof: DocDraft | null;
+  bankProofType: 'cancel_cheque' | 'bank_statement';
+  aof: DocDraft | null;
 }
+
+interface DocDraft {
+  fileName: string;
+  fileSize: number;
+  fileBlob: string;
+}
+
+interface NomineeDraft {
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  dob: string;
+  relation: string;
+  percent: string;
+  identifierType: 'pan' | 'aadhaar' | 'passport';
+  identifierNumber: string;
+  isMinor: boolean;
+  guardianFirstName: string;
+  guardianLastName: string;
+  guardianDob: string;
+  guardianPan: string;
+}
+
+const EMPTY_NOMINEE: NomineeDraft = {
+  firstName: '',
+  middleName: '',
+  lastName: '',
+  dob: '',
+  relation: '18',
+  percent: '100',
+  identifierType: 'pan',
+  identifierNumber: '',
+  isMinor: false,
+  guardianFirstName: '',
+  guardianLastName: '',
+  guardianDob: '',
+  guardianPan: '',
+};
 
 const EMPTY: Form = {
   clientCode: '',
@@ -68,10 +115,54 @@ const EMPTY: Form = {
   accountNumber: '',
   ifsc: '',
   accountType: 'SB',
+  fatherName: '',
+  spouseName: '',
+  nominationChoice: 'pending',
+  nominees: [],
+  bankProof: null,
+  bankProofType: 'cancel_cheque',
+  aof: null,
 };
 
 /** BSE encodes entity type in the PAN's 4th character — 'P' for an individual. */
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+
+/** BSE caps each supporting document at 3 MB and accepts these types. */
+const MAX_DOC_BYTES = 3 * 1024 * 1024;
+const DOC_ACCEPT = '.pdf,.jpg,.jpeg,.png';
+
+/** Read a file into the base64 blob BSE's identifier blocks carry. */
+async function readAsDoc(file: File): Promise<DocDraft> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  const CHUNK = 0x8000; // chunked — String.fromCharCode blows the stack on big files
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return { fileName: file.name, fileSize: file.size, fileBlob: btoa(binary) };
+}
+
+/** Per-nominee problems, positionally aligned with form.nominees. */
+function nomineeIssues(f: Form): (string | null)[] {
+  return f.nominees.map((n) => {
+    if (!n.firstName.trim()) return 'First name is required.';
+    if (!n.identifierNumber.trim()) return 'An ID number is required.';
+    if (n.identifierType === 'pan' && !PAN_RE.test(n.identifierNumber.trim().toUpperCase()))
+      return 'PAN format must be ABCDE1234F.';
+    if (n.identifierType === 'aadhaar' && !/^\d{4}$/.test(n.identifierNumber.trim()))
+      return 'BSE takes only the last 4 digits of the Aadhaar number.';
+    const pct = Number(n.percent);
+    if (!Number.isInteger(pct) || pct < 1 || pct > 100)
+      return 'Share must be a whole number between 1 and 100.';
+    if (n.isMinor) {
+      if (!n.guardianFirstName.trim()) return 'A minor nominee needs a guardian name.';
+      if (!n.guardianDob) return "A minor nominee needs the guardian's date of birth.";
+      if (!PAN_RE.test(n.guardianPan.trim().toUpperCase()))
+        return "The guardian's PAN is required, format ABCDE1234F.";
+    }
+    return null;
+  });
+}
 
 function validate(f: Form): Partial<Record<keyof Form, string>> {
   const e: Partial<Record<keyof Form, string>> = {};
@@ -90,7 +181,10 @@ function validate(f: Form): Partial<Record<keyof Form, string>> {
   if (!f.dob) e.dob = 'Required.';
   if (!/^\S+@\S+\.\S+$/.test(f.email.trim())) e.email = 'A valid email is required.';
   if (!/^\d{10}$/.test(f.mobile.replace(/\D/g, ''))) e.mobile = '10-digit mobile number.';
+  // BSE enforces a 10-character minimum on address_line_1; catching it here
+  // beats a rejection after the client code has been consumed.
   if (!f.line1.trim()) e.line1 = 'Required.';
+  else if (f.line1.trim().length < 10) e.line1 = 'BSE needs at least 10 characters.';
   if (!f.city.trim()) e.city = 'Required.';
   if (!f.state.trim()) e.state = 'Required.';
   if (!/^\d{6}$/.test(f.pincode.trim())) e.pincode = '6-digit pincode.';
@@ -98,6 +192,19 @@ function validate(f: Form): Partial<Record<keyof Form, string>> {
     e.accountNumber = 'Account number: 9–20 digits, including leading zeros.';
   if (!/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/.test(f.ifsc.trim()))
     e.ifsc = 'IFSC format, e.g. HDFC0000123.';
+
+  // Nomination is a regulatory choice, so it has to be made rather than
+  // defaulted. Declining is fine; leaving it unanswered is not.
+  if (f.nominationChoice === 'pending') {
+    e.nominees = 'Record the client’s nomination, or that they have declined.';
+  } else if (f.nominationChoice === 'nominate') {
+    if (f.nominees.length === 0) e.nominees = 'Add at least one nominee, or record a decline.';
+    else if (nomineeIssues(f).some(Boolean)) e.nominees = 'Fix the highlighted nominee details.';
+    else {
+      const total = f.nominees.reduce((sum, n) => sum + Number(n.percent || 0), 0);
+      if (total !== 100) e.nominees = `Shares must total exactly 100% — currently ${total}%.`;
+    }
+  }
   return e;
 }
 
@@ -130,6 +237,45 @@ export function ClientOnboardingPage() {
     (u) => u.clientCode.toLowerCase() === form.clientCode.trim().toLowerCase(),
   );
 
+  const issues = nomineeIssues(form);
+  const shareTotal = form.nominees.reduce((sum, n) => sum + Number(n.percent || 0), 0);
+
+  const setNominee = (i: number, patch: Partial<NomineeDraft>) =>
+    setForm((f) => ({
+      ...f,
+      nominees: f.nominees.map((n, idx) => (idx === i ? { ...n, ...patch } : n)),
+    }));
+
+  const addNominee = () =>
+    setForm((f) => {
+      // Split evenly so the total lands on 100 without staff doing the sum.
+      const next = [...f.nominees, { ...EMPTY_NOMINEE, percent: '' }];
+      const even = Math.floor(100 / next.length);
+      return {
+        ...f,
+        nominees: next.map((n, idx) => ({
+          ...n,
+          percent: String(idx === 0 ? 100 - even * (next.length - 1) : even),
+        })),
+      };
+    });
+
+  const removeNominee = (i: number) =>
+    setForm((f) => ({ ...f, nominees: f.nominees.filter((_, idx) => idx !== i) }));
+
+  /** Read a chosen file into base64, rejecting anything over BSE's cap. */
+  const pickDoc = (key: 'bankProof' | 'aof') => async (file: File | undefined) => {
+    if (!file) return setForm((f) => ({ ...f, [key]: null }));
+    if (file.size > MAX_DOC_BYTES) {
+      setError(`${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB — BSE's limit is 3 MB.`);
+      return;
+    }
+    setError(null);
+    setForm((f) => ({ ...f, [key]: null }));
+    const doc = await readAsDoc(file);
+    setForm((f) => ({ ...f, [key]: doc }));
+  };
+
   const search = async () => {
     setSearching(true);
     try {
@@ -145,6 +291,9 @@ export function ClientOnboardingPage() {
     const source = (c.panName?.trim() || c.fullName).trim();
     const [first, ...rest] = source.split(/\s+/);
     setForm({
+      // Nomination and documents have no CRM equivalent — they stay at their
+      // empty defaults so an import can never silently opt a client out.
+      ...EMPTY,
       clientCode: c.clientCode,
       pan: c.pan,
       firstName: first ?? source,
@@ -219,6 +368,45 @@ export function ClientOnboardingPage() {
           accountNumber: form.accountNumber.trim(),
           ifsc: form.ifsc.trim().toUpperCase(),
           accountType: form.accountType,
+        },
+        fatca: {
+          fatherName: form.fatherName.trim() || undefined,
+          spouseName: form.spouseName.trim() || undefined,
+        },
+        // Absent means declined — the proxy reads that as a recorded opt-out.
+        nominees:
+          form.nominationChoice === 'nominate'
+            ? form.nominees.map((n) => ({
+                firstName: n.firstName.trim(),
+                middleName: n.middleName.trim() || undefined,
+                lastName: n.lastName.trim() || undefined,
+                dob: n.dob || undefined,
+                relation: n.relation,
+                percent: Number(n.percent),
+                identifierType: n.identifierType,
+                identifierNumber:
+                  n.identifierType === 'pan'
+                    ? n.identifierNumber.trim().toUpperCase()
+                    : n.identifierNumber.trim(),
+                isMinor: n.isMinor || undefined,
+                guardian: n.isMinor
+                  ? {
+                      firstName: n.guardianFirstName.trim(),
+                      lastName: n.guardianLastName.trim() || undefined,
+                      dob: n.guardianDob,
+                      pan: n.guardianPan.trim().toUpperCase(),
+                    }
+                  : undefined,
+              }))
+            : [],
+        documents: {
+          // BSE wants an identifier number alongside each blob: the account
+          // number identifies a cheque, the client code an AOF.
+          bankProof: form.bankProof
+            ? { docNumber: form.accountNumber.trim(), ...form.bankProof }
+            : undefined,
+          bankProofType: form.bankProofType,
+          aof: form.aof ? { docNumber: form.clientCode.trim(), ...form.aof } : undefined,
         },
       });
       // Nothing progresses at BSE until the investor approves, so fetch the
@@ -458,6 +646,17 @@ export function ClientOnboardingPage() {
             {err('email') && <p className="mt-1 text-[11px] text-danger">{err('email')}</p>}
           </Field>
 
+          {/* Both are conditional at BSE and can hold up FATCA if the RTA asks
+              for them, so capture them rather than sending blanks. */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Father's name (optional)">
+              <input value={form.fatherName} onChange={(e) => set('fatherName')(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Spouse's name (optional)">
+              <input value={form.spouseName} onChange={(e) => set('spouseName')(e.target.value)} className={inputCls} />
+            </Field>
+          </div>
+
           <Field label="Address">
             <input value={form.line1} onChange={(e) => set('line1')(e.target.value)} placeholder="Flat / street" className={inputCls} />
             {err('line1') && <p className="mt-1 text-[11px] text-danger">{err('line1')}</p>}
@@ -497,6 +696,287 @@ export function ClientOnboardingPage() {
             </Field>
           </div>
 
+          {/* Supporting documents. Bank verification cannot pass without proof
+              of the account, which is why it reads "Verification failed" on
+              every UCC registered before this existed. */}
+          <div className="rounded-token-md border border-border bg-bg-base p-3">
+            <p className="text-xs font-semibold text-text-primary">Supporting documents</p>
+            <p className="mt-0.5 text-[11px] text-text-faint">
+              PDF, JPG or PNG, up to 3 MB each.
+            </p>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="text-xs font-semibold text-text-primary">Bank proof</span>
+                  <select
+                    value={form.bankProofType}
+                    onChange={(e) => set('bankProofType')(e.target.value)}
+                    className="rounded-token-md border border-border bg-bg-surface px-1.5 py-0.5 text-[10px] text-text-secondary outline-none"
+                  >
+                    <option value="cancel_cheque">Cancelled cheque</option>
+                    <option value="bank_statement">Bank statement</option>
+                  </select>
+                </div>
+                <input
+                  type="file"
+                  accept={DOC_ACCEPT}
+                  onChange={(e) => void pickDoc('bankProof')(e.target.files?.[0])}
+                  className="block w-full text-[11px] text-text-secondary file:mr-2 file:rounded-token-md file:border file:border-border file:bg-bg-surface file:px-2 file:py-1 file:text-[11px] file:font-semibold file:text-text-primary"
+                />
+                <p className="mt-1 text-[11px] text-text-faint">
+                  {form.bankProof ? (
+                    <span className="text-success">
+                      <Paperclip className="mr-1 inline h-3 w-3 align-[-2px]" />
+                      {form.bankProof.fileName}
+                    </span>
+                  ) : (
+                    'Without this, BSE cannot verify the bank account.'
+                  )}
+                </p>
+              </div>
+
+              <div>
+                <span className="mb-1.5 block text-xs font-semibold text-text-primary">
+                  Account opening form
+                </span>
+                <input
+                  type="file"
+                  accept={DOC_ACCEPT}
+                  onChange={(e) => void pickDoc('aof')(e.target.files?.[0])}
+                  className="block w-full text-[11px] text-text-secondary file:mr-2 file:rounded-token-md file:border file:border-border file:bg-bg-surface file:px-2 file:py-1 file:text-[11px] file:font-semibold file:text-text-primary"
+                />
+                <p className="mt-1 text-[11px] text-text-faint">
+                  {form.aof ? (
+                    <span className="text-success">
+                      <Paperclip className="mr-1 inline h-3 w-3 align-[-2px]" />
+                      {form.aof.fileName}
+                    </span>
+                  ) : (
+                    'Signed AOF, checked by the RTA for physical UCCs.'
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Nomination. Not optional as a decision — SEBI requires either a
+              nomination or a recorded opt-out, so neither is the default. */}
+          <div className="rounded-token-md border border-border bg-bg-base p-3">
+            <p className="text-xs font-semibold text-text-primary">Nomination</p>
+            <p className="mt-0.5 text-[11px] text-text-faint">
+              The client must either nominate or decline. Up to 3 nominees, shares totalling 100%.
+            </p>
+
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    nominationChoice: 'nominate',
+                    nominees: f.nominees.length ? f.nominees : [{ ...EMPTY_NOMINEE }],
+                  }))
+                }
+                className={`rounded-token-md border px-2.5 py-1 text-[11px] font-semibold ${
+                  form.nominationChoice === 'nominate'
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-border bg-bg-surface text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                Add nominees
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((f) => ({ ...f, nominationChoice: 'decline', nominees: [] }))
+                }
+                className={`rounded-token-md border px-2.5 py-1 text-[11px] font-semibold ${
+                  form.nominationChoice === 'decline'
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-border bg-bg-surface text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                Client declines to nominate
+              </button>
+            </div>
+
+            {form.nominationChoice === 'decline' && (
+              <p className="mt-2 text-[11px] text-warning">
+                Recorded as an opt-out. The client can add a nominee later through BSE.
+              </p>
+            )}
+
+            {form.nominationChoice === 'nominate' && (
+              <div className="mt-3 space-y-3">
+                {form.nominees.map((n, i) => (
+                  <div key={i} className="rounded-token-md border border-border bg-bg-surface p-2.5">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-text-secondary">
+                        Nominee {i + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeNominee(i)}
+                        className="text-text-faint hover:text-danger"
+                        aria-label={`Remove nominee ${i + 1}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <input
+                        value={n.firstName}
+                        onChange={(e) => setNominee(i, { firstName: e.target.value })}
+                        placeholder="First name"
+                        className={inputCls}
+                      />
+                      <input
+                        value={n.middleName}
+                        onChange={(e) => setNominee(i, { middleName: e.target.value })}
+                        placeholder="Middle name"
+                        className={inputCls}
+                      />
+                      <input
+                        value={n.lastName}
+                        onChange={(e) => setNominee(i, { lastName: e.target.value })}
+                        placeholder="Last name"
+                        className={inputCls}
+                      />
+                    </div>
+
+                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                      <select
+                        value={n.relation}
+                        onChange={(e) => setNominee(i, { relation: e.target.value })}
+                        className={selectCls}
+                      >
+                        {NOMINEE_RELATIONS.map((r) => (
+                          <option key={r.code} value={r.code}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="date"
+                        value={n.dob}
+                        onChange={(e) => setNominee(i, { dob: e.target.value })}
+                        className={inputCls}
+                      />
+                      <div className="flex items-center gap-1">
+                        <input
+                          value={n.percent}
+                          onChange={(e) => setNominee(i, { percent: e.target.value })}
+                          inputMode="numeric"
+                          className={inputCls}
+                        />
+                        <span className="text-xs text-text-faint">%</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                      <select
+                        value={n.identifierType}
+                        onChange={(e) =>
+                          setNominee(i, {
+                            identifierType: e.target.value as NomineeDraft['identifierType'],
+                            identifierNumber: '',
+                          })
+                        }
+                        className={selectCls}
+                      >
+                        <option value="pan">PAN</option>
+                        <option value="aadhaar">Aadhaar (last 4)</option>
+                        <option value="passport">Passport</option>
+                      </select>
+                      <input
+                        value={n.identifierNumber}
+                        onChange={(e) =>
+                          setNominee(i, {
+                            identifierNumber:
+                              n.identifierType === 'pan'
+                                ? e.target.value.toUpperCase()
+                                : e.target.value,
+                          })
+                        }
+                        placeholder={n.identifierType === 'aadhaar' ? '1234' : 'ABCDE1234F'}
+                        className={`${inputCls} font-mono sm:col-span-2`}
+                      />
+                    </div>
+
+                    <label className="mt-2 flex items-center gap-2 text-[11px] text-text-secondary">
+                      <input
+                        type="checkbox"
+                        checked={n.isMinor}
+                        onChange={(e) => setNominee(i, { isMinor: e.target.checked })}
+                      />
+                      Nominee is a minor — a guardian is required
+                    </label>
+
+                    {n.isMinor && (
+                      <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                        <input
+                          value={n.guardianFirstName}
+                          onChange={(e) => setNominee(i, { guardianFirstName: e.target.value })}
+                          placeholder="Guardian first name"
+                          className={inputCls}
+                        />
+                        <input
+                          value={n.guardianLastName}
+                          onChange={(e) => setNominee(i, { guardianLastName: e.target.value })}
+                          placeholder="Guardian last name"
+                          className={inputCls}
+                        />
+                        <input
+                          type="date"
+                          value={n.guardianDob}
+                          onChange={(e) => setNominee(i, { guardianDob: e.target.value })}
+                          className={inputCls}
+                        />
+                        <input
+                          value={n.guardianPan}
+                          onChange={(e) =>
+                            setNominee(i, { guardianPan: e.target.value.toUpperCase() })
+                          }
+                          placeholder="Guardian PAN"
+                          className={`${inputCls} font-mono`}
+                        />
+                      </div>
+                    )}
+
+                    {touched && issues[i] && (
+                      <p className="mt-1.5 text-[11px] text-danger">{issues[i]}</p>
+                    )}
+                  </div>
+                ))}
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {form.nominees.length < 3 ? (
+                    <button
+                      type="button"
+                      onClick={addNominee}
+                      className="inline-flex items-center gap-1 rounded-token-md border border-border bg-bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-primary hover:text-accent"
+                    >
+                      <Plus className="h-3 w-3" /> Add another
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-text-faint">BSE allows at most 3.</span>
+                  )}
+                  <span
+                    className={`text-[11px] font-semibold ${
+                      shareTotal === 100 ? 'text-success' : 'text-warning'
+                    }`}
+                  >
+                    Total {shareTotal}%
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {err('nominees') && <p className="mt-2 text-[11px] text-danger">{err('nominees')}</p>}
+          </div>
+
           {!confirming ? (
             <button
               type="button"
@@ -522,6 +1002,25 @@ export function ClientOnboardingPage() {
                 { label: 'Contact', value: `${form.email} · ${form.mobile}` },
                 { label: 'Bank', value: `${form.ifsc} · ${form.accountNumber} (${form.accountType})` },
                 { label: 'Address', value: `${form.city}, ${form.state} ${form.pincode}` },
+                {
+                  label: 'Nomination',
+                  value:
+                    form.nominationChoice === 'decline'
+                      ? 'Declined'
+                      : form.nominees
+                          .map(
+                            (n) =>
+                              `${[n.firstName, n.lastName].filter(Boolean).join(' ')} ${n.percent}%`,
+                          )
+                          .join(', '),
+                },
+                {
+                  label: 'Documents',
+                  value:
+                    [form.bankProof && 'Bank proof', form.aof && 'AOF']
+                      .filter(Boolean)
+                      .join(', ') || 'None attached',
+                },
               ]}
               note="Registers a physical, resident-individual UCC at BSE StAR MF. The investor must then approve a 2FA link before KYC and PAN verification begin."
               busy={busy}

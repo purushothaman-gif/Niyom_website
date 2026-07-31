@@ -128,6 +128,31 @@ export interface UccDetail {
   isMock: boolean;
 }
 
+/** A scan sent to BSE inline as base64 — capped at 3 MB by the proxy. */
+export interface UccDocumentInput {
+  docNumber: string;
+  fileName: string;
+  fileSize: number;
+  fileBlob: string;
+}
+
+/**
+ * A nominee. BSE takes at most 3, their percentages must total exactly 100,
+ * and `relation` is a code from BSE's nomination_relation enum, not a label.
+ */
+export interface NomineeInput {
+  firstName: string;
+  middleName?: string;
+  lastName?: string;
+  dob?: string;
+  relation: string;
+  percent: number;
+  identifierType: 'pan' | 'aadhaar' | 'passport';
+  identifierNumber: string;
+  isMinor?: boolean;
+  guardian?: { firstName: string; middleName?: string; lastName?: string; dob: string; pan: string };
+}
+
 export interface RegisterUccInput {
   clientCode: string;
   pan: string;
@@ -140,7 +165,41 @@ export interface RegisterUccInput {
   mobile: string;
   address: { line1: string; city: string; state: string; pincode: string };
   bank: { accountNumber: string; ifsc: string; accountType?: string };
+  fatca?: { fatherName?: string; spouseName?: string };
+  /** Empty means the client has declined to nominate — a recorded opt-out. */
+  nominees?: NomineeInput[];
+  documents?: {
+    bankProof?: UccDocumentInput;
+    bankProofType?: 'cancel_cheque' | 'bank_statement';
+    aof?: UccDocumentInput;
+  };
 }
+
+/** BSE's nomination_relation codes (§7.4.18) — the value sent is the code. */
+export const NOMINEE_RELATIONS: { code: string; label: string }[] = [
+  { code: '1', label: 'Aunt' },
+  { code: '2', label: 'Brother' },
+  { code: '3', label: 'Daughter' },
+  { code: '4', label: 'Daughter in law' },
+  { code: '5', label: 'Father' },
+  { code: '6', label: 'Father in law' },
+  { code: '7', label: 'Grand daughter' },
+  { code: '8', label: 'Grand son' },
+  { code: '9', label: 'Grand father' },
+  { code: '10', label: 'Grand mother' },
+  { code: '11', label: 'Husband' },
+  { code: '12', label: 'Mother' },
+  { code: '13', label: 'Mother in law' },
+  { code: '14', label: 'Nephew' },
+  { code: '15', label: 'Niece' },
+  { code: '16', label: 'Friend' },
+  { code: '17', label: 'Sister' },
+  { code: '18', label: 'Son' },
+  { code: '19', label: 'Son in law' },
+  { code: '20', label: 'Uncle' },
+  { code: '21', label: 'Wife' },
+  { code: '22', label: 'Others' },
+];
 
 export type RedeemMode = 'amount' | 'units' | 'all';
 
