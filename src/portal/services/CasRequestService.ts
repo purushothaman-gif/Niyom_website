@@ -26,15 +26,24 @@ export type CasRequestStatus =
   | 'cancelled'
   | 'expired';
 
-/** The values the client must enter on the registrar's form. */
+/**
+ * The values the client must enter on the registrar's form — and ONLY fields
+ * that form actually has, in its own order and using its own labels.
+ *
+ * There is no date of birth here because CAMS does not ask for one. Showing a
+ * value the page has no field for makes a client hunt for it and doubt the rest
+ * of the instructions.
+ */
 export interface CasFormGuidance {
   url: string;
-  email: string;
-  pan: string;
-  dob: string;
   statementType: string;
   period: string;
+  fromDate: string;
+  toDate: string;
   folioListing: string;
+  email: string;
+  /** Optional on the CAMS form; blank when we hold no PAN. */
+  pan: string;
 }
 
 export interface CasRequest {
