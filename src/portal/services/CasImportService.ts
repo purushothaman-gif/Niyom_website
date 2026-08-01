@@ -79,7 +79,12 @@ export const CasImportService = {
    * NOT their PAN, which is the assumption that makes this fail most often. It
    * is used to open the PDF and is never persisted.
    */
-  async importStatement(file: File, password: string): Promise<CasImportResponse> {
+  async importStatement(
+    file: File,
+    password: string,
+    /** Links the import back to the tracked request that produced it, when there is one. */
+    requestId?: string | null,
+  ): Promise<CasImportResponse> {
     const baseUrl = proxyBaseUrl();
     if (!baseUrl) return { ok: false, error: 'Portfolio import is not enabled here yet.' };
     if (file.size > MAX_CAS_BYTES) {
@@ -98,6 +103,7 @@ export const CasImportService = {
           fileBase64: await toBase64(file),
           fileName: file.name,
           password,
+          ...(requestId ? { requestId } : {}),
         }),
       });
       const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;

@@ -44,6 +44,8 @@ import {
   type CasParseResult,
 } from './parse.js';
 import { parseDetailedSchemes, type CasDetailedScheme } from './detailed.js';
+import { CasError, sbDelete, sbInsert, sbPatch, sbSelect } from './db.js';
+import { alertRm } from './alerts.js';
 
 /** A base64 PDF inflates by a third; express.json is capped at 10mb. */
 const MAX_PDF_BYTES = 6 * 1024 * 1024;
@@ -56,61 +58,6 @@ const money = (n: number) => n.toFixed(2);
 
 /** Never write another person's PAN against a client's record. */
 const maskPan = (pan: string) => `${pan.slice(0, 2)}XXXXXX${pan.slice(-2)}`;
-
-class CasError extends Error {
-  constructor(
-    message: string,
-    readonly httpStatus = 400,
-  ) {
-    super(message);
-    this.name = 'CasError';
-  }
-}
-
-/* ----------------------------------------------------------- Supabase I/O -- */
-
-function serviceHeaders(cfg: ProxyConfig): Record<string, string> {
-  const key = cfg.supabaseServiceRoleKey;
-  if (!key) throw new CasError('Portfolio import is not configured on this server.', 503);
-  return {
-    'Content-Type': 'application/json',
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-  };
-}
-
-async function sbSelect<T>(cfg: ProxyConfig, path: string): Promise<T[]> {
-  const r = await fetch(`${cfg.supabaseUrl}/rest/v1/${path}`, { headers: serviceHeaders(cfg) });
-  if (!r.ok) {
-    throw new CasError(`Could not read from the database (${r.status}).`, 502);
-  }
-  return (await r.json()) as T[];
-}
-
-/**
- * Rows carry client-generated ids so children can be built before anything is
- * sent — one round trip per table instead of one per row, and no dependence on
- * PostgREST returning inserted rows in the order they were given.
- */
-async function sbInsert(cfg: ProxyConfig, table: string, rows: unknown[]): Promise<void> {
-  if (!rows.length) return;
-  const r = await fetch(`${cfg.supabaseUrl}/rest/v1/${table}`, {
-    method: 'POST',
-    headers: { ...serviceHeaders(cfg), Prefer: 'return=minimal' },
-    body: JSON.stringify(rows),
-  });
-  if (!r.ok) {
-    const body = await r.text().catch(() => '');
-    throw new CasError(`Could not save the statement (${table}: ${body.slice(0, 200)}).`, 502);
-  }
-}
-
-async function sbDelete(cfg: ProxyConfig, path: string): Promise<void> {
-  await fetch(`${cfg.supabaseUrl}/rest/v1/${path}`, {
-    method: 'DELETE',
-    headers: serviceHeaders(cfg),
-  }).catch(() => undefined);
-}
 
 /* --------------------------------------------------------- reconciliation -- */
 
@@ -392,7 +339,12 @@ export function casRouter(cfg: ProxyConfig): Router {
         fileName?: string;
         password?: string;
         clientId?: string;
+        /** Links this import back to the tracked request that produced it. */
+        requestId?: string;
       };
+      const requestId = /^[0-9a-f-]{36}$/i.test(String(body.requestId ?? ''))
+        ? String(body.requestId)
+        : null;
 
       const password = String(body.password ?? '');
       if (!password) {
@@ -484,8 +436,23 @@ export function casRouter(cfg: ProxyConfig): Router {
             status: 'failed',
             error: `Statement is for PAN ${statementPans.map(maskPan).join(', ')}, not this client.`,
             created_by: caller.kind === 'staff' ? (caller.employeeId ?? null) : null,
+            request_id: requestId,
           },
         ]);
+        if (requestId) {
+          await sbPatch(cfg, `cas_requests?id=eq.${requestId}`, {
+            status: 'failed',
+            failure_reason: 'The statement was for a different PAN.',
+            completed_at: new Date().toISOString(),
+          });
+        }
+        // A PAN mismatch is the one failure a client cannot resolve alone — it
+        // usually means a family member's statement, and someone has to say so.
+        await alertRm(cfg, 'panMismatch', {
+          clientId,
+          clientLabel: client.full_name ?? clientId,
+          detail: `Uploaded a statement for PAN ${statementPans.map(maskPan).join(', ')}, which is not theirs. Nothing was imported.`,
+        });
         throw new CasError(
           'This statement belongs to a different PAN, so it has not been imported.',
           409,
@@ -548,6 +515,7 @@ export function casRouter(cfg: ProxyConfig): Router {
           transaction_count: rows.transactions.length,
           error: recon.failures.length ? recon.failures.join(' ') : null,
           created_by: caller.kind === 'staff' ? (caller.employeeId ?? null) : null,
+          request_id: requestId,
         },
       ]);
 
@@ -564,6 +532,55 @@ export function casRouter(cfg: ProxyConfig): Router {
         // so dropping the import row removes whatever landed.
         await sbDelete(cfg, `cas_imports?id=eq.${importId}`);
         throw err;
+      }
+
+      /* --------------------------------------------- close out and notify */
+
+      if (requestId) {
+        await sbPatch(cfg, `cas_requests?id=eq.${requestId}`, {
+          status: recon.reconciled ? 'imported' : 'failed',
+          import_id: importId,
+          failure_reason: recon.reconciled ? null : recon.failures.join(' ') || null,
+          completed_at: new Date().toISOString(),
+        }).catch(() => undefined); // the import stands regardless
+      }
+
+      const clientLabel = client.full_name ?? clientId;
+      if (!recon.reconciled) {
+        // The client is told we could not verify it and shown no figures. The RM
+        // is told because a mismatch means the parser met a layout it did not
+        // know, and that needs a human to look at the statement.
+        await alertRm(cfg, 'reconciliationMismatch', {
+          clientId,
+          clientLabel,
+          detail: `A statement was imported but did not reconcile, so it is not being shown. ${recon.failures.join(' ')}`,
+        });
+      } else {
+        /*
+         * Held-away value is read back from the database rather than recomputed
+         * here: `cas_schemes.is_ours` is a GENERATED column, so asking Postgres
+         * keeps the ARN-matching rule in exactly one place. Costs one round trip
+         * on the success path only.
+         */
+        try {
+          const heldAway = await sbSelect<{ value: number | null }>(
+            cfg,
+            `cas_schemes?select=value&import_id=eq.${importId}` +
+              `&is_ours=is.false&advisor_code=not.is.null&value=gt.0`,
+          );
+          if (heldAway.length) {
+            const total = heldAway.reduce((s, r) => s + (Number(r.value) || 0), 0);
+            await alertRm(cfg, 'heldAwayDetected', {
+              clientId,
+              clientLabel,
+              detail:
+                `${heldAway.length} scheme(s) worth ₹${total.toLocaleString('en-IN', { maximumFractionDigits: 0 })} ` +
+                `sit with another distributor.`,
+            });
+          }
+        } catch {
+          /* the import succeeded; a missing alert must not change that */
+        }
       }
 
       res.json({

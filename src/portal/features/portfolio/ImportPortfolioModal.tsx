@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  AlertCircle, ArrowRight, CheckCircle2, Download, FileText, Loader2, Lock, ShieldCheck, Upload, X,
+  AlertCircle, CheckCircle2, Download, FileText, Loader2, Lock, ShieldCheck, Upload, X,
 } from 'lucide-react';
 import { fmtDate, fmtFull } from '../../../crm/utils';
 import { StatusPill } from '../../components/StatusPill';
@@ -9,6 +9,16 @@ import {
   type CasImportOutcome,
   type CasImportRecord,
 } from '../../services/CasImportService';
+import {
+  CasRequestService,
+  isOpenRequest,
+  type CasFormGuidance,
+  type CasRequest,
+} from '../../services/CasRequestService';
+import type { ConsentType } from '../../types/consent';
+import { CasConsentStep } from './CasConsentStep';
+import { CasRequestStep } from './CasRequestStep';
+import { CasAwaitingStep } from './CasAwaitingStep';
 
 /**
  * Import an existing mutual fund portfolio from a Consolidated Account
@@ -43,10 +53,20 @@ interface Props {
   onImported: () => void;
 }
 
-type Step = 'how' | 'upload' | 'done';
+/**
+ * consent  what they are authorising
+ * request  the registrar's form, prefilled from their own record
+ * awaiting the ~5 minutes before the email arrives
+ * upload   the statement itself
+ * done     the outcome
+ *
+ * `upload` is reachable from everywhere: a client who already has a statement,
+ * or who imported before, should never be walked through the earlier steps.
+ */
+type Step = 'consent' | 'request' | 'awaiting' | 'upload' | 'done';
 
 export function ImportPortfolioModal({ onClose, onImported }: Props) {
-  const [step, setStep] = useState<Step>('how');
+  const [step, setStep] = useState<Step>('consent');
   /**
    * Set as soon as the client navigates, so the asynchronous "have they done
    * this before?" answer can never yank the screen out from under someone who
@@ -63,33 +83,64 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
   const [error, setError] = useState('');
   const [outcome, setOutcome] = useState<CasImportOutcome | null>(null);
   const [previous, setPrevious] = useState<CasImportRecord[]>([]);
+  const [consents, setConsents] = useState<ConsentType[]>([]);
+  const [request, setRequest] = useState<CasRequest | null>(null);
+  const [form, setForm] = useState<CasFormGuidance | null>(null);
+  const [email, setEmail] = useState('');
 
+  /**
+   * Where to open.
+   *
+   * An open request means they are mid-journey and want to know what happened to
+   * it, not to start again. A previous successful import means they know the
+   * drill and are holding a file. Only a genuine first-timer sees consent first.
+   */
   useEffect(() => {
     let alive = true;
-    void CasImportService.listImports().then((rows) => {
-      if (!alive) return;
-      setPrevious(rows);
-      /*
-       * A returning client already knows how to request a statement and is
-       * holding the file — the five-step guide is a wall in front of the one
-       * thing they came to do. Skip straight to the upload; the guide stays one
-       * click away for when they need it again.
-       */
-      if (!navigated.current && rows.some((r) => r.status === 'reconciled')) {
-        setStep('upload');
-      }
-    });
+    void Promise.all([CasImportService.listImports(), CasRequestService.latest()]).then(
+      ([rows, latest]) => {
+        if (!alive) return;
+        setPrevious(rows);
+        if (latest) setRequest(latest);
+        if (latest?.requestedEmail) setEmail(latest.requestedEmail);
+        if (navigated.current) return;
+        if (latest && isOpenRequest(latest.status)) setStep('awaiting');
+        else if (rows.some((r) => r.status === 'reconciled')) setStep('upload');
+      },
+    );
     return () => {
       alive = false;
     };
   }, []);
+
+  /** Consent granted → create the tracked request and fetch the form values. */
+  const startRequest = async () => {
+    setError('');
+    setBusy(true);
+    const r = await CasRequestService.start({ email: email.trim(), consents });
+    setBusy(false);
+    if (!r.ok) return setError(r.error);
+    setForm(r.request.form);
+    setRequest({
+      requestId: r.request.requestId,
+      status: r.request.status,
+      requestedEmail: email.trim(),
+      statementFrom: null,
+      statementTo: null,
+      expectedBy: r.request.expectedBy,
+      importId: null,
+      failureReason: null,
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+    });
+  };
 
   const submit = async () => {
     if (!file) return setError('Choose the statement you received by email.');
     if (!password) return setError('Enter the password you set when you requested the statement.');
     setError('');
     setBusy(true);
-    const r = await CasImportService.importStatement(file, password);
+    const r = await CasImportService.importStatement(file, password, request?.requestId ?? null);
     setBusy(false);
     if (!r.ok) return setError(r.error);
     setOutcome(r.outcome);
@@ -114,11 +165,39 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
           </button>
         </div>
 
-        {step === 'how' && (
-          <HowToRequest
-            lastGood={lastGood}
-            onContinue={() => goTo('upload')}
+        {step === 'consent' && (
+          <CasConsentStep
+            onContinue={(granted) => {
+              setConsents(granted);
+              goTo('request');
+            }}
             onClose={onClose}
+          />
+        )}
+
+        {step === 'request' && (
+          <CasRequestStep
+            form={form}
+            email={email}
+            onEmailChange={setEmail}
+            busy={busy}
+            error={error}
+            // Before the request exists this creates it; afterwards it means
+            // "I've filled in the CAMS form" and moves on to waiting.
+            onSubmitted={() => (form ? goTo('awaiting') : void startRequest())}
+            onBack={() => goTo('consent')}
+          />
+        )}
+
+        {step === 'awaiting' && request && (
+          <CasAwaitingStep
+            request={request}
+            onUpload={() => goTo('upload')}
+            onCancelled={() => {
+              setRequest(null);
+              setForm(null);
+              goTo('consent');
+            }}
           />
         )}
 
@@ -207,7 +286,7 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
             <div className="flex justify-between gap-3 pt-1">
               <button
                 type="button"
-                onClick={() => goTo('how')}
+                onClick={() => goTo(form ? 'request' : 'consent')}
                 className="rounded-token-md border border-border bg-bg-raised px-4 py-2 text-sm text-text-muted"
               >
                 How do I request one?
@@ -238,114 +317,6 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
         )}
       </div>
     </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-
-function HowToRequest({
-  lastGood,
-  onContinue,
-  onClose,
-}: {
-  lastGood?: CasImportRecord;
-  onContinue: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="space-y-5 p-6">
-      {lastGood && (
-        <div className="flex items-start gap-2 rounded-token-md border border-success-soft/25 bg-success-soft/5 p-3">
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success-soft" />
-          <p className="text-xs leading-relaxed text-text-muted">
-            You last imported a statement on {fmtDate(lastGood.created_at)}
-            {lastGood.scheme_count ? `, covering ${lastGood.scheme_count} schemes` : ''}. Importing a
-            newer one will bring your portfolio up to date.
-          </p>
-        </div>
-      )}
-
-      <p className="text-sm leading-relaxed text-text-muted">
-        Your Consolidated Account Statement lists every mutual fund you hold, across every fund house
-        — including funds you did not buy through us. Request one from CAMS and we will read it in.
-      </p>
-
-      <ol className="space-y-3.5">
-        <Instruction n={1} title="Open camsonline.com → Statements → “CAS – CAMS + KFintech”">
-          One request covers both registrars, so this is the only statement you need.
-        </Instruction>
-        <Instruction n={2} title="Enter the email your funds are registered against" emphasis>
-          Statements are consolidated by <b>email address, not PAN</b>. Any folio held under a
-          different email will be missing, and the file will give no sign that it is incomplete.
-        </Instruction>
-        <Instruction n={3} title="Choose Detailed, not Summary" emphasis>
-          A summary lists only what you hold today. The detailed statement carries every transaction,
-          which is what your returns and capital gains are worked out from.
-        </Instruction>
-        <Instruction n={4} title="Pick the earliest start date, and include zero-balance folios">
-          Funds you have fully exited still count towards your realised gains, so leaving them out
-          understates what you have made.
-        </Instruction>
-        <Instruction n={5} title="Set a password you will remember" emphasis>
-          CAMS asks you to choose one — it is <b>not your PAN</b>. You will need to type it here to
-          open the file.
-        </Instruction>
-      </ol>
-
-      <div className="flex items-start gap-2 rounded-token-md border border-accent/15 bg-accent/5 p-3">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-        <p className="text-xs leading-relaxed text-text-muted">
-          CAMS emails the statement to that address in about five minutes. Come back here once it
-          arrives — there is nothing to wait on this screen for.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap justify-end gap-3 pt-1">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-token-md border border-border bg-bg-raised px-4 py-2 text-sm text-text-muted"
-        >
-          I&apos;ll come back
-        </button>
-        <button
-          onClick={onContinue}
-          className="press flex items-center gap-2 rounded-token-md px-5 py-2.5 text-sm font-bold text-text-on-accent"
-          style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
-        >
-          I have my statement
-          <ArrowRight className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function Instruction({
-  n,
-  title,
-  emphasis,
-  children,
-}: {
-  n: number;
-  title: string;
-  emphasis?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <li className="flex gap-3">
-      <span
-        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-          emphasis ? 'bg-accent/15 text-accent' : 'bg-bg-surface text-text-muted'
-        }`}
-      >
-        {n}
-      </span>
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-text-primary">{title}</p>
-        <p className="mt-0.5 text-xs leading-relaxed text-text-muted">{children}</p>
-      </div>
-    </li>
   );
 }
 
