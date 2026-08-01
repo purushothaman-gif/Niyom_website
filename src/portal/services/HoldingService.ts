@@ -29,7 +29,13 @@ import { clientSupabase as supabase } from '../../lib/supabase';
 import type { NWClient, NWHolding, NWTransaction } from '../../crm/types';
 import type { CasFreshness, PortalHolding } from '../types/cas';
 import { CasPortfolioService } from './CasPortfolioService';
-import { assessCasFreshness, selectHoldings, type CasCashFlow } from './cas/model';
+import {
+  assessCasFreshness,
+  portfolioDayChange,
+  selectHoldings,
+  valuationDate,
+  type CasCashFlow,
+} from './cas/model';
 
 // Re-exported so existing importers of these from HoldingService keep working.
 export { selectHoldings } from './cas/model';
@@ -49,6 +55,10 @@ export interface ClientWealthSnapshot {
    * return. Empty when no statement has been imported.
    */
   casFlows: CasCashFlow[];
+  /** Value change across the last published NAV move; null when not revalued. */
+  dayChange: number | null;
+  /** The date the mutual fund valuations are as at, when newer than the statement. */
+  valuedOn: string | null;
 }
 
 export const HoldingService = {
@@ -88,15 +98,18 @@ export const HoldingService = {
 
     const manual = (holdingsRes.data as NWHolding[]) ?? [];
     const latestOwnMfTxnDate = (latestMfRes.data?.txn_date as string) ?? null;
+    const holdings = selectHoldings(manual, cas?.holdings ?? null);
 
     return {
       client: (clientRes.data as NWClient) ?? null,
-      holdings: selectHoldings(manual, cas?.holdings ?? null),
+      holdings,
       transactions: (txnRes.data as NWTransaction[]) ?? [],
       mfSource: cas ? 'cas' : 'manual',
       casStatementTo: cas?.statementTo ?? null,
       casFreshness: assessCasFreshness(cas?.statementTo ?? null, latestOwnMfTxnDate),
       casFlows: cas?.flows ?? [],
+      dayChange: portfolioDayChange(holdings),
+      valuedOn: valuationDate(holdings),
     };
   },
 };

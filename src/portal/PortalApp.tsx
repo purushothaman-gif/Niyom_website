@@ -99,6 +99,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
             onActivateProducts={() => setShowActivate(true)}
             onImport={() => setShowImport(true)}
             hasImportedStatement={hasImportedStatement}
+            dayChange={snapshot.dayChange}
           />
         ) : (
           <LoadingState />
@@ -119,6 +120,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
             onImport={() => setShowImport(true)}
             freshness={snapshot.casFreshness}
             hasImportedStatement={hasImportedStatement}
+            valuedOn={snapshot.valuedOn}
           />
         ) : (
           <LoadingState />

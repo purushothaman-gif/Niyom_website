@@ -225,3 +225,112 @@ export function migrationCandidates(holdings: PortalHolding[]): CasHoldingMeta[]
     .map((h) => h.cas)
     .filter((c): c is CasHoldingMeta => !!c && c.ownership === 'held_away');
 }
+
+/* --------------------------------------------------------------- valuation -- */
+
+/** The latest published NAV for one scheme, and the one before it. */
+export interface NavQuote {
+  isin: string;
+  nav: number;
+  navDate: string;
+  /** The prior published NAV, for the day's change. Null when there is no prior. */
+  previousNav: number | null;
+}
+
+/** A nav_daily row as read from the database. */
+export interface NavRow {
+  isin: string;
+  nav: number | string;
+  nav_date: string;
+}
+
+/**
+ * Reduce raw NAV rows to one quote per scheme.
+ *
+ * "Latest" is per ISIN, never a single portfolio-wide date: a wound-up fund
+ * keeps its final NAV for years, and taking the newest date across the whole
+ * file would leave those schemes with no quote at all rather than their real
+ * last price.
+ */
+export function toNavQuotes(rows: NavRow[]): Map<string, NavQuote> {
+  const byIsin = new Map<string, NavRow[]>();
+  for (const r of rows) {
+    const list = byIsin.get(r.isin) ?? [];
+    list.push(r);
+    byIsin.set(r.isin, list);
+  }
+
+  const out = new Map<string, NavQuote>();
+  for (const [isin, list] of byIsin) {
+    // Sorted here rather than trusted from the query: correctness should not
+    // depend on a caller remembering an ORDER BY.
+    const sorted = [...list].sort((a, b) => (a.nav_date < b.nav_date ? 1 : -1));
+    const latest = sorted[0];
+    const prior = sorted.find((r) => r.nav_date < latest.nav_date);
+    out.set(isin, {
+      isin,
+      nav: Number(latest.nav),
+      navDate: latest.nav_date.slice(0, 10),
+      previousNav: prior ? Number(prior.nav) : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * Revalue a statement holding at the latest published NAV.
+ *
+ * A CAS is a snapshot: without this, a client's portfolio is frozen on the day
+ * they imported it. With it, the VALUE moves daily while the UNITS stay as at
+ * the statement — which is why the staleness notice still matters and this is
+ * not a substitute for importing a newer statement.
+ *
+ * Returns the holding untouched when there is nothing newer to apply. Showing
+ * the statement's own valuation is right in that case; inventing a movement
+ * would not be.
+ */
+export function applyNav(h: PortalHolding, quote: NavQuote | undefined): PortalHolding {
+  if (!h.cas || !quote || !Number.isFinite(quote.nav) || quote.nav <= 0) return h;
+
+  // Only ever move forward. A NAV at or before the statement's own date tells
+  // us nothing the statement did not already say.
+  const statementNavDate = (h.cas.navDate ?? '').slice(0, 10);
+  if (statementNavDate && quote.navDate <= statementNavDate) return h;
+
+  const units = h.quantity || 0;
+  if (!units) return h;
+
+  const value = units * quote.nav;
+  const dayChange =
+    quote.previousNav && quote.previousNav > 0 ? units * (quote.nav - quote.previousNav) : null;
+
+  return {
+    ...h,
+    current_value: Number(value.toFixed(2)),
+    current_nav: quote.nav,
+    nav_date: quote.navDate,
+    cas: {
+      ...h.cas,
+      value: Number(value.toFixed(2)),
+      liveNav: {
+        nav: quote.nav,
+        navDate: quote.navDate,
+        dayChange: dayChange === null ? null : Number(dayChange.toFixed(2)),
+      },
+    },
+  };
+}
+
+/** Total value change across the last published NAV move. Null when nothing was revalued. */
+export function portfolioDayChange(holdings: PortalHolding[]): number | null {
+  const changes = holdings
+    .map((h) => h.cas?.liveNav?.dayChange)
+    .filter((c): c is number => typeof c === 'number');
+  return changes.length ? Number(changes.reduce((s, c) => s + c, 0).toFixed(2)) : null;
+}
+
+/** The date the revalued figures are as at, or null if nothing was revalued. */
+export function valuationDate(holdings: PortalHolding[]): string | null {
+  const dates = holdings.map((h) => h.cas?.liveNav?.navDate).filter((d): d is string => !!d);
+  return dates.length ? dates.sort().slice(-1)[0] : null;
+}

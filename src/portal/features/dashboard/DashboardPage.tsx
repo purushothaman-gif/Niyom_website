@@ -31,6 +31,8 @@ interface DashboardPageProps {
   onActivateProducts: () => void;
   /** Opens the import wizard, owned by PortalApp. */
   onImport: () => void;
+  /** Value change across the last published NAV move; null until there is one. */
+  dayChange?: number | null;
   /** False until a reconciled statement exists — drives the import prompt. */
   hasImportedStatement?: boolean;
 }
@@ -50,6 +52,7 @@ export function DashboardPage({
   onActivateProducts,
   onImport,
   hasImportedStatement = false,
+  dayChange = null,
 }: DashboardPageProps) {
   const firstName = client?.full_name?.split(' ')[0] || 'Investor';
   const { summary } = data;
@@ -109,6 +112,23 @@ export function DashboardPage({
             />
           </div>
         </div>
+        {/*
+          Mutual fund NAVs are struck once a day after the close, so this is the
+          last published move rather than anything intraday. Shown only when a
+          move exists — a "0" here would claim a flat day, which is a different
+          statement from "not repriced yet".
+        */}
+        {dayChange !== null && (
+          <p className="mt-4 border-t border-border-subtle pt-3 text-xs text-text-faint">
+            Last NAV move{' '}
+            <span
+              className="font-semibold tabular-nums"
+              style={{ color: dayChange >= 0 ? 'var(--success)' : 'var(--danger)' }}
+            >
+              {dayChange >= 0 ? '+' : ''}{inr(dayChange)}
+            </span>
+          </p>
+        )}
         {data.xirrPercent === null && summary.netWorth > 0 && (
           <p className="mt-4 border-t border-border-subtle pt-3 text-[11px] text-text-faint">
             XIRR appears once there is enough transaction history to calculate a

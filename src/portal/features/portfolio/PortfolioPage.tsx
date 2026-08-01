@@ -26,6 +26,7 @@ export function PortfolioPage({
   onImport,
   freshness,
   hasImportedStatement = false,
+  valuedOn,
 }: {
   data: PortfolioData;
   /** Opens the import wizard, which PortalApp owns so both screens share one. */
@@ -33,6 +34,8 @@ export function PortfolioPage({
   /** How current the imported mutual fund picture is; absent until one exists. */
   freshness?: CasFreshness;
   hasImportedStatement?: boolean;
+  /** NAV date the mutual fund figures are priced at, when newer than the statement. */
+  valuedOn?: string | null;
 }) {
   const { summary, rows } = data;
   const [filter, setFilter] = useState<Filter>('all');
@@ -111,7 +114,9 @@ export function PortfolioPage({
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          {freshness && <CasStatusNote freshness={freshness} onImport={onImport} />}
+          {freshness && (
+            <CasStatusNote freshness={freshness} onImport={onImport} valuedOn={valuedOn} />
+          )}
         </div>
         {hasImportedStatement && <ImportButton onClick={onImport} />}
       </div>

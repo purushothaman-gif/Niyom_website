@@ -11,12 +11,16 @@ import type { NWHolding } from '../../../crm/types';
 import type { PortalHolding } from '../../types/cas';
 import { MF_OWNERSHIP, ownershipOf } from '../../types/ownership';
 import {
+  applyNav,
   assessCasFreshness,
   isOpenPosition,
   migrationCandidates,
+  portfolioDayChange,
   selectHoldings,
   toFlow,
   toHolding,
+  toNavQuotes,
+  valuationDate,
   type CasSchemeRow,
 } from './model';
 
@@ -319,5 +323,95 @@ describe('backward compatibility', () => {
     const legacy: NWHolding = holding({ product_type: 'secondary_bond' });
     expect(() => selectHoldings([legacy], null)).not.toThrow();
     expect(selectHoldings([legacy], null)[0].cas).toBeUndefined();
+  });
+});
+
+/* -------------------------------------------------------------- valuation -- */
+
+describe('toNavQuotes', () => {
+  it('takes the latest per ISIN, not one date across the whole set', () => {
+    // A wound-up fund keeps its final NAV for years. A portfolio-wide "latest
+    // date" would leave it with no quote instead of its real last price.
+    const q = toNavQuotes([
+      { isin: 'A', nav: 10, nav_date: '2026-07-31' },
+      { isin: 'A', nav: 9, nav_date: '2026-07-30' },
+      { isin: 'B', nav: 50, nav_date: '2022-09-16' },
+    ]);
+    expect(q.get('A')).toMatchObject({ nav: 10, navDate: '2026-07-31', previousNav: 9 });
+    expect(q.get('B')).toMatchObject({ nav: 50, navDate: '2022-09-16', previousNav: null });
+  });
+
+  it('does not depend on the rows arriving sorted', () => {
+    const q = toNavQuotes([
+      { isin: 'A', nav: 9, nav_date: '2026-07-30' },
+      { isin: 'A', nav: 10, nav_date: '2026-07-31' },
+    ]);
+    expect(q.get('A')?.nav).toBe(10);
+  });
+
+  it('accepts numeric strings, which is how PostgREST returns numerics', () => {
+    const q = toNavQuotes([{ isin: 'A', nav: '461.6166', nav_date: '2026-07-31' }]);
+    expect(q.get('A')?.nav).toBeCloseTo(461.6166, 4);
+  });
+});
+
+describe('applyNav', () => {
+  const held = () =>
+    toHolding(scheme({ units: 100, nav: 10, value: 1000, nav_date: '2026-07-01' }), ctx);
+
+  it('revalues at the newer NAV', () => {
+    const out = applyNav(held(), { isin: 'x', nav: 12, navDate: '2026-07-31', previousNav: 11 });
+    expect(out.current_value).toBe(1200);
+    expect(out.current_nav).toBe(12);
+    expect(out.cas?.liveNav).toMatchObject({ nav: 12, navDate: '2026-07-31', dayChange: 100 });
+  });
+
+  it('leaves the statement valuation alone when the NAV is not newer', () => {
+    // Nothing published since the statement says nothing the statement did not.
+    const out = applyNav(held(), { isin: 'x', nav: 99, navDate: '2026-07-01', previousNav: null });
+    expect(out.current_value).toBe(1000);
+    expect(out.cas?.liveNav).toBeUndefined();
+  });
+
+  it('leaves it alone when there is no quote at all', () => {
+    expect(applyNav(held(), undefined).current_value).toBe(1000);
+  });
+
+  it('reports no day change when there is no prior NAV', () => {
+    const out = applyNav(held(), { isin: 'x', nav: 12, navDate: '2026-07-31', previousNav: null });
+    expect(out.cas?.liveNav?.dayChange).toBeNull();
+  });
+
+  it('refuses a nonsensical NAV rather than zeroing a portfolio', () => {
+    for (const nav of [0, -5, Number.NaN]) {
+      expect(applyNav(held(), { isin: 'x', nav, navDate: '2026-07-31', previousNav: 1 }).current_value).toBe(1000);
+    }
+  });
+
+  it('does not touch a holding that came from nw_holdings', () => {
+    // No cas block means no statement behind it, so there is nothing to revalue.
+    const manual = { ...held(), cas: undefined } as PortalHolding;
+    expect(applyNav(manual, { isin: 'x', nav: 12, navDate: '2026-07-31', previousNav: 11 })).toBe(manual);
+  });
+});
+
+describe('portfolioDayChange and valuationDate', () => {
+  const revalued = (nav: number, prev: number, date: string) =>
+    applyNav(toHolding(scheme({ units: 100, nav: 10, value: 1000, nav_date: '2026-07-01' }), ctx), {
+      isin: 'x', nav, navDate: date, previousNav: prev,
+    });
+
+  it('sums the day change across revalued holdings', () => {
+    expect(portfolioDayChange([revalued(12, 11, '2026-07-31'), revalued(9, 10, '2026-07-31')]))
+      .toBeCloseTo(0, 6); // +100 and -100
+  });
+
+  it('is null when nothing was revalued, rather than a misleading zero', () => {
+    expect(portfolioDayChange([toHolding(scheme(), ctx)])).toBeNull();
+  });
+
+  it('reports the newest valuation date in play', () => {
+    expect(valuationDate([revalued(12, 11, '2026-07-30'), revalued(12, 11, '2026-07-31')]))
+      .toBe('2026-07-31');
   });
 });
