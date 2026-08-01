@@ -139,6 +139,12 @@ describe('toFlow — cash flow signs from the investor’s side', () => {
     expect(flow('REDEMPTION', -19053.54)?.amount).toBe(19053.54);
   });
 
+  it('treats a returned ELSS residue as money in', () => {
+    // Nothing was sold, but the cash came back — leaving it out would overstate
+    // what the client actually invested.
+    expect(flow('REFUND', 399.65)?.amount).toBe(399.65);
+  });
+
   it('treats a dividend PAYOUT as money in', () => {
     expect(flow('DIVIDEND', 903.9, 0)?.amount).toBe(903.9);
   });
