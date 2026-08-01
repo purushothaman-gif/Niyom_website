@@ -10,7 +10,7 @@ import { CasStatusNote } from '../../components/CasStatusNote';
 import type { PortfolioData } from '../../types';
 import type { CasFreshness } from '../../types/cas';
 import { HoldingsTable, type SortKey } from './HoldingsTable';
-import { ImportPortfolioModal } from './ImportPortfolioModal';
+import { ImportPortfolioCard } from './ImportPortfolioCard';
 
 type Filter = ProductType | 'all';
 
@@ -23,19 +23,21 @@ const SORTERS: Record<SortKey, (a: PortfolioData['rows'][number], b: PortfolioDa
 
 export function PortfolioPage({
   data,
-  onImported,
+  onImport,
   freshness,
+  hasImportedStatement = false,
 }: {
   data: PortfolioData;
-  onImported?: () => void;
+  /** Opens the import wizard, which PortalApp owns so both screens share one. */
+  onImport: () => void;
   /** How current the imported mutual fund picture is; absent until one exists. */
   freshness?: CasFreshness;
+  hasImportedStatement?: boolean;
 }) {
   const { summary, rows } = data;
   const [filter, setFilter] = useState<Filter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('value');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-  const [importing, setImporting] = useState(false);
 
   const filterOptions = useMemo(() => {
     const opts: Array<{ value: Filter; label: string; count: number }> = [
@@ -62,13 +64,6 @@ export function PortfolioPage({
     }
   };
 
-  const modal = importing ? (
-    <ImportPortfolioModal
-      onClose={() => setImporting(false)}
-      onImported={() => onImported?.()}
-    />
-  ) : null;
-
   /**
    * An investor with nothing here has almost always invested elsewhere — an
    * empty portfolio is far more often "we cannot see it yet" than "there is
@@ -77,19 +72,17 @@ export function PortfolioPage({
    */
   if (rows.length === 0) {
     return (
-      <>
+      <div className="space-y-5">
+        {/* The pitch does the work here; a bare "no holdings" card would not. */}
+        <ImportPortfolioCard onImport={onImport} dismissible={false} />
         <Card>
           <EmptyState
             icon={Wallet}
-            title="No holdings yet."
-            hint="Already invest elsewhere? Import your existing mutual funds from a Consolidated Account Statement."
+            title="Nothing here yet."
+            hint="Holdings you buy through us will appear here as they settle."
           />
-          <div className="flex justify-center pb-2">
-            <ImportButton onClick={() => setImporting(true)} primary />
-          </div>
         </Card>
-        {modal}
-      </>
+      </div>
     );
   }
 
@@ -103,13 +96,24 @@ export function PortfolioPage({
         know are behind. Saying so is the difference between a number they can
         rely on and one they will query when it does not match their fund house.
       */}
+      {/*
+        Before a statement exists the client does not know anything is missing,
+        so the case for it gets real space. Once imported, the same action
+        becomes a quiet "bring it up to date" button.
+      */}
+      {!hasImportedStatement && (
+        <ImportPortfolioCard
+          onImport={onImport}
+          visibleHoldings={rows.length}
+          returnsUnavailable={false}
+        />
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          {freshness && (
-            <CasStatusNote freshness={freshness} onImport={() => setImporting(true)} />
-          )}
+          {freshness && <CasStatusNote freshness={freshness} onImport={onImport} />}
         </div>
-        <ImportButton onClick={() => setImporting(true)} />
+        {hasImportedStatement && <ImportButton onClick={onImport} />}
       </div>
 
       {/* Summary bar */}
@@ -137,25 +141,12 @@ export function PortfolioPage({
         </p>
       </div>
 
-      {modal}
     </div>
   );
 }
 
-function ImportButton({ onClick, primary }: { onClick: () => void; primary?: boolean }) {
-  if (primary) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="press inline-flex items-center gap-2 rounded-token-md px-5 py-2.5 text-sm font-bold text-text-on-accent"
-        style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
-      >
-        <Download className="h-4 w-4" />
-        Import existing portfolio
-      </button>
-    );
-  }
+/** The quiet variant, shown only once a statement has already been imported. */
+function ImportButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
@@ -163,7 +154,7 @@ function ImportButton({ onClick, primary }: { onClick: () => void; primary?: boo
       className="inline-flex items-center gap-2 rounded-token-md border border-border bg-bg-surface px-3.5 py-2 text-xs font-semibold text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary"
     >
       <Download className="h-3.5 w-3.5" />
-      Import existing portfolio
+      Update from a newer statement
     </button>
   );
 }

@@ -21,6 +21,7 @@ import { SipPage } from './features/sip/SipPage';
 import { NotificationsPage } from './features/notifications/NotificationsPage';
 import { SupportPage } from './features/support/SupportPage';
 import { ChangePasswordModal } from './features/profile/ChangePasswordModal';
+import { ImportPortfolioModal } from './features/portfolio/ImportPortfolioModal';
 
 interface PortalAppProps {
   clientId: string;
@@ -37,9 +38,17 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
   const { snapshot, loading, error, refreshedAt, refresh } = useClientSnapshot(clientId);
   const [showChangePw, setShowChangePw] = useState(false);
   const [showActivate, setShowActivate] = useState(false);
+  /*
+   * Owned here rather than by either screen: the dashboard and the portfolio
+   * both offer the import, and two components each holding their own copy of
+   * the wizard is two places for its state to drift.
+   */
+  const [showImport, setShowImport] = useState(false);
 
   const client = snapshot.client;
   const hasData = !!refreshedAt; // first load completed
+  /** A reconciled statement is what turns the prompt off and the refresh on. */
+  const hasImportedStatement = snapshot.mfSource === 'cas';
 
   const dashboardData = useMemo(
     () => (hasData ? buildDashboardData(snapshot) : null),
@@ -88,6 +97,8 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
             refreshedAt={refreshedAt}
             onNavigate={navigate}
             onActivateProducts={() => setShowActivate(true)}
+            onImport={() => setShowImport(true)}
+            hasImportedStatement={hasImportedStatement}
           />
         ) : (
           <LoadingState />
@@ -105,8 +116,9 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
         return portfolioData ? (
           <PortfolioPage
             data={portfolioData}
-            onImported={refresh}
+            onImport={() => setShowImport(true)}
             freshness={snapshot.casFreshness}
+            hasImportedStatement={hasImportedStatement}
           />
         ) : (
           <LoadingState />
@@ -148,6 +160,13 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
 
       {showChangePw && (
         <ChangePasswordModal clientId={clientId} onClose={() => setShowChangePw(false)} />
+      )}
+
+      {showImport && (
+        <ImportPortfolioModal
+          onClose={() => setShowImport(false)}
+          onImported={refresh}
+        />
       )}
 
       {showActivate && (
