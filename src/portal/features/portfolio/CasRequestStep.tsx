@@ -7,9 +7,9 @@ import type { CasFormGuidance } from '../../services/CasRequestService';
  *
  * We cannot submit this for the client — no distributor may request a CAS on an
  * investor's behalf — so the next best thing is that they never have to look
- * anything up. Their PAN, date of birth and registered email all come from
- * their own record; the four choices that decide whether the statement is
- * usable are stated as the exact values to select, not as advice.
+ * anything up. Their PAN and registered email come from their own record, and
+ * the choices that decide whether the statement is usable are stated as the
+ * exact values to select rather than as advice.
  *
  * The values come from the server rather than being assembled here, so a client
  * on a stale bundle cannot be shown instructions we have since corrected.
