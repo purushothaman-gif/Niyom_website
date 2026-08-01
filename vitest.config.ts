@@ -14,7 +14,13 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    /*
+     * The proxy is a separate npm project but the same repo, and its CAS parser
+     * carries the most consequential logic we have — a misread there becomes a
+     * wrong number on a client's screen. It had no tests until one of those
+     * misreads reached production.
+     */
+    include: ['src/**/*.test.ts', 'server/bse-proxy/src/**/*.test.ts'],
     // Explicit imports of describe/it/expect rather than globals, so the test
     // files typecheck under the app's existing tsconfig with no extra `types`
     // entry and no ambient declarations.

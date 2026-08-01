@@ -186,17 +186,65 @@ function splitPriceUnits(
   return null;
 }
 
-/** "Purchase", "Redemption Directly credited..." -> a stable enum + the prose. */
-function classify(rest: string): { type: string; description: string } {
+/**
+ * A transaction's prose -> a stable type.
+ *
+ * ## Why this matches anywhere in the string, not just the start
+ *
+ * It used to test `startsWith('purchase')` and `startsWith('sip')`, which
+ * matched "SIP Purchase-BSE ..." and missed almost everything else a registrar
+ * actually writes:
+ *
+ *   Systematic Investment (1)
+ *   Systematic Purchase (Continuous Offer) - Instalment 2/904 - via Internet
+ *   Initial Purchase
+ *   NFO Purchase
+ *
+ * On one real statement that was 121 transactions worth 2,04,489 falling
+ * through to OTHER — more than the whole portfolio. Nothing looked broken: the
+ * units parse the same whatever the type is called, so every balance check
+ * still passed and the holdings were correct to the paisa. Only the money-
+ * weighted return was wrong, because OTHER is not a cash flow, and a client saw
+ * 70% where the truth was a fraction of that.
+ *
+ * ## Order matters, and the action comes before the charge
+ *
+ * A redemption's prose often mentions the charge deducted from it —
+ * "Redemption - NEFT PAYOUT-NSE - ... , less STT" — so testing for STT first
+ * turns real redemptions into fee rows. The genuine charge lines carry no
+ * action word at all ("STT Paid", "Stamp Duty"), so they fall through safely to
+ * the end.
+ *
+ * Within the actions, "Systematic Withdrawal" is a redemption despite reading
+ * like the systematic purchases above, so withdrawal is tested before the
+ * purchase words; a switch is neither and is caught before both.
+ */
+export function classify(rest: string): { type: string; description: string } {
   const description = rest.trim();
   const s = description.toLowerCase();
-  if (s.startsWith('purchase') || s.startsWith('sip')) return { type: 'PURCHASE', description };
-  if (s.startsWith('redemption')) return { type: 'REDEMPTION', description };
-  if (s.includes('switch') && s.includes('out')) return { type: 'SWITCH_OUT', description };
-  if (s.includes('switch')) return { type: 'SWITCH_IN', description };
-  if (s.includes('dividend') || s.includes('idcw')) return { type: 'DIVIDEND', description };
-  if (s.includes('stt')) return { type: 'STT', description };
+
+  // A switch moves money between schemes and is neither a purchase nor a sale.
+  if (s.includes('switch')) {
+    return { type: s.includes('out') ? 'SWITCH_OUT' : 'SWITCH_IN', description };
+  }
+
+  if (s.includes('idcw') || s.includes('dividend')) return { type: 'DIVIDEND', description };
+
+  // Before the purchase words: a systematic WITHDRAWAL reads like a systematic
+  // investment but is the opposite.
+  if (/redemption|redeem|withdrawal|repurchase/.test(s)) {
+    return { type: 'REDEMPTION', description };
+  }
+
+  if (/purchase|investment|\bsip\b|nfo|allot/.test(s)) {
+    return { type: 'PURCHASE', description };
+  }
+
+  // Charges last: only a row with no action in it at all is actually a charge.
   if (s.includes('stamp duty')) return { type: 'STAMP_DUTY', description };
+  // Word-bounded: "stt" as a substring appears inside ordinary words.
+  if (/\bstt\b/.test(s)) return { type: 'STT', description };
+
   return { type: 'OTHER', description };
 }
 

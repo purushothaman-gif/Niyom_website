@@ -111,6 +111,24 @@ export function reconcileDetailed(schemes: CasDetailedScheme[], lines: string[])
     if (undated) {
       failures.push(`${where}: ${undated} transaction(s) carry a date this parser could not read.`);
     }
+    /*
+     * A transaction that moved units but could not be named is the one error
+     * every check above is blind to. Units parse identically whatever the type
+     * is called, so the balances still reconcile and the holdings are still
+     * right — but OTHER is not a cash flow, so the money silently vanishes from
+     * the return calculation. That is exactly how a real statement came to show
+     * 70% instead of 11%.
+     *
+     * Fail on it. A registrar phrasing we have not seen should stop the import
+     * loudly and get the pattern added, not quietly distort someone's return.
+     */
+    const unclassified = s.transactions.filter((t) => t.type === 'OTHER' && t.units !== 0);
+    if (unclassified.length) {
+      const sample = unclassified[0].description.slice(0, 60);
+      failures.push(
+        `${where}: ${unclassified.length} transaction(s) move units but could not be identified as a purchase, sale or switch (e.g. "${sample}"), so they would be missing from your return.`,
+      );
+    }
     // Units x NAV should reproduce the stated market value. NAV is printed
     // rounded, so this cannot be exact on a large holding — a warning, never a
     // gate, or rounding alone would block real statements.
