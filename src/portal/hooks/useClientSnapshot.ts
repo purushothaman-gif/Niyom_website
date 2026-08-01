@@ -24,6 +24,8 @@ const EMPTY: ClientWealthSnapshot = {
   casStatementTo: null,
   casFreshness: { state: 'none', statementTo: null, latestOwnMfTxnDate: null },
   casFlows: [],
+  dayChange: null,
+  valuedOn: null,
 };
 
 export function useClientSnapshot(clientId: string) {

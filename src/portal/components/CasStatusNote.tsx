@@ -25,10 +25,20 @@ import { CAS_FRESHNESS_COPY, type CasFreshness } from '../types/cas';
 export function CasStatusNote({
   freshness,
   onImport,
+  valuedOn,
 }: {
   freshness: CasFreshness;
   /** Optional: offers the client the import flow straight from the notice. */
   onImport?: () => void;
+  /**
+   * The NAV date the figures are priced at, when newer than the statement.
+   *
+   * Worth stating separately because the two dates mean different things: the
+   * statement date is when the UNITS were counted, this is when they were last
+   * PRICED. A client who knows only one of them cannot tell whether a figure is
+   * out of date.
+   */
+  valuedOn?: string | null;
 }) {
   const { state, statementTo } = freshness;
   const [dismissed, dismiss] = useDismissed(statementTo ? `cas-stale:${statementTo}` : null);
@@ -36,11 +46,17 @@ export function CasStatusNote({
   if (state === 'none' || !statementTo) return null;
   const shown = fmtDate(statementTo);
 
+  const priced =
+    valuedOn && valuedOn.slice(0, 10) > statementTo.slice(0, 10)
+      ? ` · priced at NAV of ${fmtDate(valuedOn)}`
+      : '';
+
   if (state === 'current') {
     return (
       <p className="inline-flex items-center gap-1.5 text-xs text-text-faint">
         <CalendarCheck className="h-3.5 w-3.5" />
         {CAS_FRESHNESS_COPY.current(shown)}
+        {priced}
       </p>
     );
   }

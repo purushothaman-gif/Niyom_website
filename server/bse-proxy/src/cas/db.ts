@@ -53,11 +53,21 @@ export async function sbSelect<T>(cfg: ProxyConfig, path: string): Promise<T[]> 
  * sent — one round trip per table instead of one per row, and no dependence on
  * PostgREST returning inserted rows in the order they were given.
  */
-export async function sbInsert(cfg: ProxyConfig, table: string, rows: unknown[]): Promise<void> {
+export async function sbInsert(
+  cfg: ProxyConfig,
+  table: string,
+  rows: unknown[],
+  /**
+   * Overrides for this call — chiefly `Prefer` for an upsert
+   * (`resolution=merge-duplicates` alongside `?on_conflict=` in the path), which
+   * is what lets the NAV refresh run twice in a day without failing.
+   */
+  extraHeaders: Record<string, string> = {},
+): Promise<void> {
   if (!rows.length) return;
   const r = await fetch(`${cfg.supabaseUrl}/rest/v1/${table}`, {
     method: 'POST',
-    headers: { ...serviceHeaders(cfg), Prefer: 'return=minimal' },
+    headers: { ...serviceHeaders(cfg), Prefer: 'return=minimal', ...extraHeaders },
     body: JSON.stringify(rows),
   });
   if (!r.ok) {

@@ -57,6 +57,21 @@ export interface CasHoldingMeta {
   isOurs: boolean;
   /** Derived from the two above; see types/ownership.ts for why it is 3-valued. */
   ownership: MfOwnership;
+
+  /**
+   * Set when a published NAV newer than the statement has been applied.
+   *
+   * Absent means the holding is still shown at the statement's own valuation —
+   * either no NAV has been published since, or the scheme has none (a wound-up
+   * fund keeps its last NAV for years). Absence is not a failure and must not
+   * be rendered as one.
+   */
+  liveNav?: {
+    nav: number;
+    navDate: string;
+    /** Value change since the previous published NAV. Null on the first day. */
+    dayChange: number | null;
+  };
 }
 
 /** An NWHolding that may carry the statement it came from. */

@@ -18,6 +18,7 @@ import { BseClient, BseError } from './bseClient.js';
 import { webhookRouter } from './webhooks.js';
 import { casRouter } from './cas/import.js';
 import { casRequestRouter } from './cas/requests.js';
+import { lastNavRefresh, refreshNavs } from './cas/nav.js';
 import {
   toAppOrderResult,
   toAppScheme,
@@ -224,7 +225,7 @@ function mountFeature(path: string, name: string, router: Router): void {
 /** When this process came up — a restart after deploying is visible here. */
 const startedAt = new Date().toISOString();
 
-app.get('/health', (_req, res) => {
+app.get('/health', async (_req, res) => {
   res.json({
     ok: true,
     env: cfg.bseEnv,
@@ -232,7 +233,31 @@ app.get('/health', (_req, res) => {
     startedAt,
     // Public on purpose: names of mounted routes, nothing about what they do.
     features: mountedFeatures,
+    /*
+     * A NAV feed that quietly stops is worse than one that is plainly missing —
+     * the client keeps seeing a figure that looks current. Surfacing the last
+     * run here is what makes a stalled job noticeable without logging in.
+     */
+    nav: await lastNavRefresh(cfg),
   });
+});
+
+/**
+ * Nightly NAV refresh, called by the droplet's own cron.
+ *
+ * Sits BEFORE the Supabase-JWT gate and authenticates with a shared secret,
+ * because cron has no user session — the same shape as /verify/pan. AMFI
+ * publishes once a day after the close, so this is scheduled, never polled.
+ */
+app.post('/nav/refresh', async (req, res) => {
+  if (!cfg.navRefreshSecret) {
+    return res.status(503).json({ error: 'NAV refresh is not configured on this server.' });
+  }
+  if (req.header('x-nav-secret') !== cfg.navRefreshSecret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const result = await refreshNavs(cfg);
+  return res.status(result.ok ? 200 : 502).json(result);
 });
 
 // Public — BSE calls this, so it must sit BEFORE the Supabase-JWT gate.

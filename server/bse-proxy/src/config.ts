@@ -63,6 +63,11 @@ export interface ProxyConfig {
    * Cashfree whitelists; the /verify/pan route forwards to Cashfree from here.
    * The Supabase edge function calls it with x-relay-secret. All optional so
    * the proxy still boots if verification isn't configured yet. */
+  /**
+   * Shared secret for the nightly NAV refresh. The droplet's own cron calls the
+   * route with it, so the job needs no Supabase session of its own.
+   */
+  navRefreshSecret: string | null;
   panRelaySecret: string | null;
   cashfreeVerifyClientId: string | null;
   cashfreeVerifySecret: string | null;
@@ -98,6 +103,7 @@ export function loadConfig(): ProxyConfig {
       .filter(Boolean),
     requireAuth: process.env.REQUIRE_AUTH !== 'false',
     publicBaseUrl: process.env.PUBLIC_BASE_URL || 'https://api.niyomwealth.com',
+    navRefreshSecret: process.env.NAV_REFRESH_SECRET || null,
     panRelaySecret: process.env.PAN_RELAY_SECRET || null,
     cashfreeVerifyClientId: process.env.CASHFREE_VERIFY_CLIENT_ID || null,
     cashfreeVerifySecret: process.env.CASHFREE_VERIFY_SECRET_KEY || null,
