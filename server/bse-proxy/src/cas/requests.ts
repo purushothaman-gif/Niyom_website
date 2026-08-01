@@ -61,6 +61,24 @@ const OPEN_STATUSES = ['draft', 'awaiting_statement', 'received'];
  */
 const EARLIEST_FROM = '1990-01-01';
 
+/**
+ * Which folio listing we ask for, and the stored key for it.
+ *
+ * "Transacted folios and folios with balance" rather than the broader "with
+ * zero balance folios": because the period runs from EARLIEST_FROM, "transacted
+ * in the period" means "transacted ever", so this still captures every folio
+ * the client has since exited — where realised capital gains live — alongside
+ * everything they still hold, while leaving out folios opened and never funded.
+ *
+ * The page defaults to "Without zero balance folios", which drops exited folios
+ * entirely and makes capital gains impossible to compute. This is a change the
+ * client must actively make.
+ */
+const FOLIO_LISTING = {
+  key: 'transacted_and_balance',
+  label: 'Transacted folios and folios with balance',
+} as const;
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "1990-01-01" -> "01-Jan-1990", the format the CAMS date fields display. */
@@ -78,7 +96,7 @@ interface RequestRow {
   statement_from: string | null;
   statement_to: string | null;
   statement_type: string | null;
-  include_zero_balance: boolean | null;
+  folio_listing: string | null;
   expected_by: string | null;
   import_id: string | null;
   failure_reason: string | null;
@@ -110,7 +128,7 @@ const toApi = (r: RequestRow) => ({
   statementFrom: r.statement_from,
   statementTo: r.statement_to,
   statementType: r.statement_type,
-  includeZeroBalance: r.include_zero_balance,
+  folioListing: r.folio_listing,
   expectedBy: r.expected_by,
   importId: r.import_id,
   failureReason: r.failure_reason,
@@ -125,9 +143,9 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
    * Start a request.
    *
    * Returns the exact values the client must enter on the CAMS form, taken from
-   * their own record rather than asked for again — we already hold their PAN,
-   * date of birth and registered email, and making someone retype what we know
-   * is both friction and a chance to get it wrong.
+   * their own record rather than asked for again — we already hold their PAN and
+   * registered email, and making someone retype what we know is both friction
+   * and a chance to get it wrong.
    */
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -185,7 +203,7 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
           statement_from: fromDate,
           statement_to: toDate,
           statement_type: 'detailed',
-          include_zero_balance: true,
+          folio_listing: FOLIO_LISTING.key,
           expected_by: new Date(now.getTime() + EXPECTED_WITHIN_MS).toISOString(),
           created_by: req.caller?.kind === 'staff' ? (req.caller.employeeId ?? null) : null,
         },
@@ -232,7 +250,7 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
           period: 'Specific Period',
           fromDate: toCamsDate(fromDate),
           toDate: toCamsDate(toDate),
-          folioListing: 'With zero balance folios',
+          folioListing: FOLIO_LISTING.label,
           email: requestedEmail,
           pan: client.pan ?? '',
         },
