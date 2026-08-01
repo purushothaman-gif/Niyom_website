@@ -55,13 +55,24 @@ export function PortalShell({
   const [moreOpen, setMoreOpen] = useState(false);
   /** Which header menu is open, by heading; null when none is. */
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  /*
+   * BOTH menu roots have to be known here. The dismiss-on-outside-click handler
+   * runs on mousedown, and a mousedown it considers "outside" unmounts the menu
+   * before the browser can deliver the click — so anything not covered by these
+   * refs looks clickable and does nothing. The account menu was exactly that:
+   * its items live outside the nav, so every one of them was dead on arrival.
+   */
   const navRef = useRef<HTMLDivElement>(null);
+  const accountRef = useRef<HTMLDivElement>(null);
 
   // A click anywhere else, or Escape, closes the open menu.
   useEffect(() => {
     if (!openMenu) return;
     const onDown = (e: MouseEvent) => {
-      if (!navRef.current?.contains(e.target as Node)) setOpenMenu(null);
+      const target = e.target as Node;
+      const inside =
+        navRef.current?.contains(target) || accountRef.current?.contains(target);
+      if (!inside) setOpenMenu(null);
     };
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpenMenu(null);
     document.addEventListener('mousedown', onDown);
@@ -158,7 +169,7 @@ export function PortalShell({
             <ThemeToggle variant="icon" />
 
             {client && (
-              <div className="relative ml-1">
+              <div className="relative ml-1" ref={accountRef}>
                 <button
                   type="button"
                   onClick={() => setOpenMenu(openMenu === 'account' ? null : 'account')}
@@ -181,18 +192,10 @@ export function PortalShell({
                 </button>
 
                 {openMenu === 'account' && (
-                  <>
-                    {/* Backdrop: this menu sits outside navRef's click handler. */}
-                    <button
-                      type="button"
-                      aria-label="Close menu"
-                      className="fixed inset-0 z-30 cursor-default"
-                      onClick={() => setOpenMenu(null)}
-                    />
-                    <div
-                      role="menu"
-                      className="absolute right-0 top-[calc(100%+10px)] z-40 w-[300px] overflow-hidden rounded-token-xl border border-border bg-bg-elevated p-1.5 shadow-token-lg"
-                    >
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-[calc(100%+10px)] z-40 w-[300px] overflow-hidden rounded-token-xl border border-border bg-bg-elevated p-1.5 shadow-token-lg"
+                  >
                       <div className="flex items-center gap-3 px-2.5 py-2.5">
                         <ClientAvatar name={client.full_name} url={client.avatar_url} size={38} />
                         <div className="min-w-0">
@@ -235,8 +238,7 @@ export function PortalShell({
                         <LogOut className="h-4 w-4 shrink-0 text-danger-soft" />
                         <span className="text-[13px] font-semibold text-danger-soft">Sign out</span>
                       </button>
-                    </div>
-                  </>
+                  </div>
                 )}
               </div>
             )}
