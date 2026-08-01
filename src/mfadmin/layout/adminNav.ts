@@ -61,6 +61,7 @@ export type AdminView =
   | 'nfo'
   // Funds
   | 'explore'
+  | 'recommendations'
   | 'nav'
   | 'performance'
   // Reports
@@ -129,6 +130,12 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     icon: Compass,
     items: [
       { view: 'explore', label: 'Explore Funds', icon: Compass },
+      {
+        view: 'recommendations',
+        label: 'Recommendations',
+        icon: Sparkles,
+        note: 'Shown to clients in the portal',
+      },
       { view: 'nav', label: 'Scheme NAV', icon: LineChart },
       { view: 'performance', label: 'Scheme Performance', icon: TrendingUp },
     ],
@@ -179,6 +186,7 @@ export const ADMIN_VIEW_TITLES: Record<AdminView, string> = {
   swp: 'Systematic Withdrawal Plan',
   nfo: 'New Fund Offers',
   explore: 'Explore Funds',
+  recommendations: 'Fund Recommendations',
   nav: 'Scheme NAV',
   performance: 'Scheme Performance',
   reports: 'Exports',

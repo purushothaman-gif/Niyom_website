@@ -78,6 +78,11 @@ export function createLiveGateway(baseUrl: string | null): BseGateway {
 
   return {
     getSchemes: () => proxyGet<FundScheme[]>(baseUrl, BSE_PROXY_ROUTES.schemes),
+    searchSchemes: (query: string, limit = 100) =>
+      proxyGet<FundScheme[]>(
+        baseUrl,
+        `${BSE_PROXY_ROUTES.schemes}?q=${encodeURIComponent(query)}&limit=${limit}`,
+      ),
     // No client code in the request: the proxy resolves the caller's own UCC
     // from their session and ignores anything the browser might send.
     getSystematicPlans: () => proxyGet<SystematicPlan[]>(baseUrl, BSE_PROXY_ROUTES.sxp),

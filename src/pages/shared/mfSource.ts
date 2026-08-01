@@ -16,12 +16,17 @@ export interface MutualFund {
   category: string | null;
   sub_category: string | null;
   fund_house: string | null;
-  return_ytd: number;
-  return_6m: number;
-  return_1y: number;
-  return_3y: number;
-  return_5y: number;
-  return_si: number;
+  /*
+   * Null where the fund's NAV history does not reach back over that period —
+   * a young fund has no 5Y figure and never will have had one. Rendered as an
+   * em dash, never as 0.00%, which would read as a flat year.
+   */
+  return_ytd: number | null;
+  return_6m: number | null;
+  return_1y: number | null;
+  return_3y: number | null;
+  return_5y: number | null;
+  return_si: number | null;
   current_nav: number;
   nav_date: string | null;
   risk_level: string | null;
@@ -41,12 +46,13 @@ export interface MfSchemeHit {
 export interface MfMetrics {
   current_nav: number;
   nav_date: string | null;
-  return_ytd: number;
-  return_6m: number;
-  return_1y: number;
-  return_3y: number;
-  return_5y: number;
-  return_si: number;
+  /** Null for periods the NAV history cannot cover — see MutualFund above. */
+  return_ytd: number | null;
+  return_6m: number | null;
+  return_1y: number | null;
+  return_3y: number | null;
+  return_5y: number | null;
+  return_si: number | null;
   high_52w: number;
   low_52w: number;
 }

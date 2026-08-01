@@ -43,6 +43,7 @@ import { NoBseDataPage } from './features/bse/NoBseDataPage';
 import { ClientOnboardingPage } from './features/bse/ClientOnboardingPage';
 import { KycPage } from './features/bse/KycPage';
 import { ExploreFundsPage } from './features/funds/ExploreFundsPage';
+import { RecommendationsPage } from './features/funds/RecommendationsPage';
 import { CalculatorsPage } from './features/tools/CalculatorsPage';
 import { HoldingsPage } from './features/reports/HoldingsPage';
 import { NoData } from './ui/controls';
@@ -162,6 +163,8 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
       // Fund discovery and planning.
       case 'explore':
         return <ExploreFundsPage onNavigate={navigate} />;
+      case 'recommendations':
+        return <RecommendationsPage employee={employee} />;
       case 'calculators':
         return <CalculatorsPage />;
       case 'holdings':

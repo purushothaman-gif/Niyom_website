@@ -3,13 +3,19 @@ import { AlertTriangle, Clock, Lock, ArrowRight } from 'lucide-react';
 import type { NWHolding } from '../../../crm/types';
 import { LogoLoader } from '../../../components/LogoLoader';
 import type { PortalView } from '../../layout/navigation';
+import { Card } from '../../components/Card';
 import { Segmented } from '../../components/Segmented';
 import { useFundCatalog } from '../../hooks/useFundCatalog';
+import { useMfCatalog } from '../../hooks/useMfCatalog';
 import { BSEService } from '../../services/BSEService';
 import { useBseAccount } from './useBseAccount';
-import type { OrderType } from '../../types/funds';
+import type { FundScheme, OrderType } from '../../types/funds';
 import { FundDiscoveryPage } from './discovery/FundDiscoveryPage';
 import { FundDetailsPage } from './details/FundDetailsPage';
+import { CatalogFundPage } from './explore/CatalogFundPage';
+import { CollectionPage } from './explore/CollectionPage';
+import { ExploreHome } from './explore/ExploreHome';
+import { collectionById } from './explore/collections';
 import { InvestFlow } from './invest/InvestFlow';
 import { MyFundsPage } from './holdings/MyFundsPage';
 import { RedeemFlow } from './redeem/RedeemFlow';
@@ -48,19 +54,37 @@ export type InvestGate =
   | 'bse_unavailable'
   | null;
 
-type Tab = 'explore' | 'my-funds';
+type Tab = 'explore' | 'all-funds' | 'my-funds';
 
 type Screen =
   | { name: 'list' }
+  /** A curated collection ("Small cap", "Tax saver"). */
+  | { name: 'collection'; id: string }
+  /** A curated fund, keyed by AMFI code — the research view. */
+  | { name: 'fund'; amfiCode: string }
+  /** A raw BSE scheme, keyed by BSE code — reached from All schemes. */
   | { name: 'details'; schemeCode: string }
-  | { name: 'invest'; schemeCode: string; orderType: OrderType }
+  /*
+   * Carries the scheme itself, not just its code: a fund resolved from the
+   * curated catalog is looked up in BSE's master on demand and need not be in
+   * the page of schemes this module loaded. `back` is where the flow returns to,
+   * which differs by where the order started.
+   */
+  | { name: 'invest'; scheme: FundScheme; orderType: OrderType; back: Screen }
   | { name: 'redeem'; holdingId: string }
   | { name: 'switch'; holdingId: string };
 
 /**
- * Self-contained Mutual Fund module. Owns an Explore | My Funds tab and a screen
- * machine (list → details → invest, and holdings → redeem / switch). Loads the
- * BSE scheme master once; the portal's outer router only knows `mutual-funds`.
+ * Self-contained Mutual Fund module. Owns the tab bar (Explore | All schemes |
+ * My Funds) and a screen machine over two catalogs:
+ *
+ *   - the CURATED catalog (`useMfCatalog`) — real returns and NAVs from AMFI,
+ *     which is what Explore, collections and the fund page are built on;
+ *   - the BSE scheme master (`useFundCatalog`) — the order rail, which carries
+ *     no performance data at all and is only used to place and list trades.
+ *
+ * They fail independently on purpose: BSE being unreachable costs the ordering
+ * path, not the ability to research a fund.
  */
 export function MutualFundsModule({
   clientId,
@@ -70,6 +94,7 @@ export function MutualFundsModule({
   onNavigate,
 }: Props) {
   const { schemes, facets, loading, error } = useFundCatalog();
+  const catalog = useMfCatalog();
   const [tab, setTab] = useState<Tab>('explore');
   const [screen, setScreen] = useState<Screen>({ name: 'list' });
 
@@ -107,10 +132,15 @@ export function MutualFundsModule({
   const mfHoldings = useMemo(() => mapMfHoldings(holdings, schemes), [holdings, schemes]);
   const schemeOf = (code: string) => schemes.find((s) => s.schemeCode === code) ?? null;
   const holdingOf = (id: string) => mfHoldings.find((h) => h.id === id) ?? null;
+  const fundOf = (amfiCode: string) =>
+    catalog.funds.find((f) => f.amfiCode === amfiCode) ?? null;
 
   const goList = () => setScreen({ name: 'list' });
 
-  if (loading) {
+  // The curated catalog is what the landing screen is made of, so it is the one
+  // worth waiting for. The BSE master loads alongside and is only awaited by the
+  // screens that trade.
+  if (catalog.loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <LogoLoader size={52} />
@@ -118,16 +148,56 @@ export function MutualFundsModule({
     );
   }
 
-  if (error) {
+  if (catalog.error) {
     return (
       <div className="mx-auto max-w-md py-16 text-center">
         <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-danger" />
-        <p className="text-sm text-text-primary">{error}</p>
+        <p className="text-sm text-text-primary">{catalog.error}</p>
+        <button
+          type="button"
+          onClick={catalog.reload}
+          className="mt-4 rounded-token-md border border-border bg-bg-surface px-4 py-2 text-xs font-semibold text-text-primary hover:text-accent"
+        >
+          Try again
+        </button>
       </div>
     );
   }
 
   // --- Detail / flow screens take over the whole view ---------------------
+
+  if (screen.name === 'collection') {
+    const collection = collectionById(screen.id);
+    if (collection) {
+      return (
+        <CollectionPage
+          collection={collection}
+          funds={catalog.funds}
+          onBack={goList}
+          onOpenFund={(amfiCode) => setScreen({ name: 'fund', amfiCode })}
+        />
+      );
+    }
+  }
+
+  if (screen.name === 'fund') {
+    const fund = fundOf(screen.amfiCode);
+    if (fund) {
+      return (
+        <CatalogFundPage
+          fund={fund}
+          schemes={schemes}
+          gate={investGate}
+          onBack={goList}
+          onInvest={(scheme, orderType) =>
+            guardOrder(() =>
+              setScreen({ name: 'invest', scheme, orderType, back: { name: 'fund', amfiCode: fund.amfiCode } }),
+            )
+          }
+        />
+      );
+    }
+  }
 
   if (screen.name === 'details') {
     const scheme = schemeOf(screen.schemeCode);
@@ -139,7 +209,12 @@ export function MutualFundsModule({
           gate={investGate}
           onInvest={(orderType) =>
             guardOrder(() =>
-              setScreen({ name: 'invest', schemeCode: scheme.schemeCode, orderType }),
+              setScreen({
+                name: 'invest',
+                scheme,
+                orderType,
+                back: { name: 'details', schemeCode: scheme.schemeCode },
+              }),
             )
           }
         />
@@ -148,18 +223,16 @@ export function MutualFundsModule({
   }
 
   if (screen.name === 'invest') {
-    const scheme = schemeOf(screen.schemeCode);
-    if (scheme) {
-      return (
-        <InvestFlow
-          scheme={scheme}
-          clientId={clientId}
-          initialType={screen.orderType}
-          onBack={() => setScreen({ name: 'details', schemeCode: scheme.schemeCode })}
-          onDone={goList}
-        />
-      );
-    }
+    const { scheme, back } = screen;
+    return (
+      <InvestFlow
+        scheme={scheme}
+        clientId={clientId}
+        initialType={screen.orderType}
+        onBack={() => setScreen(back)}
+        onDone={goList}
+      />
+    );
   }
 
   if (screen.name === 'redeem') {
@@ -184,7 +257,7 @@ export function MutualFundsModule({
     }
   }
 
-  // --- List view: Explore / My Funds tabs ---------------------------------
+  // --- List view: Explore / All schemes / My Funds tabs -------------------
 
   return (
     <div className="space-y-5">
@@ -195,6 +268,7 @@ export function MutualFundsModule({
       <Segmented<Tab>
         options={[
           { value: 'explore', label: 'Explore' },
+          { value: 'all-funds', label: 'All schemes' },
           { value: 'my-funds', label: 'My Funds', count: mfHoldings.length || undefined },
         ]}
         value={tab}
@@ -202,14 +276,51 @@ export function MutualFundsModule({
       />
 
       {tab === 'explore' ? (
-        <FundDiscoveryPage
-          schemes={schemes}
-          facets={facets}
-          onOpenFund={(schemeCode) => setScreen({ name: 'details', schemeCode })}
-          onInvest={(schemeCode) =>
-            guardOrder(() => setScreen({ name: 'invest', schemeCode, orderType: 'lumpsum' }))
-          }
+        <ExploreHome
+          funds={catalog.funds}
+          recommendations={catalog.recommendations}
+          holdings={mfHoldings}
+          onOpenFund={(amfiCode) => setScreen({ name: 'fund', amfiCode })}
+          onOpenCollection={(id) => setScreen({ name: 'collection', id })}
+          onAllFunds={() => setTab('all-funds')}
+          onNavigate={onNavigate}
         />
+      ) : tab === 'all-funds' ? (
+        loading ? (
+          <div className="flex min-h-[40vh] items-center justify-center">
+            <LogoLoader size={48} />
+          </div>
+        ) : error ? (
+          /* Only the ordering rail is down. Explore and My Funds still work,
+             so this is a section-level message, not a page-level one. */
+          <Card>
+            <div className="py-8 text-center">
+              <AlertTriangle className="mx-auto mb-3 h-7 w-7 text-danger" />
+              <p className="text-sm text-text-primary">{error}</p>
+              <p className="mt-1 text-xs text-text-secondary">
+                Fund research on the Explore tab is unaffected.
+              </p>
+            </div>
+          </Card>
+        ) : (
+          <FundDiscoveryPage
+            schemes={schemes}
+            facets={facets}
+            onOpenFund={(schemeCode) => setScreen({ name: 'details', schemeCode })}
+            onInvest={(schemeCode) => {
+              const scheme = schemeOf(schemeCode);
+              if (scheme)
+                guardOrder(() =>
+                  setScreen({
+                    name: 'invest',
+                    scheme,
+                    orderType: 'lumpsum',
+                    back: { name: 'list' },
+                  }),
+                );
+            }}
+          />
+        )
       ) : (
         <MyFundsPage
           holdings={mfHoldings}
