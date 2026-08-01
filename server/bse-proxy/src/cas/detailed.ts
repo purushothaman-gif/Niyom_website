@@ -223,12 +223,34 @@ export function classify(rest: string): { type: string; description: string } {
   const description = rest.trim();
   const s = description.toLowerCase();
 
-  // A switch moves money between schemes and is neither a purchase nor a sale.
-  if (s.includes('switch')) {
-    return { type: s.includes('out') ? 'SWITCH_OUT' : 'SWITCH_IN', description };
+  /*
+   * A switch moves money between schemes and is neither a purchase nor a sale.
+   *
+   * Registrars do not agree on the word. CAMS writes "Switch Out"; KFintech
+   * writes "Lateral Shift Out (To <other scheme>)" for the same intra-AMC move,
+   * which cost a real client an import until it was added here.
+   *
+   * The direction is read from the text BEFORE the bracket. The scheme named
+   * inside it is the OTHER side of the switch, and a fund with "Payout" in its
+   * name would otherwise turn every switch-in into a switch-out.
+   */
+  if (s.includes('switch') || s.includes('lateral shift')) {
+    const head = s.split('(')[0];
+    return { type: /\bout\b/.test(head) ? 'SWITCH_OUT' : 'SWITCH_IN', description };
   }
 
   if (s.includes('idcw') || s.includes('dividend')) return { type: 'DIVIDEND', description };
+
+  /*
+   * An ELSS purchase must be a multiple of 500, so an AMC returns the residue:
+   * "Refund Taxsaver non Multiples of 500 Residual Refund". No units move, but
+   * the money genuinely comes back to the investor, so it is a cash flow — and
+   * left as OTHER it would silently overstate what they actually invested.
+   *
+   * Kept distinct from a redemption because nothing was sold: a capital-gains
+   * computation must not see it as a disposal.
+   */
+  if (s.includes('refund')) return { type: 'REFUND', description };
 
   // Before the purchase words: a systematic WITHDRAWAL reads like a systematic
   // investment but is the opposite.

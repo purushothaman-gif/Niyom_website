@@ -107,3 +107,48 @@ describe('classify — the guarantee the reconciliation gate relies on', () => {
     expect(typeOf('Registration of Nominee')).toBe('OTHER');
   });
 });
+
+describe('classify — registrars disagree about what a switch is called', () => {
+  /*
+   * Verbatim from a real KFintech statement that failed to import. The
+   * descriptions arrive truncated because the line wraps in the PDF, so the
+   * direction has to be readable from the start of the string.
+   */
+  it('reads KFintech "Lateral Shift" as a switch', () => {
+    expect(typeOf('Lateral Shift Out (To Axis ELSS Tax Saver Fund - Direct Growth')).toBe('SWITCH_OUT');
+    expect(typeOf('Lateral Shift In (From Axis Large Cap Fund - Direct Growth')).toBe('SWITCH_IN');
+    expect(typeOf('Lateral Shift Out (To Mirae Asset ELSS Tax Saver Fund (formerly Mirae')).toBe('SWITCH_OUT');
+    expect(typeOf('Lateral Shift In (From Mirae Asset Large and Midcap Fund (formerly Mirae')).toBe('SWITCH_IN');
+  });
+
+  it('takes the direction from before the bracket, not the scheme named inside it', () => {
+    // The other side of the switch is named in the brackets. A fund with
+    // "Payout" in its name must not flip an incoming switch to outgoing.
+    expect(typeOf('Lateral Shift In (From Kotak Equity IDCW Payout Fund')).toBe('SWITCH_IN');
+    expect(typeOf('Switch In - From HDFC Income Payout Plan')).toBe('SWITCH_IN');
+  });
+
+  it('keeps both legs out of the cash flows', () => {
+    // Neither leg reaches the investor, so counting them would distort the
+    // return in both directions at once.
+    for (const d of [
+      'Lateral Shift Out (To Axis ELSS Tax Saver Fund - Direct Growth',
+      'Lateral Shift In (From Axis Large Cap Fund - Direct Growth',
+    ]) {
+      expect(typeOf(d)).not.toBe('OTHER');
+      expect(['SWITCH_IN', 'SWITCH_OUT']).toContain(typeOf(d));
+    }
+  });
+});
+
+describe('classify — ELSS residual refunds', () => {
+  it('recognises the refund an AMC sends back', () => {
+    // ELSS must be bought in multiples of 500, so the residue is returned.
+    expect(typeOf('Refund Taxsaver non Multiples of 500 Residual Refund')).toBe('REFUND');
+  });
+
+  it('does not call it a redemption, because nothing was sold', () => {
+    // A capital-gains computation must not see this as a disposal.
+    expect(typeOf('Refund Taxsaver non Multiples of 500 Residual Refund')).not.toBe('REDEMPTION');
+  });
+});

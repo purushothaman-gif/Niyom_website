@@ -70,6 +70,9 @@ export function toFlow(t: CasTxnRow): CasCashFlow | null {
     case 'STAMP_DUTY':
       return { amount: -amount, date: t.txn_date };
     case 'REDEMPTION':
+    // Money the AMC could not invest and sent back — cash returned to the
+    // investor, even though no units were sold.
+    case 'REFUND':
       return { amount, date: t.txn_date };
     case 'DIVIDEND':
       return Number(t.units) ? null : { amount, date: t.txn_date };
