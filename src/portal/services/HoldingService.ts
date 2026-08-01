@@ -55,6 +55,14 @@ export interface ClientWealthSnapshot {
    * return. Empty when no statement has been imported.
    */
   casFlows: CasCashFlow[];
+  /**
+   * False when the imported statement starts mid-history. Holdings stay correct;
+   * the return is suppressed, because flows that do not explain the closing
+   * value produce an answer that is not merely imprecise but absurd.
+   */
+  historyComplete: boolean;
+  /** Where the statement's period begins, for explaining a suppressed return. */
+  casStatementFrom: string | null;
   /** Value change across the last published NAV move; null when not revalued. */
   dayChange: number | null;
   /** The date the mutual fund valuations are as at, when newer than the statement. */
@@ -108,6 +116,8 @@ export const HoldingService = {
       casStatementTo: cas?.statementTo ?? null,
       casFreshness: assessCasFreshness(cas?.statementTo ?? null, latestOwnMfTxnDate),
       casFlows: cas?.flows ?? [],
+      historyComplete: cas ? cas.historyComplete : true,
+      casStatementFrom: cas?.statementFrom ?? null,
       dayChange: portfolioDayChange(holdings),
       valuedOn: valuationDate(holdings),
     };

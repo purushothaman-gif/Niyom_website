@@ -13,6 +13,7 @@ import { MF_OWNERSHIP, ownershipOf } from '../../types/ownership';
 import {
   applyNav,
   assessCasFreshness,
+  hasCompleteHistory,
   isOpenPosition,
   migrationCandidates,
   portfolioDayChange,
@@ -419,5 +420,57 @@ describe('portfolioDayChange and valuationDate', () => {
   it('reports the newest valuation date in play', () => {
     expect(valuationDate([revalued(12, 11, '2026-07-30'), revalued(12, 11, '2026-07-31')]))
       .toBe('2026-07-31');
+  });
+});
+
+/* -------------------------------------------------- statement completeness -- */
+
+describe('hasCompleteHistory', () => {
+  it('is true when every unit is explained by a transaction', () => {
+    expect(
+      hasCompleteHistory(
+        [{ id: 'a', units: 100 }],
+        [
+          { scheme_id: 'a', units: 60 },
+          { scheme_id: 'a', units: 40 },
+        ],
+      ),
+    ).toBe(true);
+  });
+
+  it('is FALSE when the client already held units when the statement began', () => {
+    /*
+     * The real case: a statement for the current financial year only. The client
+     * opened with 13,251 units bought earlier, then redeemed. The reconciliation
+     * gate is satisfied — opening + ledger = closing — but the money that bought
+     * those units is nowhere in the file, so a return computed from these flows
+     * is meaningless.
+     */
+    expect(
+      hasCompleteHistory([{ id: 'a', units: 6439.984 }], [{ scheme_id: 'a', units: -6811.667 }]),
+    ).toBe(false);
+  });
+
+  it('is false when any single scheme is truncated, not just all of them', () => {
+    expect(
+      hasCompleteHistory(
+        [
+          { id: 'a', units: 100 },
+          { id: 'b', units: 50 },
+        ],
+        [
+          { scheme_id: 'a', units: 100 },
+          { scheme_id: 'b', units: 10 },
+        ],
+      ),
+    ).toBe(false);
+  });
+
+  it('tolerates rounding at the third decimal, where units stop', () => {
+    expect(hasCompleteHistory([{ id: 'a', units: 100 }], [{ scheme_id: 'a', units: 99.9995 }])).toBe(true);
+  });
+
+  it('is false when a scheme has holdings but no transactions at all', () => {
+    expect(hasCompleteHistory([{ id: 'a', units: 100 }], [])).toBe(false);
   });
 });

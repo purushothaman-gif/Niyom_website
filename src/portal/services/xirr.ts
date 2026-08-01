@@ -19,6 +19,19 @@ export interface CashFlow {
 }
 
 const DAYS = 365;
+
+/**
+ * The widest rate we will report, matching the bisection's own bracket.
+ *
+ * Newton-Raphson is unbounded and will happily converge on a rate no portfolio
+ * can produce when the flows do not explain the closing value — a real client
+ * was shown 198,502% because their statement began mid-history and the units
+ * they already held had no purchase behind them. Bisection could never have
+ * returned that, since it only searches inside this band; Newton is now held to
+ * the same one, and anything outside it is treated as a failed solve rather
+ * than an answer.
+ */
+const MAX_RATE = 10; // 1000% a year
 const MAX_ITER = 60;
 const TOLERANCE = 1e-7;
 
@@ -52,7 +65,7 @@ export function xirr(flows: CashFlow[]): number | null {
   let rate = 0.1;
   for (let i = 0; i < MAX_ITER; i++) {
     const f = npv(rate, sorted, t0);
-    if (Math.abs(f) < TOLERANCE) return rate * 100;
+    if (Math.abs(f) < TOLERANCE) return Math.abs(rate) > MAX_RATE ? null : rate * 100;
     const step = 1e-5;
     const derivative = (npv(rate + step, sorted, t0) - f) / step;
     if (!Number.isFinite(derivative) || derivative === 0) break;
@@ -63,13 +76,18 @@ export function xirr(flows: CashFlow[]): number | null {
       rate = -0.99;
       break;
     }
-    if (Math.abs(next - rate) < TOLERANCE) return next * 100;
+    // Outside the plausible band this is divergence, not a return. Fall through
+    // to bisection, which cannot leave the band, and to null if it cannot bracket.
+    if (next > MAX_RATE) break;
+    if (Math.abs(next - rate) < TOLERANCE) {
+      return Math.abs(next) > MAX_RATE ? null : next * 100;
+    }
     rate = next;
   }
 
   // Bisection over a range wide enough for anything a portfolio can do.
   let lo = -0.9999;
-  let hi = 10;
+  let hi = MAX_RATE;
   let fLo = npv(lo, sorted, t0);
   let fHi = npv(hi, sorted, t0);
   if (!Number.isFinite(fLo) || !Number.isFinite(fHi) || fLo * fHi > 0) return null;

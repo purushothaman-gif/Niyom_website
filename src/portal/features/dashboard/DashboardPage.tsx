@@ -11,6 +11,7 @@ import type { NWClient } from '../../../crm/types';
 import type { DashboardData } from '../../types';
 import type { PortalView } from '../../layout/navigation';
 import { inr, inrCompact, pct } from '../../../lib/money';
+import { fmtDate } from '../../../crm/utils';
 import { Figure, MiniStat, Tile } from '../../ui/kit';
 import { AllocationCard } from './sections/AllocationCard';
 import { AccountSummaryCard } from './sections/AccountSummaryCard';
@@ -33,6 +34,10 @@ interface DashboardPageProps {
   onImport: () => void;
   /** Value change across the last published NAV move; null until there is one. */
   dayChange?: number | null;
+  /** False when the imported statement starts mid-history, so no return is shown. */
+  historyComplete?: boolean;
+  /** Where that statement's period begins, so the explanation can be concrete. */
+  statementFrom?: string | null;
   /** False until a reconciled statement exists — drives the import prompt. */
   hasImportedStatement?: boolean;
 }
@@ -53,6 +58,8 @@ export function DashboardPage({
   onImport,
   hasImportedStatement = false,
   dayChange = null,
+  historyComplete = true,
+  statementFrom = null,
 }: DashboardPageProps) {
   const firstName = client?.full_name?.split(' ')[0] || 'Investor';
   const { summary } = data;
@@ -129,10 +136,31 @@ export function DashboardPage({
             </span>
           </p>
         )}
+        {/*
+          Two different reasons for a blank return, and conflating them would
+          leave a client waiting for something that will never arrive. A
+          truncated statement is fixable by them today; too little history is
+          simply a matter of time.
+        */}
         {data.xirrPercent === null && summary.netWorth > 0 && (
-          <p className="mt-4 border-t border-border-subtle pt-3 text-[11px] text-text-faint">
-            XIRR appears once there is enough transaction history to calculate a
-            money-weighted return.
+          <p className="mt-4 border-t border-border-subtle pt-3 text-[11px] leading-relaxed text-text-faint">
+            {historyComplete ? (
+              'XIRR appears once there is enough transaction history to calculate a money-weighted return.'
+            ) : (
+              <>
+                Your return needs your full investing history. The statement you imported
+                {statementFrom ? ` begins on ${fmtDate(statementFrom)}` : ' begins part-way through'}, so
+                anything you bought before that is missing from it.{' '}
+                <button
+                  type="button"
+                  onClick={onImport}
+                  className="font-semibold text-accent underline underline-offset-2"
+                >
+                  Import one from the earliest available date
+                </button>{' '}
+                and it will appear.
+              </>
+            )}
           </p>
         )}
       </Tile>

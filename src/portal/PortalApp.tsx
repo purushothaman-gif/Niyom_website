@@ -100,6 +100,8 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
             onImport={() => setShowImport(true)}
             hasImportedStatement={hasImportedStatement}
             dayChange={snapshot.dayChange}
+            historyComplete={snapshot.historyComplete}
+            statementFrom={snapshot.casStatementFrom}
           />
         ) : (
           <LoadingState />
