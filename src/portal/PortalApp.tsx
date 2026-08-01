@@ -138,6 +138,7 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
             clientId={clientId}
             onChangePassword={() => setShowChangePw(true)}
             onActivateProducts={() => setShowActivate(true)}
+            onRefresh={refresh}
           />
         );
       case 'sip':

@@ -7,6 +7,7 @@ import {
 import { clientSupabase as supabase } from '../../../lib/supabase';
 import type { NWClient } from '../../../crm/types';
 import type { PortalView } from '../../layout/navigation';
+import { AvatarPicker } from '../../components/AvatarPicker';
 import { Card } from '../../components/Card';
 import { Segmented } from '../../components/Segmented';
 import { StatusPill } from '../../components/StatusPill';
@@ -354,6 +355,24 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
               hint="We need these to activate your account and process your investments." />
 
             <div className="space-y-4">
+              {/*
+                A photo is the one thing on this screen that is purely the
+                client's — everything else is a regulator's requirement. It sits
+                first because it is the easiest thing on the page, and it never
+                gates anything: `detailsComplete` does not look at it.
+              */}
+              <div className="rounded-token-lg border border-border-subtle bg-bg-surface p-4">
+                <AvatarPicker
+                  clientId={clientId}
+                  clientCode={clientCode}
+                  name={panName || client?.full_name || 'Investor'}
+                  url={client?.avatar_url}
+                  onChanged={onRefresh}
+                  size={64}
+                  hint="Optional — adds your face to the portal. You can add or change it later from Profile → Settings."
+                />
+              </div>
+
               <WizardField label="Date of Birth" optional>
                 <WizardInput type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
               </WizardField>

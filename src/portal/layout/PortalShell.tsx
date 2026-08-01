@@ -1,17 +1,33 @@
 /**
  * App frame for the client portal.
  *
- * Two different shapes for two different contexts. On desktop the sections sit
- * across the top with a contextual rail, matching the admin console so the two
- * products feel related. On a phone the navigation moves to a bottom tab bar —
- * investors check a portfolio one-handed, and a hamburger buries exactly the
- * screens they open most.
+ * Two different shapes for two different contexts. On desktop the header holds
+ * four grouped menus rather than the eleven-link row it used to be — the row
+ * gave a fund page and a password screen exactly the same weight, and left no
+ * space to say what any of them were. On a phone the navigation moves to a
+ * bottom tab bar: investors check a portfolio one-handed, and a hamburger
+ * buries exactly the screens they open most.
+ *
+ * The frame also owns the page header (title + a line saying what the screen is
+ * for). Before, `title` was passed in and never rendered, so every screen began
+ * with content and no name.
  */
-import { useState, type ReactNode } from 'react';
-import { KeyRound, LogOut, MoreHorizontal, RefreshCw, X } from 'lucide-react';
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { ChevronDown, KeyRound, LogOut, MoreHorizontal, RefreshCw, X } from 'lucide-react';
 import type { NWClient } from '../../crm/types';
 import { ThemeToggle } from '../../theme/ThemeToggle';
-import { NAV_GROUPS, PRIMARY_VIEWS, type PortalView } from './navigation';
+import { ClientAvatar } from '../components/ClientAvatar';
+import {
+  ACCOUNT_ITEMS,
+  HEADER_LINKS,
+  HEADER_MENUS,
+  NAV_GROUPS,
+  PRIMARY_VIEWS,
+  VIEW_SUBTITLES,
+  type NavGroup,
+  type NavItem,
+  type PortalView,
+} from './navigation';
 
 interface PortalShellProps {
   view: PortalView;
@@ -27,6 +43,7 @@ interface PortalShellProps {
 
 export function PortalShell({
   view,
+  title,
   client,
   refreshing,
   onNavigate,
@@ -36,94 +53,207 @@ export function PortalShell({
   children,
 }: PortalShellProps) {
   const [moreOpen, setMoreOpen] = useState(false);
+  /** Which header menu is open, by heading; null when none is. */
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const navRef = useRef<HTMLDivElement>(null);
+
+  // A click anywhere else, or Escape, closes the open menu.
+  useEffect(() => {
+    if (!openMenu) return;
+    const onDown = (e: MouseEvent) => {
+      if (!navRef.current?.contains(e.target as Node)) setOpenMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpenMenu(null);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [openMenu]);
 
   const go = (v: PortalView) => {
     onNavigate(v);
     setMoreOpen(false);
+    setOpenMenu(null);
   };
 
   const primaryViews = PRIMARY_VIEWS.map((p) => p.view);
+  const subtitle = VIEW_SUBTITLES[view];
+  const accountActive = ACCOUNT_ITEMS.some((i) => i.view === view);
 
   return (
     <div className="min-h-screen bg-bg-base text-text-primary">
       {/* ---- Header ---- */}
       <header className="sticky top-0 z-30 border-b border-border-subtle bg-header/95 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-[1280px] items-center gap-3 px-4 sm:px-6">
+        <div className="mx-auto flex h-16 w-full max-w-[1280px] items-center gap-4 px-4 sm:px-6">
           <button
             type="button"
             onClick={() => go('dashboard')}
             className="flex shrink-0 items-center gap-2.5 text-left"
+            aria-label="Niyom Wealth — dashboard"
           >
-            <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-7 w-auto object-contain" />
+            <img
+              src="/niyomlogo.png"
+              alt="Niyom Wealth"
+              className="h-10 w-auto object-contain sm:h-11"
+            />
           </button>
 
-          {/* Desktop navigation. */}
-          <nav className="ml-3 hidden min-w-0 flex-1 items-center gap-0.5 lg:flex">
-            {NAV_GROUPS.flatMap((g) => g.items)
-              .filter((i) => i.view && !i.comingSoon)
-              .map((i) => {
-                const active = i.view === view;
-                return (
-                  <button
-                    key={i.key}
-                    type="button"
-                    onClick={() => go(i.view!)}
-                    className={`relative rounded-token-md px-2.5 py-2 text-[13px] font-semibold transition-colors ${
-                      active ? 'text-accent' : 'text-text-secondary hover:text-text-primary'
-                    }`}
+          {/* Desktop navigation: one link + three menus. */}
+          <div ref={navRef} className="hidden min-w-0 flex-1 items-center gap-1 lg:flex">
+            {HEADER_LINKS.filter((i) => i.view).map((i) => (
+              <TopButton key={i.key} active={i.view === view} onClick={() => go(i.view!)}>
+                {i.label}
+              </TopButton>
+            ))}
+
+            {HEADER_MENUS.map((group) => {
+              const heading = group.heading!;
+              const active = group.items.some((i) => i.view === view);
+              const open = openMenu === heading;
+              return (
+                <div key={heading} className="relative">
+                  <TopButton
+                    active={active}
+                    onClick={() => setOpenMenu(open ? null : heading)}
+                    aria-expanded={open}
+                    aria-haspopup="menu"
                   >
-                    {i.label}
-                    {active && (
-                      <span className="absolute inset-x-2.5 -bottom-[9px] h-0.5 rounded-full bg-accent" />
-                    )}
-                  </button>
-                );
-              })}
-          </nav>
+                    {heading}
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+                    />
+                  </TopButton>
+
+                  {open && (
+                    <div
+                      role="menu"
+                      className="absolute left-0 top-[calc(100%+10px)] z-40 w-[330px] overflow-hidden rounded-token-xl border border-border bg-bg-elevated p-1.5 shadow-token-lg"
+                    >
+                      {group.items.map((item) => (
+                        <MenuRow
+                          key={item.key}
+                          item={item}
+                          active={item.view === view}
+                          onClick={() => item.view && go(item.view)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-1">
             <button
               type="button"
               onClick={onRefresh}
-              className="rounded-token-md p-2 text-text-secondary hover:text-accent"
+              className="rounded-token-md p-2 text-text-secondary transition-colors hover:text-accent"
               aria-label="Refresh"
             >
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
             <ThemeToggle variant="icon" />
+
             {client && (
-              <button
-                type="button"
-                onClick={() => go('profile')}
-                className="ml-1 flex items-center gap-2 rounded-token-md px-1.5 py-1 hover:bg-bg-surface"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[11px] font-bold text-accent">
-                  {client.full_name.charAt(0).toUpperCase()}
-                </span>
-                <span className="hidden leading-tight sm:block">
-                  <span className="block text-[12px] font-semibold text-text-primary">
-                    {client.full_name.split(' ')[0]}
+              <div className="relative ml-1">
+                <button
+                  type="button"
+                  onClick={() => setOpenMenu(openMenu === 'account' ? null : 'account')}
+                  aria-expanded={openMenu === 'account'}
+                  aria-haspopup="menu"
+                  className={`flex items-center gap-2 rounded-token-md px-1.5 py-1 transition-colors hover:bg-bg-surface ${
+                    accountActive ? 'text-accent' : ''
+                  }`}
+                >
+                  <ClientAvatar name={client.full_name} url={client.avatar_url} size={32} />
+                  <span className="hidden leading-tight sm:block">
+                    <span className="block text-[12px] font-semibold text-text-primary">
+                      {client.full_name.split(' ')[0]}
+                    </span>
+                    <span className="block font-mono text-[10px] text-text-faint">
+                      {client.client_code}
+                    </span>
                   </span>
-                  <span className="block font-mono text-[10px] text-text-faint">
-                    {client.client_code}
-                  </span>
-                </span>
-              </button>
+                  <ChevronDown className="hidden h-3.5 w-3.5 text-text-faint sm:block" />
+                </button>
+
+                {openMenu === 'account' && (
+                  <>
+                    {/* Backdrop: this menu sits outside navRef's click handler. */}
+                    <button
+                      type="button"
+                      aria-label="Close menu"
+                      className="fixed inset-0 z-30 cursor-default"
+                      onClick={() => setOpenMenu(null)}
+                    />
+                    <div
+                      role="menu"
+                      className="absolute right-0 top-[calc(100%+10px)] z-40 w-[300px] overflow-hidden rounded-token-xl border border-border bg-bg-elevated p-1.5 shadow-token-lg"
+                    >
+                      <div className="flex items-center gap-3 px-2.5 py-2.5">
+                        <ClientAvatar name={client.full_name} url={client.avatar_url} size={38} />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-text-primary">
+                            {client.full_name}
+                          </p>
+                          <p className="font-mono text-[10px] text-text-faint">
+                            {client.client_code}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="my-1 border-t border-border-subtle" />
+                      {ACCOUNT_ITEMS.map((item) => (
+                        <MenuRow
+                          key={item.key}
+                          item={item}
+                          active={item.view === view}
+                          onClick={() => item.view && go(item.view)}
+                        />
+                      ))}
+                      <div className="my-1 border-t border-border-subtle" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenMenu(null);
+                          onChangePassword();
+                        }}
+                        className="flex w-full items-center gap-3 rounded-token-md px-2.5 py-2 text-left transition-colors hover:bg-bg-surface"
+                      >
+                        <KeyRound className="h-4 w-4 shrink-0 text-text-secondary" />
+                        <span className="text-[13px] font-semibold text-text-primary">
+                          Change password
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onLogout}
+                        className="flex w-full items-center gap-3 rounded-token-md px-2.5 py-2 text-left transition-colors hover:bg-bg-surface"
+                      >
+                        <LogOut className="h-4 w-4 shrink-0 text-danger-soft" />
+                        <span className="text-[13px] font-semibold text-danger-soft">Sign out</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
-            <button
-              type="button"
-              onClick={onLogout}
-              className="hidden rounded-token-md p-2 text-text-secondary hover:text-danger sm:block"
-              aria-label="Sign out"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
           </div>
         </div>
       </header>
 
       {/* ---- Content. Bottom padding clears the mobile tab bar. ---- */}
-      <main className="mx-auto w-full max-w-[1280px] px-4 py-6 pb-28 sm:px-6 lg:pb-8">
+      <main className="mx-auto w-full max-w-[1280px] px-4 py-6 pb-28 sm:px-6 lg:pb-10">
+        {subtitle && (
+          <div className="mb-5">
+            <h1 className="font-display text-2xl font-bold tracking-tight text-text-primary">
+              {title}
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-text-secondary">{subtitle}</p>
+          </div>
+        )}
         {children}
       </main>
 
@@ -169,9 +299,21 @@ export function PortalShell({
             onClick={() => setMoreOpen(false)}
             className="absolute inset-0 bg-bg-overlay"
           />
-          <div className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-token-xl border-t border-border bg-bg-elevated p-5 pb-8">
+          <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-token-xl border-t border-border bg-bg-elevated p-5 pb-8">
             <div className="mb-4 flex items-center justify-between">
-              <p className="font-display text-base font-bold text-text-primary">Everything else</p>
+              {client ? (
+                <div className="flex min-w-0 items-center gap-3">
+                  <ClientAvatar name={client.full_name} url={client.avatar_url} size={40} />
+                  <div className="min-w-0">
+                    <p className="truncate font-display text-base font-bold text-text-primary">
+                      {client.full_name}
+                    </p>
+                    <p className="font-mono text-[10px] text-text-faint">{client.client_code}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="font-display text-base font-bold text-text-primary">Everything else</p>
+              )}
               <button
                 type="button"
                 onClick={() => setMoreOpen(false)}
@@ -182,14 +324,14 @@ export function PortalShell({
               </button>
             </div>
 
-            {NAV_GROUPS.map((group, gi) => (
+            {NAV_GROUPS.map((group: NavGroup, gi) => (
               <div key={group.heading ?? gi} className="mb-4 last:mb-0">
                 {group.heading && (
                   <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-faint">
                     {group.heading}
                   </p>
                 )}
-                <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
                   {group.items.map((i) => {
                     const Icon = i.icon;
                     // Products we don't offer yet are shown, but plainly
@@ -198,7 +340,7 @@ export function PortalShell({
                       return (
                         <span
                           key={i.key}
-                          className="flex items-center gap-2 rounded-token-md border border-border-subtle px-3 py-2.5 text-[13px] text-text-faint"
+                          className="flex items-center gap-3 rounded-token-md border border-border-subtle px-3 py-2.5 text-[13px] text-text-faint"
                         >
                           <Icon className="h-4 w-4 shrink-0" />
                           <span className="min-w-0 truncate">{i.label}</span>
@@ -206,19 +348,35 @@ export function PortalShell({
                         </span>
                       );
                     }
+                    const active = i.view === view;
                     return (
                       <button
                         key={i.key}
                         type="button"
                         onClick={() => go(i.view!)}
-                        className={`flex items-center gap-2 rounded-token-md border px-3 py-2.5 text-left text-[13px] font-medium ${
-                          i.view === view
-                            ? 'border-accent bg-accent/10 text-accent'
-                            : 'border-border bg-bg-surface text-text-primary'
+                        className={`flex w-full items-center gap-3 rounded-token-md border px-3 py-2.5 text-left ${
+                          active
+                            ? 'border-accent/30 bg-accent/10'
+                            : 'border-border bg-bg-surface'
                         }`}
                       >
-                        <Icon className="h-4 w-4 shrink-0" />
-                        <span className="min-w-0 truncate">{i.label}</span>
+                        <Icon
+                          className={`h-4 w-4 shrink-0 ${active ? 'text-accent' : 'text-text-secondary'}`}
+                        />
+                        <span className="min-w-0">
+                          <span
+                            className={`block truncate text-[13px] font-semibold ${
+                              active ? 'text-accent' : 'text-text-primary'
+                            }`}
+                          >
+                            {i.label}
+                          </span>
+                          {i.description && (
+                            <span className="block truncate text-[11px] text-text-faint">
+                              {i.description}
+                            </span>
+                          )}
+                        </span>
                       </button>
                     );
                   })}
@@ -249,5 +407,84 @@ export function PortalShell({
         </div>
       )}
     </div>
+  );
+}
+
+/** A top-level header control: the Dashboard link and each menu trigger. */
+function TopButton({
+  children,
+  active,
+  onClick,
+  ...rest
+}: {
+  children: ReactNode;
+  active: boolean;
+  onClick: () => void;
+} & ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative flex items-center gap-1 rounded-token-md px-3 py-2 text-[13px] font-semibold transition-colors ${
+        active ? 'text-accent' : 'text-text-secondary hover:text-text-primary'
+      }`}
+      {...rest}
+    >
+      {children}
+      {active && <span className="absolute inset-x-3 -bottom-[11px] h-0.5 rounded-full bg-accent" />}
+    </button>
+  );
+}
+
+/** One destination inside a header menu: icon, label, and what it is for. */
+function MenuRow({
+  item,
+  active,
+  onClick,
+}: {
+  item: NavItem;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const Icon = item.icon;
+
+  if (item.comingSoon || !item.view) {
+    return (
+      <span className="flex items-start gap-3 rounded-token-md px-2.5 py-2 opacity-60">
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-text-faint" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-semibold text-text-secondary">{item.label}</span>
+          {item.description && (
+            <span className="block text-[11px] text-text-faint">{item.description}</span>
+          )}
+        </span>
+        <span className="mt-0.5 shrink-0 rounded-token-sm bg-bg-surface px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-text-faint">
+          Soon
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={`flex w-full items-start gap-3 rounded-token-md px-2.5 py-2 text-left transition-colors ${
+        active ? 'bg-selected' : 'hover:bg-bg-surface'
+      }`}
+    >
+      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${active ? 'text-accent' : 'text-text-secondary'}`} />
+      <span className="min-w-0">
+        <span
+          className={`block text-[13px] font-semibold ${active ? 'text-accent' : 'text-text-primary'}`}
+        >
+          {item.label}
+        </span>
+        {item.description && (
+          <span className="block text-[11px] leading-snug text-text-faint">{item.description}</span>
+        )}
+      </span>
+    </button>
   );
 }

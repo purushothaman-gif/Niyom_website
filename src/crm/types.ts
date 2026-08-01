@@ -45,6 +45,8 @@ export interface NWClient {
   client_login_enabled: boolean;
   client_password_changed: boolean;
   client_auth_user_id: string | null;
+  /** Profile photo (public URL in the client-avatars bucket); null → initials. */
+  avatar_url?: string | null;
   // Progressive-onboarding funnel (see 20260725170000_onboarding_redesign.sql)
   phone_verified: boolean;
   pan_verified: boolean;
