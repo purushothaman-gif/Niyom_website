@@ -71,6 +71,12 @@ export const mockGateway: BseGateway = {
     return delay(SCHEME_MASTER);
   },
 
+  async searchSchemes(query: string) {
+    const q = query.trim().toLowerCase();
+    if (!q) return delay([]);
+    return delay(SCHEME_MASTER.filter((s) => `${s.name} ${s.amc}`.toLowerCase().includes(q)));
+  },
+
   async getScheme(schemeCode) {
     return delay(SCHEME_MASTER.find((s) => s.schemeCode === schemeCode) ?? null);
   },

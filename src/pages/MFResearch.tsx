@@ -105,7 +105,16 @@ export default function MFResearch({ onBack }: MFResearchProps) {
           ? true
           : `${f.fund_name} ${f.sub_category ?? ''} ${f.fund_house ?? ''}`.toLowerCase().includes(q),
       )
-      .sort((a, b) => (b[sortBy] ?? 0) - (a[sortBy] ?? 0));
+      /* Funds with no figure for the chosen period go last, not into the middle
+         of the table where `?? 0` used to park them, above every negative one. */
+      .sort((a, b) => {
+        const x = a[sortBy];
+        const y = b[sortBy];
+        if (x == null && y == null) return 0;
+        if (x == null) return 1;
+        if (y == null) return -1;
+        return y - x;
+      });
   }, [funds, category, amc, search, sortBy]);
 
   // Universe hits not already represented in the curated table (by scheme code).

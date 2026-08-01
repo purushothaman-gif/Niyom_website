@@ -30,6 +30,11 @@ export const BSEService = {
     return bseGateway().getSchemes();
   },
 
+  /** Schemes matching a name fragment (the master is far larger than one page). */
+  searchSchemes(query: string, limit?: number): Promise<FundScheme[]> {
+    return bseGateway().searchSchemes(query, limit);
+  },
+
   /** A single scheme by BSE code. */
   getScheme(schemeCode: string): Promise<FundScheme | null> {
     return bseGateway().getScheme(schemeCode);

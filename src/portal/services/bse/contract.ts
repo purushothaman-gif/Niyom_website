@@ -251,6 +251,12 @@ export interface SystematicPlan {
 
 export interface BseGateway {
   getSchemes(): Promise<FundScheme[]>;
+  /**
+   * Schemes whose name matches `query`. The full master is ~28k rows and
+   * `getSchemes()` only ever pulls a page of it, so resolving one named fund
+   * (e.g. a curated catalog entry the client tapped) has to ask BSE directly.
+   */
+  searchSchemes(query: string, limit?: number): Promise<FundScheme[]>;
   /** The client's own systematic plans, live from BSE. */
   getSystematicPlans(): Promise<SystematicPlan[]>;
   getScheme(schemeCode: string): Promise<FundScheme | null>;

@@ -20,7 +20,17 @@ export default defineConfig({
      * wrong number on a client's screen. It had no tests until one of those
      * misreads reached production.
      */
-    include: ['src/**/*.test.ts', 'server/bse-proxy/src/**/*.test.ts'],
+    /*
+     * The edge functions are Deno at runtime, but `_shared/mfReturns.ts` is
+     * plain TypeScript with no Deno imports and it decides the return figures
+     * shown on every fund card — it earned coverage the same way the CAS parser
+     * did, by being wrong in production.
+     */
+    include: [
+      'src/**/*.test.ts',
+      'server/bse-proxy/src/**/*.test.ts',
+      'supabase/functions/_shared/*.test.ts',
+    ],
     // Explicit imports of describe/it/expect rather than globals, so the test
     // files typecheck under the app's existing tsconfig with no extra `types`
     // entry and no ambient declarations.

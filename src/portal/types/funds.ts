@@ -56,6 +56,67 @@ export interface FundScheme {
   isMock: boolean;
 }
 
+/* ------------------------------ Curated catalog --------------------------- */
+
+/**
+ * The BSE scheme master is the ORDER rail and carries no performance data at
+ * all (`toAppScheme` in the proxy fills returns/NAV/AUM with zeros because
+ * `master_scheme_list` has no such fields). Discovery needs real numbers, so
+ * the Explore screens run off a second, smaller catalog: the `mutual_funds`
+ * table, whose returns and NAVs are computed from AMFI NAV history.
+ *
+ * Two catalogs, two jobs — this one answers "is this fund any good", the BSE
+ * one answers "can I buy it and for how little". `CatalogFund.bseSchemeCode` is
+ * resolved at the seam between them (see `resolveBseScheme`).
+ */
+export interface CatalogReturns {
+  YTD: number | null;
+  '6M': number | null;
+  '1Y': number | null;
+  '3Y': number | null;
+  '5Y': number | null;
+  SI: number | null;
+}
+
+export interface CatalogFund {
+  /** AMFI scheme code — the identity of the curated row. */
+  amfiCode: string;
+  name: string;
+  amc: string;
+  category: FundCategory;
+  subCategory: string;
+  /** House risk view from the curated table ('Low' | 'Moderate' | 'High'). */
+  risk: string | null;
+  nav: number | null;
+  navDate: string | null;
+  returns: CatalogReturns;
+  minInvestment: number | null;
+  launchDate: string | null;
+  updatedAt: string | null;
+}
+
+/** One staff pick from nw_mf_recommendations, joined to its catalog fund. */
+export interface FundRecommendation {
+  amfiCode: string;
+  fundName: string;
+  headline: string | null;
+  rationale: string | null;
+}
+
+/** Trailing NAV point for the fund chart ("dd-mm-yyyy", as mfapi returns it). */
+export interface CatalogNavPoint {
+  date: string;
+  nav: number;
+}
+
+/** On-demand detail for one curated fund: chart + 52-week band. */
+export interface CatalogFundDetail {
+  navHistory: CatalogNavPoint[];
+  high52w: number | null;
+  low52w: number | null;
+  launchDate: string | null;
+}
+
 /* --------------------------------- Discovery ------------------------------ */
 
 export type FundSort = 'returns1Y' | 'returns3Y' | 'aum' | 'rating' | 'expense';
