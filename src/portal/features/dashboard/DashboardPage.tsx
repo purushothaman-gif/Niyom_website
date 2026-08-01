@@ -20,6 +20,7 @@ import { QuickActions } from './sections/QuickActions';
 import { SupportCard } from './sections/SupportCard';
 import { OnboardingChecklistCard } from '../onboarding/OnboardingChecklistCard';
 import { ActivateProductsCard } from './sections/ActivateProductsCard';
+import { ImportPortfolioCard } from '../portfolio/ImportPortfolioCard';
 import { onboardingIncomplete, canActivateMoreProducts } from '../onboarding/onboardingSteps';
 
 interface DashboardPageProps {
@@ -28,6 +29,10 @@ interface DashboardPageProps {
   refreshedAt: Date | null;
   onNavigate: (view: PortalView) => void;
   onActivateProducts: () => void;
+  /** Opens the import wizard, owned by PortalApp. */
+  onImport: () => void;
+  /** False until a reconciled statement exists — drives the import prompt. */
+  hasImportedStatement?: boolean;
 }
 
 function greeting(): string {
@@ -43,6 +48,8 @@ export function DashboardPage({
   refreshedAt,
   onNavigate,
   onActivateProducts,
+  onImport,
+  hasImportedStatement = false,
 }: DashboardPageProps) {
   const firstName = client?.full_name?.split(' ')[0] || 'Investor';
   const { summary } = data;
@@ -109,6 +116,19 @@ export function DashboardPage({
           </p>
         )}
       </Tile>
+
+      {/*
+        Directly beneath the number the client came to see. They believe that
+        figure is their portfolio; if it is only the part we sold them, this is
+        the moment to say so.
+      */}
+      {!hasImportedStatement && (
+        <ImportPortfolioCard
+          onImport={onImport}
+          visibleHoldings={summary.holdingsCount}
+          returnsUnavailable={data.xirrPercent === null && summary.netWorth > 0}
+        />
+      )}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <AllocationCard summary={summary} />
