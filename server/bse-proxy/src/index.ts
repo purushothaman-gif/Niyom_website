@@ -17,6 +17,7 @@ import { loadConfig } from './config.js';
 import { BseClient, BseError } from './bseClient.js';
 import { webhookRouter } from './webhooks.js';
 import { casRouter } from './cas/import.js';
+import { casRequestRouter } from './cas/requests.js';
 import {
   toAppOrderResult,
   toAppScheme,
@@ -416,6 +417,9 @@ app.use(requireCaller);
  * confirm from outside that a droplet is running a build containing this route.
  */
 mountFeature('/cas', 'cas', casRouter(cfg));
+// Tracking around the import: intent, consent and status. Deliberately separate
+// from /cas/import, which is the pipeline itself and stays untouched.
+mountFeature('/cas/requests', 'cas_requests', casRequestRouter(cfg));
 
 /* ----------------------------- scheme master ------------------------------ */
 
