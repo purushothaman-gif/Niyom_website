@@ -50,6 +50,26 @@ type ConsentType = (typeof CONSENT_TYPES)[number];
 
 const OPEN_STATUSES = ['draft', 'awaiting_statement', 'received'];
 
+/**
+ * The earliest start date we ask for.
+ *
+ * A CAS must cover the client's whole history or the returns computed from it
+ * are simply wrong, and CAMS has no "since inception" option — only a date. The
+ * Indian mutual fund industry predates this by decades in principle, but no
+ * retail folio does, so it is early enough to mean "everything" while still
+ * being a date the form will accept.
+ */
+const EARLIEST_FROM = '1990-01-01';
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "1990-01-01" -> "01-Jan-1990", the format the CAMS date fields display. */
+function toCamsDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  const month = MONTHS[Number(m) - 1];
+  return month ? `${d}-${month}-${y}` : iso;
+}
+
 interface RequestRow {
   id: string;
   client_id: string;
@@ -122,12 +142,11 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
       const [client] = await sbSelect<{
         id: string;
         pan: string | null;
-        dob: string | null;
         email: string | null;
         full_name: string | null;
       }>(
         cfg,
-        `nw_clients?select=id,pan,dob,email,full_name&id=eq.${encodeURIComponent(clientId)}&limit=1`,
+        `nw_clients?select=id,pan,email,full_name&id=eq.${encodeURIComponent(clientId)}&limit=1`,
       );
       if (!client) throw new CasError('That client does not exist.', 404);
 
@@ -154,6 +173,8 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
 
       const now = new Date();
       const requestId = randomUUID();
+      const fromDate = body.statementFrom ?? EARLIEST_FROM;
+      const toDate = now.toISOString().slice(0, 10);
 
       await sbInsert(cfg, 'cas_requests', [
         {
@@ -161,10 +182,8 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
           client_id: clientId,
           status: 'awaiting_statement',
           requested_email: requestedEmail,
-          // Earliest possible start: a CAS covers everything from inception, and
-          // returns computed on a truncated history are simply wrong.
-          statement_from: body.statementFrom ?? '1990-01-01',
-          statement_to: now.toISOString().slice(0, 10),
+          statement_from: fromDate,
+          statement_to: toDate,
           statement_type: 'detailed',
           include_zero_balance: true,
           expected_by: new Date(now.getTime() + EXPECTED_WITHIN_MS).toISOString(),
@@ -198,19 +217,24 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
         status: 'awaiting_statement',
         expectedBy: new Date(now.getTime() + EXPECTED_WITHIN_MS).toISOString(),
         /*
-         * What to type on the CAMS form. Sent from the server so the wording of
-         * the four choices that decide whether a statement is usable lives in
-         * one place, and a client on an old cached bundle cannot be shown stale
-         * instructions.
+         * What to enter on the CAMS form, in the form's own field order and
+         * using its own labels. Sent from the server so the choices that decide
+         * whether a statement is usable live in one place, and a client on a
+         * stale bundle cannot be shown instructions we have since corrected.
+         *
+         * Only fields the form actually has. Anything else is noise a client
+         * has to mentally discard while working through a page that already
+         * asks a lot of them.
          */
         form: {
           url: 'https://www.camsonline.com/Investors/Statements/Consolidated-Account-Statement',
+          statementType: 'Detailed',
+          period: 'Specific Period',
+          fromDate: toCamsDate(fromDate),
+          toDate: toCamsDate(toDate),
+          folioListing: 'With zero balance folios',
           email: requestedEmail,
           pan: client.pan ?? '',
-          dob: client.dob ?? '',
-          statementType: 'Detailed',
-          period: 'Specific Period — earliest available start date',
-          folioListing: 'With zero balance folios',
         },
       });
     } catch (err) {

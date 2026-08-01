@@ -101,15 +101,23 @@ export function CasRequestStep({
   }
 
   /*
-   * The last three rows carry the reason as well as the value. Each has a
-   * plausible-looking wrong answer that cannot be undone afterwards, and a
-   * client who understands why is far likelier to get it right than one being
-   * told to trust us.
+   * The form's own fields, in the form's own order, with the form's own labels.
+   * Nothing else — CAMS does not ask for a date of birth, and showing one would
+   * send a client hunting for a field that is not there and doubting the rest.
+   *
+   * Three of these are choices the page defaults to the WRONG answer for
+   * (Detailed over Summary, Specific Period over Current Financial Year, and
+   * zero-balance folios), so each carries its reason: none can be undone
+   * afterwards, and a client who understands why gets it right more often than
+   * one told to trust us.
    */
-  const rows: { key: string; label: string; value: string; why?: string }[] = [
-    { key: 'email', label: 'Email', value: form.email },
-    ...(form.pan ? [{ key: 'pan', label: 'PAN', value: form.pan }] : []),
-    ...(form.dob ? [{ key: 'dob', label: 'Date of birth', value: form.dob }] : []),
+  const rows: {
+    key: string;
+    label: string;
+    value: string;
+    why?: string;
+    optional?: boolean;
+  }[] = [
     {
       key: 'type',
       label: 'Statement type',
@@ -120,14 +128,18 @@ export function CasRequestStep({
       key: 'period',
       label: 'Period',
       value: form.period,
-      why: 'Returns are computed across the whole history. A shorter period quietly changes the answer.',
+      why: 'The page defaults to the current financial year. Returns are computed across your whole history, and a shorter period quietly changes the answer.',
     },
+    { key: 'from', label: 'From date', value: form.fromDate },
+    { key: 'to', label: 'To date', value: form.toDate },
     {
       key: 'folios',
       label: 'Folio listing',
       value: form.folioListing,
-      why: 'Funds you have fully exited still count towards your realised gains.',
+      why: 'The page defaults to excluding them. Funds you have fully exited still count towards your realised gains.',
     },
+    { key: 'email', label: 'Email', value: form.email },
+    ...(form.pan ? [{ key: 'pan', label: 'PAN', value: form.pan, optional: true }] : []),
   ];
 
   return (
@@ -154,6 +166,7 @@ export function CasRequestStep({
             <div className="flex items-center gap-3">
               <span className="w-28 shrink-0 text-[11px] uppercase tracking-wider text-text-faint">
                 {r.label}
+                {r.optional && <span className="ml-1 normal-case">(optional)</span>}
               </span>
               <span className="min-w-0 flex-1 text-sm font-semibold text-text-primary">
                 {r.value}
