@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
+import { CasHoldingsPanel } from './CasHoldingsPanel';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWHolding, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, PRODUCT_CHART_COLORS } from './utils';
@@ -1412,6 +1413,19 @@ export default function Portfolio({ employee, pageParams }: Props) {
           </table>
         </div>
       </div>
+      )}
+
+      {/*
+        The client's own statement, beside the book rather than merged into it.
+        The table above is what we sold — priced, editable, and the basis of
+        every AUM and MIS figure. This is what they actually hold, including
+        funds bought elsewhere, which is precisely why it must not be counted as
+        ours. Read-only for the same reason.
+      */}
+      {view === 'detail' && clientFilter && (
+        <div className="mt-6">
+          <CasHoldingsPanel clientId={clientFilter} />
+        </div>
       )}
 
       {showAdd && <Modal title="Add Holding" onClose={() => setShowAdd(false)}>{holdingFormJsx}</Modal>}
