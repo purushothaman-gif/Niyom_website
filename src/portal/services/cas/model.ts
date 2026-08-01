@@ -37,6 +37,7 @@ export interface CasSchemeRow {
 }
 
 export interface CasTxnRow {
+  scheme_id?: string | null;
   txn_date: string;
   txn_type: string | null;
   amount: number | null;
@@ -336,4 +337,42 @@ export function portfolioDayChange(holdings: PortalHolding[]): number | null {
 export function valuationDate(holdings: PortalHolding[]): string | null {
   const dates = holdings.map((h) => h.cas?.liveNav?.navDate).filter((d): d is string => !!d);
   return dates.length ? dates.sort().slice(-1)[0] : null;
+}
+
+/* ------------------------------------------------------- history coverage -- */
+
+/**
+ * Does the ledger explain every unit the client holds?
+ *
+ * A CAS can be requested for any period, and CAMS defaults to the current
+ * financial year. Ask for that and the statement opens with units the client
+ * already held — real holdings, bought with money that appears nowhere in the
+ * file. The reconciliation gate is satisfied, because the statement's own
+ * arithmetic (opening + ledger = closing) still balances. The holdings and
+ * their value are correct.
+ *
+ * But a money-weighted return computed from those flows is not, and not by a
+ * little: it sees redemptions with no matching purchase and a closing value
+ * that came from nowhere. One real client was shown 198,502%.
+ *
+ * So this asks the one question XIRR depends on — is every unit accounted for
+ * by a transaction we can see — by summing the ledger per scheme and comparing
+ * with the closing balance. Any shortfall is an opening balance, and an opening
+ * balance means the history is truncated.
+ */
+export function hasCompleteHistory(
+  schemes: { id: string; units: number | null }[],
+  txns: { scheme_id?: string | null; units: number | null }[],
+): boolean {
+  const ledger = new Map<string, number>();
+  for (const t of txns) {
+    if (!t.scheme_id) continue;
+    ledger.set(t.scheme_id, (ledger.get(t.scheme_id) ?? 0) + (Number(t.units) || 0));
+  }
+  return schemes.every((s) => {
+    const closing = Number(s.units) || 0;
+    const summed = ledger.get(s.id) ?? 0;
+    // Units run to three decimals; the same tolerance the gate uses.
+    return Math.abs(closing - summed) <= 0.001;
+  });
 }

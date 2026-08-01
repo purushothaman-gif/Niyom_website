@@ -24,7 +24,7 @@ import { portfolioXirr } from './xirr';
 import type { DashboardData } from '../types';
 
 export function buildDashboardData(snapshot: ClientWealthSnapshot): DashboardData {
-  const { holdings, transactions, casFlows, mfSource } = snapshot;
+  const { holdings, transactions, casFlows, mfSource, historyComplete } = snapshot;
   const summary = PortfolioService.buildSummary(holdings);
 
   /*
@@ -48,6 +48,12 @@ export function buildDashboardData(snapshot: ClientWealthSnapshot): DashboardDat
     // Real money-weighted return from the client's own cash flows. Null when it
     // cannot be computed — too few flows, or nothing realised yet — and the UI
     // then shows nothing rather than 0%, which would read as "flat".
-    xirrPercent: portfolioXirr(otherTxns, summary.netWorth, casFlows),
+    /*
+     * Suppressed outright when the statement begins mid-history. The flows then
+     * describe only part of the client's investing, while the closing value
+     * describes all of it, and the rate that reconciles those two is meaningless
+     * — one real client saw 198,502%. Null says "unknown", which is true.
+     */
+    xirrPercent: historyComplete ? portfolioXirr(otherTxns, summary.netWorth, casFlows) : null,
   };
 }

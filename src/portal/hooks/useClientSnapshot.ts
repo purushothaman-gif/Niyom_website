@@ -24,6 +24,8 @@ const EMPTY: ClientWealthSnapshot = {
   casStatementTo: null,
   casFreshness: { state: 'none', statementTo: null, latestOwnMfTxnDate: null },
   casFlows: [],
+  historyComplete: true,
+  casStatementFrom: null,
   dayChange: null,
   valuedOn: null,
 };

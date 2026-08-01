@@ -36,6 +36,7 @@ import {
   migrationCandidates,
   toFlow,
   toHolding,
+  hasCompleteHistory,
   toNavQuotes,
   type CasCashFlow,
   type CasSchemeRow,
@@ -52,6 +53,14 @@ export interface CasPortfolio {
   importedAt: string;
   holdings: PortalHolding[];
   flows: CasCashFlow[];
+  /**
+   * False when the statement begins mid-history, leaving opening balances that
+   * no transaction explains. The holdings are still right; a return computed
+   * from these flows would not be.
+   */
+  historyComplete: boolean;
+  /** The date the statement starts, for explaining a truncated history. */
+  statementFrom: string | null;
 }
 
 /**
@@ -92,7 +101,7 @@ export const CasPortfolioService = {
   async getPortfolio(clientId: string): Promise<CasPortfolio | null> {
     const { data: imp } = await supabase
       .from('cas_imports')
-      .select('id,statement_to,created_at')
+      .select('id,statement_from,statement_to,created_at')
       .eq('client_id', clientId)
       .eq('status', 'reconciled')
       .order('created_at', { ascending: false })
@@ -103,6 +112,7 @@ export const CasPortfolioService = {
     const importId = imp.id as string;
     const importedAt = (imp.created_at as string) ?? new Date().toISOString();
     const statementTo = (imp.statement_to as string) ?? null;
+    const statementFrom = (imp.statement_from as string) ?? null;
 
     const [schemeRes, txnRes] = await Promise.all([
       supabase
@@ -112,7 +122,7 @@ export const CasPortfolioService = {
         .order('value', { ascending: false }),
       supabase
         .from('cas_transactions')
-        .select('txn_date,txn_type,amount,units')
+        .select('scheme_id,txn_date,txn_type,amount,units')
         .eq('import_id', importId)
         .order('txn_date', { ascending: true }),
     ]);
@@ -138,6 +148,11 @@ export const CasPortfolioService = {
       importedAt,
       holdings: holdings.map((h) => applyNav(h, quotes.get(h.cas?.isin ?? ''))),
       flows: txns.map(toFlow).filter((f): f is CasCashFlow => f !== null),
+      historyComplete: hasCompleteHistory(
+        schemes.map((s) => ({ id: s.id, units: s.units })),
+        txns as { scheme_id?: string | null; units: number | null }[],
+      ),
+      statementFrom,
     };
   },
 
