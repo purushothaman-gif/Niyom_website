@@ -33,8 +33,12 @@ UPDATE cas_requests
 ALTER TABLE cas_requests ALTER COLUMN folio_listing SET DEFAULT 'transacted_and_balance';
 
 /*
- * Superseded by the column above. Written but never read, so dropping it costs
- * nothing and leaving it would leave a boolean that cannot express the choice
- * we now make.
+ * include_zero_balance is superseded but NOT dropped here.
+ *
+ * It was dropped in the first version of this migration and that broke live
+ * imports: the proxy deploys separately from the database, so for as long as a
+ * running build still writes the column, removing it turns every new request
+ * into a PGRST204. Expand first, contract later — the drop lives in
+ * 20260801230000, to be applied only once the droplet is confirmed on a build
+ * that no longer references it.
  */
-ALTER TABLE cas_requests DROP COLUMN IF EXISTS include_zero_balance;
