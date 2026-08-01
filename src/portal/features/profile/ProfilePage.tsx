@@ -11,7 +11,9 @@ import { fmtDate } from '../../../crm/utils';
 import { LogoLoader } from '../../../components/LogoLoader';
 import type { NWClient } from '../../../crm/types';
 import { ThemeToggle } from '../../../theme/ThemeToggle';
+import { AvatarPicker } from '../../components/AvatarPicker';
 import { Card } from '../../components/Card';
+import { ClientAvatar } from '../../components/ClientAvatar';
 import { Segmented } from '../../components/Segmented';
 import { EmptyState } from '../../components/EmptyState';
 import { StatusPill } from '../../components/StatusPill';
@@ -33,6 +35,8 @@ interface Props {
   clientId: string;
   onChangePassword: () => void;
   onActivateProducts: () => void;
+  /** Re-reads the client record — the photo lives on it. */
+  onRefresh: () => void;
 }
 
 /** Label/value line used across the read-only sections. */
@@ -67,7 +71,13 @@ const ADVISOR_NOTE = (
   </p>
 );
 
-export function ProfilePage({ client, clientId, onChangePassword, onActivateProducts }: Props) {
+export function ProfilePage({
+  client,
+  clientId,
+  onChangePassword,
+  onActivateProducts,
+  onRefresh,
+}: Props) {
   const [tab, setTab] = useState<Tab>('personal');
   const status = client?.verification_status ?? 'pending';
   const canActivate = canActivateMoreProducts(client);
@@ -77,9 +87,7 @@ export function ProfilePage({ client, clientId, onChangePassword, onActivateProd
       {/* Identity header */}
       <Card accent>
         <div className="flex items-center gap-4">
-          <span className="flex h-14 w-14 items-center justify-center rounded-token-xl bg-accent/12 font-display text-xl font-bold text-accent">
-            {client?.full_name?.charAt(0).toUpperCase() ?? 'N'}
-          </span>
+          <ClientAvatar name={client?.full_name ?? 'Investor'} url={client?.avatar_url} size={56} />
           <div className="min-w-0 flex-1">
             <h2 className="truncate font-display text-lg font-bold text-text-primary">
               {client?.full_name ?? 'Investor'}
@@ -181,7 +189,19 @@ export function ProfilePage({ client, clientId, onChangePassword, onActivateProd
       )}
 
       {tab === 'settings' && (
-        <SectionCard title="Settings" icon={Lock}>
+        <div className="space-y-5">
+          <SectionCard title="Profile Photo" icon={UserRound}>
+            <AvatarPicker
+              clientId={clientId}
+              clientCode={client?.client_code ?? ''}
+              name={client?.full_name ?? 'Investor'}
+              url={client?.avatar_url}
+              onChanged={onRefresh}
+              hint="Shown to you across the portal. JPG, PNG or WEBP, up to 5 MB."
+            />
+          </SectionCard>
+
+          <SectionCard title="Settings" icon={Lock}>
           <div className="space-y-2">
             <div className="flex items-center justify-between rounded-token-md bg-bg-surface px-3.5 py-3">
               <div>
@@ -210,8 +230,9 @@ export function ProfilePage({ client, clientId, onChangePassword, onActivateProd
               </div>
               <StatusPill tone="muted">Soon</StatusPill>
             </div>
-          </div>
-        </SectionCard>
+            </div>
+          </SectionCard>
+        </div>
       )}
     </div>
   );
