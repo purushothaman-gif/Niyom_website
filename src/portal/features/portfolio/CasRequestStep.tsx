@@ -136,7 +136,7 @@ export function CasRequestStep({
       key: 'folios',
       label: 'Folio listing',
       value: form.folioListing,
-      why: 'The page defaults to excluding them. Funds you have fully exited still count towards your realised gains.',
+      why: 'The page defaults to "Without zero balance folios", which leaves out funds you have since sold — and those are exactly the ones your realised capital gains come from.',
     },
     { key: 'email', label: 'Email', value: form.email },
     ...(form.pan ? [{ key: 'pan', label: 'PAN', value: form.pan, optional: true }] : []),
