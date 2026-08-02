@@ -3,6 +3,8 @@ import { clientSupabase as supabase } from '../lib/supabase';
 import { Lock, Eye, EyeOff, ArrowRight, ChevronLeft, AlertTriangle, CreditCard, Mail, Home, ShieldCheck, RotateCcw } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
+import { PinInput } from '../components/PinInput';
+import { clearPinHint, getDeviceId, hasPinHint } from '../lib/pinDevice';
 
 interface Props {
   onLogin: (clientId: string, passwordChanged: boolean) => void;
@@ -11,7 +13,7 @@ interface Props {
   startOtp?: boolean;
 }
 
-type View = 'login' | 'forgot' | 'reset_sent' | 'otp_login';
+type View = 'login' | 'forgot' | 'reset_sent' | 'otp_login' | 'pin';
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 300;
@@ -69,7 +71,17 @@ function clearRateLimit() {
 }
 
 export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: Props) {
-  const [view, setView] = useState<View>(startOtp ? 'otp_login' : 'login');
+  /*
+   * A device that has a PIN opens on the keypad. The hint is local and
+   * unverified — it only decides which screen shows first; the server still
+   * decides whether the PIN is right.
+   */
+  const [view, setView] = useState<View>(
+    startOtp ? 'otp_login' : hasPinHint() ? 'pin' : 'login',
+  );
+  const [pinError, setPinError] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinReset, setPinReset] = useState(0);
   const [pan, setPan] = useState('');
   const [password, setPassword] = useState('');
   const [resetPan, setResetPan] = useState('');
@@ -174,6 +186,45 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
     clearRateLimit();
     setLoading(false);
     onLogin(client.client_id, client.password_changed);
+  };
+
+  /**
+   * PIN sign-in. The browser proves nothing here: it sends the device id and
+   * four digits, and the server either mints a one-time sign-in token or
+   * counts another failure. Wrong-PIN handling (cool-off, burning the PIN
+   * after ten tries) is entirely server-side — see client-pin-login.
+   */
+  const handlePin = async (pin: string) => {
+    setPinError('');
+    setPinBusy(true);
+    const { ok, data } = await callPublicFn('client-pin-login', {
+      device_id: getDeviceId(),
+      pin,
+    });
+
+    if (!ok || !data?.token_hash) {
+      setPinBusy(false);
+      setPinReset((n) => n + 1);
+      setPinError(data?.error || 'That PIN didn’t work. Please try again.');
+      // A burned or expired PIN is gone for good — stop opening on the keypad.
+      if (data?.code === 'burned' || data?.code === 'expired') {
+        clearPinHint();
+        setTimeout(() => setView('login'), 1800);
+      }
+      return;
+    }
+
+    const { error: sessErr } = await supabase.auth.verifyOtp({
+      token_hash: data.token_hash,
+      type: 'email',
+    });
+    setPinBusy(false);
+    if (sessErr) {
+      setPinReset((n) => n + 1);
+      setPinError('Could not sign you in. Please try again.');
+      return;
+    }
+    onLogin(data.client_id, data.password_changed !== false);
   };
 
   /**
@@ -329,6 +380,52 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
       {/* Right panel */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md space-y-8">
+
+          {view === 'pin' && (
+            <>
+              <div>
+                <div className="flex items-center gap-3 mb-6 lg:hidden">
+                  <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-8 w-auto object-contain" />
+                  <p className="font-bold text-sm" style={{ color: 'var(--accent-soft)' }}>Niyom Wealth</p>
+                </div>
+                <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--accent)' }}>Client Portal</p>
+                <h1 className="text-3xl font-bold text-text-primary">Enter your PIN</h1>
+                <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  The 4-digit PIN you set for this device.
+                </p>
+              </div>
+
+              {pinError && (
+                <div className="p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                  <AlertTriangle className="w-4 h-4 text-c-red flex-shrink-0" />
+                  <p className="text-sm text-c-red">{pinError}</p>
+                </div>
+              )}
+
+              <PinInput onComplete={handlePin} disabled={pinBusy} autoFocus resetKey={pinReset} />
+
+              {pinBusy && (
+                <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>Signing you in…</p>
+              )}
+
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setView('login'); setPinError(''); }}
+                  className="text-xs font-semibold" style={{ color: 'var(--accent)' }}
+                >
+                  Use PAN &amp; password instead
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { clearPinHint(); setView('login'); setPinError(''); }}
+                  className="text-[11px]" style={{ color: 'var(--text-faint)' }}
+                >
+                  Not your device? Forget the PIN on this browser
+                </button>
+              </div>
+            </>
+          )}
 
           {view === 'login' && (
             <>

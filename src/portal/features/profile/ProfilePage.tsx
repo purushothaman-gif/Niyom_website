@@ -20,6 +20,7 @@ import { StatusPill } from '../../components/StatusPill';
 import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { maskAccount } from '../../services/ProfileService';
 import { canActivateMoreProducts } from '../onboarding/onboardingSteps';
+import { PinSection } from './PinSection';
 
 type Tab = 'personal' | 'bank' | 'demat' | 'kyc' | 'settings';
 
@@ -199,6 +200,10 @@ export function ProfilePage({
               onChanged={onRefresh}
               hint="Shown to you across the portal. JPG, PNG or WEBP, up to 5 MB."
             />
+          </SectionCard>
+
+          <SectionCard title="Sign-in" icon={ShieldCheck}>
+            <PinSection clientId={clientId} />
           </SectionCard>
 
           <SectionCard title="Settings" icon={Lock}>
