@@ -14,6 +14,7 @@ import { PUBLIC_ROUTES, type PublicRoute } from './routes/publicRoutes';
 const CRM = lazy(() => import('./crm/CRM'));
 const MfAdminApp = lazy(() => import('./mfadmin/MfAdminApp'));
 const ClientLogin = lazy(() => import('./pages/ClientLogin'));
+const ClientAuthCallback = lazy(() => import('./pages/ClientAuthCallback'));
 const ClientChangePassword = lazy(() => import('./pages/ClientChangePassword'));
 const ClientPortal = lazy(() => import('./pages/ClientPortal'));
 const PartnerLogin = lazy(() => import('./pages/PartnerLogin'));
@@ -282,6 +283,8 @@ function AppContent() {
 
           {/* Authenticated / utility surfaces (noindex). */}
           <Route path="/client-login" element={<ClientLoginRoute />} />
+          {/* Google's redirect target — must match the Supabase allow-list. */}
+          <Route path="/client-auth/callback" element={<ClientAuthCallback />} />
           <Route path="/partner-login" element={<PartnerLoginRoute />} />
           <Route path="/onboarding" element={<OnboardingRoute />} />
           <Route path="/crm/*" element={<CRM />} />
