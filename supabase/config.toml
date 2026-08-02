@@ -523,6 +523,21 @@ verify_jwt = false
 [functions.client-google-resolve]
 verify_jwt = false
 
+# Per-device 4-digit PIN sign-in. All three are public verify_jwt for the same
+# reason as the other client-facing functions: -login runs before any session
+# exists, and -set / -manage verify the caller's bearer token inside so they can
+# answer with a spoken error ("that PIN is too easy to guess") rather than a
+# bare 401. The lockout counting that makes a 4-digit secret defensible lives
+# server-side in client-pin-login.
+[functions.client-pin-set]
+verify_jwt = false
+
+[functions.client-pin-login]
+verify_jwt = false
+
+[functions.client-pin-manage]
+verify_jwt = false
+
 # create-partner-login is intentionally absent from this file: it keeps the
 # default verify_jwt = true (an RM/admin calls it with their own bearer token)
 # and additionally re-checks active-employee status and DSA ownership inside.
