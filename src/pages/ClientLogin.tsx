@@ -16,6 +16,25 @@ type View = 'login' | 'forgot' | 'reset_sent' | 'otp_login';
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 300;
 
+/**
+ * Google sign-in stays dark until VITE_GOOGLE_AUTH=on. The button depends on a
+ * provider that has to be configured in the Supabase dashboard first, and a
+ * button that reliably 400s is worse than no button.
+ */
+const GOOGLE_ENABLED = import.meta.env.VITE_GOOGLE_AUTH === 'on';
+
+/** Google's mark, inlined — the CSP blocks remote assets and this never changes. */
+function GoogleMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
+  );
+}
+
 function getRateLimitState() {
   try {
     const raw = sessionStorage.getItem('client_login_rl');
@@ -155,6 +174,30 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
     clearRateLimit();
     setLoading(false);
     onLogin(client.client_id, client.password_changed);
+  };
+
+  /**
+   * Hand off to Google. Everything after the redirect happens in
+   * /client-auth/callback: the code exchange, then the server deciding which
+   * client record (if any) this Google account owns.
+   */
+  const handleGoogle = async () => {
+    setError('');
+    setLoading(true);
+    const { error: oauthErr } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/client-auth/callback`,
+        // Always show the chooser: a client with two Google accounts should not
+        // be silently signed in with whichever one the browser remembers.
+        queryParams: { prompt: 'select_account' },
+      },
+    });
+    if (oauthErr) {
+      setLoading(false);
+      setError('Google sign-in is unavailable right now. Please use your PAN and password.');
+    }
+    // On success the browser leaves this page, so nothing to reset.
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -309,6 +352,27 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
                 <div className="p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
                   <AlertTriangle className="w-4 h-4 text-c-red flex-shrink-0" />
                   <p className="text-sm text-c-red">{error}</p>
+                </div>
+              )}
+
+              {GOOGLE_ENABLED && (
+                <div className="space-y-4">
+                  <button
+                    type="button"
+                    onClick={handleGoogle}
+                    disabled={loading || !!lockoutMsg}
+                    className="w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2.5 transition-colors disabled:opacity-50"
+                    style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+                  >
+                    <GoogleMark /> Continue with Google
+                  </button>
+                  <div className="flex items-center gap-3">
+                    <span className="h-px flex-1" style={{ background: 'var(--border-subtle)' }} />
+                    <span className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
+                      or sign in with PAN
+                    </span>
+                    <span className="h-px flex-1" style={{ background: 'var(--border-subtle)' }} />
+                  </div>
                 </div>
               )}
 
