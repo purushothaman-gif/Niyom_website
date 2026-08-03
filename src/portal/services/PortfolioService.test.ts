@@ -109,12 +109,6 @@ describe('ownership on holding rows', () => {
     expect(row.cas?.folioNumber).toBe('1');
   });
 
-  it('leaves ownership undefined for a manually held row', () => {
-    // We recorded it, but that proves nothing about whose ARN it sits under —
-    // so the badge renders nothing rather than claiming it is ours.
-    expect(PortfolioService.buildHoldingRows([fund('A Fund')])[0].ownership).toBeUndefined();
-  });
-
   it('leaves ownership undefined for every non-fund product', () => {
     const [row] = PortfolioService.buildHoldingRows([
       fund('A Bond', { product_type: 'secondary_bond' }),
@@ -142,5 +136,39 @@ describe('summary aggregation spans every product', () => {
     ]);
     expect(mf.value).toBe(100);
     expect(mf.folioCount).toBe(1);
+  });
+});
+
+describe('ownership — a fund in our own book is under our ARN', () => {
+  it('badges a CRM-entered mutual fund as held with Niyom', () => {
+    /*
+     * The only way a row reaches nw_holdings is that we sold it, so it sits
+     * under our ARN. Left undefined it showed no badge at all, which read as
+     * "we do not know" about the one case we know best.
+     */
+    expect(PortfolioService.buildHoldingRows([fund('SBI Multi Asset Allocation Fund')])[0].ownership)
+      .toBe(MF_OWNERSHIP.heldWithNiyom);
+  });
+
+  it('lets the statement override, because it names the distributor outright', () => {
+    const [row] = PortfolioService.buildHoldingRows([
+      fund('quant ELSS', {
+        cas: {
+          source: 'cas', importId: 'i', importedAt: '', statementTo: null, schemeId: 's',
+          isin: null, rtaCode: null, schemeName: 'quant ELSS', amc: null, folioNumber: '1',
+          registrar: null, units: 1, value: 100, cost: 80, navDate: null,
+          advisorCode: 'ARN-163992', isOurs: false, ownership: MF_OWNERSHIP.heldAway,
+        },
+      }),
+    ]);
+    expect(row.ownership).toBe(MF_OWNERSHIP.heldAway);
+  });
+
+  it('leaves every other asset class without an ownership state', () => {
+    // Bonds, insurance, FDs and unlisted shares have no distributor notion.
+    for (const t of ['secondary_bond', 'insurance', 'fixed_deposit', 'unlisted_share'] as const) {
+      expect(PortfolioService.buildHoldingRows([fund('X', { product_type: t })])[0].ownership)
+        .toBeUndefined();
+    }
   });
 });

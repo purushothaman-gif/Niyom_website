@@ -370,14 +370,14 @@ describe('applyNav', () => {
     const out = applyNav(held(), { isin: 'x', nav: 12, navDate: '2026-07-31', previousNav: 11 });
     expect(out.current_value).toBe(1200);
     expect(out.current_nav).toBe(12);
-    expect(out.cas?.liveNav).toMatchObject({ nav: 12, navDate: '2026-07-31', dayChange: 100 });
+    expect(out.liveNav).toMatchObject({ nav: 12, navDate: '2026-07-31', dayChange: 100 });
   });
 
   it('leaves the statement valuation alone when the NAV is not newer', () => {
     // Nothing published since the statement says nothing the statement did not.
     const out = applyNav(held(), { isin: 'x', nav: 99, navDate: '2026-07-01', previousNav: null });
     expect(out.current_value).toBe(1000);
-    expect(out.cas?.liveNav).toBeUndefined();
+    expect(out.liveNav).toBeUndefined();
   });
 
   it('leaves it alone when there is no quote at all', () => {
@@ -386,7 +386,7 @@ describe('applyNav', () => {
 
   it('reports no day change when there is no prior NAV', () => {
     const out = applyNav(held(), { isin: 'x', nav: 12, navDate: '2026-07-31', previousNav: null });
-    expect(out.cas?.liveNav?.dayChange).toBeNull();
+    expect(out.liveNav?.dayChange).toBeNull();
   });
 
   it('refuses a nonsensical NAV rather than zeroing a portfolio', () => {
@@ -395,10 +395,19 @@ describe('applyNav', () => {
     }
   });
 
-  it('does not touch a holding that came from nw_holdings', () => {
-    // No cas block means no statement behind it, so there is nothing to revalue.
-    const manual = { ...held(), cas: undefined } as PortalHolding;
-    expect(applyNav(manual, { isin: 'x', nav: 12, navDate: '2026-07-31', previousNav: 11 })).toBe(manual);
+  it('reprices a holding with no statement behind it, given an ISIN', () => {
+    /*
+     * This deliberately reverses the earlier rule. A fund entered in the console
+     * has no cas block, and used to be skipped — which left funds sold through
+     * us ageing at a hand-typed NAV while imported ones moved daily. It is the
+     * same feed and the same ISIN; the only requirement is knowing the scheme.
+     */
+    const manual = { ...held(), cas: undefined, isin: 'INF200K01800' } as PortalHolding;
+    const out = applyNav(manual, {
+      isin: 'INF200K01800', nav: 12, navDate: '2026-07-31', previousNav: 11,
+    });
+    expect(out.current_value).toBe(1200);
+    expect(out.liveNav?.nav).toBe(12);
   });
 });
 
@@ -472,5 +481,41 @@ describe('hasCompleteHistory', () => {
 
   it('is false when a scheme has holdings but no transactions at all', () => {
     expect(hasCompleteHistory([{ id: 'a', units: 100 }], [])).toBe(false);
+  });
+});
+
+describe('applyNav — prices anything with an ISIN, whatever its source', () => {
+  const crmFund = (): PortalHolding =>
+    holding({
+      product_type: 'mutual_fund',
+      isin: 'INF200K01800',
+      quantity: 900.84,
+      current_nav: 66.6766,
+      nav_date: '2026-07-28',
+      current_value: 60064.95,
+    });
+
+  it('reprices a fund entered in the console, which has no statement behind it', () => {
+    // The real gap: a CRM-entered holding aged at whatever NAV staff typed.
+    const out = applyNav(crmFund(), {
+      isin: 'INF200K01800', nav: 67.5, navDate: '2026-07-31', previousNav: 67,
+    });
+    expect(out.current_value).toBeCloseTo(900.84 * 67.5, 2);
+    expect(out.liveNav?.navDate).toBe('2026-07-31');
+    expect(out.cas).toBeUndefined();
+  });
+
+  it('will not move it backwards past the NAV it already carried', () => {
+    const out = applyNav(crmFund(), {
+      isin: 'INF200K01800', nav: 99, navDate: '2026-07-28', previousNav: null,
+    });
+    expect(out.current_value).toBe(60064.95);
+    expect(out.liveNav).toBeUndefined();
+  });
+
+  it('leaves a holding with no ISIN exactly as it was', () => {
+    // Nothing to join on, so nothing to price — it keeps the staff figure.
+    const noIsin = holding({ product_type: 'mutual_fund', current_value: 60064.95 });
+    expect(applyNav(noIsin, undefined).current_value).toBe(60064.95);
   });
 });

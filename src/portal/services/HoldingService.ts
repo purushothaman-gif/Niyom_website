@@ -30,12 +30,46 @@ import type { NWClient, NWHolding, NWTransaction } from '../../crm/types';
 import type { CasFreshness, PortalHolding } from '../types/cas';
 import { CasPortfolioService } from './CasPortfolioService';
 import {
+  applyNav,
   assessCasFreshness,
   portfolioDayChange,
   selectHoldings,
+  toNavQuotes,
   valuationDate,
   type CasCashFlow,
+  type NavRow,
 } from './cas/model';
+
+/**
+ * How far back to look for a quote.
+ *
+ * Long enough to cover a long weekend or a stalled feed, short enough that a
+ * wound-up scheme's years-old final NAV is not presented as today's price. A
+ * holding with nothing inside the window keeps whatever priced it before.
+ */
+const NAV_LOOKBACK_DAYS = 15;
+
+/**
+ * Current prices for every holding that can be priced.
+ *
+ * Deliberately not limited to statement-sourced funds: a fund bought through us
+ * and recorded in the console is just as entitled to a current value, and it is
+ * the same ISIN and the same feed. The only requirement is that someone said
+ * WHICH scheme it is.
+ */
+async function loadNavQuotes(isins: string[]) {
+  const unique = [...new Set(isins)].filter(Boolean);
+  if (!unique.length) return new Map();
+  const since = new Date(Date.now() - NAV_LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('nav_daily')
+    .select('isin,nav,nav_date')
+    .in('isin', unique)
+    .gte('nav_date', since)
+    .order('nav_date', { ascending: false });
+  if (error || !data) return new Map();
+  return toNavQuotes(data as NavRow[]);
+}
 
 // Re-exported so existing importers of these from HoldingService keep working.
 export { selectHoldings } from './cas/model';
@@ -106,7 +140,15 @@ export const HoldingService = {
 
     const manual = (holdingsRes.data as NWHolding[]) ?? [];
     const latestOwnMfTxnDate = (latestMfRes.data?.txn_date as string) ?? null;
-    const holdings = selectHoldings(manual, cas?.holdings ?? null);
+    const chosen = selectHoldings(manual, cas?.holdings ?? null);
+
+    /*
+     * Price everything that carries an ISIN, from either source, in one query.
+     * Best-effort throughout: a feed that is down or behind leaves each holding
+     * at whatever priced it before rather than failing the portfolio.
+     */
+    const quotes = await loadNavQuotes(chosen.map((h) => h.cas?.isin ?? h.isin ?? ''));
+    const holdings = chosen.map((h) => applyNav(h, quotes.get(h.cas?.isin ?? h.isin ?? '')));
 
     return {
       client: (clientRes.data as NWClient) ?? null,

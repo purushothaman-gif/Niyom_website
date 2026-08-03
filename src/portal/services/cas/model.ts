@@ -70,9 +70,9 @@ export function toFlow(t: CasTxnRow): CasCashFlow | null {
     case 'STT':
     case 'STAMP_DUTY':
       return { amount: -amount, date: t.txn_date };
+    // REFUND is money the AMC could not invest and sent back — cash returned to
+    // the investor, even though no units were sold.
     case 'REDEMPTION':
-    // Money the AMC could not invest and sent back — cash returned to the
-    // investor, even though no units were sold.
     case 'REFUND':
       return { amount, date: t.txn_date };
     case 'DIVIDEND':
@@ -294,12 +294,15 @@ export function toNavQuotes(rows: NavRow[]): Map<string, NavQuote> {
  * would not be.
  */
 export function applyNav(h: PortalHolding, quote: NavQuote | undefined): PortalHolding {
-  if (!h.cas || !quote || !Number.isFinite(quote.nav) || quote.nav <= 0) return h;
+  if (!quote || !Number.isFinite(quote.nav) || quote.nav <= 0) return h;
 
-  // Only ever move forward. A NAV at or before the statement's own date tells
-  // us nothing the statement did not already say.
-  const statementNavDate = (h.cas.navDate ?? '').slice(0, 10);
-  if (statementNavDate && quote.navDate <= statementNavDate) return h;
+  /*
+   * Only ever move forward. Whatever priced this holding already — a statement,
+   * or a figure staff entered when they recorded the purchase — a NAV at or
+   * before that date says nothing new, and applying it would only add noise.
+   */
+  const pricedOn = (h.cas?.navDate ?? h.nav_date ?? '').slice(0, 10);
+  if (pricedOn && quote.navDate <= pricedOn) return h;
 
   const units = h.quantity || 0;
   if (!units) return h;
@@ -313,29 +316,27 @@ export function applyNav(h: PortalHolding, quote: NavQuote | undefined): PortalH
     current_value: Number(value.toFixed(2)),
     current_nav: quote.nav,
     nav_date: quote.navDate,
-    cas: {
-      ...h.cas,
-      value: Number(value.toFixed(2)),
-      liveNav: {
-        nav: quote.nav,
-        navDate: quote.navDate,
-        dayChange: dayChange === null ? null : Number(dayChange.toFixed(2)),
-      },
+    liveNav: {
+      nav: quote.nav,
+      navDate: quote.navDate,
+      dayChange: dayChange === null ? null : Number(dayChange.toFixed(2)),
     },
+    // Keep the statement block's own value in step when there is one.
+    ...(h.cas ? { cas: { ...h.cas, value: Number(value.toFixed(2)) } } : {}),
   };
 }
 
 /** Total value change across the last published NAV move. Null when nothing was revalued. */
 export function portfolioDayChange(holdings: PortalHolding[]): number | null {
   const changes = holdings
-    .map((h) => h.cas?.liveNav?.dayChange)
+    .map((h) => h.liveNav?.dayChange)
     .filter((c): c is number => typeof c === 'number');
   return changes.length ? Number(changes.reduce((s, c) => s + c, 0).toFixed(2)) : null;
 }
 
 /** The date the revalued figures are as at, or null if nothing was revalued. */
 export function valuationDate(holdings: PortalHolding[]): string | null {
-  const dates = holdings.map((h) => h.cas?.liveNav?.navDate).filter((d): d is string => !!d);
+  const dates = holdings.map((h) => h.liveNav?.navDate).filter((d): d is string => !!d);
   return dates.length ? dates.sort().slice(-1)[0] : null;
 }
 

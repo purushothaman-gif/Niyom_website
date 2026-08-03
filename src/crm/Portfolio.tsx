@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { CasHoldingsPanel } from './CasHoldingsPanel';
+import { SchemePicker } from './SchemePicker';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWHolding, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, PRODUCT_CHART_COLORS } from './utils';
@@ -440,7 +441,15 @@ export default function Portfolio({ employee, pageParams }: Props) {
       product_type: form.product_type,
       product_name: form.product_name.trim(),
       txn_date: form.txn_date || null,
-      isin: (form.product_type === 'unlisted_share' || isBondSave) ? (form.isin.trim().toUpperCase() || null) : null,
+      /*
+       * Mutual funds now carry an ISIN too. It is what the nightly NAV refresh
+       * joins on, so without it a fund holding ages at whatever price was typed
+       * on the day it was entered.
+       */
+      isin:
+        (form.product_type === 'unlisted_share' || isBondSave || isMFSave)
+          ? (form.isin.trim().toUpperCase() || null)
+          : null,
       quantity: parseFloat(form.quantity) || 0,
       avg_cost: parseFloat(form.avg_cost) || 0,
       current_value: parseFloat(form.current_value) || 0,
@@ -952,6 +961,31 @@ export default function Portfolio({ employee, pageParams }: Props) {
       {isMF && (
         <div className="space-y-4">
           <SecHead icon={TrendingUp} label="Mutual Fund Details" color="var(--chart-4)" />
+
+          {/*
+            The scheme, chosen rather than typed. A name does not identify a
+            fund — "SBI Multi Asset Allocation" is fourteen schemes from 29.79
+            to 74.54 — so this is what lets the holding be repriced nightly
+            instead of ageing at whatever NAV was typed on the day.
+          */}
+          <Field
+            label="Scheme"
+            hint="Pick the exact scheme and this holding is repriced automatically every night. Leave blank to keep entering the NAV by hand."
+          >
+            <SchemePicker
+              value={form.isin || null}
+              onSelect={(c) => {
+                setF('isin', c.isin);
+                // The current NAV is known the moment the scheme is; prefilling
+                // it saves a lookup and starts the holding at a true price.
+                setF('current_nav', String(c.nav));
+                setF('nav_date', c.navDate);
+                if (!form.product_name.trim()) setF('product_name', c.schemeName);
+              }}
+              onClear={() => setF('isin', '')}
+            />
+          </Field>
+
           <div className="grid grid-cols-2 gap-4">
             <Field label="Fund House / AMC">
               <I value={form.fund_house} onChange={e => setF('fund_house', e.target.value)} placeholder="e.g. HDFC Mutual Fund" />

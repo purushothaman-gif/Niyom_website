@@ -123,6 +123,68 @@ export function hasProfile(clientId: string): boolean {
   return listProfiles().some((p) => p.clientId === clientId);
 }
 
+/* --------------------- Partner / Employee profiles ------------------------ */
+/*
+ * The client PIN store above is the original. Partner (DSA) and Employee (CRM)
+ * PIN sign-in reuse the SAME device id (a browser is one device) but keep their
+ * remembered profiles in their own namespaced slots, so a staff PIN and a client
+ * PIN on one browser never collide. Same shape, same masking rules.
+ */
+
+export type PinSurface = 'partner' | 'employee';
+
+export interface SurfaceProfile {
+  /** dsa_id or employee_id, depending on the surface. */
+  id: string;
+  name: string;
+  maskedEmail: string;
+}
+
+const surfaceProfilesKey = (s: PinSurface) => `nw_pin_profiles_${s}`;
+
+export function listSurfaceProfiles(s: PinSurface): SurfaceProfile[] {
+  const raw = readLocal(surfaceProfilesKey(s));
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (p): p is SurfaceProfile => !!p && typeof p.id === 'string' && typeof p.name === 'string',
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function saveSurfaceProfile(s: PinSurface, profile: SurfaceProfile): void {
+  const others = listSurfaceProfiles(s).filter((p) => p.id !== profile.id);
+  writeLocal(surfaceProfilesKey(s), JSON.stringify([...others, profile]));
+}
+
+export function removeSurfaceProfile(s: PinSurface, id: string): void {
+  writeLocal(surfaceProfilesKey(s), JSON.stringify(listSurfaceProfiles(s).filter((p) => p.id !== id)));
+}
+
+export function hasSurfaceProfile(s: PinSurface, id: string): boolean {
+  return listSurfaceProfiles(s).some((p) => p.id === id);
+}
+
+const surfacePromptKey = (s: PinSurface, id: string) => `nw_pin_prompt_skips_${s}:${id}`;
+
+export function surfacePinPromptSkips(s: PinSurface, id: string): number {
+  const raw = readLocal(surfacePromptKey(s, id));
+  const n = raw ? Number(raw) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function recordSurfacePinPromptSkip(s: PinSurface, id: string): void {
+  writeLocal(surfacePromptKey(s, id), String(surfacePinPromptSkips(s, id) + 1));
+}
+
+export function silenceSurfacePinPrompt(s: PinSurface, id: string): void {
+  writeLocal(surfacePromptKey(s, id), String(PIN_PROMPT_LIMIT));
+}
+
 /* ------------------------- "Set a PIN?" prompt state ---------------------- */
 
 /**

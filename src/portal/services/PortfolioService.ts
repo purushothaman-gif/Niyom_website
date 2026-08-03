@@ -10,6 +10,7 @@ import type { NWHolding, NWTransaction, ProductType } from '../../crm/types';
 import type { PortalHolding } from '../types/cas';
 import { PRODUCT_LABELS, PRODUCT_CHART_COLORS } from '../../crm/utils';
 import { ASSET_CLASS_COLOR, paletteColor } from './palette';
+import { MF_OWNERSHIP } from '../types/ownership';
 import type {
   AllocationBucket,
   AllocationDimension,
@@ -177,10 +178,15 @@ export const PortfolioService = {
         const gain = value - invested;
         return {
           id: h.id,
-          // Only statement-sourced mutual funds carry an ownership state. A
-          // manually held row proves nothing about whose ARN it sits under, so
-          // it is left undefined rather than assumed to be ours.
-          ownership: h.cas?.ownership,
+          /*
+           * A statement names the distributor outright, so it decides. Failing
+           * that, a mutual fund in nw_holdings is one WE sold — that is the only
+           * way a row gets there — so it sits under our ARN. Every other asset
+           * class has no such notion and stays undefined.
+           */
+          ownership:
+            h.cas?.ownership ??
+            (h.product_type === 'mutual_fund' ? MF_OWNERSHIP.heldWithNiyom : undefined),
           cas: h.cas,
           productType: h.product_type,
           productLabel: PRODUCT_LABELS[h.product_type] ?? h.product_type,

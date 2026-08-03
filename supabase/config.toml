@@ -488,6 +488,30 @@ verify_jwt = false
 [functions.reset-client-password-with-otp]
 verify_jwt = false
 
+# Partner (DSA) self-serve reset — 6-digit OTP code flow (same rationale as the
+# client one: email scanners pre-consume magic links). Public: run pre-session.
+[functions.send-partner-reset-otp]
+verify_jwt = false
+
+[functions.reset-partner-password-with-otp]
+verify_jwt = false
+
+# Device-PIN quick-login. *-pin-login are public (run before any session). The
+# *-pin-set functions verify the caller's own bearer token inside so they can
+# return spoken errors ("PIN too easy") instead of a bare 401. employee-pin-*
+# additionally enforce role='employee' (admins keep password + 2FA).
+[functions.partner-pin-set]
+verify_jwt = false
+
+[functions.partner-pin-login]
+verify_jwt = false
+
+[functions.employee-pin-set]
+verify_jwt = false
+
+[functions.employee-pin-login]
+verify_jwt = false
+
 # --- Marketing Tool / Content Creation -------------------------------------
 # mkt-generate-content is intentionally absent from this file: it keeps the
 # default verify_jwt = true and additionally re-checks admin role inside.
