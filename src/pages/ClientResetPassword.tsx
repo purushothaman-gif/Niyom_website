@@ -6,6 +6,20 @@ import { ThemeToggle } from '../theme/ThemeToggle';
 import { passwordChecks, passwordError } from '../lib/passwordPolicy';
 
 /**
+ * Page shell. Defined at module scope (NOT inside the component) so it keeps a
+ * stable identity across renders — otherwise React would remount the subtree on
+ * every keystroke and the password inputs would lose focus after each letter.
+ */
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-8" style={{ background: 'var(--bg-base)' }}>
+      <div className="absolute top-4 right-4 z-10"><ThemeToggle variant="icon" /></div>
+      <div className="w-full max-w-md space-y-8">{children}</div>
+    </div>
+  );
+}
+
+/**
  * Landing screen for a client's password-recovery email link.
  *
  * The link opens the app with a Supabase recovery session in the URL hash;
@@ -94,13 +108,6 @@ export default function ClientResetPassword() {
     setStage('done');
     setTimeout(() => navigate('/client-login', { replace: true }), 2200);
   };
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className="min-h-screen flex items-center justify-center p-8" style={{ background: 'var(--bg-base)' }}>
-      <div className="absolute top-4 right-4 z-10"><ThemeToggle variant="icon" /></div>
-      <div className="w-full max-w-md space-y-8">{children}</div>
-    </div>
-  );
 
   if (stage === 'checking') {
     return (
