@@ -202,6 +202,7 @@ export interface LeadListFilters {
   owner_employee_id: string | '';
   scope: 'all' | 'assigned' | 'self_generated' | 'pool';
   city: string;
+  state: string;
   product: string;
   source: string;
   min_investment: string;
