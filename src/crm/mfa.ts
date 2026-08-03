@@ -155,7 +155,13 @@ export function clearStorageKeepingTrustedDevices(): void {
     const preserved: Array<[string, string]> = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith(TRUSTED_DEVICE_PREFIX)) {
+      // Keep "remember this device" (2FA) markers AND the device-PIN state
+      // (device id, remembered profiles, prompt-skip counters). Wiping the
+      // latter on logout would forget the employee's PIN — the browser would
+      // mint a new device id, so the server PIN row could never match again,
+      // and the keypad would never be offered (it would re-ask for credentials
+      // and re-prompt to set a PIN every login).
+      if (k && (k.startsWith(TRUSTED_DEVICE_PREFIX) || k.startsWith('nw_pin_'))) {
         const v = localStorage.getItem(k);
         if (v !== null) preserved.push([k, v]);
       }
