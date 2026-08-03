@@ -7,9 +7,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase credentials');
 }
 
-// Employee / CRM auth session — DEFAULT storage key. Left unchanged so existing
-// staff logins keep working. Used by CRM, MF Admin, and public/anon pages.
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Employee / CRM auth session — DEFAULT storage key. Used by CRM, MF Admin, and
+// public/anon pages. `detectSessionInUrl: false` is deliberate: the ONLY email
+// link that produces a URL session in this app is the CLIENT password-recovery
+// link, and that session must land in the client-portal slot — not here. With
+// the default (true), whichever instance parsed the hash first would win, so a
+// recovery token could adopt into the employee slot (see PartnerLogin's note),
+// leaving the client reset dead in the water. No staff/admin flow relies on
+// URL-session detection (all use signInWithPassword or verifyOtp token_hash).
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: { detectSessionInUrl: false },
+});
 
 // Client-portal auth session — ISOLATED storage key. A client login and an
 // employee (CRM) login share one browser origin; with a single client they
@@ -21,6 +29,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export const clientSupabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storageKey: 'nw-client-portal-auth',
+    // The sole instance that adopts an email-link (password-recovery) session,
+    // so the recovery token always lands in the client slot. The reset screen
+    // (/client-reset-password) reads it here to let the client set a new password.
+    detectSessionInUrl: true,
   },
 });
 
@@ -33,5 +45,7 @@ export const clientSupabase = createClient(supabaseUrl, supabaseAnonKey, {
 export const partnerSupabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storageKey: 'nw-partner-portal-auth',
+    // Never adopt URL sessions (same reason as the default client above).
+    detectSessionInUrl: false,
   },
 });
