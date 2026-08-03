@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { NWEmployee, CRMPage } from '../types';
-import { List, LayoutGrid, Plus, LayoutDashboard, CalendarDays } from 'lucide-react';
+import { List, LayoutGrid, Plus, LayoutDashboard, CalendarDays, PhoneCall } from 'lucide-react';
 import { NWLead } from './leadTypes';
 import { isAdminRole } from './leadUtils';
 import LeadList from './LeadList';
@@ -13,6 +13,7 @@ import LeadImport from './LeadImport';
 import LeadDuplicateQueue from './LeadDuplicateQueue';
 import LeadDashboard from './LeadDashboard';
 import LeadCalendar from './LeadCalendar';
+import LeadCallQueue from './LeadCallQueue';
 import LeadReminderPopup from './LeadReminderPopup';
 
 interface Props {
@@ -26,7 +27,7 @@ const LEAD_SELECT =
   'created_by:nw_employees!nw_leads_created_by_employee_id_fkey(full_name, employee_code)';
 
 type FormState = { open: boolean; mode: 'create' | 'edit'; lead: NWLead | null };
-type View = 'dashboard' | 'list' | 'board' | 'calendar' | 'import';
+type View = 'dashboard' | 'queue' | 'list' | 'board' | 'calendar' | 'import';
 
 export default function Leads({ employee, onNavigate }: Props) {
   const isAdmin = isAdminRole(employee);
@@ -91,7 +92,7 @@ export default function Leads({ employee, onNavigate }: Props) {
 
   const viewToggle = (
     <div className="flex items-center rounded-xl p-0.5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-      {([['dashboard', LayoutDashboard, 'Dashboard'], ['list', List, 'List view'], ['board', LayoutGrid, 'Pipeline board'], ['calendar', CalendarDays, 'Calendar']] as const).map(([v, Icon, label]) => (
+      {([['dashboard', LayoutDashboard, 'Dashboard'], ['queue', PhoneCall, 'Call Queue'], ['list', List, 'List view'], ['board', LayoutGrid, 'Pipeline board'], ['calendar', CalendarDays, 'Calendar']] as const).map(([v, Icon, label]) => (
         <button key={v} onClick={() => setView(v)}
           className="px-2.5 py-1.5 rounded-lg transition-all"
           style={{ background: view === v ? 'var(--accent)' : 'transparent', color: view === v ? 'var(--text-on-accent)' : 'var(--text-faint)' }}
@@ -137,6 +138,11 @@ export default function Leads({ employee, onNavigate }: Props) {
         <div className="space-y-5">
           <PageHeader title={isAdmin ? 'Admin Dashboard' : 'My Dashboard'} />
           <LeadDashboard employee={employee} refreshKey={refreshKey} onOpenLead={openWorkspace} />
+        </div>
+      ) : view === 'queue' ? (
+        <div className="space-y-5">
+          <PageHeader title="Call Queue" />
+          <LeadCallQueue employee={employee} refreshKey={refreshKey} onOpenLead={openWorkspace} />
         </div>
       ) : view === 'calendar' ? (
         <div className="space-y-5">
