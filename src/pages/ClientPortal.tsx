@@ -10,8 +10,10 @@ import PortalApp from '../portal/PortalApp';
 interface Props {
   clientId: string;
   onLogout: () => void;
+  /** Inactivity sign-out — returns to the sign-in screen, not the home page. */
+  onIdleLogout?: () => void;
 }
 
-export default function ClientPortal({ clientId, onLogout }: Props) {
-  return <PortalApp clientId={clientId} onLogout={onLogout} />;
+export default function ClientPortal({ clientId, onLogout, onIdleLogout }: Props) {
+  return <PortalApp clientId={clientId} onLogout={onLogout} onIdleLogout={onIdleLogout} />;
 }

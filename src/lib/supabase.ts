@@ -21,23 +21,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export const clientSupabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storageKey: 'nw-client-portal-auth',
-    /*
-     * Google sign-in makes the three-instances-one-origin problem sharper.
-     *
-     * With the implicit flow the provider returns the access token in the URL
-     * fragment, and EVERY Supabase instance on the page with detectSessionInUrl
-     * would race to consume it — a client's token could land in the employee
-     * instance's storage slot. PKCE returns a one-time `code` that is worthless
-     * without the verifier held in THIS instance's storage, so only this client
-     * can complete the exchange.
-     *
-     * detectSessionInUrl is off for the same reason: the exchange happens where
-     * we choose (ClientAuthCallback), not implicitly wherever a URL is seen.
-     * Nothing else here needs it — the OTP sign-ins use verifyOtp with a
-     * server-issued token_hash, which is flow-agnostic.
-     */
-    flowType: 'pkce',
-    detectSessionInUrl: false,
   },
 });
 

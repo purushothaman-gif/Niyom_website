@@ -14,7 +14,6 @@ import { PUBLIC_ROUTES, type PublicRoute } from './routes/publicRoutes';
 const CRM = lazy(() => import('./crm/CRM'));
 const MfAdminApp = lazy(() => import('./mfadmin/MfAdminApp'));
 const ClientLogin = lazy(() => import('./pages/ClientLogin'));
-const ClientAuthCallback = lazy(() => import('./pages/ClientAuthCallback'));
 const ClientChangePassword = lazy(() => import('./pages/ClientChangePassword'));
 const ClientPortal = lazy(() => import('./pages/ClientPortal'));
 const PartnerLogin = lazy(() => import('./pages/PartnerLogin'));
@@ -120,7 +119,7 @@ function ClientLoginRoute() {
     setClientPasswordChanged(true);
   };
 
-  const handleClientLogout = () => {
+  const endClientSession = () => {
     try {
       sessionStorage.removeItem('nw_portal_client');
       sessionStorage.removeItem('nw_portal_pw_ok');
@@ -129,8 +128,22 @@ function ClientLoginRoute() {
     import('./lib/supabase').then(({ clientSupabase }) => clientSupabase.auth.signOut());
     setClientPortalId(null);
     setClientPasswordChanged(false);
+  };
+
+  const handleClientLogout = () => {
+    endClientSession();
     // Send the signed-out client to the public home page, not back to the login form.
     navigate('/');
+  };
+
+  /*
+   * Signed out by inactivity, not by choice — so this lands on the sign-in
+   * screen (which opens on the PIN keypad when this device has one) rather than
+   * the marketing home page.
+   */
+  const handleClientIdleLogout = () => {
+    endClientSession();
+    navigate('/client-login', { replace: true });
   };
 
   if (loading) return <LoadingScreen />;
@@ -141,7 +154,13 @@ function ClientLoginRoute() {
         <ClientChangePassword clientId={clientPortalId} onComplete={handleClientPasswordChanged} />
       );
     }
-    return <ClientPortal clientId={clientPortalId} onLogout={handleClientLogout} />;
+    return (
+      <ClientPortal
+        clientId={clientPortalId}
+        onLogout={handleClientLogout}
+        onIdleLogout={handleClientIdleLogout}
+      />
+    );
   }
 
   return (
@@ -283,8 +302,6 @@ function AppContent() {
 
           {/* Authenticated / utility surfaces (noindex). */}
           <Route path="/client-login" element={<ClientLoginRoute />} />
-          {/* Google's redirect target — must match the Supabase allow-list. */}
-          <Route path="/client-auth/callback" element={<ClientAuthCallback />} />
           <Route path="/partner-login" element={<PartnerLoginRoute />} />
           <Route path="/onboarding" element={<OnboardingRoute />} />
           <Route path="/crm/*" element={<CRM />} />

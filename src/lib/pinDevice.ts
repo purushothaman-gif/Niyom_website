@@ -1,19 +1,30 @@
 /**
- * Device identity for PIN sign-in.
+ * Device identity and remembered profiles for PIN sign-in.
  *
- * The device id is an opaque random string kept in localStorage. It is a NAME,
- * not a credential: on its own it grants nothing, and the server treats it as
- * untrusted input. Pairing it with a PIN is what signs someone in, and the
- * server counts the tries.
+ * The device id is an opaque random string in localStorage. It is a NAME, not a
+ * credential: on its own it grants nothing, and the server treats it as
+ * untrusted input. Pairing it with the right PIN is what signs someone in, and
+ * the server counts the tries.
  *
- * `nw_pin_client` is a local hint that this browser has a PIN set, so the login
- * screen can open on the keypad instead of asking everyone. It is a UI
- * shortcut: deleting it costs the client nothing but one password login, and
- * forging it gets an attacker a keypad that rejects them.
+ * Alongside it sits the list of profiles that have a PIN on this browser, so
+ * the keypad can say WHOSE account is being unlocked. That matters most where
+ * a family shares a laptop: two Niyom accounts on one device is the case where
+ * typing a PIN blind gets you the wrong portfolio.
+ *
+ * Only a display name and a MASKED email are stored — enough to recognise
+ * yourself, not a copy of the client's contact details. Forging any of it gets
+ * an attacker a keypad that rejects them.
  */
 
 const DEVICE_KEY = 'nw_pin_device_id';
-const HINT_KEY = 'nw_pin_client';
+const PROFILES_KEY = 'nw_pin_profiles';
+
+export interface PinProfile {
+  clientId: string;
+  name: string;
+  /** Already masked at save time, e.g. "a••••••n@gmail.com". */
+  maskedEmail: string;
+}
 
 function readLocal(key: string): string | null {
   try {
@@ -27,15 +38,7 @@ function writeLocal(key: string, value: string): void {
   try {
     window.localStorage.setItem(key, value);
   } catch {
-    /* PIN sign-in simply won't persist here; password login is unaffected */
-  }
-}
-
-function removeLocal(key: string): void {
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    /* ignore */
+    /* PIN sign-in just won't persist here; password login is unaffected */
   }
 }
 
@@ -80,15 +83,38 @@ export function deviceLabel(): string {
   return `${browser} on ${os}`;
 }
 
-/** True when this browser believes it has a PIN set. */
-export function hasPinHint(): boolean {
-  return !!readLocal(HINT_KEY);
+/** "anand.kumar@gmail.com" → "a••••••••••r@gmail.com". */
+export function maskEmail(email: string): string {
+  const [local, domain] = String(email || '').split('@');
+  if (!local || !domain) return '';
+  if (local.length <= 2) return `${local[0]}••@${domain}`;
+  return `${local[0]}${'•'.repeat(Math.min(local.length - 2, 12))}${local[local.length - 1]}@${domain}`;
 }
 
-export function setPinHint(clientId: string): void {
-  writeLocal(HINT_KEY, clientId);
+/** Profiles with a PIN on this browser, in the order they were added. */
+export function listProfiles(): PinProfile[] {
+  const raw = readLocal(PROFILES_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (p): p is PinProfile => !!p && typeof p.clientId === 'string' && typeof p.name === 'string',
+    );
+  } catch {
+    return [];
+  }
 }
 
-export function clearPinHint(): void {
-  removeLocal(HINT_KEY);
+export function saveProfile(profile: PinProfile): void {
+  const others = listProfiles().filter((p) => p.clientId !== profile.clientId);
+  writeLocal(PROFILES_KEY, JSON.stringify([...others, profile]));
+}
+
+export function removeProfile(clientId: string): void {
+  writeLocal(PROFILES_KEY, JSON.stringify(listProfiles().filter((p) => p.clientId !== clientId)));
+}
+
+export function hasProfiles(): boolean {
+  return listProfiles().length > 0;
 }

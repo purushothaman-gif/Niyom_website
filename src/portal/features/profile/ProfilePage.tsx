@@ -203,7 +203,11 @@ export function ProfilePage({
           </SectionCard>
 
           <SectionCard title="Sign-in" icon={ShieldCheck}>
-            <PinSection clientId={clientId} />
+            <PinSection
+              clientId={clientId}
+              clientName={client?.full_name ?? 'Investor'}
+              clientEmail={client?.email ?? ''}
+            />
           </SectionCard>
 
           <SectionCard title="Settings" icon={Lock}>

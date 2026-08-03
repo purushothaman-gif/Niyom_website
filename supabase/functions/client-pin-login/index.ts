@@ -53,6 +53,12 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const deviceId = String(body.device_id ?? "").trim();
     const pin = body.pin;
+    /*
+     * Which account on this device. One browser can hold a PIN for several
+     * clients — a family sharing a laptop — so the caller names the one it is
+     * unlocking. It is only a selector: the PIN still has to match THAT row.
+     */
+    const clientId = String(body.client_id ?? "").trim();
 
     if (!/^[a-f0-9]{32,64}$/i.test(deviceId) || !isValidPin(pin)) return json(WRONG, 401);
 
@@ -61,15 +67,24 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: row } = await db
+    let query = db
       .from("nw_client_device_pins")
       .select(
         "id, client_id, pin_hash, pin_salt, pin_iterations, failed_attempts, locked_until, revoked_at, expires_at",
       )
       .eq("device_id", deviceId)
-      .is("revoked_at", null)
-      .maybeSingle();
+      .is("revoked_at", null);
 
+    if (clientId) query = query.eq("client_id", clientId);
+
+    const { data: rows } = await query.limit(2);
+
+    /*
+     * No client_id and more than one account on the device: the browser has to
+     * say which. Answered as a plain wrong-PIN so this cannot be used to count
+     * the accounts on someone else's machine.
+     */
+    const row = rows?.length === 1 ? rows[0] : null;
     if (!row) return json(WRONG, 401);
 
     const now = Date.now();

@@ -22,10 +22,18 @@ import { NotificationsPage } from './features/notifications/NotificationsPage';
 import { SupportPage } from './features/support/SupportPage';
 import { ChangePasswordModal } from './features/profile/ChangePasswordModal';
 import { ImportPortfolioModal } from './features/portfolio/ImportPortfolioModal';
+import { IdleWarning } from './components/IdleWarning';
+import { useIdleTimeout } from './hooks/useIdleTimeout';
 
 interface PortalAppProps {
   clientId: string;
   onLogout: () => void;
+  /**
+   * Sign-out triggered by inactivity rather than by the client. Lands them back
+   * on the sign-in screen (which opens on the PIN keypad) instead of the public
+   * home page, because they did not ask to leave.
+   */
+  onIdleLogout?: () => void;
 }
 
 /**
@@ -33,7 +41,7 @@ interface PortalAppProps {
  * model from it, so navigation between Dashboard / Portfolio / Allocation never
  * re-queries. Owns internal routing; leaves the host router in App.tsx untouched.
  */
-export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
+export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAppProps) {
   const { view, navigate } = usePortalRouter();
   const { snapshot, loading, error, refreshedAt, refresh } = useClientSnapshot(clientId);
   const [showChangePw, setShowChangePw] = useState(false);
@@ -44,6 +52,17 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
    * the wizard is two places for its state to drift.
    */
   const [showImport, setShowImport] = useState(false);
+
+  /*
+   * Five minutes of nothing signs the client out. This is what makes a 4-digit
+   * PIN a fair trade: getting back in is quick, so a session left open on a
+   * shared screen does not have to be tolerated for convenience.
+   */
+  const { secondsLeft, stayActive } = useIdleTimeout({
+    minutes: 5,
+    warnSeconds: 30,
+    onTimeout: () => (onIdleLogout ?? onLogout)(),
+  });
 
   const client = snapshot.client;
   const hasData = !!refreshedAt; // first load completed
@@ -180,6 +199,14 @@ export default function PortalApp({ clientId, onLogout }: PortalAppProps) {
           clientId={clientId}
           onClose={() => setShowActivate(false)}
           onDone={refresh}
+        />
+      )}
+
+      {secondsLeft !== null && (
+        <IdleWarning
+          secondsLeft={secondsLeft}
+          onStay={stayActive}
+          onSignOutNow={() => (onIdleLogout ?? onLogout)()}
         />
       )}
     </>
