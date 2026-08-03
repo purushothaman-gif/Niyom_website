@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { clientSupabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
 import { ScrollToTop } from './components/ScrollToTop';
@@ -20,6 +21,7 @@ const PartnerLogin = lazy(() => import('./pages/PartnerLogin'));
 const PartnerChangePassword = lazy(() => import('./pages/PartnerChangePassword'));
 const PartnerPortal = lazy(() => import('./pages/PartnerPortal'));
 const PublicOnboarding = lazy(() => import('./pages/PublicOnboarding'));
+const ClientResetPassword = lazy(() => import('./pages/ClientResetPassword'));
 const PublicDealView = lazy(() => import('./pages/PublicDealView'));
 const PublicDebitNoteView = lazy(() => import('./pages/PublicDebitNoteView'));
 
@@ -285,10 +287,42 @@ function DebitNoteRoute() {
   return token ? <PublicDebitNoteView token={token} /> : <Navigate to="/" replace />;
 }
 
+/**
+ * Whenever a client password-recovery session is detected — either captured at
+ * boot (main.tsx sets the flag before Supabase strips the URL hash) or fired
+ * live as PASSWORD_RECOVERY — route to the reset screen. This makes the reset
+ * link work even when Supabase falls back to the Site URL (home page) instead of
+ * the exact reset path (e.g. when that path isn't in the allowed-redirect list).
+ */
+function ClientRecoveryRedirect() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const go = () => {
+      if (window.location.pathname !== '/client-reset-password') {
+        navigate('/client-reset-password', { replace: true });
+      }
+    };
+    let flagged = false;
+    try { flagged = sessionStorage.getItem('nw_pw_recovery') === '1'; } catch {}
+    if (flagged) go();
+
+    const { data } = clientSupabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        try { sessionStorage.setItem('nw_pw_recovery', '1'); } catch {}
+        go();
+      }
+    });
+    return () => data.subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
+}
+
 function AppContent() {
   return (
     <>
       <ScrollToTop />
+      <ClientRecoveryRedirect />
       <Suspense fallback={<LoadingScreen />}>
         <Routes>
           {/* Public, indexed pages (each carries its own <Seo>). */}
@@ -302,6 +336,7 @@ function AppContent() {
 
           {/* Authenticated / utility surfaces (noindex). */}
           <Route path="/client-login" element={<ClientLoginRoute />} />
+          <Route path="/client-reset-password" element={<ClientResetPassword />} />
           <Route path="/partner-login" element={<PartnerLoginRoute />} />
           <Route path="/onboarding" element={<OnboardingRoute />} />
           <Route path="/crm/*" element={<CRM />} />

@@ -44,10 +44,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Determine redirect URL for after password reset
+    // Send the client to the dedicated reset screen, which reads the recovery
+    // session and lets them set a new password. (If this exact path is not in
+    // the project's allowed-redirect list, Supabase falls back to the Site URL —
+    // the app still routes to the reset screen via its recovery safety net.)
     const origin = req.headers.get("Origin") || req.headers.get("Referer") || "";
     const baseUrl = origin.split("/").slice(0, 3).join("/");
-    const redirectTo = baseUrl ? `${baseUrl}/client-login` : `${supabaseUrl}/client-login`;
+    const redirectTo = baseUrl ? `${baseUrl}/client-reset-password` : `${supabaseUrl}/client-reset-password`;
 
     // Use the public anon client to send the actual password reset email
     // (resetPasswordForEmail sends a real email; admin generateLink only creates a link)
