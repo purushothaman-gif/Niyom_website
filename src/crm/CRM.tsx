@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
+import { SurfaceSetPinPrompt } from '../components/SurfaceSetPinPrompt';
+import {
+  PIN_PROMPT_LIMIT, hasSurfaceProfile, recordSurfacePinPromptSkip,
+  silenceSurfacePinPrompt, surfacePinPromptSkips,
+} from '../lib/pinDevice';
 import { NWEmployee, CRMPage } from './types';
 import { evaluateMfaGate, isMfaUnavailable, clearStorageKeepingTrustedDevices } from './mfa';
 import CRMLogin from './CRMLogin';
@@ -31,6 +36,20 @@ export default function CRM() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<CRMPage>('dashboard');
   const [pageParams, setPageParams] = useState<Record<string, string>>({});
+
+  // Offer a device PIN once, right after a regular employee signs in. Admins /
+  // super_admins are never offered one (they keep password + TOTP 2FA) — the
+  // edge function enforces the same, this is just the UI side.
+  const [pinPromptOpen, setPinPromptOpen] = useState(false);
+  const pinPromptDecided = useRef(false);
+  useEffect(() => {
+    if (pinPromptDecided.current || !employee) return;
+    if (!employee.password_changed || employee.role !== 'employee') return;
+    pinPromptDecided.current = true;
+    const already = hasSurfaceProfile('employee', employee.id);
+    const refused = surfacePinPromptSkips('employee', employee.id) >= PIN_PROMPT_LIMIT;
+    if (!already && !refused) setPinPromptOpen(true);
+  }, [employee]);
 
   useEffect(() => {
   const path = window.location.pathname;
@@ -197,6 +216,19 @@ export default function CRM() {
   return (
     <Layout employee={employee} page={page} onNavigate={navigate}>
       {renderPage()}
+      {pinPromptOpen && !isAdmin && (
+        <SurfaceSetPinPrompt
+          supabase={supabase}
+          surface="employee"
+          setFn="employee-pin-set"
+          id={employee.id}
+          name={employee.full_name}
+          email={employee.email}
+          manageHint="Settings"
+          onSkip={() => { recordSurfacePinPromptSkip('employee', employee.id); setPinPromptOpen(false); }}
+          onDone={() => { silenceSurfacePinPrompt('employee', employee.id); setPinPromptOpen(false); }}
+        />
+      )}
     </Layout>
   );
 }

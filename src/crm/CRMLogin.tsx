@@ -8,6 +8,8 @@ import {
 } from './mfa';
 import { Shield, Users, BarChart3, Mail, Lock, Eye, EyeOff, ArrowRight, ChevronLeft, ArrowLeft, AlertTriangle, KeyRound, CheckCircle2, RotateCw, Smartphone } from 'lucide-react';
 import { HeroBackground } from '../components/HeroBackground';
+import { PinInput } from '../components/PinInput';
+import { getDeviceId, listSurfaceProfiles, removeSurfaceProfile, type SurfaceProfile } from '../lib/pinDevice';
 
 interface Props {
   onLogin: (emp: NWEmployee) => void;
@@ -18,7 +20,7 @@ interface Props {
 // Privileged accounts (admin / super_admin) carry a TOTP second factor:
 //   login -> mfa_challenge   (already enrolled — enter the current code)
 //   login -> mfa_enroll      (first sign-in after 2FA was turned on)
-type View = 'login' | 'fp_email' | 'fp_otp' | 'fp_password' | 'fp_done'
+type View = 'login' | 'pin_login' | 'fp_email' | 'fp_otp' | 'fp_password' | 'fp_done'
   | 'mfa_challenge' | 'mfa_enroll';
 
 const FN_BASE = `${(import.meta as any).env?.VITE_SUPABASE_URL || ''}/functions/v1`;
@@ -77,7 +79,17 @@ function clearRateLimit() {
 }
 
 export default function CRMLogin({ onLogin }: Props) {
-  const [view, setView] = useState<View>('login');
+  // Device-PIN quick sign-in (regular employees only; admins never get a PIN).
+  const [profiles, setProfiles] = useState<SurfaceProfile[]>(() => listSurfaceProfiles('employee'));
+  const [activeProfile, setActiveProfile] = useState<SurfaceProfile | null>(() => {
+    const list = listSurfaceProfiles('employee');
+    return list.length === 1 ? list[0] : null;
+  });
+  const [pinError, setPinError] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinReset, setPinReset] = useState(0);
+
+  const [view, setView] = useState<View>(() => (listSurfaceProfiles('employee').length > 0 ? 'pin_login' : 'login'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -295,6 +307,41 @@ export default function CRMLogin({ onLogin }: Props) {
     return { res, data };
   };
 
+  const forgetProfile = (employeeId: string) => {
+    removeSurfaceProfile('employee', employeeId);
+    const left = listSurfaceProfiles('employee');
+    setProfiles(left);
+    setActiveProfile(left.length === 1 ? left[0] : null);
+    setPinError('');
+    if (left.length === 0) setView('login');
+  };
+
+  // PIN quick sign-in. The token exchange fires SIGNED_IN, which CRM.tsx adopts
+  // (after its MFA gate). Regular employees have no TOTP, so they land straight
+  // in; admins never have a PIN row, and the edge function re-checks the role.
+  const handlePin = async (pin: string) => {
+    if (!activeProfile) return;
+    setPinError('');
+    setPinBusy(true);
+    const { res, data } = await callFn('employee-pin-login', {
+      device_id: getDeviceId(),
+      employee_id: activeProfile.id,
+      pin,
+    });
+    if (!res.ok || !data?.token_hash) {
+      setPinBusy(false);
+      setPinReset((n) => n + 1);
+      setPinError(data?.error || 'That PIN didn’t work. Please try again.');
+      if (data?.code === 'burned' || data?.code === 'expired') {
+        setTimeout(() => forgetProfile(activeProfile.id), 1800);
+      }
+      return;
+    }
+    const { error: sessErr } = await supabase.auth.verifyOtp({ token_hash: data.token_hash, type: 'email' });
+    if (sessErr) { setPinBusy(false); setPinReset((n) => n + 1); setPinError('Could not sign you in. Please try again.'); return; }
+    // Leave pinBusy true — CRM.tsx adopts the SIGNED_IN session and unmounts us.
+  };
+
   // Step 1-2: request an OTP for the entered email.
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -454,6 +501,51 @@ export default function CRMLogin({ onLogin }: Props) {
             </button>
           </div>
 
+          {view === 'pin_login' && (
+            <div className="space-y-8">
+              <div>
+                <div className="lg:hidden flex items-center gap-3 mb-8">
+                  <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-9 w-auto object-contain" />
+                  <p className="font-bold text-lg" style={{ color: 'var(--accent-soft)' }}>Niyom Wealth</p>
+                </div>
+                <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--accent-soft)', letterSpacing: '0.15em' }}>Welcome back</p>
+                <h2 className="text-3xl font-bold text-text-primary">
+                  {activeProfile ? activeProfile.name.split(' ')[0] : 'Enter your PIN'}
+                </h2>
+                <p className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>Enter your 4-digit PIN for this device.</p>
+              </div>
+
+              {profiles.length > 1 && !activeProfile ? (
+                <div className="space-y-3">
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>More than one account uses a PIN here. Choose yours:</p>
+                  {profiles.map(p => (
+                    <button key={p.id} onClick={() => { setActiveProfile(p); setPinError(''); setPinReset(n => n + 1); }}
+                      className="w-full text-left p-4 rounded-xl transition-colors" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                      <p className="text-sm font-semibold text-text-primary">{p.name}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{p.maskedEmail}</p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {pinError && (
+                    <div className="p-4 rounded-xl text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: 'rgb(var(--danger-soft-rgb))' }}>{pinError}</div>
+                  )}
+                  <PinInput onComplete={handlePin} disabled={pinBusy} autoFocus resetKey={pinReset} />
+                  {profiles.length > 1 && (
+                    <button type="button" onClick={() => { setActiveProfile(null); setPinError(''); }}
+                      className="w-full text-center text-xs" style={{ color: 'var(--text-muted)' }}>Use a different account</button>
+                  )}
+                </>
+              )}
+
+              <button type="button" onClick={() => { setView('login'); setPinError(''); }}
+                className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2" style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                <Lock className="w-4 h-4" /> Sign in with password
+              </button>
+            </div>
+          )}
+
           {view === 'login' && (
             <div className="space-y-8">
               <div>
@@ -523,6 +615,13 @@ export default function CRMLogin({ onLogin }: Props) {
                   {loading ? 'Signing in...' : <><span>Sign In</span><ArrowRight className="w-4 h-4" /></>}
                 </button>
               </form>
+
+              {profiles.length > 0 && (
+                <button type="button" onClick={() => { setView('pin_login'); setError(''); setPinReset(n => n + 1); }}
+                  className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2" style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                  <KeyRound className="w-4 h-4" /> Use your PIN instead
+                </button>
+              )}
 
               <p className="text-xs text-center" style={{ color: 'var(--border-stronger)' }}>
                 Access restricted to authorized staff only. Contact your administrator for account access.
