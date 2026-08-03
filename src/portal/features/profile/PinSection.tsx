@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, Loader2, Smartphone, Trash2 } from 'lucide-react';
 import { clientSupabase as supabase } from '../../../lib/supabase';
-import { clearPinHint, deviceLabel, getDeviceId, hasPinHint, setPinHint } from '../../../lib/pinDevice';
+import {
+  deviceLabel,
+  getDeviceId,
+  listProfiles,
+  maskEmail,
+  removeProfile,
+  saveProfile,
+} from '../../../lib/pinDevice';
 import { PinInput } from '../../../components/PinInput';
 import { StatusPill } from '../../components/StatusPill';
 
@@ -17,6 +24,9 @@ interface DeviceRow {
 
 interface Props {
   clientId: string;
+  /** Shown above the keypad at sign-in, so a shared device names the account. */
+  clientName: string;
+  clientEmail: string;
 }
 
 async function callFn(name: string, payload: unknown) {
@@ -45,7 +55,7 @@ const fmtDate = (iso: string | null) =>
  * be revoked from here — including from a different device, which is the case
  * that matters when a phone goes missing.
  */
-export function PinSection({ clientId }: Props) {
+export function PinSection({ clientId, clientName, clientEmail }: Props) {
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [stage, setStage] = useState<'idle' | 'enter' | 'confirm'>('idle');
@@ -112,7 +122,9 @@ export function PinSection({ clientId }: Props) {
       return;
     }
 
-    setPinHint(clientId);
+    /* Remember who this PIN belongs to, so the keypad can greet them by name.
+       Name + masked email only — never the PIN, never the full address. */
+    saveProfile({ clientId, name: clientName, maskedEmail: maskEmail(clientEmail) });
     setStage('idle');
     setDone(true);
     void load();
@@ -121,7 +133,7 @@ export function PinSection({ clientId }: Props) {
   const revoke = async (deviceId: string) => {
     setBusy(true);
     await callFn('client-pin-manage', { action: 'revoke', device_id: deviceId });
-    if (deviceId === thisDevice) clearPinHint();
+    if (deviceId === thisDevice) removeProfile(clientId);
     setBusy(false);
     void load();
   };
@@ -132,7 +144,7 @@ export function PinSection({ clientId }: Props) {
         <div className="min-w-0">
           <p className="text-sm font-semibold text-text-primary">
             PIN sign-in
-            {onThisDevice && hasPinHint() && (
+            {onThisDevice && listProfiles().some((p) => p.clientId === clientId) && (
               <span className="ml-2 align-middle">
                 <StatusPill tone="success">On for this device</StatusPill>
               </span>

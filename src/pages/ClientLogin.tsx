@@ -4,7 +4,7 @@ import { Lock, Eye, EyeOff, ArrowRight, ChevronLeft, AlertTriangle, CreditCard, 
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
 import { PinInput } from '../components/PinInput';
-import { clearPinHint, getDeviceId, hasPinHint } from '../lib/pinDevice';
+import { getDeviceId, listProfiles, removeProfile, type PinProfile } from '../lib/pinDevice';
 
 interface Props {
   onLogin: (clientId: string, passwordChanged: boolean) => void;
@@ -17,25 +17,6 @@ type View = 'login' | 'forgot' | 'reset_sent' | 'otp_login' | 'pin';
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 300;
-
-/**
- * Google sign-in stays dark until VITE_GOOGLE_AUTH=on. The button depends on a
- * provider that has to be configured in the Supabase dashboard first, and a
- * button that reliably 400s is worse than no button.
- */
-const GOOGLE_ENABLED = import.meta.env.VITE_GOOGLE_AUTH === 'on';
-
-/** Google's mark, inlined — the CSP blocks remote assets and this never changes. */
-function GoogleMark() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z" />
-      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-    </svg>
-  );
-}
 
 function getRateLimitState() {
   try {
@@ -72,16 +53,32 @@ function clearRateLimit() {
 
 export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: Props) {
   /*
-   * A device that has a PIN opens on the keypad. The hint is local and
-   * unverified — it only decides which screen shows first; the server still
-   * decides whether the PIN is right.
+   * A device with a saved PIN opens on the keypad. What is stored locally is a
+   * name and a masked email — enough to recognise the account, and unverified:
+   * it only decides which screen shows first. The server still decides whether
+   * the PIN is right, and for which client.
    */
+  const [profiles, setProfiles] = useState<PinProfile[]>(() => listProfiles());
+  const [activeProfile, setActiveProfile] = useState<PinProfile | null>(() => {
+    const saved = listProfiles();
+    return saved.length === 1 ? saved[0] : null;
+  });
   const [view, setView] = useState<View>(
-    startOtp ? 'otp_login' : hasPinHint() ? 'pin' : 'login',
+    startOtp ? 'otp_login' : listProfiles().length > 0 ? 'pin' : 'login',
   );
   const [pinError, setPinError] = useState('');
   const [pinBusy, setPinBusy] = useState(false);
   const [pinReset, setPinReset] = useState(0);
+
+  /** Stop offering a PIN for this account on this browser. */
+  const forgetProfile = (clientId: string) => {
+    removeProfile(clientId);
+    const left = listProfiles();
+    setProfiles(left);
+    setActiveProfile(left.length === 1 ? left[0] : null);
+    setPinError('');
+    if (left.length === 0) setView('login');
+  };
   const [pan, setPan] = useState('');
   const [password, setPassword] = useState('');
   const [resetPan, setResetPan] = useState('');
@@ -195,10 +192,13 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
    * after ten tries) is entirely server-side — see client-pin-login.
    */
   const handlePin = async (pin: string) => {
+    if (!activeProfile) return;
     setPinError('');
     setPinBusy(true);
     const { ok, data } = await callPublicFn('client-pin-login', {
       device_id: getDeviceId(),
+      // Which account on this device. The PIN still has to match it.
+      client_id: activeProfile.clientId,
       pin,
     });
 
@@ -206,10 +206,9 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
       setPinBusy(false);
       setPinReset((n) => n + 1);
       setPinError(data?.error || 'That PIN didn’t work. Please try again.');
-      // A burned or expired PIN is gone for good — stop opening on the keypad.
+      // A burned or expired PIN is gone for good — stop offering the keypad.
       if (data?.code === 'burned' || data?.code === 'expired') {
-        clearPinHint();
-        setTimeout(() => setView('login'), 1800);
+        setTimeout(() => forgetProfile(activeProfile.clientId), 1800);
       }
       return;
     }
@@ -225,30 +224,6 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
       return;
     }
     onLogin(data.client_id, data.password_changed !== false);
-  };
-
-  /**
-   * Hand off to Google. Everything after the redirect happens in
-   * /client-auth/callback: the code exchange, then the server deciding which
-   * client record (if any) this Google account owns.
-   */
-  const handleGoogle = async () => {
-    setError('');
-    setLoading(true);
-    const { error: oauthErr } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/client-auth/callback`,
-        // Always show the chooser: a client with two Google accounts should not
-        // be silently signed in with whichever one the browser remembers.
-        queryParams: { prompt: 'select_account' },
-      },
-    });
-    if (oauthErr) {
-      setLoading(false);
-      setError('Google sign-in is unavailable right now. Please use your PAN and password.');
-    }
-    // On success the browser leaves this page, so nothing to reset.
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
@@ -389,11 +364,41 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
                   <p className="font-bold text-sm" style={{ color: 'var(--accent-soft)' }}>Niyom Wealth</p>
                 </div>
                 <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--accent)' }}>Client Portal</p>
-                <h1 className="text-3xl font-bold text-text-primary">Enter your PIN</h1>
+                <h1 className="text-3xl font-bold text-text-primary">
+                  {activeProfile ? 'Welcome back' : 'Choose your account'}
+                </h1>
                 <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-                  The 4-digit PIN you set for this device.
+                  {activeProfile
+                    ? 'Enter the 4-digit PIN you set on this device.'
+                    : 'More than one account uses a PIN on this device.'}
                 </p>
               </div>
+
+              {/*
+                Whose account this is, before a single digit is typed. On a
+                shared device the PIN alone tells you nothing about which
+                portfolio you are about to open.
+              */}
+              {activeProfile && (
+                <div className="rounded-xl p-4 text-center" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+                  <p className="text-base font-bold text-text-primary">{activeProfile.name}</p>
+                  {activeProfile.maskedEmail && (
+                    <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {activeProfile.maskedEmail}
+                    </p>
+                  )}
+                  {profiles.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => { setActiveProfile(null); setPinError(''); }}
+                      className="mt-2 text-xs font-semibold"
+                      style={{ color: 'var(--accent)' }}
+                    >
+                      Switch account
+                    </button>
+                  )}
+                </div>
+              )}
 
               {pinError && (
                 <div className="p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
@@ -402,10 +407,30 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
                 </div>
               )}
 
-              <PinInput onComplete={handlePin} disabled={pinBusy} autoFocus resetKey={pinReset} />
-
-              {pinBusy && (
-                <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>Signing you in…</p>
+              {activeProfile ? (
+                <>
+                  <PinInput onComplete={handlePin} disabled={pinBusy} autoFocus resetKey={pinReset} />
+                  {pinBusy && (
+                    <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>Signing you in…</p>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-2">
+                  {profiles.map((p) => (
+                    <button
+                      key={p.clientId}
+                      type="button"
+                      onClick={() => { setActiveProfile(p); setPinError(''); setPinReset((n) => n + 1); }}
+                      className="w-full rounded-xl px-4 py-3 text-left transition-colors"
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+                    >
+                      <p className="text-sm font-bold text-text-primary">{p.name}</p>
+                      {p.maskedEmail && (
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{p.maskedEmail}</p>
+                      )}
+                    </button>
+                  ))}
+                </div>
               )}
 
               <div className="flex flex-col items-center gap-2">
@@ -416,13 +441,15 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
                 >
                   Use PAN &amp; password instead
                 </button>
-                <button
-                  type="button"
-                  onClick={() => { clearPinHint(); setView('login'); setPinError(''); }}
-                  className="text-[11px]" style={{ color: 'var(--text-faint)' }}
-                >
-                  Not your device? Forget the PIN on this browser
-                </button>
+                {activeProfile && (
+                  <button
+                    type="button"
+                    onClick={() => forgetProfile(activeProfile.clientId)}
+                    className="text-[11px]" style={{ color: 'var(--text-faint)' }}
+                  >
+                    Not you? Remove this account from this device
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -449,27 +476,6 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
                 <div className="p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
                   <AlertTriangle className="w-4 h-4 text-c-red flex-shrink-0" />
                   <p className="text-sm text-c-red">{error}</p>
-                </div>
-              )}
-
-              {GOOGLE_ENABLED && (
-                <div className="space-y-4">
-                  <button
-                    type="button"
-                    onClick={handleGoogle}
-                    disabled={loading || !!lockoutMsg}
-                    className="w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2.5 transition-colors disabled:opacity-50"
-                    style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-                  >
-                    <GoogleMark /> Continue with Google
-                  </button>
-                  <div className="flex items-center gap-3">
-                    <span className="h-px flex-1" style={{ background: 'var(--border-subtle)' }} />
-                    <span className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
-                      or sign in with PAN
-                    </span>
-                    <span className="h-px flex-1" style={{ background: 'var(--border-subtle)' }} />
-                  </div>
                 </div>
               )}
 

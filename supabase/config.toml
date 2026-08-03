@@ -515,14 +515,6 @@ verify_jwt = false
 [functions.partner-submit-lead]
 verify_jwt = false
 
-# Resolves a Google-authenticated user to their nw_clients row. Public
-# verify_jwt: it verifies the caller's bearer token itself (and requires the
-# Google identity's email to be verified BY Google) so it can answer with its
-# own error codes — "no Niyom account for this email" has to reach the login
-# screen as a message, not as a bare 401.
-[functions.client-google-resolve]
-verify_jwt = false
-
 # Per-device 4-digit PIN sign-in. All three are public verify_jwt for the same
 # reason as the other client-facing functions: -login runs before any session
 # exists, and -set / -manage verify the caller's bearer token inside so they can
