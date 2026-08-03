@@ -479,6 +479,15 @@ verify_jwt = false
 [functions.raise-support-ticket]
 verify_jwt = false
 
+# Client "Forgot Password" — 6-digit OTP code flow (no magic link, which email
+# scanners pre-consume). Both public because they run before any session exists;
+# PAN-enumeration-safe, rate-limited, and code-hashed with a server pepper.
+[functions.send-client-reset-otp]
+verify_jwt = false
+
+[functions.reset-client-password-with-otp]
+verify_jwt = false
+
 # --- Marketing Tool / Content Creation -------------------------------------
 # mkt-generate-content is intentionally absent from this file: it keeps the
 # default verify_jwt = true and additionally re-checks admin role inside.
