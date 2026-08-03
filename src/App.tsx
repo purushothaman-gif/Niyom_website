@@ -8,6 +8,7 @@ import { Seo } from './components/Seo';
 import { NotFound } from './components/NotFound';
 import { LogoLoader } from './components/LogoLoader';
 import { PUBLIC_ROUTES, type PublicRoute } from './routes/publicRoutes';
+import { isDemoSession, endDemoSession } from './partner/demo/demoData';
 
 // Authenticated / utility surfaces are code-split so the public marketing bundle
 // stays lean. They keep their own internal navigation (CRM = state, Portal & MF
@@ -201,6 +202,10 @@ function PartnerLoginRoute() {
   // shows instead of a portal whose every RPC would raise.
   useEffect(() => {
     if (!partnerDsaId) return;
+    // The demo portal has no Supabase session by design, so this check would
+    // evict it on every refresh. Demo sessions end via Sign Out (or closing the
+    // tab, since the flag lives in sessionStorage).
+    if (isDemoSession()) return;
     let cancelled = false;
     import('./lib/supabase').then(({ partnerSupabase }) =>
       partnerSupabase.auth.getSession().then(({ data }) => {
@@ -242,6 +247,7 @@ function PartnerLoginRoute() {
       sessionStorage.removeItem('nw_partner_dsa');
       sessionStorage.removeItem('nw_partner_pw_ok');
     } catch {}
+    endDemoSession();
     import('./lib/supabase').then(({ partnerSupabase }) => partnerSupabase.auth.signOut());
     setPartnerDsaId(null);
     setPartnerPasswordChanged(false);

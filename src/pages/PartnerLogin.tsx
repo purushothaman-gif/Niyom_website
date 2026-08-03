@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { partnerSupabase as supabase } from '../lib/supabase';
-import { Lock, Eye, EyeOff, ArrowRight, AlertTriangle, CreditCard, Home, ChevronLeft, Mail, CheckCircle2, KeyRound } from 'lucide-react';
+import { Lock, Eye, EyeOff, ArrowRight, AlertTriangle, CreditCard, Home, ChevronLeft, Mail, CheckCircle2, KeyRound, Sparkles } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
 import { PinInput } from '../components/PinInput';
 import { passwordChecks, passwordError } from '../lib/passwordPolicy';
 import { getDeviceId, listSurfaceProfiles, removeSurfaceProfile, type SurfaceProfile } from '../lib/pinDevice';
+import { DEMO_DSA_ID, DEMO_PAN, DEMO_PASSWORD, isDemoCredentials, startDemoSession } from '../partner/demo/demoData';
 
 interface Props {
   onLogin: (dsaId: string, passwordChanged: boolean) => void;
@@ -243,6 +244,17 @@ export default function PartnerLogin({ onLogin }: Props) {
       return;
     }
     if (!password) { setError('Password is required.'); return; }
+
+    // Demo mode. Recognised locally and never sent to partner-pan-login, so the
+    // published demo credentials unlock nothing real — there is no account
+    // behind them and nothing to brute-force. PartnerService then serves
+    // fixtures for every read and refuses both writes.
+    if (isDemoCredentials(panClean, password)) {
+      startDemoSession();
+      clearRateLimit();
+      onLogin(DEMO_DSA_ID, true);
+      return;
+    }
 
     setLoading(true);
 
@@ -488,6 +500,30 @@ export default function PartnerLogin({ onLogin }: Props) {
                   <KeyRound className="w-4 h-4" /> Use your PIN instead
                 </button>
               )}
+
+              {/* Sample portal. One click fills the published demo credentials
+                  and signs in against built-in fixtures — no account exists
+                  behind them, so nothing real is reachable this way. */}
+              <div className="rounded-xl p-4" style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
+                <div className="flex items-start gap-3">
+                  <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-text-primary">Not a partner yet?</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      Explore a sample portal with made-up clients and earnings — see exactly
+                      what you would get.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { setPan(DEMO_PAN); setPassword(DEMO_PASSWORD); setError(''); }}
+                      className="mt-2.5 text-xs font-semibold inline-flex items-center gap-1.5"
+                      style={{ color: 'var(--accent)' }}
+                    >
+                      Fill demo credentials <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
                 Looking for your investment portfolio?{' '}

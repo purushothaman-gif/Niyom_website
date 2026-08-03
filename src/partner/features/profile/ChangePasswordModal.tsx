@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Lock, Eye, EyeOff } from 'lucide-react';
 import { partnerSupabase as supabase } from '../../../lib/supabase';
 import { passwordChecks, passwordError } from '../../../lib/passwordPolicy';
+import { isDemoSession } from '../../demo/demoData';
 
 interface Props {
   onClose: () => void;
@@ -23,6 +24,16 @@ export function ChangePasswordModal({ onClose }: Props) {
     if (password !== confirm) { setError('Passwords do not match.'); return; }
     setError('');
     setLoading(true);
+
+    // The demo portal has no auth user, so there is no password to change.
+    // Show the same success state rather than a Supabase error, and change
+    // nothing.
+    if (isDemoSession()) {
+      await new Promise((r) => setTimeout(r, 400));
+      setLoading(false);
+      setDone(true);
+      return;
+    }
 
     const { error: pwErr } = await supabase.auth.updateUser({ password });
     if (pwErr) { setError(pwErr.message); setLoading(false); return; }
