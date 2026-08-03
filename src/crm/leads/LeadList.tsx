@@ -8,7 +8,7 @@ import {
   ArrowUp, ArrowDown, ChevronsUpDown,
 } from 'lucide-react';
 import { NWLead, LeadListFilters, LeadStatus, LeadPriority, LeadOrigin, NWLeadSavedView } from './leadTypes';
-import { LEAD_STATUSES, PRIORITIES, INTERESTED_PRODUCTS, LEAD_SOURCES, LEAD_ORIGIN_LABEL, PAGE_SIZE } from './leadConstants';
+import { LEAD_STATUSES, PRIORITIES, INTERESTED_PRODUCTS, LEAD_SOURCES, LEAD_ORIGIN_LABEL, INDIAN_STATES, PAGE_SIZE } from './leadConstants';
 import { StatusBadge, PriorityBadge, ScoreBadge, Input, Select } from './leadUi';
 import { isAdminRole, formatMoney, formatDate, initials, relativeTime } from './leadUtils';
 import { leadsToCsv, downloadCsv } from './leadImportUtils';
@@ -20,7 +20,7 @@ const LEAD_SELECT =
 
 const EMPTY_FILTERS: LeadListFilters = {
   search: '', status: '', priority: '', lead_origin: '', owner_employee_id: '',
-  scope: 'all', city: '', product: '', source: '', min_investment: '', max_investment: '',
+  scope: 'all', city: '', state: '', product: '', source: '', min_investment: '', max_investment: '',
   date_from: '', date_to: '', include_archived: false,
 };
 
@@ -143,6 +143,7 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
     if (filters.product) q = q.eq('interested_product', filters.product);
     if (filters.source) q = q.eq('lead_source', filters.source);
     if (filters.city) q = q.ilike('city', `%${filters.city}%`);
+    if (filters.state) q = q.ilike('state', `%${filters.state}%`);
     if (filters.min_investment) q = q.gte('investment_capacity', Number(filters.min_investment));
     if (filters.max_investment) q = q.lte('investment_capacity', Number(filters.max_investment));
     if (filters.date_from) q = q.gte('created_at', filters.date_from);
@@ -208,7 +209,7 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const activeFilterCount = useMemo(() =>
-    (['status', 'priority', 'lead_origin', 'owner_employee_id', 'city', 'product', 'source',
+    (['status', 'priority', 'lead_origin', 'owner_employee_id', 'city', 'state', 'product', 'source',
       'min_investment', 'max_investment', 'date_from', 'date_to'] as (keyof LeadListFilters)[])
       .filter(k => filters[k]).length + (filters.include_archived ? 1 : 0),
     [filters]);
@@ -410,6 +411,8 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
               options={INTERESTED_PRODUCTS.map(p => ({ value: p, label: p }))} />
             <FilterSelect label="Source" value={filters.source} onChange={v => setF({ source: v })}
               options={LEAD_SOURCES.map(s => ({ value: s, label: s }))} />
+            <FilterSelect label="State" value={filters.state} onChange={v => setF({ state: v })}
+              options={INDIAN_STATES.map(s => ({ value: s, label: s }))} />
             <div>
               <FilterLabel>City</FilterLabel>
               <Input value={filters.city} onChange={e => setF({ city: e.target.value })} placeholder="City" />
