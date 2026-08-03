@@ -11,6 +11,7 @@ import { PartnerShell } from './layout/PartnerShell';
 import { VIEW_TITLES } from './layout/navigation';
 import { usePartnerRouter } from './routing/usePartnerRouter';
 import { usePartnerSnapshot } from './hooks/usePartnerSnapshot';
+import { isDemoSession } from './demo/demoData';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ClientsPage } from './features/clients/ClientsPage';
 import { PayoutsPage } from './features/payouts/PayoutsPage';
@@ -51,6 +52,10 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
   useEffect(() => {
     if (pinPromptDecided.current || !partner) return;
     pinPromptDecided.current = true;
+    // Never in the demo portal: there is no auth session to mint a PIN against,
+    // so partner-pin-setup would fail, and a prospect should not be asked to
+    // put a credential on their device for a sample account.
+    if (isDemoSession()) return;
     const already = hasSurfaceProfile('partner', partner.dsa_id);
     const refused = surfacePinPromptSkips('partner', partner.dsa_id) >= PIN_PROMPT_LIMIT;
     if (!already && !refused) setPinPromptOpen(true);
