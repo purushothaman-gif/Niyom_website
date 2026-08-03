@@ -1,6 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { LogoLoader } from '../components/LogoLoader';
+import { partnerSupabase } from '../lib/supabase';
+import { SurfaceSetPinPrompt } from '../components/SurfaceSetPinPrompt';
+import {
+  PIN_PROMPT_LIMIT, hasSurfaceProfile, recordSurfacePinPromptSkip,
+  silenceSurfacePinPrompt, surfacePinPromptSkips,
+} from '../lib/pinDevice';
 import { PartnerShell } from './layout/PartnerShell';
 import { VIEW_TITLES } from './layout/navigation';
 import { usePartnerRouter } from './routing/usePartnerRouter';
@@ -37,6 +43,18 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
   const { snapshot, loading, error, refresh } = usePartnerSnapshot(handleAccessRevoked);
 
   const hasData = !!snapshot.profile;
+
+  // Offer a device PIN once, right after the first successful load.
+  const [pinPromptOpen, setPinPromptOpen] = useState(false);
+  const pinPromptDecided = useRef(false);
+  const partner = snapshot.profile;
+  useEffect(() => {
+    if (pinPromptDecided.current || !partner) return;
+    pinPromptDecided.current = true;
+    const already = hasSurfaceProfile('partner', partner.dsa_id);
+    const refused = surfacePinPromptSkips('partner', partner.dsa_id) >= PIN_PROMPT_LIMIT;
+    if (!already && !refused) setPinPromptOpen(true);
+  }, [partner]);
 
   const renderView = () => {
     if (loading && !hasData) return <LoadingState />;
@@ -81,6 +99,20 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
       </PartnerShell>
 
       {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
+
+      {pinPromptOpen && partner && (
+        <SurfaceSetPinPrompt
+          supabase={partnerSupabase}
+          surface="partner"
+          setFn="partner-pin-set"
+          id={partner.dsa_id}
+          name={partner.full_name}
+          email={partner.email}
+          manageHint="Profile"
+          onSkip={() => { recordSurfacePinPromptSkip('partner', partner.dsa_id); setPinPromptOpen(false); }}
+          onDone={() => { silenceSurfacePinPrompt('partner', partner.dsa_id); setPinPromptOpen(false); }}
+        />
+      )}
     </>
   );
 }
