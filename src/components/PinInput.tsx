@@ -21,20 +21,29 @@ interface Props {
 export function PinInput({ onComplete, disabled, autoFocus, resetKey = 0, label }: Props) {
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const fired = useRef(false);
+
+  /*
+   * The callback is held in a ref so the completion effect depends on `value`
+   * ALONE.
+   *
+   * It used to depend on `onComplete` too, and callers rebuild that closure on
+   * every render — so the effect re-ran in the same commit that cleared the
+   * boxes, still holding the old four digits, and fired a second time. The
+   * caller saw one entry as two: the "enter it again to confirm" step was
+   * consumed by the first entry confirming itself, and a mistyped PIN would
+   * have been saved without the client ever seeing the second prompt.
+   */
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
     setValue('');
-    fired.current = false;
     if (autoFocus) inputRef.current?.focus();
   }, [resetKey, autoFocus]);
 
   useEffect(() => {
-    if (value.length === 4 && !fired.current) {
-      fired.current = true;
-      onComplete(value);
-    }
-  }, [value, onComplete]);
+    if (value.length === 4) onCompleteRef.current(value);
+  }, [value]);
 
   return (
     <div>
@@ -72,11 +81,7 @@ export function PinInput({ onComplete, disabled, autoFocus, resetKey = 0, label 
       <input
         ref={inputRef}
         value={value}
-        onChange={(e) => {
-          const next = e.target.value.replace(/\D/g, '').slice(0, 4);
-          if (next.length < 4) fired.current = false;
-          setValue(next);
-        }}
+        onChange={(e) => setValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
         inputMode="numeric"
         autoComplete="one-time-code"
         maxLength={4}
