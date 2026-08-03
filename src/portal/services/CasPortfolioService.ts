@@ -31,17 +31,14 @@
 import { clientSupabase as supabase } from '../../lib/supabase';
 import type { CasHoldingMeta, PortalHolding } from '../types/cas';
 import {
-  applyNav,
   isOpenPosition,
   migrationCandidates,
   toFlow,
   toHolding,
   hasCompleteHistory,
-  toNavQuotes,
   type CasCashFlow,
   type CasSchemeRow,
   type CasTxnRow,
-  type NavRow,
 } from './cas/model';
 
 export type { CasCashFlow } from './cas/model';
@@ -61,29 +58,6 @@ export interface CasPortfolio {
   historyComplete: boolean;
   /** The date the statement starts, for explaining a truncated history. */
   statementFrom: string | null;
-}
-
-/**
- * How far back to look for a quote.
- *
- * Long enough to cover a long weekend or a stalled feed, short enough that a
- * wound-up scheme's years-old final NAV is not presented as today's price. A
- * scheme with nothing inside the window simply keeps its statement valuation.
- */
-const NAV_LOOKBACK_DAYS = 15;
-
-async function loadNavQuotes(isins: string[]) {
-  const unique = [...new Set(isins)].filter(Boolean);
-  if (!unique.length) return new Map();
-  const since = new Date(Date.now() - NAV_LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 10);
-  const { data, error } = await supabase
-    .from('nav_daily')
-    .select('isin,nav,nav_date')
-    .in('isin', unique)
-    .gte('nav_date', since)
-    .order('nav_date', { ascending: false });
-  if (error || !data) return new Map();
-  return toNavQuotes(data as NavRow[]);
 }
 
 const SCHEME_COLUMNS =
@@ -134,19 +108,11 @@ export const CasPortfolioService = {
       .filter(isOpenPosition)
       .map((s) => toHolding(s, { clientId, importId, importedAt, statementTo }));
 
-    /*
-     * Revalue at the latest published NAV, so an imported portfolio is not
-     * frozen on the day it was imported. Best-effort: a NAV feed that is down
-     * or behind must leave the statement's own valuation showing rather than
-     * fail the whole portfolio.
-     */
-    const quotes = await loadNavQuotes(holdings.map((h) => h.cas?.isin ?? '').filter(Boolean));
-
     return {
       importId,
       statementTo,
       importedAt,
-      holdings: holdings.map((h) => applyNav(h, quotes.get(h.cas?.isin ?? ''))),
+      holdings,
       flows: txns.map(toFlow).filter((f): f is CasCashFlow => f !== null),
       historyComplete: hasCompleteHistory(
         schemes.map((s) => ({ id: s.id, units: s.units })),

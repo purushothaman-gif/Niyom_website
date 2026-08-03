@@ -1,12 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { partnerSupabase as supabase } from '../lib/supabase';
-import { Lock, Eye, EyeOff, ArrowRight, AlertTriangle, CreditCard, Home, LifeBuoy } from 'lucide-react';
+import { Lock, Eye, EyeOff, ArrowRight, AlertTriangle, CreditCard, Home, ChevronLeft, Mail, CheckCircle2, KeyRound } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
+import { PinInput } from '../components/PinInput';
+import { passwordChecks, passwordError } from '../lib/passwordPolicy';
+import { getDeviceId, listSurfaceProfiles, removeSurfaceProfile, type SurfaceProfile } from '../lib/pinDevice';
 
 interface Props {
   onLogin: (dsaId: string, passwordChanged: boolean) => void;
 }
+
+type View = 'login' | 'forgot' | 'pin';
 
 /**
  * Partner (DSA) sign-in. Structurally a trimmed copy of ClientLogin: same
@@ -14,15 +19,15 @@ interface Props {
  * sessionStorage key so a partner and a client locking themselves out are
  * independent.
  *
- * Deliberately has NO self-serve password reset in Phase 1. resetPasswordForEmail
- * returns the user with a recovery token in the URL hash, and whichever Supabase
- * client instance initialises first claims it — with the default client created
- * app-wide by AuthContext, that recovery session would land under the CRM
- * storage key rather than the partner one. Partners ask their RM to re-issue a
- * temporary password instead.
+ * Self-serve password reset uses a 6-digit email OTP code (send-partner-reset-otp
+ * / reset-partner-password-with-otp) rather than a magic link — links get
+ * pre-consumed by email scanners, and a recovery URL session would also risk
+ * landing under the wrong Supabase storage key. Device-PIN quick sign-in
+ * (partner-pin-*) mirrors the client portal.
  *
  * The real brute-force defence is server-side (per-IP throttling inside the
- * partner-pan-login edge function); this lockout is only a UX affordance.
+ * partner-pan-login edge function, and per-PIN lockout in partner-pin-login);
+ * the client-side lockout is only a UX affordance.
  */
 
 const MAX_ATTEMPTS = 5;
@@ -68,8 +73,127 @@ export default function PartnerLogin({ onLogin }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [lockoutMsg, setLockoutMsg] = useState('');
-  const [showHelp, setShowHelp] = useState(false);
   const lockoutTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Device-PIN quick sign-in. Open on the keypad when this browser already holds
+  // a partner PIN profile.
+  const [profiles, setProfiles] = useState<SurfaceProfile[]>(() => listSurfaceProfiles('partner'));
+  const [activeProfile, setActiveProfile] = useState<SurfaceProfile | null>(() => {
+    const list = listSurfaceProfiles('partner');
+    return list.length === 1 ? list[0] : null;
+  });
+  const [view, setView] = useState<View>(() => (listSurfaceProfiles('partner').length > 0 ? 'pin' : 'login'));
+  const [pinError, setPinError] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinReset, setPinReset] = useState(0);
+
+  // Forgot-password (6-digit OTP) flow — PAN → code → new password.
+  const [resetPan, setResetPan] = useState('');
+  const [forgotStep, setForgotStep] = useState<'pan' | 'code' | 'password'>('pan');
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [forgotPw, setForgotPw] = useState('');
+  const [forgotConfirm, setForgotConfirm] = useState('');
+  const [forgotResendIn, setForgotResendIn] = useState(0);
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const forgotTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => () => { if (forgotTimer.current) clearInterval(forgotTimer.current); }, []);
+
+  const callPublicFn = async (name: string, payload: unknown) => {
+    const url = import.meta.env.VITE_SUPABASE_URL;
+    const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const res = await fetch(`${url}/functions/v1/${name}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon}`, Apikey: anon },
+      body: JSON.stringify(payload),
+    });
+    return { ok: res.ok, data: await res.json().catch(() => ({})) };
+  };
+
+  const forgetProfile = (dsaId: string) => {
+    removeSurfaceProfile('partner', dsaId);
+    const left = listSurfaceProfiles('partner');
+    setProfiles(left);
+    setActiveProfile(left.length === 1 ? left[0] : null);
+    setPinError('');
+    if (left.length === 0) setView('login');
+  };
+
+  const handlePin = async (pin: string) => {
+    if (!activeProfile) return;
+    setPinError('');
+    setPinBusy(true);
+    const { ok, data } = await callPublicFn('partner-pin-login', {
+      device_id: getDeviceId(),
+      dsa_id: activeProfile.id,
+      pin,
+    });
+    if (!ok || !data?.token_hash) {
+      setPinBusy(false);
+      setPinReset((n) => n + 1);
+      setPinError(data?.error || 'That PIN didn’t work. Please try again.');
+      if (data?.code === 'burned' || data?.code === 'expired') {
+        setTimeout(() => forgetProfile(activeProfile.id), 1800);
+      }
+      return;
+    }
+    const { error: sessErr } = await supabase.auth.verifyOtp({ token_hash: data.token_hash, type: 'email' });
+    setPinBusy(false);
+    if (sessErr) { setPinReset((n) => n + 1); setPinError('Could not sign you in. Please try again.'); return; }
+    onLogin(data.dsa_id, data.password_changed !== false);
+  };
+
+  const startForgotCooldown = () => {
+    setForgotResendIn(30);
+    if (forgotTimer.current) clearInterval(forgotTimer.current);
+    forgotTimer.current = setInterval(() => {
+      setForgotResendIn(s => { if (s <= 1 && forgotTimer.current) { clearInterval(forgotTimer.current); return 0; } return s - 1; });
+    }, 1000);
+  };
+
+  const openForgot = () => {
+    setView('forgot'); setError(''); setResetSuccess(false);
+    setForgotStep('pan'); setForgotOtp(''); setForgotPw(''); setForgotConfirm('');
+    setResetPan(pan);
+  };
+
+  const handleSendResetCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const panClean = resetPan.trim().toUpperCase();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panClean)) { setError('Please enter a valid PAN number (e.g. ABCDE1234F).'); return; }
+    setLoading(true);
+    const { ok, data } = await callPublicFn('send-partner-reset-otp', { pan: panClean });
+    setLoading(false);
+    if (!ok) { setError(data?.error || 'Could not send the code. Please try again.'); return; }
+    setForgotStep('code'); setForgotOtp(''); startForgotCooldown();
+  };
+
+  const handleVerifyResetCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!/^\d{6}$/.test(forgotOtp)) { setError('Enter the 6-digit code from your email.'); return; }
+    setLoading(true);
+    const { ok, data } = await callPublicFn('reset-partner-password-with-otp', { action: 'verify', pan: resetPan.trim().toUpperCase(), otp: forgotOtp });
+    setLoading(false);
+    if (!ok || !data?.verified) { setError(data?.error || 'Verification failed.'); return; }
+    setForgotStep('password'); setForgotPw(''); setForgotConfirm('');
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const policyErr = passwordError(forgotPw);
+    if (policyErr) { setError(policyErr); return; }
+    if (forgotPw !== forgotConfirm) { setError('Passwords do not match.'); return; }
+    setError('');
+    setLoading(true);
+    const { ok, data } = await callPublicFn('reset-partner-password-with-otp', { action: 'reset', pan: resetPan.trim().toUpperCase(), otp: forgotOtp, password: forgotPw });
+    setLoading(false);
+    if (!ok) { setError(data?.error || 'Could not reset your password. Please try again.'); return; }
+    if (forgotTimer.current) clearInterval(forgotTimer.current);
+    setResetSuccess(true);
+    setView('login'); setForgotStep('pan');
+    setResetPan(''); setForgotOtp(''); setForgotPw(''); setForgotConfirm('');
+  };
 
   const checkLockout = (): boolean => {
     const state = getRateLimitState();
@@ -231,8 +355,16 @@ export default function PartnerLogin({ onLogin }: Props) {
               <p className="font-bold text-sm" style={{ color: 'var(--accent-soft)' }}>Niyom Wealth</p>
             </div>
             <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--accent)' }}>Partner Portal</p>
-            <h1 className="text-3xl font-bold text-text-primary">Partner Sign In</h1>
-            <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>Sign in using your PAN number and password.</p>
+            <h1 className="text-3xl font-bold text-text-primary">
+              {view === 'pin' ? 'Welcome Back' : view === 'forgot' ? 'Password Reset' : 'Partner Sign In'}
+            </h1>
+            <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+              {view === 'pin'
+                ? (activeProfile ? `Enter your PIN, ${activeProfile.name.split(' ')[0]}.` : 'Enter your 4-digit PIN for this device.')
+                : view === 'forgot'
+                  ? (forgotStep === 'pan' ? 'Enter your PAN. We’ll email a 6-digit code.' : forgotStep === 'code' ? 'Enter the 6-digit code from your email.' : 'Choose a new password.')
+                  : 'Sign in using your PAN number and password.'}
+            </p>
           </div>
 
           {lockoutMsg && (
@@ -247,81 +379,229 @@ export default function PartnerLogin({ onLogin }: Props) {
               <p className="text-sm text-c-red">{error}</p>
             </div>
           )}
-
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>PAN Number</label>
-              <div className="relative">
-                <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
-                <input
-                  type="text"
-                  value={pan}
-                  onChange={e => setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
-                  placeholder="ABCDE1234F"
-                  maxLength={10}
-                  autoComplete="username"
-                  className="w-full py-3 rounded-xl text-sm text-text-primary outline-none transition-all font-mono tracking-widest"
-                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', paddingLeft: '2.75rem' }}
-                  onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
-                  onBlur={e => (e.target.style.borderColor = 'var(--border)')}
-                  disabled={!!lockoutMsg}
-                />
-              </div>
+          {resetSuccess && !error && view === 'login' && (
+            <div className="p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--success)' }} />
+              <p className="text-sm" style={{ color: 'var(--success)' }}>Password updated. Please sign in with your new password.</p>
             </div>
+          )}
 
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
-                <input
-                  type={showPw ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Your password"
-                  autoComplete="current-password"
-                  className="w-full py-3 rounded-xl text-sm text-text-primary outline-none transition-all"
-                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', paddingLeft: '2.75rem', paddingRight: '2.75rem' }}
-                  onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
-                  onBlur={e => (e.target.style.borderColor = 'var(--border)')}
-                  disabled={!!lockoutMsg}
-                />
-                <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-secondary)' }} aria-label={showPw ? 'Hide password' : 'Show password'}>
-                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <button type="button" onClick={() => setShowHelp(s => !s)}
-                className="text-xs font-medium transition-colors" style={{ color: 'var(--accent)' }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent-soft)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'var(--accent)')}>
-                Forgot Password?
+          {view === 'pin' && (
+            <div className="space-y-6">
+              {profiles.length > 1 && !activeProfile ? (
+                <div className="space-y-3">
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>More than one partner uses a PIN on this device. Choose yours:</p>
+                  {profiles.map(p => (
+                    <button key={p.id} onClick={() => { setActiveProfile(p); setPinError(''); setPinReset(n => n + 1); }}
+                      className="w-full text-left p-4 rounded-xl transition-colors" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                      <p className="text-sm font-semibold text-text-primary">{p.name}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{p.maskedEmail}</p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {pinError && (
+                    <div className="p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                      <AlertTriangle className="w-4 h-4 text-c-red flex-shrink-0" />
+                      <p className="text-sm text-c-red">{pinError}</p>
+                    </div>
+                  )}
+                  <PinInput onComplete={handlePin} disabled={pinBusy} autoFocus resetKey={pinReset} />
+                  {profiles.length > 1 && (
+                    <button type="button" onClick={() => { setActiveProfile(null); setPinError(''); }}
+                      className="w-full text-center text-xs" style={{ color: 'var(--text-muted)' }}>Use a different account</button>
+                  )}
+                </>
+              )}
+              <button type="button" onClick={() => { setView('login'); setPinError(''); }}
+                className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2" style={{ background: 'var(--bg-raised)', color: 'var(--text-faint)', border: '1px solid var(--border)' }}>
+                <Lock className="w-4 h-4" /> Sign in with password
               </button>
             </div>
+          )}
 
-            {showHelp && (
-              <div className="flex items-start gap-3 rounded-xl p-4" style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
-                <LifeBuoy className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  Please contact your Niyom Wealth relationship manager to have a new
-                  temporary password issued. You will be asked to set your own password
-                  the first time you sign in with it.
-                </p>
-              </div>
-            )}
+          {view === 'login' && (
+            <>
+              <form onSubmit={handleLogin} className="space-y-5">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>PAN Number</label>
+                  <div className="relative">
+                    <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
+                    <input
+                      type="text"
+                      value={pan}
+                      onChange={e => setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+                      placeholder="ABCDE1234F"
+                      maxLength={10}
+                      autoComplete="username"
+                      className="w-full py-3 rounded-xl text-sm text-text-primary outline-none transition-all font-mono tracking-widest"
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', paddingLeft: '2.75rem' }}
+                      onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                      onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+                      disabled={!!lockoutMsg}
+                    />
+                  </div>
+                </div>
 
-            <button type="submit" disabled={loading || !!lockoutMsg}
-              className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
-              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
-              {loading ? 'Signing in…' : <><span>Sign In</span><ArrowRight className="w-4 h-4" /></>}
-            </button>
-          </form>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
+                    <input
+                      type={showPw ? 'text' : 'password'}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Your password"
+                      autoComplete="current-password"
+                      className="w-full py-3 rounded-xl text-sm text-text-primary outline-none transition-all"
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', paddingLeft: '2.75rem', paddingRight: '2.75rem' }}
+                      onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                      onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+                      disabled={!!lockoutMsg}
+                    />
+                    <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-secondary)' }} aria-label={showPw ? 'Hide password' : 'Show password'}>
+                      {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
 
-          <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
-            Looking for your investment portfolio?{' '}
-            <a href="/client-login" style={{ color: 'var(--accent)' }}>Client sign in</a>
-          </p>
+                <div className="flex justify-end">
+                  <button type="button" onClick={openForgot}
+                    className="text-xs font-medium transition-colors" style={{ color: 'var(--accent)' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent-soft)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--accent)')}>
+                    Forgot Password?
+                  </button>
+                </div>
+
+                <button type="submit" disabled={loading || !!lockoutMsg}
+                  className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
+                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                  {loading ? 'Signing in…' : <><span>Sign In</span><ArrowRight className="w-4 h-4" /></>}
+                </button>
+              </form>
+
+              {profiles.length > 0 && (
+                <button type="button" onClick={() => { setView('pin'); setError(''); setPinReset(n => n + 1); }}
+                  className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2" style={{ background: 'var(--bg-raised)', color: 'var(--text-faint)', border: '1px solid var(--border)' }}>
+                  <KeyRound className="w-4 h-4" /> Use your PIN instead
+                </button>
+              )}
+
+              <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
+                Looking for your investment portfolio?{' '}
+                <a href="/client-login" style={{ color: 'var(--accent)' }}>Client sign in</a>
+              </p>
+            </>
+          )}
+
+          {view === 'forgot' && (
+            <>
+              <button
+                onClick={() => {
+                  setError('');
+                  if (forgotStep === 'password') setForgotStep('code');
+                  else if (forgotStep === 'code') setForgotStep('pan');
+                  else setView('login');
+                }}
+                className="flex items-center gap-1.5 text-xs transition-colors" style={{ color: 'var(--text-muted)' }}>
+                <ChevronLeft className="w-3.5 h-3.5" /> {forgotStep === 'pan' ? 'Back to sign in' : 'Back'}
+              </button>
+
+              {forgotStep === 'pan' && (
+                <form onSubmit={handleSendResetCode} className="space-y-5">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>PAN Number</label>
+                    <div className="relative">
+                      <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
+                      <input type="text" value={resetPan}
+                        onChange={e => setResetPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+                        placeholder="ABCDE1234F" maxLength={10}
+                        className="w-full py-3 rounded-xl text-sm text-text-primary outline-none transition-all font-mono tracking-widest"
+                        style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', paddingLeft: '2.75rem' }}
+                        onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                        onBlur={e => (e.target.style.borderColor = 'var(--border)')} />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading || resetPan.length !== 10}
+                    className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent disabled:opacity-50 flex items-center justify-center gap-2"
+                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                    {loading ? 'Sending...' : <><Mail className="w-4 h-4" /><span>Send Code</span></>}
+                  </button>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>For security, we never confirm whether a PAN is registered. If yours is, a code will be emailed to you.</p>
+                </form>
+              )}
+
+              {forgotStep === 'code' && (
+                <form onSubmit={handleVerifyResetCode} className="space-y-5">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>6-Digit Code</label>
+                    <input type="text" inputMode="numeric" autoFocus value={forgotOtp}
+                      onChange={e => setForgotOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="000000" maxLength={6}
+                      className="w-full py-3 rounded-xl text-center text-2xl text-text-primary outline-none transition-all font-mono tracking-[0.5em]"
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+                      onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                      onBlur={e => (e.target.style.borderColor = 'var(--border)')} />
+                  </div>
+                  <button type="submit" disabled={loading || forgotOtp.length !== 6}
+                    className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                    {loading ? 'Verifying...' : 'Verify Code'}
+                  </button>
+                  <div className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Didn't get it?{' '}
+                    <button type="button" disabled={forgotResendIn > 0 || loading}
+                      onClick={() => handleSendResetCode({ preventDefault() {} } as React.FormEvent)}
+                      className="font-medium disabled:opacity-50" style={{ color: 'var(--accent)' }}>
+                      {forgotResendIn > 0 ? `Resend in ${forgotResendIn}s` : 'Resend code'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {forgotStep === 'password' && (
+                <form onSubmit={handleResetPassword} className="space-y-5">
+                  {[
+                    { label: 'New Password', val: forgotPw, set: setForgotPw, key: 'pw' },
+                    { label: 'Confirm Password', val: forgotConfirm, set: setForgotConfirm, key: 'cf' },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>{f.label}</label>
+                      <div className="relative">
+                        <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
+                        <input type={showPw ? 'text' : 'password'} value={f.val} onChange={e => f.set(e.target.value)}
+                          placeholder="Create a strong password"
+                          className="w-full py-3 rounded-xl text-sm text-text-primary outline-none transition-all"
+                          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', paddingLeft: '2.75rem', paddingRight: '2.75rem' }}
+                          onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                          onBlur={e => (e.target.style.borderColor = 'var(--border)')} />
+                        {f.key === 'pw' && (
+                          <button type="button" onClick={() => setShowPw(s => !s)} className="absolute right-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-secondary)' }}>
+                            {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="space-y-2">
+                    {[...passwordChecks(forgotPw), { text: 'Passwords must match', met: forgotPw === forgotConfirm && forgotConfirm.length > 0 }].map(r => (
+                      <p key={r.text} className="text-xs flex items-center gap-1.5" style={{ color: r.met ? 'var(--success)' : 'var(--text-secondary)' }}>
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: r.met ? 'var(--success)' : 'var(--text-secondary)' }} />
+                        {r.text}
+                      </p>
+                    ))}
+                  </div>
+                  <button type="submit" disabled={loading}
+                    className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                    {loading ? 'Updating...' : 'Update Password'}
+                  </button>
+                </form>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
