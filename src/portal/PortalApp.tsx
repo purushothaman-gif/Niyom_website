@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { LogoLoader } from '../components/LogoLoader';
 import { PortalShell } from './layout/PortalShell';
@@ -24,6 +24,14 @@ import { ChangePasswordModal } from './features/profile/ChangePasswordModal';
 import { ImportPortfolioModal } from './features/portfolio/ImportPortfolioModal';
 import { IdleWarning } from './components/IdleWarning';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
+import { SetPinPrompt } from './features/profile/SetPinPrompt';
+import {
+  PIN_PROMPT_LIMIT,
+  hasProfile,
+  pinPromptSkips,
+  recordPinPromptSkip,
+  silencePinPrompt,
+} from '../lib/pinDevice';
 
 interface PortalAppProps {
   clientId: string;
@@ -64,8 +72,24 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
     onTimeout: () => (onIdleLogout ?? onLogout)(),
   });
 
+  /*
+   * Offer a PIN once the client record has loaded, on the device they just
+   * signed in on. Decided once per mount rather than watched, so it cannot
+   * appear mid-session while someone is reading their portfolio.
+   */
+  const [pinPromptOpen, setPinPromptOpen] = useState(false);
+  const pinPromptDecided = useRef(false);
+
   const client = snapshot.client;
   const hasData = !!refreshedAt; // first load completed
+
+  useEffect(() => {
+    if (pinPromptDecided.current || !client) return;
+    pinPromptDecided.current = true;
+    const already = hasProfile(clientId);
+    const refused = pinPromptSkips(clientId) >= PIN_PROMPT_LIMIT;
+    if (!already && !refused) setPinPromptOpen(true);
+  }, [client, clientId]);
   /** A reconciled statement is what turns the prompt off and the refresh on. */
   const hasImportedStatement = snapshot.mfSource === 'cas';
 
@@ -199,6 +223,22 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
           clientId={clientId}
           onClose={() => setShowActivate(false)}
           onDone={refresh}
+        />
+      )}
+
+      {pinPromptOpen && client && (
+        <SetPinPrompt
+          clientId={clientId}
+          clientName={client.full_name}
+          clientEmail={client.email ?? ''}
+          onSkip={() => {
+            recordPinPromptSkip(clientId);
+            setPinPromptOpen(false);
+          }}
+          onDone={() => {
+            silencePinPrompt(clientId);
+            setPinPromptOpen(false);
+          }}
         />
       )}
 

@@ -1,16 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Loader2, Smartphone, Trash2 } from 'lucide-react';
+import { Check, Smartphone, Trash2 } from 'lucide-react';
 import { clientSupabase as supabase } from '../../../lib/supabase';
-import {
-  deviceLabel,
-  getDeviceId,
-  listProfiles,
-  maskEmail,
-  removeProfile,
-  saveProfile,
-} from '../../../lib/pinDevice';
-import { PinInput } from '../../../components/PinInput';
+import { deviceLabel, getDeviceId, listProfiles, removeProfile } from '../../../lib/pinDevice';
 import { StatusPill } from '../../components/StatusPill';
+import { PinSetup } from './PinSetup';
 
 interface DeviceRow {
   device_id: string;
@@ -50,19 +43,16 @@ const fmtDate = (iso: string | null) =>
  * PIN sign-in, from the client's side: set one for this device, see everywhere
  * it works, and switch any of them off.
  *
- * Two entries are deliberately plain about the trade-off. A PIN is quicker than
- * a password and weaker than one, so it is offered per-device, expires, and can
- * be revoked from here — including from a different device, which is the case
- * that matters when a phone goes missing.
+ * Plain about the trade-off. A PIN is quicker than a password and weaker than
+ * one, so it is offered per-device, expires, and can be revoked from here —
+ * including from a different device, which is the case that matters when a
+ * phone goes missing.
  */
 export function PinSection({ clientId, clientName, clientEmail }: Props) {
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stage, setStage] = useState<'idle' | 'enter' | 'confirm'>('idle');
-  const [firstPin, setFirstPin] = useState('');
-  const [resetKey, setResetKey] = useState(0);
+  const [setting, setSetting] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   const [done, setDone] = useState(false);
 
   const thisDevice = getDeviceId();
@@ -80,55 +70,7 @@ export function PinSection({ clientId, clientName, clientEmail }: Props) {
 
   const active = devices.filter((d) => !d.revoked_at && new Date(d.expires_at) > new Date());
   const onThisDevice = active.some((d) => d.device_id === thisDevice);
-
-  const start = () => {
-    setStage('enter');
-    setFirstPin('');
-    setError('');
-    setDone(false);
-    setResetKey((n) => n + 1);
-  };
-
-  const handleEntry = async (pin: string) => {
-    if (stage === 'enter') {
-      setFirstPin(pin);
-      setStage('confirm');
-      setResetKey((n) => n + 1);
-      return;
-    }
-
-    if (pin !== firstPin) {
-      setError('Those two PINs didn’t match. Start again.');
-      setStage('enter');
-      setFirstPin('');
-      setResetKey((n) => n + 1);
-      return;
-    }
-
-    setBusy(true);
-    setError('');
-    const { ok, data } = await callFn('client-pin-set', {
-      device_id: thisDevice,
-      device_label: deviceLabel(),
-      pin,
-    });
-    setBusy(false);
-
-    if (!ok) {
-      setError(data?.error || 'Could not save your PIN.');
-      setStage('enter');
-      setFirstPin('');
-      setResetKey((n) => n + 1);
-      return;
-    }
-
-    /* Remember who this PIN belongs to, so the keypad can greet them by name.
-       Name + masked email only — never the PIN, never the full address. */
-    saveProfile({ clientId, name: clientName, maskedEmail: maskEmail(clientEmail) });
-    setStage('idle');
-    setDone(true);
-    void load();
-  };
+  const savedHere = listProfiles().some((p) => p.clientId === clientId);
 
   const revoke = async (deviceId: string) => {
     setBusy(true);
@@ -144,7 +86,7 @@ export function PinSection({ clientId, clientName, clientEmail }: Props) {
         <div className="min-w-0">
           <p className="text-sm font-semibold text-text-primary">
             PIN sign-in
-            {onThisDevice && listProfiles().some((p) => p.clientId === clientId) && (
+            {onThisDevice && savedHere && (
               <span className="ml-2 align-middle">
                 <StatusPill tone="success">On for this device</StatusPill>
               </span>
@@ -155,10 +97,13 @@ export function PinSection({ clientId, clientName, clientEmail }: Props) {
             time. Your password still works everywhere, and five wrong tries locks the PIN.
           </p>
         </div>
-        {stage === 'idle' && (
+        {!setting && (
           <button
             type="button"
-            onClick={start}
+            onClick={() => {
+              setSetting(true);
+              setDone(false);
+            }}
             className="shrink-0 rounded-token-md border border-border bg-bg-surface px-3 py-2 text-xs font-semibold text-text-primary transition-colors hover:text-accent"
           >
             {onThisDevice ? 'Change PIN' : 'Set a PIN'}
@@ -172,30 +117,19 @@ export function PinSection({ clientId, clientName, clientEmail }: Props) {
         </p>
       )}
 
-      {stage !== 'idle' && (
+      {setting && (
         <div className="mt-4 rounded-token-lg border border-border-subtle bg-bg-surface p-4">
-          <p className="mb-3 text-xs font-semibold text-text-primary">
-            {stage === 'enter' ? 'Choose a 4-digit PIN' : 'Enter it once more'}
-          </p>
-          <PinInput onComplete={handleEntry} disabled={busy} autoFocus resetKey={resetKey} />
-          {busy && (
-            <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-text-muted">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
-            </p>
-          )}
-          {error && <p className="mt-3 text-center text-xs text-danger-soft">{error}</p>}
-          <div className="mt-3 text-center">
-            <button
-              type="button"
-              onClick={() => {
-                setStage('idle');
-                setError('');
-              }}
-              className="text-[11px] text-text-faint hover:text-accent"
-            >
-              Cancel
-            </button>
-          </div>
+          <PinSetup
+            clientId={clientId}
+            clientName={clientName}
+            clientEmail={clientEmail}
+            onDone={() => {
+              setSetting(false);
+              setDone(true);
+              void load();
+            }}
+            onCancel={() => setSetting(false)}
+          />
         </div>
       )}
 

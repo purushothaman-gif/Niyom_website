@@ -118,3 +118,34 @@ export function removeProfile(clientId: string): void {
 export function hasProfiles(): boolean {
   return listProfiles().length > 0;
 }
+
+export function hasProfile(clientId: string): boolean {
+  return listProfiles().some((p) => p.clientId === clientId);
+}
+
+/* ------------------------- "Set a PIN?" prompt state ---------------------- */
+
+/**
+ * How many times a client may be offered a PIN before we take the hint. Three
+ * because the first login is often a hurried one, and a second and third ask
+ * catch the person who meant to and forgot — beyond that it is nagging, and
+ * Profile → Settings is always there.
+ */
+export const PIN_PROMPT_LIMIT = 3;
+
+const promptKey = (clientId: string) => `nw_pin_prompt_skips:${clientId}`;
+
+export function pinPromptSkips(clientId: string): number {
+  const raw = readLocal(promptKey(clientId));
+  const n = raw ? Number(raw) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function recordPinPromptSkip(clientId: string): void {
+  writeLocal(promptKey(clientId), String(pinPromptSkips(clientId) + 1));
+}
+
+/** Stop asking — they set one, or they have refused enough times. */
+export function silencePinPrompt(clientId: string): void {
+  writeLocal(promptKey(clientId), String(PIN_PROMPT_LIMIT));
+}
