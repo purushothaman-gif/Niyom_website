@@ -645,3 +645,44 @@ describe('mergeStatements — one portfolio from several statements', () => {
     expect(merged.txns[0].scheme_id).toBe('s1');
   });
 });
+
+describe('hasCompleteHistory — segregated portfolios do not truncate a history', () => {
+  /*
+   * A side pocket is created when a debt issuer defaults: the AMC moves the
+   * doubtful paper out and credits holders with units nobody bought. No
+   * purchase, no money, no transaction line — so its units never add up.
+   *
+   * Treating that as a truncated history suppressed the return for a client
+   * whose statement ran from 1990 and was complete in every way XIRR cares
+   * about. One side-pocketed fund among 34 cost them the whole figure.
+   */
+  it('ignores a side pocket with no transactions', () => {
+    const complete = hasCompleteHistory(
+      [
+        { id: 'ordinary', units: 100, name: 'NIPPON INDIA LARGE CAP FUND - GROWTH' },
+        {
+          id: 'sidepocket',
+          units: 4768.581,
+          name: 'NIPPON INDIA MEDIUM DURATION FUND - SEGREGATED PORTFOLIO 2 - GROWTH PLAN',
+        },
+      ],
+      [{ scheme_id: 'ordinary', units: 100 }],
+    );
+    expect(complete).toBe(true);
+  });
+
+  it('still catches an ORDINARY scheme whose units are unexplained', () => {
+    // The exemption must not become a way for a truncated statement to pass.
+    expect(
+      hasCompleteHistory(
+        [{ id: 'a', units: 100, name: 'Some Ordinary Fund' }],
+        [{ scheme_id: 'a', units: 40 }],
+      ),
+    ).toBe(false);
+  });
+
+  it('works when no name is supplied at all', () => {
+    expect(hasCompleteHistory([{ id: 'a', units: 100 }], [{ scheme_id: 'a', units: 100 }])).toBe(true);
+    expect(hasCompleteHistory([{ id: 'a', units: 100 }], [{ scheme_id: 'a', units: 40 }])).toBe(false);
+  });
+});

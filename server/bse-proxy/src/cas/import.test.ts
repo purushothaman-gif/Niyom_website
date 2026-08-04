@@ -111,3 +111,49 @@ describe('reconcileDetailed — the checks that must keep firing', () => {
     expect(result.failures.join(' ')).toContain('could not be identified');
   });
 });
+
+describe('reconcileDetailed — rounding in the portfolio total', () => {
+  /*
+   * Every scheme's value is printed rounded to the paisa, so adding N of them
+   * lands a few paise from the total the registrar printed once. A real
+   * statement was refused over ₹0.02 across six schemes — and told the client
+   * "a scheme was probably missed entirely", which was wrong and alarming.
+   */
+  const withTotal = (values: number[], statedMarket: number, statedCost: number) => {
+    const schemes = values.map((v, i) =>
+      scheme({
+        folioNumber: `F${i}`,
+        schemeName: `Fund ${i}`,
+        closingUnits: 10,
+        marketValue: v,
+        costValue: v,
+        nav: v / 10,
+        transactions: [txn(10)],
+      }),
+    );
+    return reconcileDetailed(schemes, [`Total ${statedCost.toFixed(2)} ${statedMarket.toFixed(2)}`]);
+  };
+
+  it('accepts a few paise of rounding across several schemes', () => {
+    // 6 schemes summing to 282443.51 against a printed 282443.49.
+    const values = [50000.25, 60000.13, 40000.51, 70000.22, 42442.4, 20000.0];
+    const sum = values.reduce((a, b) => a + b, 0);
+    const result = withTotal(values, sum - 0.02, sum - 0.02);
+    expect(result.failures).toEqual([]);
+    expect(result.reconciled).toBe(true);
+  });
+
+  it('still refuses a genuinely missing scheme', () => {
+    // One ₹50,000 holding absent is nothing like a rounding difference.
+    const values = [50000.25, 60000.13];
+    const sum = values.reduce((a, b) => a + b, 0);
+    const result = withTotal(values, sum + 50000, sum + 50000);
+    expect(result.failures.join(' ')).toContain('probably missed entirely');
+    expect(result.reconciled).toBe(false);
+  });
+
+  it('keeps a single-scheme statement at one paisa', () => {
+    const result = withTotal([1000.0], 1000.5, 1000.5);
+    expect(result.reconciled).toBe(false);
+  });
+});
