@@ -226,15 +226,26 @@ export function classify(rest: string): { type: string; description: string } {
   /*
    * A switch moves money between schemes and is neither a purchase nor a sale.
    *
-   * Registrars do not agree on the word. CAMS writes "Switch Out"; KFintech
-   * writes "Lateral Shift Out (To <other scheme>)" for the same intra-AMC move,
-   * which cost a real client an import until it was added here.
+   * Registrars do not agree on the word, and each disagreement has cost a real
+   * client an import:
+   *
+   *   "Switch Out"                       CAMS
+   *   "Lateral Shift Out (To <scheme>)"  KFintech, intra-AMC
+   *   "Lateral Out (To <scheme>)"        KFintech again, same thing, no "Shift"
+   *   "Systematic Transfer Plan In"      an STP instalment — a switch on a
+   *                                      schedule, which is why it belongs here
+   *                                      and not under the purchase words it
+   *                                      otherwise reads like
+   *
+   * All of them move money between schemes without any of it reaching the
+   * investor, which is what SWITCH_* means downstream: excluded from cash flows,
+   * both legs, so the return is not distorted by an internal transfer.
    *
    * The direction is read from the text BEFORE the bracket. The scheme named
    * inside it is the OTHER side of the switch, and a fund with "Payout" in its
    * name would otherwise turn every switch-in into a switch-out.
    */
-  if (s.includes('switch') || s.includes('lateral shift')) {
+  if (/switch|lateral|systematic transfer|\bstp\b/.test(s)) {
     const head = s.split('(')[0];
     return { type: /\bout\b/.test(head) ? 'SWITCH_OUT' : 'SWITCH_IN', description };
   }

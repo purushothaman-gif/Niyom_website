@@ -152,3 +152,40 @@ describe('classify — ELSS residual refunds', () => {
     expect(typeOf('Refund Taxsaver non Multiples of 500 Residual Refund')).not.toBe('REDEMPTION');
   });
 });
+
+describe('classify — the phrasings that blocked the 04-Aug-2026 import', () => {
+  /*
+   * Verbatim from the statement that failed with "We could not verify this
+   * statement". Three phrasings, 33 transactions, all landing in OTHER — which
+   * the reconciliation gate correctly refused to import, since money that moves
+   * units without a name silently vanishes from the return.
+   */
+  it('reads an STP instalment as a switch, not a purchase', () => {
+    // It moves money between two schemes of the same AMC on a schedule. The
+    // purchase words nearly catch it, which is why it needed its own rule.
+    expect(typeOf('Systematic Transfer Plan In (From CP (GP) F.No:402150711736)')).toBe('SWITCH_IN');
+    expect(typeOf('Systematic Transfer Plan Out (To CP (GP) F.No:402150711736)')).toBe('SWITCH_OUT');
+    expect(typeOf('STP Out - To Nippon India Liquid Fund')).toBe('SWITCH_OUT');
+  });
+
+  it('reads KFintech "Lateral In/Out" — the same move without the word "Shift"', () => {
+    expect(typeOf('Lateral Out (To UTI Value Fund - Regular Plan F.No:514257400')).toBe('SWITCH_OUT');
+    expect(typeOf('Lateral In (From UTI Unit Linked Insurance Plan - Direct Pla')).toBe('SWITCH_IN');
+  });
+
+  it('leaves none of them unclassified', () => {
+    const FROM_THE_FAILED_STATEMENT = [
+      'Systematic Transfer Plan In (From CP (GP) F.No:402150711736)',
+      'Lateral Out (To UTI Value Fund - Regular Plan F.No:514257400',
+      'Lateral In (From UTI Unit Linked Insurance Plan - Direct Pla',
+    ];
+    expect(FROM_THE_FAILED_STATEMENT.filter((d) => typeOf(d) === 'OTHER')).toEqual([]);
+  });
+
+  it('still does not swallow an ordinary purchase or redemption', () => {
+    // The new rule is broad ("systematic transfer"), so the neighbours matter.
+    expect(typeOf('Systematic Investment (1)')).toBe('PURCHASE');
+    expect(typeOf('Systematic Purchase (Continuous Offer) - Instalment 2/904')).toBe('PURCHASE');
+    expect(typeOf('Redemption - NEFT PAYOUT-BSE')).toBe('REDEMPTION');
+  });
+});
