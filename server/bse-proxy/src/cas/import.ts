@@ -94,6 +94,31 @@ export function reconcileDetailed(schemes: CasDetailedScheme[], lines: string[])
 
   for (const s of schemes) {
     const where = `${s.schemeName} (folio ${s.folioNumber || 'unknown'})`;
+
+    /*
+     * A segregated portfolio holds units nobody bought.
+     *
+     * When a debt fund's issuer defaults, the AMC side-pockets the doubtful
+     * paper into "Segregated Portfolio 1/2" and credits existing holders with
+     * units of it — no purchase, no payment, no transaction line in the CAS.
+     * The units simply exist, and the unit checks below read that as a whole
+     * block of dropped transactions.
+     *
+     * Passing it is not a concession, it is the accurate treatment: the units
+     * are real and belong in the portfolio, and having NO cash flow is correct,
+     * because no money was ever put in. Narrow on purpose — only a scheme the
+     * statement itself names as segregated, and only when it carries no
+     * transactions at all, so an ordinary block that failed to parse still
+     * fails loudly.
+     */
+    if (/segregated portfolio/i.test(s.schemeName) && s.transactions.length === 0) {
+      warnings.push(
+        `${where}: a segregated portfolio holding ${s.closingUnits.toFixed(3)} units with no transactions — ` +
+          'side-pocketed units are credited by the AMC, so there is nothing to reconcile against.',
+      );
+      continue;
+    }
+
     const ledger = s.transactions.reduce((sum, t) => sum + t.units, s.openingUnits);
     if (!nearUnits(ledger, s.closingUnits)) {
       failures.push(
