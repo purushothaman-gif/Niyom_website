@@ -151,7 +151,9 @@ export const CasPortfolioService = {
       holdings,
       flows: txns.map(toFlow).filter((f): f is CasCashFlow => f !== null),
       historyComplete: hasCompleteHistory(
-        schemes.map((s) => ({ id: s.id, units: s.units })),
+        // The name carries the one exemption: a side-pocketed scheme's units
+        // were credited, not bought, so they explain no missing cash flow.
+        schemes.map((s) => ({ id: s.id, units: s.units, name: s.name })),
         txns as { scheme_id?: string | null; units: number | null }[],
       ),
     };

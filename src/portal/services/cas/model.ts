@@ -362,9 +362,26 @@ export function valuationDate(holdings: PortalHolding[]): string | null {
  * by a transaction we can see — by summing the ledger per scheme and comparing
  * with the closing balance. Any shortfall is an opening balance, and an opening
  * balance means the history is truncated.
+ *
+ * ## Except a segregated portfolio
+ *
+ * When a debt fund's issuer defaults the AMC side-pockets the doubtful paper
+ * and credits holders with units of a "Segregated Portfolio". Nobody bought
+ * them, no money moved, and the statement prints no transaction — so the units
+ * never add up and never will. Counting that as a truncated history suppressed
+ * the return on a statement that ran from 1990 and was complete in every way
+ * that matters to XIRR: one client held ONE side-pocketed fund among 34 and saw
+ * no return at all.
+ *
+ * The question here is whether a CASH FLOW is missing, and a side pocket's
+ * units are missing no cash. Its own redemption, if it ever recovers, is a real
+ * inflow and still counts.
  */
+const isSegregatedPortfolio = (name: string | null | undefined): boolean =>
+  /segregated portfolio/i.test(name ?? '');
+
 export function hasCompleteHistory(
-  schemes: { id: string; units: number | null }[],
+  schemes: { id: string; units: number | null; name?: string | null }[],
   txns: { scheme_id?: string | null; units: number | null }[],
 ): boolean {
   const ledger = new Map<string, number>();
@@ -372,7 +389,7 @@ export function hasCompleteHistory(
     if (!t.scheme_id) continue;
     ledger.set(t.scheme_id, (ledger.get(t.scheme_id) ?? 0) + (Number(t.units) || 0));
   }
-  return schemes.every((s) => {
+  return schemes.filter((s) => !isSegregatedPortfolio(s.name)).every((s) => {
     const closing = Number(s.units) || 0;
     const summed = ledger.get(s.id) ?? 0;
     // Units run to three decimals; the same tolerance the gate uses.

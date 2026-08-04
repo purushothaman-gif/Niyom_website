@@ -50,8 +50,23 @@ import { alertRm } from './alerts.js';
 /** A base64 PDF inflates by a third; express.json is capped at 10mb. */
 const MAX_PDF_BYTES = 6 * 1024 * 1024;
 
-/** Money to the paisa; units to the thousandth — the precision a CAS prints. */
-const nearMoney = (a: number, b: number) => Math.abs(a - b) <= 0.01;
+/**
+ * Comparing a SUM of printed figures against the total printed beside them.
+ *
+ * Every scheme's market value is printed rounded to the paisa, so adding N of
+ * them can land a few paise away from the total the registrar printed — it
+ * rounded once, we rounded N times. A real statement was refused over ₹0.02
+ * across six schemes, with the message "a scheme was probably missed entirely",
+ * which was both wrong and alarming.
+ *
+ * A paisa per row absorbs that and still cannot hide a missing scheme: the
+ * smallest holding worth reporting is thousands of rupees, and a portfolio
+ * would need a hundred thousand schemes before this tolerance reached ₹1,000.
+ */
+const nearSum = (a: number, b: number, rows: number) =>
+  Math.abs(a - b) <= Math.max(0.01, rows * 0.01);
+
+/** Units to the thousandth — the precision a CAS prints. */
 const nearUnits = (a: number, b: number) => Math.abs(a - b) <= 0.001;
 
 const money = (n: number) => n.toFixed(2);
@@ -177,7 +192,10 @@ export function reconcileDetailed(schemes: CasDetailedScheme[], lines: string[])
     : null;
 
   if (stated) {
-    if (!nearMoney(parsedMarket, stated.marketValue) || !nearMoney(parsedCost, stated.costValue)) {
+    if (
+      !nearSum(parsedMarket, stated.marketValue, schemes.length) ||
+      !nearSum(parsedCost, stated.costValue, schemes.length)
+    ) {
       failures.push(
         `The schemes total ${money(parsedMarket)} against the statement's ${money(stated.marketValue)}, ` +
           `and cost ${money(parsedCost)} against ${money(stated.costValue)} — a scheme was probably missed entirely.`,
