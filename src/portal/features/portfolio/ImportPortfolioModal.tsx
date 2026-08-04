@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle, CheckCircle2, Download, FileText, Loader2, Lock, Plus, ShieldCheck, Upload, X,
 } from 'lucide-react';
-import { fmtDate, fmtFull } from '../../../crm/utils';
+import { fmtFull } from '../../../crm/utils';
 import { StatusPill } from '../../components/StatusPill';
 import {
   CasImportService,
@@ -19,6 +19,7 @@ import type { ConsentType } from '../../types/consent';
 import { CasConsentStep } from './CasConsentStep';
 import { CasRequestStep } from './CasRequestStep';
 import { CasAwaitingStep } from './CasAwaitingStep';
+import { ImportedStatements } from './ImportedStatements';
 
 /**
  * Import an existing mutual fund portfolio from a Consolidated Account
@@ -210,10 +211,14 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
 
             {lastGood && (
               <div className="space-y-2">
-                <p className="text-xs text-text-faint">
-                  You last imported on {fmtDate(lastGood.created_at)}
-                  {lastGood.scheme_count ? `, covering ${lastGood.scheme_count} schemes` : ''}.
-                </p>
+                <ImportedStatements
+                  statements={previous}
+                  onChanged={() => {
+                    void CasImportService.listImports().then(setPrevious);
+                    // The portfolio behind the modal has to reload too.
+                    onImported();
+                  }}
+                />
                 {/*
                  * A CAS covers the folios registered against ONE email address,
                  * so a client who used two addresses needs two statements. Said
