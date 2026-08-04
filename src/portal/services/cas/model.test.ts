@@ -11,6 +11,9 @@ import type { NWHolding } from '../../../crm/types';
 import type { PortalHolding } from '../../types/cas';
 import { MF_OWNERSHIP, ownershipOf } from '../../types/ownership';
 import {
+  mergeStatements,
+  type CasImportMeta,
+  type CasTxnRow,
   applyNav,
   assessCasFreshness,
   hasCompleteHistory,
@@ -517,5 +520,128 @@ describe('applyNav — prices anything with an ISIN, whatever its source', () =>
     // Nothing to join on, so nothing to price — it keeps the staff figure.
     const noIsin = holding({ product_type: 'mutual_fund', current_value: 60064.95 });
     expect(applyNav(noIsin, undefined).current_value).toBe(60064.95);
+  });
+});
+
+describe('mergeStatements — one portfolio from several statements', () => {
+  /*
+   * A client with two email addresses gets two CAS files, each complete for its
+   * own folios and silent about the other's. Reading only the newest showed
+   * whichever half was uploaded last; adding them blindly would double every
+   * fund that appears in both.
+   */
+  const imp = (id: string, from: string, to: string, created = to): CasImportMeta => ({
+    id,
+    statement_from: from,
+    statement_to: to,
+    created_at: `${created}T00:00:00Z`,
+  });
+
+  const scheme = (over: Partial<CasSchemeRow> & { id: string }): CasSchemeRow => ({
+    name: 'A Fund',
+    units: 100,
+    nav: 10,
+    nav_date: '2026-08-01',
+    value: 1000,
+    cost: 800,
+    isin: 'INF000A00001',
+    rta: 'CAMS',
+    rta_code: null,
+    advisor_code: null,
+    is_ours: false,
+    cas_folios: { folio_number: 'F1', amc: 'Some AMC', registrar: 'CAMS' },
+    ...over,
+  });
+
+  const txn = (schemeId: string, date: string, amount: number): CasTxnRow => ({
+    scheme_id: schemeId,
+    txn_date: date,
+    txn_type: 'PURCHASE',
+    amount,
+    units: 10,
+  });
+
+  it('keeps positions from BOTH statements when they do not overlap', () => {
+    const merged = mergeStatements(
+      [imp('new', '1990-01-01', '2026-08-01'), imp('old', '1990-01-01', '2026-07-01')],
+      [
+        scheme({ id: 's1', import_id: 'new', isin: 'INF000A00001' }),
+        scheme({ id: 's2', import_id: 'old', isin: 'INF000B00002', cas_folios: { folio_number: 'F2', amc: null, registrar: null } }),
+      ],
+      [txn('s1', '2020-01-01', 500), txn('s2', '2021-01-01', 700)],
+    );
+    expect(merged.schemes).toHaveLength(2);
+    expect(merged.txns).toHaveLength(2);
+    expect(merged.contributing.map((i) => i.id).sort()).toEqual(['new', 'old']);
+  });
+
+  it('does not count the same position twice — the fresher statement wins', () => {
+    // Same folio, same ISIN, different units: one holding, not two.
+    const merged = mergeStatements(
+      [imp('new', '1990-01-01', '2026-08-01'), imp('old', '1990-01-01', '2026-07-01')],
+      [
+        scheme({ id: 'fresh', import_id: 'new', units: 120, value: 1200 }),
+        scheme({ id: 'stale', import_id: 'old', units: 100, value: 1000 }),
+      ],
+      [txn('fresh', '2026-07-15', 200), txn('stale', '2020-01-01', 1000)],
+    );
+    expect(merged.schemes).toHaveLength(1);
+    expect(merged.schemes[0].id).toBe('fresh');
+    expect(merged.schemes[0].units).toBe(120);
+    // The loser's ledger goes with it: a position's flows come from ONE
+    // statement, or the same purchase would be counted from two versions.
+    expect(merged.txns.map((t) => t.scheme_id)).toEqual(['fresh']);
+  });
+
+  it('dates the portfolio by the STALEST statement, not the freshest', () => {
+    // Half the picture is a month old; saying "as at 01-Aug" would overstate it.
+    const merged = mergeStatements(
+      [imp('new', '2020-01-01', '2026-08-01'), imp('old', '1990-01-01', '2026-07-01')],
+      [
+        scheme({ id: 's1', import_id: 'new' }),
+        scheme({ id: 's2', import_id: 'old', isin: 'INF000B00002' }),
+      ],
+      [],
+    );
+    expect(merged.statementTo).toBe('2026-07-01');
+    // And reaches back only as far as its latest-starting contributor.
+    expect(merged.statementFrom).toBe('2020-01-01');
+  });
+
+  it('ignores a statement that contributed nothing', () => {
+    // Every position it held was superseded, so its dates must not drag the
+    // portfolio's staleness backwards.
+    const merged = mergeStatements(
+      [imp('new', '1990-01-01', '2026-08-01'), imp('old', '1990-01-01', '2026-01-01')],
+      [
+        scheme({ id: 'fresh', import_id: 'new' }),
+        scheme({ id: 'stale', import_id: 'old' }),
+      ],
+      [],
+    );
+    expect(merged.contributing.map((i) => i.id)).toEqual(['new']);
+    expect(merged.statementTo).toBe('2026-08-01');
+  });
+
+  it('treats a row with no ISIN by name, rather than as a new holding', () => {
+    const merged = mergeStatements(
+      [imp('new', '1990-01-01', '2026-08-01'), imp('old', '1990-01-01', '2026-07-01')],
+      [
+        scheme({ id: 'a', import_id: 'new', isin: null, name: 'Nameless Fund' }),
+        scheme({ id: 'b', import_id: 'old', isin: null, name: 'nameless fund' }),
+      ],
+      [],
+    );
+    expect(merged.schemes).toHaveLength(1);
+  });
+
+  it('drops a transaction that belongs to no kept scheme', () => {
+    const merged = mergeStatements(
+      [imp('new', '1990-01-01', '2026-08-01')],
+      [scheme({ id: 's1', import_id: 'new' })],
+      [txn('s1', '2020-01-01', 100), txn('ghost', '2020-01-01', 999)],
+    );
+    expect(merged.txns).toHaveLength(1);
+    expect(merged.txns[0].scheme_id).toBe('s1');
   });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  AlertCircle, CheckCircle2, Download, FileText, Loader2, Lock, ShieldCheck, Upload, X,
+  AlertCircle, CheckCircle2, Download, FileText, Loader2, Lock, Plus, ShieldCheck, Upload, X,
 } from 'lucide-react';
 import { fmtDate, fmtFull } from '../../../crm/utils';
 import { StatusPill } from '../../components/StatusPill';
@@ -209,10 +209,27 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
             </p>
 
             {lastGood && (
-              <p className="text-xs text-text-faint">
-                You last imported on {fmtDate(lastGood.created_at)}
-                {lastGood.scheme_count ? `, covering ${lastGood.scheme_count} schemes` : ''}.
-              </p>
+              <div className="space-y-2">
+                <p className="text-xs text-text-faint">
+                  You last imported on {fmtDate(lastGood.created_at)}
+                  {lastGood.scheme_count ? `, covering ${lastGood.scheme_count} schemes` : ''}.
+                </p>
+                {/*
+                 * A CAS covers the folios registered against ONE email address,
+                 * so a client who used two addresses needs two statements. Said
+                 * here because the natural fear is that a second upload wipes
+                 * the first — it does not.
+                 */}
+                <div className="flex items-start gap-2 rounded-token-md border border-accent/15 bg-accent/5 p-3 text-left">
+                  <Plus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
+                  <p className="text-xs leading-relaxed text-text-muted">
+                    Have a second statement — say, folios registered under another email address?
+                    Upload it here too. It <span className="font-semibold text-text-primary">adds</span>{' '}
+                    to your portfolio rather than replacing what is already there, and a fund that
+                    appears in both statements is counted once, from whichever statement is newer.
+                  </p>
+                </div>
+              </div>
             )}
 
             {error && (
