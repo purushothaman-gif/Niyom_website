@@ -104,9 +104,56 @@ export class BseClient {
     return this.post<T>(route, data);
   }
 
+  /**
+   * Emit a one-line record of a BSE call, for certification evidence.
+   *
+   * BSE asked for the results of the complete journey, and "we tested it" is not
+   * a result — a reviewer needs the request that went out, the response that
+   * came back, and when. That evidence has to come from the same code path that
+   * serves real traffic; a transcript produced by a separate test harness proves
+   * only that the harness works.
+   *
+   * Off unless BSE_TRANSCRIPT=true (read once at boot, like every other setting
+   * here), so nothing changes for normal operation. It
+   * writes to stdout rather than the database because it exists to be collected
+   * during a UAT run and then archived, not to accumulate.
+   *
+   * Credentials never appear: the token is a request header, not part of the
+   * body, and is not logged. PAN and bank details ARE investor data, so the
+   * whole record is marked for redaction before it leaves us.
+   */
+  private transcribe(
+    route: string,
+    request: unknown,
+    httpStatus: number,
+    responseText: string,
+    ms: number,
+  ): void {
+    if (!this.cfg.bseTranscript) return;
+    try {
+      console.log(
+        `[bse-transcript] ${JSON.stringify({
+          at: new Date().toISOString(),
+          env: this.cfg.bseEnv,
+          route,
+          httpStatus,
+          ms,
+          request,
+          // Truncated: a scheme-master response is megabytes and would bury the
+          // calls a reviewer is actually reading.
+          response: responseText.slice(0, 4000),
+          redactBeforeSharing: true,
+        })}`,
+      );
+    } catch {
+      /* evidence capture must never break a live call */
+    }
+  }
+
   async post<T>(route: string, data: unknown, retry = true): Promise<T> {
     const token = await this.getToken();
     const jose = this.cfg.bseJose;
+    const startedAt = Date.now();
 
     // Login stays plain even under JOSE — verified against production, where a
     // plain login succeeds and only the authenticated calls are rejected.
@@ -158,6 +205,8 @@ export class BseClient {
         parsed?.messages ?? text.slice(0, 500),
       );
     }
+    this.transcribe(route, data, res.status, text, Date.now() - startedAt);
+
     if (parsed && parsed.status && parsed.status !== 'success') {
       throw new BseError(`BSE ${route} returned status=${parsed.status}`, 502, parsed.messages);
     }
