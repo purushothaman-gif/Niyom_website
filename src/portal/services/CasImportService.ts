@@ -41,6 +41,8 @@ export interface CasImportRecord {
   status: string;
   created_at: string;
   statement_to: string | null;
+  /** Where the statement's history starts — shown so two files are tellable apart. */
+  statement_from: string | null;
   scheme_count: number | null;
   transaction_count: number | null;
   parsed_total: number | null;
@@ -123,10 +125,29 @@ export const CasImportService = {
   async listImports(): Promise<CasImportRecord[]> {
     const { data, error } = await supabase
       .from('cas_imports')
-      .select('id,status,created_at,statement_to,scheme_count,transaction_count,parsed_total')
+      .select('id,status,created_at,statement_to,statement_from,scheme_count,transaction_count,parsed_total')
       .order('created_at', { ascending: false })
       .limit(10);
     if (error) return [];
     return (data ?? []) as CasImportRecord[];
+  },
+
+  /**
+   * Remove a statement from the portfolio.
+   *
+   * Necessary because statements now COMBINE: uploading the right file no
+   * longer corrects a wrong one, it sits alongside it. Deleting the import row
+   * is the whole operation — folios, schemes and transactions cascade from it.
+   *
+   * RLS decides whether the caller may: a client can only reach their own rows,
+   * and the grant is delete-only, so nothing about an imported figure can be
+   * edited from a browser. The statement FILE was never stored, so this cannot
+   * be undone by us — the client re-uploads their copy.
+   */
+  async removeImport(importId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    const { error } = await supabase.from('cas_imports').delete().eq('id', importId);
+    return error
+      ? { ok: false, error: 'That statement could not be removed. Please try again.' }
+      : { ok: true };
   },
 };
