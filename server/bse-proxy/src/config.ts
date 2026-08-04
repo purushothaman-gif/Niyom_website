@@ -55,6 +55,11 @@ export interface ProxyConfig {
   supabaseServiceRoleKey: string | null;
   /** Optional allowlist of BSE webhook source IPs. Empty = allow all. */
   webhookAllowedIps: string[];
+  /**
+   * Emit a per-call transcript of BSE traffic to stdout, for UAT evidence.
+   * Off in normal operation; see BseClient.transcribe.
+   */
+  bseTranscript: boolean;
   /** Set false only for local smoke tests. */
   requireAuth: boolean;
   /** Public origin of this proxy, for showing the webhook URL in diagnostics. */
@@ -101,6 +106,7 @@ export function loadConfig(): ProxyConfig {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
+    bseTranscript: process.env.BSE_TRANSCRIPT === 'true',
     requireAuth: process.env.REQUIRE_AUTH !== 'false',
     publicBaseUrl: process.env.PUBLIC_BASE_URL || 'https://api.niyomwealth.com',
     navRefreshSecret: process.env.NAV_REFRESH_SECRET || null,
