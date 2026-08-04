@@ -13,5 +13,19 @@
     "noUnusedParameters": true,
     "resolveJsonModule": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  /*
+   * Tests are run by the repo-root vitest, never built for the server.
+   *
+   * Without this, `tsc -p tsconfig.json` compiles them too and fails on the
+   * droplet with "Cannot find module 'vitest'" — the proxy is installed on its
+   * own there (`npm ci` inside server/bse-proxy), so there is no repo-root
+   * node_modules for resolution to walk up into, which is the only reason the
+   * same build passes on a developer's machine.
+   *
+   * The failure is quiet in the worst way: `npm run build` stops before the
+   * systemctl restart in the documented deploy chain, so the droplet keeps
+   * serving the PREVIOUS build and a deploy appears to have happened.
+   */
+  "exclude": ["src/**/*.test.ts"]
 }
