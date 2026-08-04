@@ -113,8 +113,19 @@ const TAIL =
  */
 const HEAD = /^(\S+)\s+([\d,]+\.\d{2})(\S.*)$/;
 
-/** "Total 216,883.66194,580.90" — two amounts with no separator. */
-const TOTAL = /^Total\s+([\d,]+\.\d{2})([\d,]+\.\d{2})\s*$/;
+/**
+ * The document's own grand total: two amounts, sometimes fused, sometimes not.
+ *
+ *   Total 216,883.66194,580.90        summary CAS, no separator
+ *   Total 3,071,559.36 5,481,720.24   detailed CAS, ordinary space
+ *
+ * The space was not allowed for, so on a detailed statement this matched
+ * nothing, readStatedTotals returned null, and the completeness check — the
+ * ONLY check that can notice a scheme was never parsed at all — quietly
+ * downgraded itself to a warning. One real import was accepted as reconciled
+ * while ten schemes and ₹13.9L of a ₹54.8L portfolio were missing.
+ */
+const TOTAL = /^Total\s+([\d,]+\.\d{2})\s*([\d,]+\.\d{2})\s*$/;
 
 /**
  * Collapse runs of whitespace so the shape-anchored patterns can rely on single
@@ -138,6 +149,28 @@ export function readStatedTotals(
   for (const line of lines) {
     const t = TOTAL.exec(line);
     if (t) return { marketValue: num(t[1]), costValue: num(t[2]) };
+  }
+  return null;
+}
+
+/**
+ * The same total, read WITHOUT assuming which column is which.
+ *
+ * The two CAS variants disagree: the summary prints market then cost, the
+ * detailed one prints cost then market (verified against its own per-AMC rows —
+ * HDFC's 483,227.25 is the sum of that AMC's scheme market values, and it sits
+ * second). Rather than encode a guess that is wrong half the time, the detailed
+ * completeness check compares the pair in whichever orientation fits.
+ *
+ * What this gives up: it cannot notice a statement that swapped its own two
+ * columns. That is not what the check is for — it exists to catch a scheme that
+ * was never parsed, and a missing scheme moves BOTH totals, so it is caught
+ * either way round.
+ */
+export function readStatedTotalPair(lines: string[]): [number, number] | null {
+  for (const line of lines) {
+    const t = TOTAL.exec(line);
+    if (t) return [num(t[1]), num(t[2])];
   }
   return null;
 }

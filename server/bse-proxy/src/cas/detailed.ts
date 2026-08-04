@@ -103,40 +103,74 @@ function joinWrappedHeaders(lines: string[]): string[] {
     let line = lines[i];
 
     /*
-     * A long name can also wrap just BEFORE the "(Demat)" marker, leaving the
-     * ISIN on a line that begins with it:
+     * A header can break at any point in its long name, and the earlier
+     * approach of enumerating the shapes kept losing to new ones. One real
+     * statement wrapped six different ways and imported ten schemes short —
+     * ₹13.9L of a ₹54.8L portfolio, silently, because a header that does not
+     * parse takes its whole block with it:
      *
-     *   HGFGT-HDFC Balanced Advantage Fund - Direct Plan - Growth Option (form...
-     *   (Non-Demat) - ISIN: INF179K01WA6(Advisor: INZ000208032)
+     *   ... Fund (form...          |  (Non-Demat) - ISIN: INF179K01WA6(Advisor:
+     *   ... Equity Fund) (Non      |  -Demat ) - ISIN: INF109K01BL4(Advisor:
+     *   ... (Non -Demat ) - ISIN:  |  INF209K01LF3(Advisor: ARN-163992)
+     *   ... (Non-Demat) -          |  ISIN: INF209K01EC5 - Reinvest(Advisor:
+     *   ... REGULAR PLAN IDCW #    |  PAYOUT (Non Demat) - ISIN: INF173K01CI4
      *
-     * That second line satisfies SCHEME_HEAD on its own — reading "(Non" as the
-     * RTA code and "Demat)" as the entire scheme name — so the check below
-     * never fires, and the scheme is kept under a meaningless name rather than
-     * being dropped. It has to be rejoined before anything else looks at it.
+     * So the rule is not a shape, it is an outcome: any line mentioning an ISIN
+     * that does not parse as a header pulls in its neighbours — following lines
+     * first, then preceding ones — until it DOES parse, and is left alone if it
+     * never does. Bounded to four lines either way and stopped by the folio
+     * line, so a genuinely malformed header cannot swallow a block.
      */
-    if (/^\(\s*(?:Non[\s-]*)?Demat\s*\)\s*-\s*ISIN:/i.test(line) && out.length) {
-      line = `${out.pop()} ${line}`;
-    }
-
-    if (/-\s*ISIN:\s*[A-Z0-9]{12}/.test(line) && !SCHEME_HEAD.test(line)) {
-      // Absorb continuations until the header parses, stopping at the folio
-      // line so a genuinely malformed header cannot swallow the block.
-      let j = i + 1;
-      while (j < lines.length && j - i <= 4 && !SCHEME_HEAD.test(line)) {
-        if (/^Folio No:/i.test(lines[j])) break;
-        line = `${line}${lines[j]}`;
-        j++;
+    if (/ISIN:/i.test(line) && !SCHEME_HEAD.test(line)) {
+      /*
+       * Both directions, because a header can wrap on both sides of the ISIN at
+       * once — the name broken above it, the advisor's bracket left open below:
+       *
+       *   176SBDP-SUNDARAM AGGRESSIVE HYBRID FUND - REGULAR PLAN MONTHLY IDCW #
+       *   PAYOUT (Non Demat) - ISIN: INF173K01CI4 - Payout(Advisor:
+       *   ARN-74926) Registrar :
+       *
+       * The smallest window that parses wins, so a header never annexes more of
+       * the document than it needs.
+       */
+      let found: { text: string; back: number; fwd: number } | null = null;
+      for (let back = 0; back <= 4 && back <= out.length && !found; back++) {
+        if (back > 0 && /^Folio No:/i.test(out[out.length - back])) break;
+        const prefix = back ? `${out.slice(out.length - back).join(' ')} ` : '';
+        for (let fwd = 0; fwd <= 4 && i + fwd < lines.length; fwd++) {
+          if (fwd > 0 && /^Folio No:/i.test(lines[i + fwd])) break;
+          const candidate = prefix + line + lines.slice(i + 1, i + 1 + fwd).join('');
+          if (SCHEME_HEAD.test(candidate)) {
+            found = { text: candidate, back, fwd };
+            break;
+          }
+        }
       }
-      if (SCHEME_HEAD.test(line)) i = j - 1;
-      else line = lines[i];
+      if (found) {
+        for (let k = 0; k < found.back; k++) out.pop();
+        line = found.text;
+        i += found.fwd;
+      }
     }
     out.push(line);
   }
   return out;
 }
 
+/*
+ * `- Payout` / `- Reinvest` sits between the ISIN and the advisor on every IDCW
+ * plan:
+ *
+ *   ... - ISIN: INF789F01448 - Payout(Advisor: ARN-74926) Registrar :
+ *   ... - ISIN: INF209K01EC5 - Reinvest(Advisor: ARN-163992)
+ *   ... - ISIN: INF789F01AE0 - Payout Registrar :        (no advisor at all)
+ *
+ * Without it the header does not parse and the whole scheme is dropped, which
+ * is how a portfolio came to be short by every dividend-paying plan in it.
+ * Non-capturing, so the group numbers downstream are unchanged.
+ */
 const SCHEME_HEAD =
-  /^(\S+?)-(.+?)\s*-\s*ISIN:\s*([A-Z0-9]{12})(?:\(Advisor:\s*([^)]*)\))?\s*(?:Registrar\s*:\s*(\S+)?)?\s*$/;
+  /^(\S+?)-(.+?)\s*-\s*ISIN:\s*([A-Z0-9]{12})(?:\s*-\s*(?:Payout|Reinvest(?:ment)?))?\s*(?:\(Advisor:\s*([^)]*)\))?\s*(?:Registrar\s*:\s*(\S+)?)?\s*$/i;
 
 const TXN = /^(\d{2}-[A-Za-z]{3}-\d{4})\s+(\(?[\d,]+\.\d{2}\)?)\s+(.*)$/;
 
