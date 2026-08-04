@@ -22,6 +22,8 @@ export interface CasCashFlow {
 /** A cas_schemes row joined to its folio, as the portal reads it. */
 export interface CasSchemeRow {
   id: string;
+  /** Which statement this row came from — the key to merging several. */
+  import_id?: string | null;
   name: string;
   units: number | null;
   nav: number | null;
@@ -376,4 +378,91 @@ export function hasCompleteHistory(
     // Units run to three decimals; the same tolerance the gate uses.
     return Math.abs(closing - summed) <= 0.001;
   });
+}
+
+/* ------------------------------------------------ merging several statements */
+
+export interface CasImportMeta {
+  id: string;
+  statement_from: string | null;
+  statement_to: string | null;
+  created_at: string;
+}
+
+export interface MergedStatements {
+  /** One row per position, each from the statement that knows it best. */
+  schemes: CasSchemeRow[];
+  /** Only the transactions belonging to those rows. */
+  txns: CasTxnRow[];
+  /** The imports that actually contributed a position. */
+  contributing: CasImportMeta[];
+  /** Oldest end date among contributors — how current the whole picture is. */
+  statementTo: string | null;
+  /** Latest start date among contributors — how far back it truly reaches. */
+  statementFrom: string | null;
+}
+
+/**
+ * What makes two rows the same holding across two statements.
+ *
+ * Folio plus ISIN, because that is what a registrar means by a position: the
+ * same fund in the same folio is one holding however many statements mention
+ * it. Name is the fallback for a row with no ISIN — worse, but better than
+ * treating it as a second holding and doubling the money.
+ */
+export function positionKey(s: CasSchemeRow): string {
+  const folio = s.cas_folios?.folio_number ?? '';
+  return `${folio}|${(s.isin || s.name || '').trim().toUpperCase()}`;
+}
+
+/**
+ * Combine every reconciled statement a client has into one portfolio.
+ *
+ * One CAS covers the folios registered against one email address. A client with
+ * two addresses has two statements, each complete for its own half and silent
+ * about the other, so reading only the newest shows whichever half was uploaded
+ * last — which is what this replaced.
+ *
+ * Not a union: the same fund in the same folio can appear in both (a client who
+ * re-requests a CAS, or overlapping folios), and adding both would double that
+ * money. The FRESHER statement wins each position outright — its units, its NAV
+ * and its transactions — so a position's ledger always comes from one statement
+ * and two versions of the same purchase can never interleave.
+ *
+ * `imports` must arrive freshest-first; that ordering IS the tie-break.
+ */
+export function mergeStatements(
+  imports: CasImportMeta[],
+  schemes: CasSchemeRow[],
+  txns: CasTxnRow[],
+): MergedStatements {
+  const rank = new Map(imports.map((i, idx) => [i.id, idx]));
+  const ranked = [...schemes].sort(
+    (a, b) =>
+      (rank.get(a.import_id ?? '') ?? Number.MAX_SAFE_INTEGER) -
+      (rank.get(b.import_id ?? '') ?? Number.MAX_SAFE_INTEGER),
+  );
+
+  const byPosition = new Map<string, CasSchemeRow>();
+  for (const s of ranked) {
+    const key = positionKey(s);
+    if (!byPosition.has(key)) byPosition.set(key, s);
+  }
+
+  const kept = [...byPosition.values()];
+  const keptIds = new Set(kept.map((s) => s.id));
+  const contributing = imports.filter((i) => kept.some((s) => s.import_id === i.id));
+
+  const ends = contributing.map((i) => i.statement_to).filter((d): d is string => !!d);
+  const starts = contributing.map((i) => i.statement_from).filter((d): d is string => !!d);
+
+  return {
+    schemes: kept,
+    // A transaction with no scheme_id cannot be attributed, so it is dropped
+    // rather than counted against a portfolio it may not belong to.
+    txns: txns.filter((t) => t.scheme_id && keptIds.has(t.scheme_id)),
+    contributing,
+    statementTo: ends.length ? ends.reduce((a, b) => (a < b ? a : b)) : null,
+    statementFrom: starts.length ? starts.reduce((a, b) => (a > b ? a : b)) : null,
+  };
 }
