@@ -38,7 +38,7 @@ import {
   parseCas,
   readInvestor,
   readInvestorPans,
-  readStatedTotals,
+  readStatedTotalPair,
   readStatementPeriod,
   type CasHolding,
   type CasParseResult,
@@ -168,7 +168,14 @@ export function reconcileDetailed(schemes: CasDetailedScheme[], lines: string[])
   const parsedMarket = schemes.reduce((sum, s) => sum + s.marketValue, 0);
   const parsedCost = schemes.reduce((sum, s) => sum + s.costValue, 0);
 
-  const stated = readStatedTotals(lines);
+  const pair = readStatedTotalPair(lines);
+  const stated = pair
+    ? // Whichever printed figure is nearer our market sum IS the market column.
+      Math.abs(pair[0] - parsedMarket) <= Math.abs(pair[1] - parsedMarket)
+      ? { marketValue: pair[0], costValue: pair[1] }
+      : { marketValue: pair[1], costValue: pair[0] }
+    : null;
+
   if (stated) {
     if (!nearMoney(parsedMarket, stated.marketValue) || !nearMoney(parsedCost, stated.costValue)) {
       failures.push(
