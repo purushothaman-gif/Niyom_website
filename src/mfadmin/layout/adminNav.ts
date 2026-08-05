@@ -58,6 +58,7 @@ export type AdminView =
   | 'switch'
   | 'stp'
   | 'swp'
+  | 'mandates'
   | 'nfo'
   // Funds
   | 'explore'
@@ -121,6 +122,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { view: 'switch', label: 'Switch', icon: ArrowLeftRight },
       { view: 'stp', label: 'STP', icon: Repeat },
       { view: 'swp', label: 'SWP', icon: ArrowDownUp },
+      { view: 'mandates', label: 'Mandates', icon: Landmark },
       { view: 'nfo', label: 'NFO', icon: Sparkles },
     ],
   },
@@ -184,6 +186,7 @@ export const ADMIN_VIEW_TITLES: Record<AdminView, string> = {
   switch: 'Switch',
   stp: 'Systematic Transfer Plan',
   swp: 'Systematic Withdrawal Plan',
+  mandates: 'Mandates',
   nfo: 'New Fund Offers',
   explore: 'Explore Funds',
   recommendations: 'Fund Recommendations',
