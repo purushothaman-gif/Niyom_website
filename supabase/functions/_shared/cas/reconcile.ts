@@ -10,8 +10,8 @@
  * refused on arithmetic alone, and that judgement should be testable without a
  * database, a PDF or a network.
  */
-import { readStatedTotalPair, type CasHolding, type CasParseResult } from './parse.js';
-import type { CasDetailedScheme } from './detailed.js';
+import { readStatedTotalPair, type CasHolding, type CasParseResult } from './parse.ts';
+import type { CasDetailedScheme } from './detailed.ts';
 /**
  * Comparing a SUM of printed figures against the total printed beside them.
  *

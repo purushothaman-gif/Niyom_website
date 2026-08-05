@@ -7,8 +7,8 @@
  * the two.
  */
 import { describe, expect, it } from 'vitest';
-import { parseAmfiNavHistory, toAmfiDate } from './navHistory.js';
-import { parseAmfiNav } from './nav.js';
+import { parseAmfiNavHistory, toAmfiDate } from './navHistory.ts';
+import { parseAmfiNav } from './nav.ts';
 
 /** Real rows: header, heading, AMC, schemes. Note the 8 columns. */
 const HISTORY = [

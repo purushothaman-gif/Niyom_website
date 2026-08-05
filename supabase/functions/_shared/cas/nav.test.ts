@@ -7,7 +7,7 @@
  * wrong scheme produces a tax rate that looks completely ordinary and is wrong.
  */
 import { describe, expect, it } from 'vitest';
-import { parseAmfiNav } from './nav.js';
+import { parseAmfiNav } from './nav.ts';
 
 /** A fragment of the real file: heading, AMC, scheme rows. */
 const FILE = [

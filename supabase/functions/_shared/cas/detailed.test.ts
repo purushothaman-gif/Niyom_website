@@ -13,7 +13,7 @@
  * through to OTHER and the client was shown 70% where the truth was 6.59%.
  */
 import { describe, expect, it } from 'vitest';
-import { classify } from './detailed.js';
+import { classify } from './detailed.ts';
 
 const typeOf = (s: string) => classify(s).type;
 
