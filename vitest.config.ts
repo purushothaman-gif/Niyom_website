@@ -29,7 +29,14 @@ export default defineConfig({
     include: [
       'src/**/*.test.ts',
       'server/bse-proxy/src/**/*.test.ts',
-      'supabase/functions/_shared/*.test.ts',
+      /*
+       * Recursive on purpose. This was `_shared/*.test.ts` — top level only —
+       * which is a trap rather than an oversight: moving the CAS parser's ~120
+       * tests into `_shared/cas/` would not have failed, it would have stopped
+       * running them, and the suite would have gone green while covering
+       * nothing. Check the test COUNT after moving files, not just the colour.
+       */
+      'supabase/functions/_shared/**/*.test.ts',
     ],
     // Explicit imports of describe/it/expect rather than globals, so the test
     // files typecheck under the app's existing tsconfig with no extra `types`
