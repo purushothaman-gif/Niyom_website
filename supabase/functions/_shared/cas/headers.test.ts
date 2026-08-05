@@ -11,7 +11,7 @@
  * been useless: the parser already handled the shapes we imagined.
  */
 import { describe, expect, it } from 'vitest';
-import { parseDetailedSchemes } from './detailed.js';
+import { parseDetailedSchemes } from './detailed.ts';
 
 /** A minimal but complete scheme block, so the header is what is under test. */
 const block = (headerLines: string[]) =>

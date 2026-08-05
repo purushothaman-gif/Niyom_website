@@ -11,7 +11,7 @@
  * resulting number looks entirely ordinary on screen.
  */
 import { describe, expect, it } from 'vitest';
-import { classifyCategory, readCategoryHeading } from './assetClass.js';
+import { classifyCategory, readCategoryHeading } from './assetClass.ts';
 
 const classOf = (c: string) => classifyCategory(c).assetClass;
 const isAmbiguous = (c: string) => classifyCategory(c).ambiguous;

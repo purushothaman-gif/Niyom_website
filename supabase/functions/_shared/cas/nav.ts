@@ -36,8 +36,8 @@
  * NAVs now also tracks the heading each scheme sits under and writes it to
  * `mf_asset_class`. One regex over a file already being fetched.
  */
-import { classifyCategory, readCategoryHeading } from './assetClass.js';
-import { sbInsert, sbSelect, type SbConfig } from './db.js';
+import { classifyCategory, readCategoryHeading } from './assetClass.ts';
+import { sbInsert, sbSelect, type SbConfig } from './db.ts';
 
 const AMFI_URL = 'https://portal.amfiindia.com/spages/NAVAll.txt';
 

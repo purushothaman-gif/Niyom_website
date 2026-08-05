@@ -30,8 +30,8 @@
  * The headings are also spaced differently (`Schemes ( Income )` rather than
  * `Schemes(Income)`), which the shared heading reader normalises.
  */
-import { sbInsert, type SbConfig } from './db.js';
-import type { NavRow } from './nav.js';
+import { sbInsert, type SbConfig } from './db.ts';
+import type { NavRow } from './nav.ts';
 
 /** AMFI's historical NAV report. One day per request is enough for our use. */
 const HISTORY_URL = 'https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx';

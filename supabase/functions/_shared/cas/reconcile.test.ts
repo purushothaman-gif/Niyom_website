@@ -6,8 +6,8 @@
  * case below is the second kind, and it blocked a real import on 04-Aug-2026.
  */
 import { describe, expect, it } from 'vitest';
-import { reconcileDetailed } from './reconcile.js';
-import type { CasDetailedScheme } from './detailed.js';
+import { reconcileDetailed } from './reconcile.ts';
+import type { CasDetailedScheme } from './detailed.ts';
 
 const scheme = (over: Partial<CasDetailedScheme> = {}): CasDetailedScheme => ({
   amc: 'Nippon India Mutual Fund',

@@ -9,7 +9,7 @@
  * ₹13.9L of a ₹54.8L portfolio were missing — the client noticed, not us.
  */
 import { describe, expect, it } from 'vitest';
-import { readStatedTotalPair, readStatedTotals } from './parse.js';
+import { readStatedTotalPair, readStatedTotals } from './parse.ts';
 
 describe('reading the statement’s own grand total', () => {
   it('reads the fused form the summary CAS prints', () => {
