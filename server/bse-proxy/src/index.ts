@@ -1469,10 +1469,29 @@ app.post('/sxp/cancel', async (req, res, next) => {
       await assertOwnsByUcc(req, ((hit?.investor as Record<string, unknown>)?.ucc ?? hit?.ucc) as string, 'plan');
     }
 
-    await bse.post<Record<string, unknown>>(
-      '/sxp_cancel',
-      toSxpCancel({ regNo, type, reasonCode: reason, note }, cfg.bseMemberCode),
-    );
+    try {
+      await bse.post<Record<string, unknown>>(
+        '/sxp_cancel',
+        toSxpCancel({ regNo, type, reasonCode: reason, note }, cfg.bseMemberCode),
+      );
+    } catch (err) {
+      // BSE's demo answers a well-formed cancellation with a bare
+      // {"status":"error","data":"","messages":null} — no field, no code, and
+      // the same reply for an active plan, an already-cancelled one, and every
+      // payload variant tried (5-Aug-2026). A malformed request does NOT look
+      // like this: a wrong id gives record_not_found, a missing sxp_type gives
+      // required:Type. Staff would otherwise read "returned status=error" and
+      // go hunting for a mistake of ours, so name it for what it is.
+      if (err instanceof BseError && !err.bseMessages) {
+        throw new BseError(
+          'BSE rejected the cancellation without giving a reason. This is an open ' +
+            'fault on their side (sxp_cancel returns an empty error for every ' +
+            'well-formed request) — the plan is unchanged; raise it with BSE.',
+          502,
+        );
+      }
+      throw err;
+    }
 
     const twoFaUrl = await fetchTwoFaUrl('verify_sxp_cancel', 'sxp', regNo);
     res.json({
