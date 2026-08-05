@@ -75,6 +75,40 @@ const SCHEME_COLUMNS =
   'id,import_id,name,units,nav,nav_date,value,cost,isin,rta,rta_code,advisor_code,is_ours,' +
   'cas_folios(folio_number,amc,registrar)';
 
+/**
+ * PostgREST caps every response, and Supabase's cap is 1000 rows.
+ *
+ * It does not error and it does not warn — the array is simply short. A client
+ * with 1,639 transactions received the oldest 1,000, so every scheme's ledger
+ * fell short of its closing balance, `hasCompleteHistory` concluded the
+ * statement was truncated, and their return was suppressed. The portfolio value
+ * looked perfect throughout, because 34 schemes fit inside one page.
+ *
+ * Anything that can exceed a thousand rows has to be read page by page.
+ */
+export const PAGE_SIZE = 1000;
+
+/**
+ * Read every page. Exported for its own test: the boundary that matters is a
+ * row count that is an exact multiple of the page size, where stopping early
+ * loses everything after it and stopping late costs one empty request.
+ */
+export async function fetchAllPages<T>(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  pageSize = PAGE_SIZE,
+): Promise<T[]> {
+  const all: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await fetchPage(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = data ?? [];
+    all.push(...rows);
+    // A short page is the last one. A full page might be the last one too, so
+    // the loop asks again and stops on the empty response.
+    if (rows.length < pageSize) return all;
+  }
+}
+
 export const CasPortfolioService = {
   /**
    * Everything the client's reconciled statements say, combined.
@@ -109,24 +143,34 @@ export const CasPortfolioService = {
 
     const importIds = imports.map((i) => i.id);
 
-    const [schemeRes, txnRes] = await Promise.all([
-      supabase
-        .from('cas_schemes')
-        .select(SCHEME_COLUMNS)
-        .in('import_id', importIds)
-        .order('value', { ascending: false }),
-      supabase
-        .from('cas_transactions')
-        .select('scheme_id,txn_date,txn_type,amount,units')
-        .in('import_id', importIds)
-        .order('txn_date', { ascending: true }),
+    /*
+     * Both reads are paged, and both order by a UNIQUE tiebreaker as well as
+     * their display key. Without one, rows sharing a txn_date (or a value) can
+     * be returned in a different order on each request, so a row can appear on
+     * two pages or on none — silent duplication or loss in a ledger.
+     */
+    const [allSchemes, allTxns] = await Promise.all([
+      fetchAllPages<CasSchemeRow>((from, to) =>
+        supabase
+          .from('cas_schemes')
+          .select(SCHEME_COLUMNS)
+          .in('import_id', importIds)
+          .order('value', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, to) as unknown as PromiseLike<{ data: CasSchemeRow[] | null; error: unknown }>,
+      ),
+      fetchAllPages<CasTxnRow>((from, to) =>
+        supabase
+          .from('cas_transactions')
+          .select('id,scheme_id,txn_date,txn_type,amount,units')
+          .in('import_id', importIds)
+          .order('txn_date', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to) as unknown as PromiseLike<{ data: CasTxnRow[] | null; error: unknown }>,
+      ),
     ]);
 
-    const merged = mergeStatements(
-      imports,
-      (schemeRes.data ?? []) as unknown as CasSchemeRow[],
-      (txnRes.data ?? []) as CasTxnRow[],
-    );
+    const merged = mergeStatements(imports, allSchemes, allTxns);
     const { schemes, txns } = merged;
     const dateOf = new Map(merged.contributing.map((i) => [i.id, i.statement_to ?? null]));
     const importedAt = imports[0].created_at ?? new Date().toISOString();
