@@ -6,9 +6,13 @@
  * including funds bought elsewhere, which is why importing one is the only way
  * a portfolio screen can be complete.
  *
- * The statement is posted straight to the proxy and never stored anywhere in
- * between — not in the browser, not in Supabase storage. The proxy parses it in
- * memory, keeps the extracted rows, and discards the file.
+ * The statement goes straight to the `cas-import` Edge Function and is never
+ * stored anywhere in between — not in the browser, not in Supabase storage. It
+ * is parsed in memory, the extracted rows are kept, and the file is discarded.
+ *
+ * It used to go to the BSE droplet. That box exists for a whitelisted static IP
+ * which BSE StAR MF and the Cashfree relay need and parsing a PDF does not, so
+ * the droplet is now only the order rail.
  *
  * Reading back is a plain Supabase query: RLS on cas_imports already limits a
  * client to their own, so there is no server round trip to justify.
@@ -52,13 +56,6 @@ export type CasImportResponse =
   | { ok: true; outcome: CasImportOutcome }
   | { ok: false; error: string };
 
-function proxyBaseUrl(): string | null {
-  const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
-  const configured = env.VITE_BSE_PROXY_URL?.trim();
-  if (configured?.toLowerCase() === 'none') return null;
-  return (configured || 'https://api.niyomwealth.com').replace(/\/$/, '');
-}
-
 /**
  * btoa() takes a binary string, and spreading a multi-megabyte array into
  * String.fromCharCode in one call overflows the argument limit — hence chunks.
@@ -87,35 +84,48 @@ export const CasImportService = {
     /** Links the import back to the tracked request that produced it, when there is one. */
     requestId?: string | null,
   ): Promise<CasImportResponse> {
-    const baseUrl = proxyBaseUrl();
-    if (!baseUrl) return { ok: false, error: 'Portfolio import is not enabled here yet.' };
     if (file.size > MAX_CAS_BYTES) {
       return { ok: false, error: 'That file is larger than 6 MB. Please upload the CAS as the registrar emailed it.' };
     }
 
     const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) return { ok: false, error: 'Your session has expired. Please sign in again.' };
+    if (!data.session?.access_token) {
+      return { ok: false, error: 'Your session has expired. Please sign in again.' };
+    }
 
     try {
-      const res = await fetch(`${baseUrl}/cas/import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
+      /*
+       * invoke() attaches the client's own session token, and the function reads
+       * the client id from THAT rather than from the body — a forged clientId
+       * cannot attach someone else's statement to another portfolio.
+       */
+      const { data: outcome, error } = await supabase.functions.invoke('cas-import', {
+        body: {
           fileBase64: await toBase64(file),
           fileName: file.name,
           password,
           ...(requestId ? { requestId } : {}),
-        }),
+        },
       });
-      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!res.ok) {
+
+      if (error) {
+        /*
+         * A non-2xx arrives as a FunctionsHttpError carrying the Response, and
+         * the message the client needs is inside its body — "that password did
+         * not open the statement", "this statement belongs to a different PAN".
+         * Reporting error.message instead would replace every one of them with
+         * "Edge Function returned a non-2xx status code".
+         */
+        const body = (await (error as { context?: Response }).context
+          ?.json()
+          .catch(() => null)) as { error?: string } | null;
         return {
           ok: false,
-          error: (body.error as string) || 'We could not read that statement. Please try again.',
+          error: body?.error || 'We could not read that statement. Please try again.',
         };
       }
-      return { ok: true, outcome: body as unknown as CasImportOutcome };
+
+      return { ok: true, outcome: outcome as CasImportOutcome };
     } catch {
       return { ok: false, error: 'We could not reach the server. Please check your connection and try again.' };
     }
