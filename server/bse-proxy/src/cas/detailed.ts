@@ -172,6 +172,13 @@ function joinWrappedHeaders(lines: string[]): string[] {
 const SCHEME_HEAD =
   /^(\S+?)-(.+?)\s*-\s*ISIN:\s*([A-Z0-9]{12})(?:\s*-\s*(?:Payout|Reinvest(?:ment)?))?\s*(?:\(Advisor:\s*([^)]*)\))?\s*(?:Registrar\s*:\s*(\S+)?)?\s*$/i;
 
+/**
+ * `(Advisor: ARN-362707)` sitting on its own line, left there by a header that
+ * wrapped. Matched anywhere in the line because the registrar often follows it.
+ */
+const ADVISOR_FRAGMENT = /\(\s*Advisor\s*:\s*([^)]*)\)/i;
+const REGISTRAR_FRAGMENT = /Registrar\s*:\s*(\S+)/i;
+
 const TXN = /^(\d{2}-[A-Za-z]{3}-\d{4})\s+(\(?[\d,]+\.\d{2}\)?)\s+(.*)$/;
 
 /**
@@ -365,6 +372,29 @@ export function parseDetailedSchemes(text: string): CasDetailedScheme[] {
       running = 0;
       awaitingBalance = null;
       continue;
+    }
+
+    /*
+     * An advisor code the header wrapped away from.
+     *
+     * The advisor is OPTIONAL in a scheme header, and the header parses without
+     * it, so a long fund name that pushed "(Advisor: ARN-362707)" onto the next
+     * line left the holding attributed to nobody — shown to the client as
+     * "Advisor not stated" even when the ARN on it is ours. Silent, because a
+     * scheme with no advisor is a real and common thing (every Direct plan).
+     *
+     * Only ever FILLS a blank, and only between the header and the folio line,
+     * so it cannot overwrite a stated advisor or borrow one from another block.
+     */
+    if (cur && !cur.advisorCode && !cur.folioNumber) {
+      const adv = ADVISOR_FRAGMENT.exec(line);
+      if (adv) {
+        cur.advisorCode = adv[1].trim();
+        if (!cur.registrar) {
+          cur.registrar = REGISTRAR_FRAGMENT.exec(line)?.[1]?.trim() ?? cur.registrar;
+        }
+        continue;
+      }
     }
 
     if (!cur) {
