@@ -174,6 +174,45 @@ describe('toFlow — cash flow signs from the investor’s side', () => {
     expect(toFlow({ txn_date: '', txn_type: 'PURCHASE', amount: 5000, units: 0 })).toBeNull();
     expect(flow('OTHER', 100)).toBeNull();
   });
+
+  /*
+   * A registrar reverses a failed instalment by printing the same row negative.
+   * Taking Math.abs() and re-deriving the direction from the type counted that
+   * money as paid a SECOND time — each reversal wrong by twice its value.
+   *
+   * A real client had ₹69,000 of failed SIPs, so ₹1.38L of investment that never
+   * happened, and was shown -38.9% on a portfolio up 6%. Nothing else caught it:
+   * the units are negative too, so every unit ledger reconciled, and cost and
+   * value come from the statement's own totals.
+   *
+   * Descriptions and amounts below are verbatim from that statement.
+   */
+  it('reads a reversed SIP instalment as money coming BACK', () => {
+    // "SIP Purchase84/ER04: Insufficient Balance Physical - Instalment No 3"
+    expect(flow('PURCHASE', -9999.5, -5.147)?.amount).toBe(9999.5);
+    // "Purchase SIPPayment Failed - Credit not received from investor bank"
+    expect(flow('PURCHASE', -999.95, -23.131)?.amount).toBe(999.95);
+  });
+
+  it('reverses the charges that went with it', () => {
+    expect(flow('STAMP_DUTY', -0.5)?.amount).toBe(0.5);
+    expect(flow('STT', -0.6)?.amount).toBe(0.6);
+  });
+
+  it('still reads an ordinary purchase as money out', () => {
+    // The fix must not flip the 3,077 normal purchases to inflows.
+    expect(flow('PURCHASE', 9999.5, 5.147)?.amount).toBe(-9999.5);
+    expect(flow('STAMP_DUTY', 0.5)?.amount).toBe(-0.5);
+  });
+
+  it('would read a reversed redemption as money out again', () => {
+    // Redemptions print negative, so a positive one is the reversal.
+    expect(flow('REDEMPTION', 19053.54)?.amount).toBe(-19053.54);
+  });
+
+  it('would read a reversed dividend payout as money out again', () => {
+    expect(flow('DIVIDEND', -903.9, 0)?.amount).toBe(-903.9);
+  });
 });
 
 /* --------------------------------------------------------------- ownership -- */
