@@ -42,7 +42,9 @@ import { ReportsPage } from './features/bse/ReportsPage';
 import { NoBseDataPage } from './features/bse/NoBseDataPage';
 import { ClientOnboardingPage } from './features/bse/ClientOnboardingPage';
 import { KycPage } from './features/bse/KycPage';
+import { MandatePage } from './features/bse/MandatePage';
 import { ExploreFundsPage } from './features/funds/ExploreFundsPage';
+import { SchemeNavPage } from './features/funds/SchemeNavPage';
 import { RecommendationsPage } from './features/funds/RecommendationsPage';
 import { CalculatorsPage } from './features/tools/CalculatorsPage';
 import { HoldingsPage } from './features/reports/HoldingsPage';
@@ -159,6 +161,8 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
         return <SxpBookPage title="Systematic Transfer Plan" icon={Repeat} only="STP" />;
       case 'swp':
         return <SxpBookPage title="Systematic Withdrawal Plan" icon={ArrowDownUp} only="SWP" />;
+      case 'mandates':
+        return <MandatePage />;
 
       // Fund discovery and planning.
       case 'explore':
@@ -197,13 +201,7 @@ function AdminConsole({ employee }: { employee: NWEmployee }) {
           />
         );
       case 'nav':
-        return (
-          <NoData
-            title="Scheme NAV"
-            reason="BSE serves NAVs from nav_master_list, which the proxy does not expose yet. This is ours to build, not a BSE restriction."
-            apis={['nav_master_list']}
-          />
-        );
+        return <SchemeNavPage />;
       case 'nfo':
         return (
           <NoData

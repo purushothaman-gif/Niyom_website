@@ -87,6 +87,43 @@ export interface PlaceOrderResult {
   isMock: boolean;
 }
 
+/** E-NACH and UPI are strictly paired with a mode at BSE — see registerMandate. */
+export type MandateType = 'ENACH' | 'UPI' | 'NACH';
+
+export interface RegisterMandateInput {
+  clientCode: string;
+  /** Maximum debit BSE may authorise per instalment. */
+  amount: number;
+  type: MandateType;
+  bank: { accountNumber: string; ifsc: string; accountType?: string; name?: string };
+  /** UPI mandates only — BSE rejects a VPA sent on an E-NACH mandate. */
+  vpa?: string;
+  startDate?: string;
+  validTill?: string;
+  redirectUrl?: string;
+}
+
+export interface MandateResult {
+  mandateId: string;
+  status: string;
+  /** BSE-hosted page the investor completes to authorise an E-NACH mandate. */
+  authUrl?: string;
+  isMock: boolean;
+}
+
+export interface BseMandateRow {
+  mandateId: string;
+  clientCode: string;
+  amount: number;
+  bank: { name: string; ifsc: string; accountNumber: string };
+  mode: string;
+  umrn: string;
+  isVerified: boolean;
+  isActive: boolean;
+  validTill: string;
+  isMock: boolean;
+}
+
 export interface PaymentLinkResult {
   paymentUrl: string;
   modes: { mode: string; label: string; banks: number }[];
@@ -453,6 +490,20 @@ export const BseOpsService = {
       type: 'lumpsum',
       plan: 'Growth',
       amount: input.amount,
+    }),
+
+  /** Mandates registered under the member, newest first. */
+  mandates: (clientCode?: string) =>
+    get<BseMandateRow[]>(`/mandates${clientCode ? `?clientCode=${encodeURIComponent(clientCode)}` : ''}`),
+
+  /**
+   * Register a debit mandate. Without one a client cannot run an XSIP — BSE
+   * requires exch_mandate_id on the registration.
+   */
+  registerMandate: (input: RegisterMandateInput) =>
+    post<MandateResult>('/mandate', {
+      ...input,
+      redirectUrl: input.redirectUrl ?? `${window.location.origin}/mf-admin`,
     }),
 
   /**
