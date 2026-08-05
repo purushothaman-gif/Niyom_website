@@ -144,3 +144,93 @@ describe('the joiner does not over-reach', () => {
     expect(out[0].isin).not.toBe(out[1].isin);
   });
 });
+
+describe('the advisor code, when the header wrapped away from it', () => {
+  /*
+   * The advisor is OPTIONAL in a scheme header, so a header missing it still
+   * parses — and a long fund name that pushed "(Advisor: ARN-362707)" onto the
+   * next line left the holding attributed to nobody. The client was shown
+   * "Advisor not stated" on a fund that is under OUR ARN, and the held-away
+   * split was wrong by that holding.
+   *
+   * Silent, because a scheme with no advisor is real and common: every Direct
+   * plan has none.
+   */
+  const sbi = (headerLines: string[]) =>
+    parseDetailedSchemes(
+      [
+        'SBI Mutual Fund',
+        'PAN: AKCPH1164J KYC: OK  PAN: OK',
+        ...headerLines,
+        'Folio No: 12345678 / 0',
+        'A CLIENT',
+        ' Opening Unit Balance: 0.000',
+        '29-Jul-2026 59,997.00 66.5991900.844Switch In 900.844',
+        'NAV on 03-Aug-2026: INR 66.67 Market Value on 03-Aug-2026: INR 60,065.22',
+        'Closing Unit Balance: 900.844 Total Cost Value: 59,997.00',
+      ].join('\n'),
+    );
+
+  it('reads it from the header when it fits', () => {
+    const [s] = sbi([
+      'SBIMAG-SBI Multi Asset Allocation Fund Regular Growth (Non-Demat) - ISIN: INF200K01VT2(Advisor: ARN-362707)',
+      'Registrar : CAMS',
+    ]);
+    expect(s.advisorCode).toBe('ARN-362707');
+  });
+
+  it('picks it up from the next line when the name pushed it there', () => {
+    const [s] = sbi([
+      'SBIMAG-SBI Multi Asset Allocation Fund Regular Growth (formerly SBI Magnum Monthly Income Plan) (Non-Demat) - ISIN: INF200K01VT2',
+      '(Advisor: ARN-362707) Registrar : CAMS',
+    ]);
+    expect(s.advisorCode).toBe('ARN-362707');
+    expect(s.registrar).toBe('CAMS');
+  });
+
+  it('picks it up when it trails the registrar', () => {
+    const [s] = sbi([
+      'SBIMAG-SBI Multi Asset Allocation Fund Regular Growth (Non-Demat) - ISIN: INF200K01VT2 Registrar :',
+      'CAMS (Advisor: ARN-362707)',
+    ]);
+    expect(s.advisorCode).toBe('ARN-362707');
+  });
+
+  it('leaves it blank when the statement really does not state one', () => {
+    // Verbatim from a real statement: ISIN straight to Registrar, no advisor.
+    // A Direct plan has no distributor, and inventing one would claim a
+    // holding we do not advise on.
+    const [s] = sbi([
+      '108OPD2G-UTI Value Fund - Direct Plan (Non Demat) - ISIN: INF789F01VB2 Registrar :',
+      'KFINTECH',
+    ]);
+    expect(s.advisorCode).toBe('');
+  });
+
+  it('never overwrites an advisor the header already stated', () => {
+    const [s] = sbi([
+      'SBIMAG-SBI Multi Asset Allocation Fund Regular Growth (Non-Demat) - ISIN: INF200K01VT2(Advisor: ARN-163992)',
+      '(Advisor: ARN-362707) Registrar : CAMS',
+    ]);
+    expect(s.advisorCode).toBe('ARN-163992');
+  });
+
+  it('does not borrow an advisor from the block below', () => {
+    // The fragment scan stops at the folio line, so a following scheme's
+    // advisor cannot leak upwards into one that genuinely has none.
+    const out = parseDetailedSchemes(
+      [
+        'SBI Mutual Fund',
+        '108OPD2G-UTI Value Fund - Direct Plan (Non Demat) - ISIN: INF789F01VB2 Registrar :',
+        'KFINTECH',
+        'Folio No: 111 / 0',
+        ' Opening Unit Balance: 0.000',
+        '29-Jul-2026 59,997.00 66.5991900.844Purchase 900.844',
+        'NAV on 03-Aug-2026: INR 66.67 Market Value on 03-Aug-2026: INR 60,065.22',
+        'Closing Unit Balance: 900.844 Total Cost Value: 59,997.00',
+        '(Advisor: ARN-362707)',
+      ].join('\n'),
+    );
+    expect(out[0].advisorCode).toBe('');
+  });
+});
