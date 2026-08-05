@@ -9,7 +9,7 @@
  * page — which is exactly why it went unnoticed.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { fetchAllPages } from './CasPortfolioService';
+import { fetchAllPages } from './supabasePaging';
 
 /** A fake table of `total` rows, served in pages like PostgREST does. */
 const pager = (total: number) => {

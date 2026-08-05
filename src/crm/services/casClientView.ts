@@ -24,6 +24,7 @@
  * this passes a client id and lets the database answer.
  */
 import { supabase } from '../../lib/supabase';
+import { fetchAllPages } from '../../lib/supabasePaging';
 import { ownershipOf, type MfOwnership } from '../../portal/types/ownership';
 
 export interface CasCrmScheme {
@@ -92,13 +93,28 @@ export async function loadCasView(clientId: string): Promise<CasCrmView | null> 
     .maybeSingle();
   if (!imp) return null;
 
-  const { data } = await supabase
-    .from('cas_schemes')
-    .select('id,name,units,nav,nav_date,value,cost,isin,rta,advisor_code,is_ours,cas_folios(folio_number,amc,registrar)')
-    .eq('import_id', imp.id)
-    .order('value', { ascending: false });
+  /*
+   * Paged, and ordered by a UNIQUE tiebreaker as well as by value.
+   *
+   * PostgREST caps a response at 1000 rows without saying so, and `value` is
+   * not unique, so an unpaged read would quietly drop holdings past the cap
+   * and an unstable order would let a row land on two pages. A staff screen
+   * that is short by a fund is worse than one that fails: nothing about it
+   * looks wrong. Today's biggest client has 34 schemes, so this is protection
+   * rather than repair — the same cap cost a client their return when their
+   * 1,639 transactions crossed it.
+   */
+  const data = await fetchAllPages<SchemeRow>((from, to) =>
+    supabase
+      .from('cas_schemes')
+      .select('id,name,units,nav,nav_date,value,cost,isin,rta,advisor_code,is_ours,cas_folios(folio_number,amc,registrar)')
+      .eq('import_id', imp.id)
+      .order('value', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, to) as unknown as PromiseLike<{ data: SchemeRow[] | null; error: unknown }>,
+  );
 
-  const schemes: CasCrmScheme[] = ((data ?? []) as unknown as SchemeRow[])
+  const schemes: CasCrmScheme[] = (data as unknown as SchemeRow[])
     // Fully exited funds stay in the statement for realised gains but are not
     // holdings, and a position list that includes them overstates the client.
     .filter((s) => (Number(s.value) || 0) > 0 || (Number(s.units) || 0) > 0)
