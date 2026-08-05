@@ -26,8 +26,18 @@
  * carry semicolons — so a row is a row precisely when it splits into six parts.
  * Both ISIN columns point at the same NAV (growth/payout and reinvestment are
  * separate ISINs for one scheme), and either may be blank or "-".
+ *
+ * ## The headings are data too
+ *
+ * Those category headings used to be skipped as noise. They are the only source
+ * we have for whether a scheme is equity-oriented — which decides its holding
+ * period and its tax rate — because a CAS never states a category and
+ * `cas_schemes.scheme_type` is blank on every row. So the same pass that reads
+ * NAVs now also tracks the heading each scheme sits under and writes it to
+ * `mf_asset_class`. One regex over a file already being fetched.
  */
 import type { ProxyConfig } from '../config.js';
+import { classifyCategory, readCategoryHeading } from './assetClass.js';
 import { sbInsert, sbSelect } from './db.js';
 
 const AMFI_URL = 'https://portal.amfiindia.com/spages/NAVAll.txt';
@@ -55,48 +65,106 @@ export interface NavRow {
   amfi_code: string;
 }
 
+/** An `mf_asset_class` row, ready to upsert. */
+export interface SchemeClassRow {
+  isin: string;
+  amfi_code: string;
+  scheme_name: string;
+  amfi_category: string;
+  asset_class: 'equity' | 'debt' | 'other';
+  ambiguous: boolean;
+}
+
+export interface AmfiFile {
+  navs: NavRow[];
+  /** One per ISIN — the category it was printed under, and what that means. */
+  classes: SchemeClassRow[];
+}
+
 /**
- * AMFI's text file -> rows.
+ * AMFI's text file -> NAV rows and scheme classifications.
  *
  * Exported and pure so it can be tested against real fixture lines rather than
  * only against whatever the network returns today.
  */
-export function parseAmfiNav(text: string): NavRow[] {
-  const out: NavRow[] = [];
+export function parseAmfiNav(text: string): AmfiFile {
+  const navs: NavRow[] = [];
+  const classes: SchemeClassRow[] = [];
   const seen = new Set<string>();
+  const classified = new Set<string>();
+
+  /*
+   * The heading most recently passed. Every scheme line below it belongs to it,
+   * which is the only thing in the file that says what a scheme holds.
+   */
+  let category = '';
 
   for (const line of text.split('\n')) {
     const parts = line.split(';');
-    if (parts.length < 6) continue; // heading, AMC name or blank
+    if (parts.length < 6) {
+      // Not a scheme row — but it may be the heading that names the next batch.
+      const heading = readCategoryHeading(line);
+      if (heading) category = heading;
+      continue;
+    }
 
     const [code, isinA, isinB, name, navRaw, dateRaw] = parts;
     if (code.trim() === 'Scheme Code') continue; // the header row itself
 
     const nav = Number(navRaw.trim());
     // "N.A." for schemes yet to declare — a real absence, not a zero.
-    if (!Number.isFinite(nav) || nav <= 0) continue;
-
+    const hasNav = Number.isFinite(nav) && nav > 0;
     const navDate = toIso(dateRaw);
-    if (!navDate) continue;
 
     // One scheme carries two ISINs (growth/payout and reinvestment) against the
     // same NAV. A CAS may reference either, so both are stored.
     for (const isin of [isinA, isinB]) {
       const clean = isin.trim().toUpperCase();
       if (!/^INF[A-Z0-9]{9}$/.test(clean)) continue;
-      const key = `${clean}|${navDate}`;
-      if (seen.has(key)) continue; // the file repeats a scheme across categories
-      seen.add(key);
-      out.push({
-        isin: clean,
-        nav_date: navDate,
-        nav,
-        scheme_name: name.trim(),
-        amfi_code: code.trim(),
-      });
+
+      if (hasNav && navDate) {
+        const key = `${clean}|${navDate}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          navs.push({
+            isin: clean,
+            nav_date: navDate,
+            nav,
+            scheme_name: name.trim(),
+            amfi_code: code.trim(),
+          });
+        }
+      }
+
+      /*
+       * Classification does NOT depend on the NAV.
+       *
+       * A fund that has wound up, or has not declared today, still sits under a
+       * category heading — and still has years of transactions behind it that a
+       * gains statement has to price. Gating this on a usable NAV cost us two of
+       * the 82 ISINs held across the book, both of them closed funds whose units
+       * were sold and are taxable.
+       *
+       * A scheme is classified once, under the FIRST heading it appears beneath.
+       * AMFI repeats some schemes across categories, and taking the last would
+       * let a duplicate listing silently change a fund's tax treatment between
+       * one evening's file and the next.
+       */
+      if (category && !classified.has(clean)) {
+        classified.add(clean);
+        const { amfiCategory, assetClass, ambiguous } = classifyCategory(category);
+        classes.push({
+          isin: clean,
+          amfi_code: code.trim(),
+          scheme_name: name.trim(),
+          amfi_category: amfiCategory,
+          asset_class: assetClass,
+          ambiguous,
+        });
+      }
     }
   }
-  return out;
+  return { navs, classes };
 }
 
 export interface NavRefreshResult {
@@ -104,6 +172,8 @@ export interface NavRefreshResult {
   parsed: number;
   written: number;
   navDate: string | null;
+  /** Schemes whose category was captured this run. */
+  classified?: number;
   error?: string;
 }
 
@@ -118,6 +188,7 @@ export async function refreshNavs(cfg: ProxyConfig): Promise<NavRefreshResult> {
   const startedAt = new Date().toISOString();
   let parsed = 0;
   let written = 0;
+  let classified = 0;
   let navDate: string | null = null;
 
   try {
@@ -127,7 +198,7 @@ export async function refreshNavs(cfg: ProxyConfig): Promise<NavRefreshResult> {
     clearTimeout(timer);
     if (!res.ok) throw new Error(`AMFI responded ${res.status}`);
 
-    const rows = parseAmfiNav(await res.text());
+    const { navs: rows, classes } = parseAmfiNav(await res.text());
     parsed = rows.length;
     if (!parsed) throw new Error('AMFI returned no usable rows — the file layout may have changed.');
 
@@ -148,17 +219,37 @@ export async function refreshNavs(cfg: ProxyConfig): Promise<NavRefreshResult> {
       written += Math.min(1000, rows.length - i);
     }
 
+    /*
+     * Scheme classifications, upserted alongside.
+     *
+     * Only the AMFI-derived columns are sent, so `resolution=merge-duplicates`
+     * updates exactly those and leaves `override_asset_class` untouched. An
+     * administrator's decision about a Multi Asset fund must survive every
+     * subsequent nightly refresh — otherwise the tax treatment silently reverts
+     * to undecided and the client's statement changes overnight.
+     */
+    const now = new Date().toISOString();
+    for (let i = 0; i < classes.length; i += 1000) {
+      await sbInsert(
+        cfg,
+        'mf_asset_class?on_conflict=isin',
+        classes.slice(i, i + 1000).map((c) => ({ ...c, updated_at: now })),
+        { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      );
+      classified += Math.min(1000, classes.length - i);
+    }
+
     await sbInsert(cfg, 'nav_refresh_log', [
       { started_at: startedAt, finished_at: new Date().toISOString(), ok: true, rows_parsed: parsed, rows_written: written, nav_date: navDate },
     ]);
-    return { ok: true, parsed, written, navDate };
+    return { ok: true, parsed, written, navDate, classified };
   } catch (err) {
     const message = (err as Error)?.message ?? 'unknown';
     console.error('[nav] refresh failed:', message);
     await sbInsert(cfg, 'nav_refresh_log', [
       { started_at: startedAt, finished_at: new Date().toISOString(), ok: false, rows_parsed: parsed, rows_written: written, nav_date: navDate, error: message.slice(0, 500) },
     ]).catch(() => undefined);
-    return { ok: false, parsed, written, navDate, error: message };
+    return { ok: false, parsed, written, navDate, classified, error: message };
   }
 }
 

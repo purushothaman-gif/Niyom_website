@@ -15,6 +15,7 @@ import { AllocationPage } from './features/allocation/AllocationPage';
 import { MutualFundsModule } from './features/mutual-funds/MutualFundsModule';
 import { TransactionsPage } from './features/transactions/TransactionsPage';
 import { ReportsPage } from './features/reports/ReportsPage';
+import { CapitalGainsPage } from './features/gains/CapitalGainsPage';
 import { DocumentsPage } from './features/documents/DocumentsPage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { SipPage } from './features/sip/SipPage';
@@ -126,6 +127,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
       view === 'portfolio' ||
       view === 'allocation' ||
       view === 'reports' ||
+      view === 'capital-gains' ||
       view === 'profile' ||
       view === 'sip';
     if (snapshotView && loading && !hasData) return <LoadingState />;
@@ -173,7 +175,24 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
       case 'allocation':
         return portfolioData ? <AllocationPage data={portfolioData} /> : <LoadingState />;
       case 'reports':
-        return <ReportsPage clientId={clientId} client={client} holdings={snapshot.holdings} />;
+        return (
+          <ReportsPage
+            clientId={clientId}
+            client={client}
+            holdings={snapshot.holdings}
+            onOpenCapitalGains={() => navigate('capital-gains')}
+          />
+        );
+      case 'capital-gains':
+        return (
+          <CapitalGainsPage
+            clientId={clientId}
+            client={client}
+            // Nothing to compute gains from yet — send them where the import
+            // flow actually lives rather than leaving a dead end.
+            onImport={() => navigate('portfolio')}
+          />
+        );
       case 'profile':
         return (
           <ProfilePage

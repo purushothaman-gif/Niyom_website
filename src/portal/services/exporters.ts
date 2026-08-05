@@ -61,3 +61,65 @@ export async function exportHoldingsXlsx(rows: HoldingRow[], client: NWClient | 
     `niyom_holdings_${safeCode(client)}_${stamp()}.xlsx`,
   );
 }
+
+/**
+ * The capital gains statement, one row per matched lot.
+ *
+ * Deliberately one row per DISPOSAL rather than per redemption: a single
+ * redemption of 800 units can consume a dozen SIP instalments bought at a dozen
+ * prices, each with its own holding period and possibly its own grandfathered
+ * cost. Collapsing them would hide exactly the working a client (or their CA)
+ * needs to check the figure.
+ *
+ * Both costs are written. `Cost` is what the gain is computed on; `Actual Cost`
+ * is what was really paid. They differ only where grandfathering applies, and
+ * seeing the two side by side is what makes the relief legible rather than
+ * looking like an arithmetic error.
+ */
+export async function exportCapitalGainsXlsx(
+  rows: {
+    schemeName: string;
+    isin: string | null;
+    buyDate: string;
+    sellDate: string;
+    units: number;
+    buyNav: number;
+    sellNav: number;
+    actualCost: number;
+    cost: number;
+    grandfathered: boolean;
+    proceeds: number;
+    gain: number;
+    term: string;
+    treatment: string;
+  }[],
+  fy: string,
+  client: NWClient | null,
+) {
+  const header = [
+    'Scheme', 'ISIN', 'Purchase Date', 'Sale Date', 'Units', 'Purchase NAV', 'Sale NAV',
+    'Actual Cost (INR)', 'Cost (INR)', 'Grandfathered', 'Proceeds (INR)', 'Gain (INR)',
+    'Term', 'Tax Treatment',
+  ];
+  const body = rows.map((r) => [
+    r.schemeName,
+    r.isin ?? '',
+    fmtDate(r.buyDate),
+    fmtDate(r.sellDate),
+    Number(r.units.toFixed(3)),
+    Number(r.buyNav.toFixed(4)),
+    Number(r.sellNav.toFixed(4)),
+    Number(r.actualCost.toFixed(2)),
+    Number(r.cost.toFixed(2)),
+    r.grandfathered ? 'Yes' : '',
+    Number(r.proceeds.toFixed(2)),
+    Number(r.gain.toFixed(2)),
+    r.term,
+    r.treatment,
+  ]);
+  await writeSheet(
+    [header, ...body],
+    `Capital Gains ${fy}`,
+    `niyom_capital_gains_${fy}_${safeCode(client)}_${stamp()}.xlsx`,
+  );
+}

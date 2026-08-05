@@ -24,6 +24,7 @@ const VALID: PortalView[] = [
   'transactions',
   'sip',
   'reports',
+  'capital-gains',
   'documents',
   'notifications',
   'support',
