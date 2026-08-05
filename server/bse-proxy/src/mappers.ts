@@ -767,19 +767,27 @@ export interface AppSxpCancelRequest {
 /**
  * App view-model -> BSE `/sxp_cancel` (§6.2.4.2, example §8.3.2.1).
  *
- * Both `type` and `sxp_type` carry the plan kind: the field table names the
- * second, BSE's worked example sends the first, and add_ucc established that
- * the example is what the live API actually honours. A missing mandatory field
- * is a certain rejection; a duplicate one has never been rejected here. Drop
- * whichever proves redundant once a live cancellation settles the question.
+ * Field names probed against the live demo 5-Aug-2026, because the spec's field
+ * table and its own worked example disagree — and here the TABLE is right:
+ *
+ *  - **`sxp_type`** carries the plan kind. The example's `type` is not read at
+ *    all: a payload with `type` alone comes back `required: Type`, while
+ *    `sxp_type` alone clears validation. (The reverse of the add_ucc lesson —
+ *    check, don't assume which half of the spec to trust.)
+ *  - **`reg_no` must be a STRING** (a number gives `invalid_json`) and must be
+ *    BSE's registration number, not the numeric row id from sxp_list — a wrong
+ *    value answers `record_not_found` on field `id/type`.
+ *  - **`reason_cd` must be a NUMBER** ("7" gives `invalid_json`).
+ *
+ * Path is `/sxp_cancel`: `/v2/sxp_cancel`, `/s4/sxp_cancel` and `/s2/sxp_cancel`
+ * all 404.
  */
 export function toSxpCancel(req: AppSxpCancelRequest, memberCode: string) {
   const note = (req.note ?? '').trim();
   return {
-    reg_no: req.regNo,
-    reason_cd: req.reasonCode,
+    reg_no: String(req.regNo),
+    reason_cd: Number(req.reasonCode),
     ...(note ? { reason_cd_msg: note.slice(0, 200) } : {}),
-    type: req.type,
     sxp_type: req.type,
     member: memberCode,
   };

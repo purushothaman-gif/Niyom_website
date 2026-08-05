@@ -1,15 +1,16 @@
 /**
  * sxp_cancel payload.
  *
- * This one is worth pinning because it is spec-derived rather than
- * live-verified: the route sat in the proxy for days with no callers, and its
+ * Worth pinning because the route sat in the proxy with no callers, and its
  * original body (`sxp_reg_num` + `member`) would have been rejected by BSE on
  * the first real cancellation — wrong id field, and both mandatory fields
- * missing. The reference is BSE's own worked example, §8.3.2.1 of
- * bse-starmfv2-api_2.0.0.pdf:
+ * missing.
  *
- *   { "data": { "reg_no": "c49c7035-…", "reason_cd": 6,
- *               "reason_cd_msg": "", "type": "SIP" } }
+ * Every expectation below was checked against the live demo on 5-Aug-2026, not
+ * read off the spec: BSE's field table and its worked example §8.3.2.1
+ * disagree about the plan-type key, and the demo says the table wins
+ * (`sxp_type`; `type` alone answers `required: Type`). The types matter too —
+ * `reg_no` as a number and `reason_cd` as a string both give `invalid_json`.
  */
 import { describe, it, expect } from 'vitest';
 import { toSxpCancel } from './mappers.js';
@@ -22,10 +23,21 @@ describe('toSxpCancel', () => {
 
     expect(payload.reg_no).toBe(REG_NO);
     expect(payload.reason_cd).toBe(6);
-    // Plan type under both keys BSE's spec uses for it — see toSxpCancel.
-    expect(payload.type).toBe('SIP');
+    // The field table's key, not the example's `type` — demo rejects that one.
     expect(payload.sxp_type).toBe('SIP');
+    expect(payload).not.toHaveProperty('type');
     expect(payload.member).toBe('66899');
+  });
+
+  it('sends reg_no as a string and reason_cd as a number', () => {
+    // BSE answers invalid_json to either of these the wrong way round.
+    const payload = toSxpCancel(
+      { regNo: 202600000031617 as unknown as string, type: 'SIP', reasonCode: '7' as unknown as number },
+      '66899',
+    );
+
+    expect(payload.reg_no).toBe('202600000031617');
+    expect(payload.reason_cd).toBe(7);
   });
 
   it('omits reason_cd_msg rather than sending it empty', () => {
