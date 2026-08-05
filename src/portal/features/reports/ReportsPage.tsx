@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  ArrowRight,
   Download,
   FileSpreadsheet,
   FileText,
@@ -22,6 +23,8 @@ interface Props {
   clientId: string;
   client: NWClient | null;
   holdings: NWHolding[];
+  /** Capital gains is a screen of its own, not a download — see `open`. */
+  onOpenCapitalGains?: () => void;
 }
 
 interface ReportDef {
@@ -30,6 +33,9 @@ interface ReportDef {
   description: string;
   icon: LucideIcon;
   action?: () => Promise<void>;
+  /** Navigates rather than downloading. */
+  open?: () => void;
+  openLabel?: string;
   soon?: boolean;
 }
 
@@ -56,7 +62,17 @@ function ReportCard({ report }: { report: ReportDef }) {
           {report.soon && <ComingSoonBadge />}
         </div>
         <p className="mt-0.5 text-xs text-text-secondary">{report.description}</p>
-        {!report.soon && (
+        {report.open && (
+          <button
+            type="button"
+            onClick={report.open}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:border-accent/40 hover:text-accent"
+          >
+            <ArrowRight className="h-3.5 w-3.5" />
+            {report.openLabel ?? 'Open'}
+          </button>
+        )}
+        {!report.soon && report.action && (
           <button
             type="button"
             onClick={run}
@@ -72,7 +88,7 @@ function ReportCard({ report }: { report: ReportDef }) {
   );
 }
 
-export function ReportsPage({ clientId, client, holdings }: Props) {
+export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: Props) {
   const { rows: txnRows } = useTransactions(clientId);
   const summary = useMemo(() => PortfolioService.buildSummary(holdings), [holdings]);
   const holdingRows = useMemo(() => PortfolioService.buildHoldingRows(holdings), [holdings]);
@@ -95,14 +111,17 @@ export function ReportsPage({ clientId, client, holdings }: Props) {
     {
       key: 'capgain',
       title: 'Capital Gains Statement',
-      description: 'Realised & unrealised gains with tax treatment (STCG / LTCG).',
+      description:
+        'Realised gains by financial year, matched FIFO from your own statement — with the Excel to match.',
       icon: TrendingUp,
-      soon: true,
+      open: onOpenCapitalGains,
+      openLabel: 'View capital gains',
     },
     {
       key: 'cas',
       title: 'Consolidated Account Statement',
-      description: 'Official CAS across all folios, sourced from the RTA.',
+      description:
+        'Issued by CAMS and KFintech, not by us. Request it to your email, then import it here.',
       icon: Landmark,
       soon: true,
     },
@@ -138,8 +157,9 @@ export function ReportsPage({ clientId, client, holdings }: Props) {
       </div>
 
       <p className="px-1 text-[11px] text-text-faint">
-        Excel statements are generated on your device from your portfolio data. Capital Gains & CAS
-        connect to the RTA feed in a later phase.
+        Excel statements are generated on your device from your portfolio data — nothing leaves your
+        browser. A Consolidated Account Statement is issued by the registrars themselves; we cannot
+        produce one, but importing yours is what powers everything above.
       </p>
     </div>
   );

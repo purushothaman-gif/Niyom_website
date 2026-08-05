@@ -21,6 +21,7 @@ import {
   ArrowLeftRight,
   CalendarClock,
   FileText,
+  Receipt,
   FolderClosed,
   Bell,
   LifeBuoy,
@@ -38,6 +39,7 @@ export type PortalView =
   | 'transactions'
   | 'sip'
   | 'reports'
+  | 'capital-gains'
   | 'documents'
   | 'notifications'
   | 'support'
@@ -90,10 +92,17 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: PieChart,
       },
       {
+        view: 'capital-gains',
+        key: 'capital-gains',
+        label: 'Capital Gains',
+        description: 'What you owe tax on, year by year',
+        icon: Receipt,
+      },
+      {
         view: 'reports',
         key: 'reports',
         label: 'Reports',
-        description: 'Statements and capital gains',
+        description: 'Downloadable statements',
         icon: FileText,
       },
     ],
@@ -216,6 +225,7 @@ export const VIEW_TITLES: Record<PortalView, string> = {
   transactions: 'Transactions',
   sip: 'Systematic Plans',
   reports: 'Reports',
+  'capital-gains': 'Capital Gains',
   documents: 'Documents',
   notifications: 'Notifications',
   support: 'Support',
@@ -235,7 +245,8 @@ export const VIEW_SUBTITLES: Partial<Record<PortalView, string>> = {
   'mutual-funds': 'Research funds, start a SIP or invest a lump sum.',
   transactions: 'Every purchase, redemption, switch and payout on your account.',
   sip: 'Your systematic plans — instalments, dates and amounts.',
-  reports: 'Download statements, capital gains and holding reports.',
+  reports: 'Download your transaction and holdings statements.',
+  'capital-gains': 'Realised gains by financial year, worked out from your own statement.',
   documents: 'Your KYC papers, deal confirmations and statements in one place.',
   notifications: 'Updates from your relationship manager and your account.',
   support: 'Raise a ticket and track the ones you have open.',

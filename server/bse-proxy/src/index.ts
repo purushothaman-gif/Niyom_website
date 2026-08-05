@@ -19,6 +19,7 @@ import { webhookRouter } from './webhooks.js';
 import { casRouter } from './cas/import.js';
 import { casRequestRouter } from './cas/requests.js';
 import { lastNavRefresh, refreshNavs } from './cas/nav.js';
+import { backfillNavOn, GRANDFATHER_DATE } from './cas/navHistory.js';
 import {
   toAppOrderResult,
   toAppScheme,
@@ -259,6 +260,30 @@ app.post('/nav/refresh', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const result = await refreshNavs(cfg);
+  return res.status(result.ok ? 200 : 502).json(result);
+});
+
+/**
+ * Backfill one past day's NAVs — in practice, 31-Jan-2018.
+ *
+ * Equity units bought before 01-Feb-2018 are grandfathered, and the cost of
+ * acquisition depends on that day's NAV. It is a different AMFI endpoint in a
+ * different column order from the nightly file, so it gets its own route rather
+ * than a flag on the one above.
+ *
+ * Not on a schedule: a past NAV does not change. Run once and it is settled for
+ * every client, including ones who have not signed up yet. Defaults to the
+ * grandfathering date precisely so the common case needs no body at all.
+ */
+app.post('/nav/backfill', async (req, res) => {
+  if (!cfg.navRefreshSecret) {
+    return res.status(503).json({ error: 'NAV refresh is not configured on this server.' });
+  }
+  if (req.header('x-nav-secret') !== cfg.navRefreshSecret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const date = typeof req.body?.date === 'string' ? req.body.date : GRANDFATHER_DATE;
+  const result = await backfillNavOn(cfg, date);
   return res.status(result.ok ? 200 : 502).json(result);
 });
 
