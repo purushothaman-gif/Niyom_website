@@ -30,7 +30,9 @@ import {
   toAddUcc,
   toMandateRegister,
   toSxpRegister2,
+  toSxpCancel,
   toAppSxpResult,
+  SXP_TYPES,
   type AppSxpRequest,
   toAppMandateResult,
   type AppMandateRequest,
@@ -603,7 +605,7 @@ app.post('/switch', async (req, res, next) => {
  */
 app.post('/cancel', async (req, res, next) => {
   try {
-    const { orderId } = req.body as { orderId: string };
+    const { orderId, remark } = req.body as { orderId: string; remark?: string };
     const clientCode = scopedUcc(req, (req.body as { clientCode?: string }).clientCode);
     if (req.caller?.kind === 'client') {
       const list = await bse.post<Record<string, unknown>>('/order_list', {
@@ -618,23 +620,16 @@ app.post('/cancel', async (req, res, next) => {
       id: Number(orderId) || orderId,
       investor: { ucc: clientCode },
       member: cfg.bseMemberCode,
+      // Optional per §6.2.3.3, but it is the only place a reason is recorded
+      // against the cancellation at BSE.
+      ...(remark?.trim() ? { remark: remark.trim().slice(0, 200) } : {}),
     });
     const accepted = ((result.success_id as unknown[]) ?? []).length > 0;
     if (!accepted) {
       throw new BseError('BSE did not accept the cancellation', 502, result);
     }
     // Fetch the investor's 2FA link so the caller can surface it immediately.
-    let twoFaUrl: string | null = null;
-    try {
-      const rows = await bse.postRaw<Record<string, unknown>[]>('/v2/get_2fa_link', [
-        { event: 'verify_order_cancel', order: String(orderId), member_code: cfg.bseMemberCode },
-      ]);
-      const action = ((rows ?? [])[0]?.action ?? {}) as Record<string, unknown>;
-      const objs = (action.event_object ?? []) as Record<string, unknown>[];
-      twoFaUrl = (objs[0]?.['2fa_url'] as string) ?? null;
-    } catch {
-      /* link is best-effort — the cancellation request itself succeeded */
-    }
+    const twoFaUrl = await fetchTwoFaUrl('verify_order_cancel', 'order', String(orderId));
     res.json({
       orderId,
       status: 'CANCEL_PENDING_INVESTOR_2FA',
@@ -1390,7 +1385,11 @@ app.get('/sxp', async (req, res, next) => {
       rows
         .filter((r) => !clientCode || String((r.investor as Record<string, unknown>)?.ucc ?? r.ucc ?? '') === clientCode)
         .map((r) => ({
-          sxpRegNum: String(r.sxp_reg_num ?? r.id ?? ''),
+          // `reg_no` is BSE's registration number (a UUID) and the ONLY id
+          // sxp_cancel accepts — §8.3.6.2. `id` is an internal row number, so
+          // falling back to it used to hand the console something it could
+          // display but never act on.
+          sxpRegNum: String(r.reg_no ?? r.sxp_reg_num ?? r.id ?? ''),
           clientCode: String((r.investor as Record<string, unknown>)?.ucc ?? r.ucc ?? ''),
           type: String(r.sxp_type ?? ''),
           schemeCode: String(r.src_scheme ?? ''),
@@ -1406,10 +1405,58 @@ app.get('/sxp', async (req, res, next) => {
   }
 });
 
-/** Cancel a systematic plan. */
+/**
+ * Cancel a systematic plan.
+ *
+ * The payload here is spec-derived (§6.2.4.2 field table + the worked example
+ * §8.3.2.1), NOT yet live-verified — the route had no callers until the console
+ * gained a cancel button, so its previous body (`sxp_reg_num` + `member`) had
+ * never been sent to BSE. Three things it got wrong:
+ *
+ *  - the plan is addressed by **`reg_no`**, BSE's registration UUID, not by the
+ *    numeric row id `sxp_list` also returns;
+ *  - **`reason_cd` is mandatory** (enum §7.4.51; 13 = Others, which then makes
+ *    `reason_cd_msg` mandatory too);
+ *  - the plan **type** is mandatory.
+ *
+ * The field table calls that last one `sxp_type` while BSE's own example sends
+ * `type`. Both go out with the same value: add_ucc taught us the example is
+ * what actually works, a missing mandatory field is a certain rejection, and
+ * this API has never been observed to reject an extra key. Collapse to one once
+ * a live cancel says which.
+ *
+ * Path is `/sxp_cancel`, not `/v2/sxp_cancel` as the spec prints it — the whole
+ * SxP family sits outside /v2 on the live host (sxp_register and sxp_list are
+ * both verified that way).
+ *
+ * Like an order cancellation, this is a REQUEST: `verify_sxp_cancel` is a 2FA
+ * event (§7.4.59), so the plan keeps running until the investor approves.
+ */
 app.post('/sxp/cancel', async (req, res, next) => {
   try {
-    const { sxpRegNum } = req.body as { sxpRegNum: string };
+    const { sxpRegNum, sxpType, reasonCode, reasonText } = req.body as {
+      sxpRegNum: string;
+      sxpType?: string;
+      reasonCode?: number | string;
+      reasonText?: string;
+    };
+    const regNo = String(sxpRegNum ?? '').trim();
+    if (!regNo) throw new BseError('A plan registration number is required.', 400);
+
+    const type = String(sxpType ?? '').trim().toUpperCase();
+    if (!SXP_TYPES.includes(type)) {
+      throw new BseError(`Plan type must be one of ${SXP_TYPES.join(', ')}.`, 400);
+    }
+
+    const reason = Number(reasonCode);
+    if (!Number.isInteger(reason) || reason < 1 || reason > 13) {
+      throw new BseError('A cancellation reason code (1-13) is required.', 400);
+    }
+    const note = String(reasonText ?? '').trim();
+    if (reason === 13 && !note) {
+      throw new BseError('Reason 13 (Others) needs the reason in words.', 400);
+    }
+
     // A registration number alone proves nothing — confirm it is the caller's.
     if (req.caller?.kind === 'client') {
       const list = await bse.post<Record<string, unknown>>('/sxp_list', {
@@ -1417,15 +1464,25 @@ app.post('/sxp/cancel', async (req, res, next) => {
       });
       const rows = ((list.lists ?? list.list ?? []) as Record<string, unknown>[]) || [];
       const hit = rows.find(
-        (r) => String(r.sxp_id ?? r.sxp_reg_num ?? '') === String(sxpRegNum),
+        (r) => String(r.reg_no ?? r.sxp_reg_num ?? r.sxp_id ?? '') === regNo,
       );
       await assertOwnsByUcc(req, ((hit?.investor as Record<string, unknown>)?.ucc ?? hit?.ucc) as string, 'plan');
     }
-    const result = await bse.post<Record<string, unknown>>('/sxp_cancel', {
-      sxp_reg_num: sxpRegNum,
-      member: cfg.bseMemberCode,
+
+    await bse.post<Record<string, unknown>>(
+      '/sxp_cancel',
+      toSxpCancel({ regNo, type, reasonCode: reason, note }, cfg.bseMemberCode),
+    );
+
+    const twoFaUrl = await fetchTwoFaUrl('verify_sxp_cancel', 'sxp', regNo);
+    res.json({
+      sxpRegNum: regNo,
+      // Only claim the investor's approval is outstanding when BSE actually
+      // issued a link to approve with.
+      status: twoFaUrl ? 'CANCEL_PENDING_INVESTOR_2FA' : 'CANCEL_REQUESTED',
+      twoFaUrl,
+      isMock: false,
     });
-    res.json({ sxpRegNum, status: 'CANCEL_REQUESTED', raw: result, isMock: false });
   } catch (err) {
     next(err);
   }

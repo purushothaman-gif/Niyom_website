@@ -283,6 +283,40 @@ export interface TxnResultRow {
   isMock: boolean;
 }
 
+/**
+ * The outcome of asking BSE to cancel something.
+ *
+ * A resolved promise means BSE accepted the REQUEST, not that the order or plan
+ * is dead: both cancellations are 2FA events, so nothing changes until the
+ * investor approves at `twoFaUrl`.
+ */
+export interface CancelResult {
+  status: string;
+  twoFaUrl?: string | null;
+  isMock: boolean;
+}
+
+/**
+ * BSE's sxp_cancel_reason enum (§7.4.51). `reason_cd` is mandatory on a plan
+ * cancellation and the code — not the label — is what goes on the wire; 13
+ * additionally requires the reason in words.
+ */
+export const SXP_CANCEL_REASONS: { code: number; label: string }[] = [
+  { code: 1, label: 'Non availability of funds' },
+  { code: 2, label: 'Scheme not performing' },
+  { code: 3, label: 'Service issue' },
+  { code: 4, label: 'Load revised' },
+  { code: 5, label: 'Wish to invest in other schemes' },
+  { code: 6, label: 'Change in fund manager' },
+  { code: 7, label: 'Goal achieved' },
+  { code: 8, label: 'Not comfortable with market volatility' },
+  { code: 9, label: 'Will be restarting the SIP after a few months' },
+  { code: 10, label: 'Modifications in bank / mandate / date etc.' },
+  { code: 11, label: 'Decided to invest elsewhere' },
+  { code: 12, label: 'Not the right time to invest' },
+  { code: 13, label: 'Others (state the reason)' },
+];
+
 export interface BseSxpRow {
   sxpRegNum: string;
   clientCode: string;
@@ -491,6 +525,26 @@ export const BseOpsService = {
       plan: 'Growth',
       amount: input.amount,
     }),
+
+  /**
+   * Ask BSE to cancel an open order. The order stays where it is until the
+   * investor approves the returned link — BSE treats this as a request, so the
+   * caller must not report it as cancelled.
+   */
+  cancelOrder: (input: { orderId: string; clientCode: string; remark?: string }) =>
+    post<CancelResult & { orderId: string }>('/cancel', input),
+
+  /**
+   * Ask BSE to terminate a systematic plan. `reasonCode` is one of
+   * SXP_CANCEL_REASONS and is mandatory at BSE; code 13 needs `reasonText`.
+   * Also investor-approved, so the plan keeps collecting until they act.
+   */
+  cancelSxp: (input: {
+    sxpRegNum: string;
+    sxpType: string;
+    reasonCode: number;
+    reasonText?: string;
+  }) => post<CancelResult & { sxpRegNum: string }>('/sxp/cancel', input),
 
   /** Mandates registered under the member, newest first. */
   mandates: (clientCode?: string) =>

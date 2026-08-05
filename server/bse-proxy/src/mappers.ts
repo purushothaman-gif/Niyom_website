@@ -696,6 +696,8 @@ export function toAppMandateResult(bse: Record<string, unknown>) {
 /* ============================== SXP (SIP / SWP / STP) ====================== */
 
 export type AppSxpType = 'SIP' | 'SWP' | 'STP' | 'TOPUP' | 'SPROD';
+/** AppSxpType at runtime, for validating what arrives over the wire (§7.4.49). */
+export const SXP_TYPES: string[] = ['SIP', 'SWP', 'STP', 'TOPUP', 'SPROD'];
 /** m=monthly w=weekly d=daily f=fortnightly q=quarterly h=half-yearly y=yearly */
 export type AppSxpFreq = 'm' | 'w' | 'd' | 'f' | 'q' | 'h' | 'y';
 
@@ -750,6 +752,36 @@ export function toSxpRegister2(req: AppSxpRequest, memberCode: string, mem: AppM
         }),
     ...(req.mandateId ? { exch_mandate_id: Number(req.mandateId) } : {}),
     is_nomination_opted: false,
+  };
+}
+
+export interface AppSxpCancelRequest {
+  /** BSE's registration number (`reg_no` from sxp_list) — NOT the row id. */
+  regNo: string;
+  type: string;
+  /** sxp_cancel_reason §7.4.51; 13 = Others, which requires `note`. */
+  reasonCode: number;
+  note?: string;
+}
+
+/**
+ * App view-model -> BSE `/sxp_cancel` (§6.2.4.2, example §8.3.2.1).
+ *
+ * Both `type` and `sxp_type` carry the plan kind: the field table names the
+ * second, BSE's worked example sends the first, and add_ucc established that
+ * the example is what the live API actually honours. A missing mandatory field
+ * is a certain rejection; a duplicate one has never been rejected here. Drop
+ * whichever proves redundant once a live cancellation settles the question.
+ */
+export function toSxpCancel(req: AppSxpCancelRequest, memberCode: string) {
+  const note = (req.note ?? '').trim();
+  return {
+    reg_no: req.regNo,
+    reason_cd: req.reasonCode,
+    ...(note ? { reason_cd_msg: note.slice(0, 200) } : {}),
+    type: req.type,
+    sxp_type: req.type,
+    member: memberCode,
   };
 }
 
