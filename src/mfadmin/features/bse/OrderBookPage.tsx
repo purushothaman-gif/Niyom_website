@@ -4,7 +4,7 @@
  * The rejection reason is shown inline rather than behind a tooltip: when an
  * order fails, that sentence is the whole reason staff opened this screen.
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { BseOpsService, isBseConfigured, type BseOrderRow } from '../../services/BseOpsService';
 import { useBseData } from '../../hooks/useBseData';
@@ -12,13 +12,28 @@ import { Chip, PageHead, StatTile, statusTone } from '../../ui/Surface';
 import { DataTable, type Column } from '../../ui/DataTable';
 import { ErrorBlock, Loading } from '../../ui/controls';
 import { NotConfigured } from './formBits';
+import { CancelDialog } from './CancelDialog';
 import { dateTime, humanise, inr, inrCompact, num } from '../../../lib/money';
 
 const ORDER_TYPE: Record<string, string> = { p: 'Purchase', r: 'Redemption', s: 'Switch' };
 
+/**
+ * Whether cancellation is worth offering on an order.
+ *
+ * Only provably-finished orders lose the button — allotted, rejected, settled,
+ * refunded, already cancelled (order_lifecycle_status §7.4.61). Everything else
+ * keeps it, because BSE is the authority on how late a cancellation may come
+ * and its refusal carries a better explanation than a guess of ours would.
+ * Hiding the button on an order BSE would have cancelled is the worse failure.
+ */
+function canCancel(status: string): boolean {
+  return !/done|reject|cancel|settled|refund|matur|invalidat|expire/i.test(status || '');
+}
+
 export function OrderBookPage() {
   const { data, loading, error, refresh } = useBseData<BseOrderRow[]>(() => BseOpsService.orders());
   const rows = useMemo(() => data ?? [], [data]);
+  const [cancelling, setCancelling] = useState<BseOrderRow | null>(null);
 
   const stats = useMemo(() => {
     const done = rows.filter((o) => /done|allot|settled|match/i.test(o.status)).length;
@@ -100,6 +115,22 @@ export function OrderBookPage() {
         </div>
       ),
     },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      width: '90px',
+      render: (r) =>
+        canCancel(r.status) ? (
+          <button
+            type="button"
+            onClick={() => setCancelling(r)}
+            className="rounded-token-md border border-border bg-bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-primary transition-colors hover:border-danger-soft/40 hover:text-danger-soft"
+          >
+            Cancel
+          </button>
+        ) : null,
+    },
   ];
 
   if (!isBseConfigured()) return <NotConfigured title="Order Book" />;
@@ -138,6 +169,28 @@ export function OrderBookPage() {
             title: 'No orders at BSE yet',
             hint: 'Orders placed from Transact appear here as soon as BSE accepts them.',
           }}
+        />
+      )}
+
+      {cancelling && (
+        <CancelDialog
+          subject={{
+            kind: 'order',
+            orderId: cancelling.orderId,
+            clientCode: cancelling.clientCode,
+            rows: [
+              { label: 'Order', value: cancelling.orderId },
+              {
+                label: 'Client',
+                value: cancelling.clientName.trim() || cancelling.clientCode || '—',
+              },
+              { label: 'Scheme', value: cancelling.schemeName || cancelling.schemeCode || '—' },
+              { label: 'Amount', value: inr(cancelling.amount) },
+              { label: 'Status', value: humanise(cancelling.status) || 'Unknown' },
+            ],
+          }}
+          onClose={() => setCancelling(null)}
+          onDone={refresh}
         />
       )}
     </>

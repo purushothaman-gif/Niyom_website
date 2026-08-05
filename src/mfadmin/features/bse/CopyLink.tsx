@@ -14,7 +14,8 @@ import { useState } from 'react';
 import { Check, Copy, CreditCard, ExternalLink, ShieldCheck } from 'lucide-react';
 import { BseOpsService } from '../../services/BseOpsService';
 
-function LinkRow({
+/** One BSE-hosted link, ready to be pasted into WhatsApp or an email. */
+export function LinkRow({
   label,
   url,
   icon: Icon,

@@ -4,7 +4,7 @@
  * One component serves the three nav views — `only` filters to a single plan
  * kind, and the copy adapts so an empty SWP screen doesn't read as "no SIPs".
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { type LucideIcon } from 'lucide-react';
 import { BseOpsService, isBseConfigured, type BseSxpRow } from '../../services/BseOpsService';
 import { useBseData } from '../../hooks/useBseData';
@@ -12,6 +12,7 @@ import { Chip, PageHead, StatTile } from '../../ui/Surface';
 import { DataTable, type Column } from '../../ui/DataTable';
 import { ErrorBlock, Loading } from '../../ui/controls';
 import { NotConfigured } from './formBits';
+import { CancelDialog } from './CancelDialog';
 import { humanise, inr, inrCompact, num, shortDate } from '../../../lib/money';
 
 const FREQ: Record<string, string> = {
@@ -33,6 +34,17 @@ function sxpTone(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
   return 'neutral';
 }
 
+/**
+ * Whether a plan can still be terminated (sxp_lifecycle_status §7.4.62).
+ *
+ * Everything already stopped — cancelled by either side, auto-cancelled,
+ * matured, platform-rejected — loses the button. A paused or mandate-unlinked
+ * plan keeps it: it still exists at BSE and cancelling it is a real instruction.
+ */
+function canCancel(status: string): boolean {
+  return !/canc|matur|invalid/i.test(status || '');
+}
+
 interface Props {
   title: string;
   icon?: LucideIcon;
@@ -42,6 +54,7 @@ interface Props {
 
 export function SxpBookPage({ title, only }: Props) {
   const { data, loading, error, refresh } = useBseData<BseSxpRow[]>(() => BseOpsService.sxp());
+  const [cancelling, setCancelling] = useState<BseSxpRow | null>(null);
   const rows = useMemo(() => {
     const all = data ?? [];
     return only ? all.filter((r) => (r.type || '').toUpperCase() === only.toUpperCase()) : all;
@@ -117,6 +130,22 @@ export function SxpBookPage({ title, only }: Props) {
       value: (r) => r.status,
       render: (r) => <Chip tone={sxpTone(r.status)}>{humanise(r.status) || 'Unknown'}</Chip>,
     },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      width: '90px',
+      render: (r) =>
+        canCancel(r.status) ? (
+          <button
+            type="button"
+            onClick={() => setCancelling(r)}
+            className="rounded-token-md border border-border bg-bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-primary transition-colors hover:border-danger-soft/40 hover:text-danger-soft"
+          >
+            Cancel
+          </button>
+        ) : null,
+    },
   ];
 
   if (!isBseConfigured()) return <NotConfigured title={title} />;
@@ -160,6 +189,30 @@ export function SxpBookPage({ title, only }: Props) {
             title: `No ${kind} registrations yet`,
             hint: `Registering a ${kind} needs an ACTIVE UCC, and an XSIP additionally needs a mandate the investor has authorised.`,
           }}
+        />
+      )}
+
+      {cancelling && (
+        <CancelDialog
+          subject={{
+            kind: 'sxp',
+            sxpRegNum: cancelling.sxpRegNum,
+            // BSE needs the plan type on a cancellation; the book already knows
+            // it, so staff are never asked to retype what we were told.
+            sxpType: (cancelling.type || only || 'SIP').toUpperCase(),
+            rows: [
+              { label: 'Registration', value: cancelling.sxpRegNum },
+              { label: 'Client', value: cancelling.clientCode || '—' },
+              { label: 'Scheme', value: cancelling.schemeCode || '—' },
+              {
+                label: 'Instalment',
+                value: `${inr(cancelling.amount)} · ${FREQ[cancelling.frequency] ?? cancelling.frequency}`,
+              },
+              { label: 'Status', value: humanise(cancelling.status) || 'Unknown' },
+            ],
+          }}
+          onClose={() => setCancelling(null)}
+          onDone={refresh}
         />
       )}
     </>
