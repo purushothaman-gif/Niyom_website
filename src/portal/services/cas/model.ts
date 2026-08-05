@@ -65,20 +65,55 @@ export interface CasTxnRow {
  * exactly what distinguishes it from a payout.
  */
 export function toFlow(t: CasTxnRow): CasCashFlow | null {
-  const amount = Math.abs(Number(t.amount) || 0);
+  /*
+   * The SIGN the statement printed is data, not noise.
+   *
+   * This used to take Math.abs() and re-derive the direction from the type
+   * alone. That is right until a registrar REVERSES something, which it does by
+   * printing the same row negative:
+   *
+   *   SIP Purchase84/ER04: Insufficient Balance - Instalment No 3   -9,999.50
+   *   Purchase SIP Payment Failed - Credit not received from bank     -999.95
+   *   Stamp Duty                                                        -0.50
+   *
+   * A failed instalment is money the investor never paid — or got back. Forcing
+   * it negative counted it as paid AGAIN, so each reversal was wrong by twice
+   * its value. One client with ₹69,000 of failed SIPs had ₹1.38L of phantom
+   * investment and was shown an XIRR of -38.9% on a portfolio up 6%. Nothing
+   * else noticed: the UNITS are negative too, so every unit ledger reconciled,
+   * and cost and value come from the statement's own totals.
+   */
+  const amount = Number(t.amount) || 0;
   if (!amount || !t.txn_date) return null;
+
   switch (t.txn_type) {
+    /*
+     * Amounts the statement signs from the FUND's side: a purchase is money in
+     * (+), a redemption money out (-). The investor's flow is the opposite of
+     * the fund's, so negating the signed amount is right for both — and a
+     * reversal, which flips the printed sign, flips the flow with it.
+     */
     case 'PURCHASE':
     case 'STT':
     case 'STAMP_DUTY':
-      return { amount: -amount, date: t.txn_date };
-    // REFUND is money the AMC could not invest and sent back — cash returned to
-    // the investor, even though no units were sold.
     case 'REDEMPTION':
+      return { amount: -amount, date: t.txn_date };
+
+    /*
+     * Amounts the statement prints as a magnitude of money going TO the
+     * investor. REFUND is money the AMC could not invest and sent back — cash
+     * returned, even though no units were sold. Here the printed sign already
+     * matches the investor's flow, so it passes through, and a negative (a
+     * reversed payout) correctly becomes money leaving them again.
+     */
     case 'REFUND':
       return { amount, date: t.txn_date };
     case 'DIVIDEND':
+      // Units mean it was REINVESTED: no cash reached the investor.
       return Number(t.units) ? null : { amount, date: t.txn_date };
+
+    // Switches move money between schemes without any of it reaching the
+    // investor, so both legs are excluded — see the note above.
     default:
       return null;
   }
