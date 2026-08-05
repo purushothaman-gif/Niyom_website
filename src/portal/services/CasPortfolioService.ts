@@ -29,6 +29,7 @@
  * a screen: a portfolio that is quietly short is worse than one that is absent.
  */
 import { clientSupabase as supabase } from '../../lib/supabase';
+import { fetchAllPages } from '../../lib/supabasePaging';
 import type { CasHoldingMeta, PortalHolding } from '../types/cas';
 import {
   isOpenPosition,
@@ -74,40 +75,6 @@ export interface CasPortfolio {
 const SCHEME_COLUMNS =
   'id,import_id,name,units,nav,nav_date,value,cost,isin,rta,rta_code,advisor_code,is_ours,' +
   'cas_folios(folio_number,amc,registrar)';
-
-/**
- * PostgREST caps every response, and Supabase's cap is 1000 rows.
- *
- * It does not error and it does not warn — the array is simply short. A client
- * with 1,639 transactions received the oldest 1,000, so every scheme's ledger
- * fell short of its closing balance, `hasCompleteHistory` concluded the
- * statement was truncated, and their return was suppressed. The portfolio value
- * looked perfect throughout, because 34 schemes fit inside one page.
- *
- * Anything that can exceed a thousand rows has to be read page by page.
- */
-export const PAGE_SIZE = 1000;
-
-/**
- * Read every page. Exported for its own test: the boundary that matters is a
- * row count that is an exact multiple of the page size, where stopping early
- * loses everything after it and stopping late costs one empty request.
- */
-export async function fetchAllPages<T>(
-  fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
-  pageSize = PAGE_SIZE,
-): Promise<T[]> {
-  const all: T[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await fetchPage(from, from + pageSize - 1);
-    if (error) throw error;
-    const rows = data ?? [];
-    all.push(...rows);
-    // A short page is the last one. A full page might be the last one too, so
-    // the loop asks again and stops on the empty response.
-    if (rows.length < pageSize) return all;
-  }
-}
 
 export const CasPortfolioService = {
   /**
