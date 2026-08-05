@@ -35,7 +35,7 @@ const money = (n: number) => n.toFixed(2);
 
 /* --------------------------------------------------------- reconciliation -- */
 
-interface Reconciliation {
+export interface Reconciliation {
   reconciled: boolean;
   statedMarket: number | null;
   statedCost: number | null;
@@ -210,7 +210,7 @@ export function reconcileSummary(parsed: CasParseResult): Reconciliation {
 /* ------------------------------------------------------------- row shapes -- */
 
 /** What both statement variants reduce to before being written. */
-interface ImportRows {
+export interface ImportRows {
   folios: Record<string, unknown>[];
   schemes: Record<string, unknown>[];
   transactions: Record<string, unknown>[];
@@ -247,7 +247,7 @@ const gain = (value: number, cost: number) => ({
   gain_percent: cost > 0 ? Number((((value - cost) / cost) * 100).toFixed(4)) : null,
 });
 
-function rowsFromHoldings(
+export function rowsFromHoldings(
   holdings: CasHolding[],
   importId: string,
   clientId: string,
@@ -286,7 +286,7 @@ function rowsFromHoldings(
   };
 }
 
-function rowsFromSchemes(
+export function rowsFromSchemes(
   schemes: CasDetailedScheme[],
   importId: string,
   clientId: string,
