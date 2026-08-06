@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Download, Wallet } from 'lucide-react';
+import { Upload, Wallet } from 'lucide-react';
 import { fmt } from '../../../crm/utils';
 import type { ProductType } from '../../../crm/types';
 import { Card } from '../../components/Card';
@@ -151,15 +151,27 @@ export function PortfolioPage({
 }
 
 /** The quiet variant, shown only once a statement has already been imported. */
+/**
+ * The way back into the import flow once a statement already exists.
+ *
+ * Wording and prominence both matter here, and both were wrong. It read
+ * "Update from a newer statement", which describes only half of what the flow
+ * does — a second statement ADDS to the portfolio rather than replacing it,
+ * which is exactly what a client with folios under two email addresses needs.
+ * Someone looking for "add another statement" would not recognise this button
+ * as the thing they wanted, and reasonably concluded there was no such option.
+ *
+ * It also carried a Download icon for an action that uploads.
+ */
 function ImportButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 rounded-token-md border border-border bg-bg-surface px-3.5 py-2 text-xs font-semibold text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary"
+      className="inline-flex items-center gap-2 rounded-token-md border border-accent/30 bg-accent/5 px-3.5 py-2 text-xs font-semibold text-accent transition-colors hover:border-accent/50 hover:bg-accent/10"
     >
-      <Download className="h-3.5 w-3.5" />
-      Update from a newer statement
+      <Upload className="h-3.5 w-3.5" />
+      Add or update a statement
     </button>
   );
 }

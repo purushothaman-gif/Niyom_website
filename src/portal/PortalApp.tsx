@@ -188,9 +188,9 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
           <CapitalGainsPage
             clientId={clientId}
             client={client}
-            // Nothing to compute gains from yet — send them where the import
-            // flow actually lives rather than leaving a dead end.
-            onImport={() => navigate('portfolio')}
+            // Opens the import flow here rather than bouncing to My Portfolio
+            // and leaving the client to find the button again.
+            onImport={() => setShowImport(true)}
           />
         );
       case 'profile':
