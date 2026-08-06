@@ -135,8 +135,12 @@ Deno.serve(async (req: Request) => {
     if (!isAdmin && deal.employee_id !== employee.id) {
       return json({ success: false, error: "Forbidden" }, 403);
     }
-    if (deal.acceptance_status !== "accepted") {
-      return json({ success: false, error: "A payment link can only be sent for an accepted deal." }, 409);
+    // Acceptance was removed from the internal deal flow — a payment link may be
+    // sent for any live deal (the flow is: create → send link → client pays →
+    // record payment → transfer queue). Only a rejected deal is blocked, matching
+    // record-payment / upload-receipt / transfer-deal.
+    if (deal.acceptance_status === "rejected") {
+      return json({ success: false, error: "A payment link cannot be sent for a rejected deal." }, 409);
     }
     if (!isValidEmail(deal.snap_email)) {
       return json({ success: false, error: "The client email on record is not a valid address." }, 400);
