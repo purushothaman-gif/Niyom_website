@@ -17,8 +17,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "jose": "^6.2.5",
-    "pdfjs-dist": "^6.2.108"
+    "jose": "^6.2.5"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
