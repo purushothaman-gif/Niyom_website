@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { emailFooterHtml, emailFooterText } from "../_shared/email_footer.ts";
+import { asJson } from '../_shared/json.ts';
 
 // Public function (verify_jwt = false). Verifies the email OTP, stores the
 // e-signature + signed PDF, and permanently locks the deal as accepted.
@@ -137,10 +138,19 @@ Deno.serve(async (req: Request) => {
     // idempotency guard prevent duplicates; failure here must NEVER roll back
     // acceptance. The signed PDF bytes are already in memory.
     try {
-      const { data: clientRow } = await db.from("nw_clients")
-        .select("client_code").eq("id", deal.client_id).maybeSingle();
+      /*
+       * Hoisted so the null case is explicit. nw_documents.client_id is NOT
+       * NULL while a deal's is nullable — the lookup below already made this
+       * safe by accident (no client row, no clientCode, block skipped), but
+       * nothing said so, and the insert would have failed on a DB constraint
+       * rather than being skipped deliberately.
+       */
+      const clientId = deal.client_id;
+      const { data: clientRow } = clientId
+        ? await db.from("nw_clients").select("client_code").eq("id", clientId).maybeSingle()
+        : { data: null };
       const clientCode = clientRow?.client_code;
-      if (clientCode) {
+      if (clientCode && clientId) {
         const fileName = `Signed_Deal_Confirmation_${deal.confirmation_number}.pdf`;
         const vaultPath = `clients/${clientCode}/DEAL_CONFIRMATION/${fileName}`;
         const { data: existingDoc } = await db.from("nw_documents")
@@ -153,7 +163,7 @@ Deno.serve(async (req: Request) => {
             console.error("vault copy upload error:", up.error);
           } else {
             await db.from("nw_documents").insert({
-              client_id: deal.client_id,
+              client_id: clientId,
               employee_id: deal.employee_id,
               document_type: "DEAL_CONFIRMATION",
               file_name: fileName,
@@ -234,7 +244,7 @@ Deno.serve(async (req: Request) => {
         await db.from("nw_deal_email_log").insert({
           deal_confirmation_id: deal.id, email_type: "signed_pdf",
           sent_to: primaryTo ?? "", cc_recipients: cc, sent_by: null,
-          is_resend: false, status, provider_message_id: msgId, metadata: extra,
+          is_resend: false, status, provider_message_id: msgId, metadata: asJson(extra),
         });
       };
 

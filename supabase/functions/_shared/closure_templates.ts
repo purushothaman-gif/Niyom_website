@@ -42,7 +42,12 @@ export interface ClosureContext {
   paymentCount:       number;
   latestPaymentDate:  string | null;
   ledger:             LedgerRow[];
-  transferredAt:      string;
+  /*
+   * Nullable, like latestPaymentDate above. The column is nullable and fmtDate
+   * already renders null as "—", so claiming `string` was the type lying
+   * rather than the data being guaranteed.
+   */
+  transferredAt:      string | null;
   year:               number;
   // SELL: the client sold to us, so money was remitted TO them (no payments
   // collected). Flips the closing copy from "investment executed / received" to

@@ -131,7 +131,13 @@ Deno.serve(async (req: Request) => {
     const { data: rpcResult, error: rpcErr } = await db.rpc("nw_transfer_deal", {
       p_deal_id:             dealId,
       p_admin_id:            employee.id,
-      p_remarks:             remarks,
+      /*
+       * `p_remarks text` has no DEFAULT, so the type generator marks it
+       * required — but Postgres accepts NULL for it, and NULL is the real
+       * "no remarks given" value. Passing '' instead would silently store an
+       * empty string, so the cast is deliberate.
+       */
+      p_remarks:             remarks as string,
       p_app_version:         APPLICATION_VERSION,
       p_override_acceptance: overrideAcceptance,
     });

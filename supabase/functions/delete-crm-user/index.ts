@@ -17,6 +17,7 @@
 // ===========================================================================
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import type { Database } from "../_shared/database.types.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -86,7 +87,14 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---- workload counts -------------------------------------------------
-    const countOf = async (table: string, apply: (q: any) => any) => {
+    /*
+     * The table name, taken from the schema rather than left as `string`, so a
+     * typo at a call site is a compile error. Derived from Database directly:
+     * `Parameters<typeof admin.from>[0]` resolves to the VIEWS overload and
+     * rejects every real table, which is a trap worth not falling into twice.
+     */
+    type TableName = keyof Database["public"]["Tables"];
+    const countOf = async (table: TableName, apply: (q: any) => any) => {
       const { count } = await apply(admin.from(table).select("id", { count: "exact", head: true }));
       return count ?? 0;
     };
