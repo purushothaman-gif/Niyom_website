@@ -1029,6 +1029,19 @@ export default function DealConfirmation({ employee }: Props) {
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${d.status === 'confirmed' ? 'text-c-emerald bg-emerald-900/20' : 'text-c-amber bg-amber-900/20'}`}>
                         {d.status === 'confirmed' ? 'Confirmed' : 'Draft'}
                       </span>
+                      {/*
+                        Whether the CLIENT has accepted, which is a different
+                        question from whether we confirmed the deal. It drives
+                        real behaviour already — an accepted deal cannot be
+                        edited by a non-admin, and re-sending resets it — but
+                        until now it was invisible, so an RM had no way to see
+                        that a client had signed short of opening the record.
+                      */}
+                      {d.email_status === 'sent' && (
+                        <div className="mt-1">
+                          <AcceptanceBadge status={d.acceptance_status} />
+                        </div>
+                      )}
                     </td>
                     {/* Payment Status — derived from nw_deal_payment_summary.
                         Clicking navigates to Manage Payments to reduce clicks. */}
@@ -1068,6 +1081,22 @@ export default function DealConfirmation({ employee }: Props) {
                           onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}>
                           <Send className="w-4 h-4" />
                         </button>
+                        {/*
+                          The signed copy. handleDownloadSigned existed with
+                          nothing calling it, so a deal the client had signed
+                          stored a PDF that could not be opened from anywhere in
+                          the CRM. Shown only when there is one to open.
+                        */}
+                        {d.signed_pdf_path && (
+                          <button
+                            onClick={() => void handleDownloadSigned(d)}
+                            className="p-1.5 rounded-lg transition-colors" title="Open signed copy"
+                            style={{ color: 'var(--text-faint)' }}
+                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--success)')}
+                            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}>
+                            <Download className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => openEdit(d)}
                           className="p-1.5 rounded-lg transition-colors" title="Edit"

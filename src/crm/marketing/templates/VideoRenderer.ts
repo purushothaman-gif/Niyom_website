@@ -17,7 +17,7 @@
 
 import { ASPECT_VARIANTS } from '../marketingConstants';
 import { AspectVariant, VideoScene } from '../marketingTypes';
-import { FONT_SANS, Palette, NIYOM_LOGO_DATA_URI, LOGO_EMBLEM, isDarkPalette } from './brandTokens';
+import { FONT_SANS, Palette, NIYOM_LOGO_DATA_URI, LOGO_EMBLEM } from './brandTokens';
 import { art, artForCategory } from './financeArt';
 import { paletteFor } from './TemplateRenderer';
 import { iconForCategory, IconDef } from './financeIcons';
