@@ -32,7 +32,18 @@ interface EmployeeStat {
 export default function Dashboard({ employee, onNavigate }: Props) {
   const [stats, setStats] = useState<Stats>({ totalClients: 0, totalPortfolio: 0, verifiedClients: 0, monthlyTxns: 0 });
   const [recentTxns, setRecentTxns] = useState<NWTransaction[]>([]);
-  const [recentClients, setRecentClients] = useState<NWClient[]>([]);
+  /*
+   * Exactly the columns the dashboard query selects — NOT a full NWClient,
+   * which has 24 more it never asks for. Claiming the full type was a lie the
+   * compiler happened to catch; naming the real shape also lets the row drop
+   * its `(c as any).employee` escape hatch.
+   */
+  type RecentClient = Pick<
+    NWClient,
+    'id' | 'full_name' | 'client_code' | 'phone' | 'email' | 'portfolio_value' | 'verification_status' | 'created_at'
+  > & { employee?: { full_name: string; employee_code: string } | null };
+
+  const [recentClients, setRecentClients] = useState<RecentClient[]>([]);
   const [activity, setActivity] = useState<NWActivityLog[]>([]);
   const [employeeStats, setEmployeeStats] = useState<EmployeeStat[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +121,13 @@ export default function Dashboard({ employee, onNavigate }: Props) {
 
       setStats({ totalClients: clients.length, totalPortfolio, verifiedClients, monthlyTxns: monthTxns.length, totalEmployees: empCount });
       setRecentTxns(txns.slice(0, 5) as NWTransaction[]);
-      setRecentClients(clients.slice(0, 5) as NWClient[]);
+      /*
+       * Two-step cast, deliberately. supabase-js cannot type an embedded
+       * relation without generated Database types, and infers `employee` as an
+       * ARRAY where PostgREST actually returns an object for a many-to-one FK.
+       * Generating those types would remove the need for this entirely.
+       */
+      setRecentClients(clients.slice(0, 5) as unknown as RecentClient[]);
       setActivity(activityRes.data || []);
       setLoading(false);
     };
@@ -312,7 +329,7 @@ export default function Dashboard({ employee, onNavigate }: Props) {
                   <td className="px-5 py-3.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{c.client_code}</span></td>
                   {isAdmin && (
                     <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      {(c as any).employee?.full_name || <span style={{ color: 'var(--border-stronger)' }}>Unassigned</span>}
+                      {c.employee?.full_name || <span style={{ color: 'var(--border-stronger)' }}>Unassigned</span>}
                     </td>
                   )}
                   <td className="px-5 py-3.5 text-sm font-semibold text-text-primary">{fmt(c.portfolio_value || 0)}</td>

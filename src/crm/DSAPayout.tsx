@@ -101,7 +101,19 @@ export default function DSAPayout({ employee }: Props) {
       clientQuery = clientQuery.eq('employee_id', empFilter);
     }
     const { data: clientData } = await clientQuery;
-    const dsaClients = (clientData as (NWClient & { dsa: NWDSA })[]) || [];
+    /*
+     * The columns this query actually selects, not a whole NWClient — it asks
+     * for six and NWClient has 30-odd. Two-step cast because supabase-js infers
+     * the embedded `dsa` as an ARRAY without generated Database types, while
+     * PostgREST returns an object for a many-to-one FK; every use below reads
+     * it as an object (client.dsa.full_name), which is the correct shape.
+     */
+    type DsaClient = Pick<NWClient, 'id' | 'full_name' | 'client_code' | 'employee_id'> & {
+      sourced_via: string | null;
+      dsa_id: string | null;
+      dsa: NWDSA | null;
+    };
+    const dsaClients = ((clientData as unknown as DsaClient[]) || []);
 
     if (dsaClients.length === 0) { setGroups([]); setLoading(false); setHasLoaded(true); return; }
 
@@ -953,7 +965,7 @@ export default function DSAPayout({ employee }: Props) {
                         </td>
                         <td className="px-5 py-3">
                           <p className="text-sm text-text-primary">{r.product_name}</p>
-                          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{PRODUCT_LABELS[r.product_type]}</p>
+                          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{PRODUCT_LABELS[r.product_type as keyof typeof PRODUCT_LABELS] || r.product_type}</p>
                         </td>
                         <td className="px-5 py-3 text-sm text-text-primary">{r.quantity.toLocaleString('en-IN')}</td>
                         <td className="px-5 py-3 text-sm text-text-primary">{fmt(r.dsa_price)}</td>

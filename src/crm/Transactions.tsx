@@ -662,7 +662,6 @@ export default function Transactions({ employee, onNavigate }: Props) {
   // SELL approval dialog can call it with the operator's reduce decision.
   const commitSave = async (payload: Record<string, any>, reduceSellHolding: boolean) => {
     setError(''); setSaving(true);
-    let txnId: string;
     if (editTxn) {
       // A transferred transaction only allows the revenue-basis fields, the date
       // and notes to change (DB immutability guard). Send ONLY those — sending
@@ -684,7 +683,6 @@ export default function Transactions({ employee, onNavigate }: Props) {
       }
       const { error: err } = await supabase.from('nw_transactions').update({ ...updatePayload, updated_at: new Date().toISOString() }).eq('id', editTxn.id);
       if (err) { setError(err.message); setSaving(false); return; }
-      txnId = editTxn.id;
 
       // Keep portfolio holdings in step with the amended figures: reverse the
       // pre-edit contribution, then re-apply the new one — but only if this
@@ -693,7 +691,7 @@ export default function Transactions({ employee, onNavigate }: Props) {
       const hadHolding = await reverseTransactionFromHolding(editTxn as any);
       if (hadHolding) await syncTransactionToHolding(payload);
     } else {
-      const { data, error: err } = await supabase.from('nw_transactions').insert([payload]).select().single();
+      const { error: err } = await supabase.from('nw_transactions').insert([payload]).select().single();
       if (err) {
         // 23505 = unique violation on uq_nw_transactions_one_transferred_per_deal:
         // someone booked this deal first. Say so plainly instead of leaking the
@@ -704,7 +702,6 @@ export default function Transactions({ employee, onNavigate }: Props) {
         setSaving(false);
         return;
       }
-      txnId = data.id;
       await supabase.from('nw_activity_logs').insert([{
         employee_id: employee.id, client_id: form.client_id, action: 'Transaction Added',
         description: `${TXN_LABELS[form.txn_type]} ${form.product_name} — ${fmt(parseFloat(form.consolidated_amount))}`,
