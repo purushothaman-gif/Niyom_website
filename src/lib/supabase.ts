@@ -1,4 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
+/*
+ * The generated schema. Typing all three clients means every .from(), column
+ * name, insert shape and return type in the app is checked against the real
+ * database — the same thing that turned up a bond cashflow insert which had
+ * been silently rejected since the day it was written.
+ *
+ * Regenerate after any migration: `npm run gen:types`
+ */
+import type { Database } from './database.types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -15,7 +24,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // recovery token could adopt into the employee slot (see PartnerLogin's note),
 // leaving the client reset dead in the water. No staff/admin flow relies on
 // URL-session detection (all use signInWithPassword or verifyOtp token_hash).
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: { detectSessionInUrl: false },
 });
 
@@ -26,7 +35,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // This second instance keeps the client's session in its own slot so both can
 // coexist. EVERY client-portal path (auth + data + storage + edge functions)
 // must use this instance so RLS and `is_client` checks run as the actual client.
-export const clientSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const clientSupabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storageKey: 'nw-client-portal-auth',
     // The sole instance that adopts an email-link (password-recovery) session,
@@ -42,7 +51,7 @@ export const clientSupabase = createClient(supabaseUrl, supabaseAnonKey, {
 // (a CRM session leaking into the partner portal makes nw_current_dsa_id()
 // return NULL, so every RPC raises "Partner access required"). EVERY partner
 // path (auth + data + storage + edge functions) must use this instance.
-export const partnerSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const partnerSupabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storageKey: 'nw-partner-portal-auth',
     // Never adopt URL sessions (same reason as the default client above).

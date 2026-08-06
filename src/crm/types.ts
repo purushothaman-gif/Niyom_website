@@ -284,19 +284,25 @@ export interface NWActivityLog {
   employee_id: string | null;
   client_id: string | null;
   action: string;
-  description: string;
-  created_at: string;
-  employee?: { full_name: string };
-  client?: { full_name: string };
+  /* Nullable in the database. 0 of 221 rows are actually null, but "always set
+     so far" is not a constraint, and the generated schema is the truth. */
+  description: string | null;
+  created_at: string | null;
+  /* A PostgREST embed yields null, not undefined, when there is no related row. */
+  employee?: { full_name: string } | null;
+  client?: { full_name: string } | null;
 }
 
 export interface NWAlert {
   id: string;
-  employee_id: string;
+  /* Nullable in the database — an alert with no owner is possible there even
+     though nothing writes one today. Matching the schema rather than the habit. */
+  employee_id: string | null;
   title: string;
-  message: string;
-  read: boolean;
-  created_at: string;
+  /* Nullable in the database, both of them. */
+  message: string | null;
+  read: boolean | null;
+  created_at: string | null;
   // Additive columns from the Lead Management module (nullable).
   category?: string | null;
   lead_id?: string | null;

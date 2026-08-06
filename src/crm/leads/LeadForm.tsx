@@ -82,7 +82,12 @@ export default function LeadForm({ employee, mode, lead, onClose, onSaved, onOpe
     if (!mobile && !email && !pan) { setDupMatches([]); return; }
     const { data } = await supabase.rpc('nw_check_lead_duplicate', {
       p_mobile: mobile, p_email: email, p_pan: pan,
-      p_exclude_lead_id: mode === 'edit' && lead ? lead.id : null,
+      /*
+       * `p_exclude_lead_id uuid DEFAULT NULL` — optional, so omitting it lets
+       * the SQL default apply. That is the same thing as passing NULL and needs
+       * no cast, unlike the required uuid parameter in requestReview below.
+       */
+      p_exclude_lead_id: mode === 'edit' && lead ? lead.id : undefined,
     });
     setDupMatches((data as DupMatch[]) || []);
     setDupIgnored(false); setRequested(false);
@@ -173,7 +178,13 @@ export default function LeadForm({ employee, mode, lead, onClose, onSaved, onOpe
     setRequesting(true); setError('');
     const leadMatch = dupMatches.find(m => m.entity === 'lead');
     const { error: e } = await supabase.rpc('nw_request_duplicate_review', {
-      p_existing_lead_id: leadMatch?.entity_id ?? null,
+      /*
+       * `p_existing_lead_id uuid` is required with no default, so the generator
+       * types it `string` — but uuid accepts NULL, and NULL is the real "no
+       * existing lead" value. Omitting it (undefined) would drop a required
+       * argument, so the cast is deliberate.
+       */
+      p_existing_lead_id: (leadMatch?.entity_id ?? null) as string,
       p_payload: buildPayload(),
     });
     setRequesting(false);

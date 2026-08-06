@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
+import type { Insertable } from '../lib/dbJson';
 import { NWEmployee, NWClient } from './types';
 import {
   FileText, Plus, Search, ChevronDown, Eye, Pencil, Trash2,
@@ -551,7 +552,9 @@ export default function DealConfirmation({ employee }: Props) {
     } else {
       const confNum = await supabase.rpc('nw_generate_confirmation_number', { p_employee_id: employee.id });
       payload.confirmation_number = confNum.data || `DC-${Date.now()}`;
-      const { error: err } = await supabase.from('nw_deal_confirmations').insert([payload]);
+      const { error: err } = await supabase
+        .from('nw_deal_confirmations')
+        .insert([payload as Insertable<'nw_deal_confirmations'>]);
       setSaving(false);
       if (err) { setError(err.message); return; }
       showToast(status === 'confirmed' ? 'Deal confirmation created.' : 'Draft saved.');

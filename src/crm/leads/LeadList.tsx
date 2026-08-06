@@ -13,6 +13,7 @@ import { StatusBadge, PriorityBadge, ScoreBadge, Input, Select } from './leadUi'
 import { isAdminRole, formatMoney, formatDate, initials, relativeTime } from './leadUtils';
 import { leadsToCsv, downloadCsv } from './leadImportUtils';
 import LeadBulkToolbar from './LeadBulkToolbar';
+import { asJson } from '../../lib/dbJson';
 
 const LEAD_SELECT =
   '*, owner:nw_employees!nw_leads_owner_employee_id_fkey(full_name, employee_code), ' +
@@ -104,7 +105,7 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
   };
   const saveView = async () => {
     if (!saveViewName.trim()) return;
-    await supabase.from('nw_lead_saved_views').insert([{ employee_id: employee.id, name: saveViewName.trim(), filters }]);
+    await supabase.from('nw_lead_saved_views').insert([{ employee_id: employee.id, name: saveViewName.trim(), filters: asJson(filters) }]);
     setSaveViewName(''); loadViews();
   };
   const deleteView = async (id: string) => { await supabase.from('nw_lead_saved_views').delete().eq('id', id); loadViews(); };
