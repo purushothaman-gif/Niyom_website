@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { computeAll, downsampleNav, parseDate, isoDate, type NavPoint } from "../_shared/mfReturns.ts";
+import { asJson } from '../_shared/json.ts';
 
 /**
  * update-mutual-funds
@@ -196,7 +197,8 @@ Deno.serve(async (req: Request) => {
         // curated fund without any extra mfapi.in calls.
         const cache = {
           scheme_code: String(t.code),
-          payload: {
+          // jsonb column: FundMetrics is plain data but not provably `Json`.
+          payload: asJson({
             success: true,
             meta: {
               scheme_name: detail.meta.scheme_name,
@@ -207,7 +209,7 @@ Deno.serve(async (req: Request) => {
             },
             metrics,
             navHistory: downsampleNav(detail.data, 220),
-          },
+          }),
           last_synced_at: new Date().toISOString(),
         };
 

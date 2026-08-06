@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { emailFooterHtml, emailFooterText } from "../_shared/email_footer.ts";
+import { asJson } from '../_shared/json.ts';
 
 // Deal Confirmation v2: sends a SECURE LINK (not a PDF attachment) to the
 // client. Requires an authenticated employee. Mints/rotates the secure token
@@ -210,7 +211,7 @@ ${emailFooterText({ year, ref: deal.confirmation_number })}`;
         await db.from("nw_deal_email_log").insert({
           deal_confirmation_id: deal.id, email_type: "secure_link",
           sent_to: clientTo, cc_recipients: ccRecipients, sent_by: employee.id,
-          is_resend: isResend, status, provider_message_id: msgId, metadata: extra,
+          is_resend: isResend, status, provider_message_id: msgId, metadata: asJson(extra),
         });
       } catch (logErr) {
         console.error("email-log insert failed:", logErr);

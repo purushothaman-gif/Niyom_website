@@ -107,7 +107,18 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
   await supabase.from("bm_cashflow_schedule").delete().eq("bond_id", bondId);
   if (a.ok) {
     if (a.coupon_schedule.length) await supabase.from("bm_coupon_schedule").insert(a.coupon_schedule.map((c) => ({ bond_id: bondId, ...c })));
-    if (a.cashflow_schedule.length) await supabase.from("bm_cashflow_schedule").insert(a.cashflow_schedule.map((c) => ({ bond_id: bondId, ...c })));
+    if (a.cashflow_schedule.length) {
+      /*
+       * `date` -> `cf_date`. The analytics row calls it `date`; the column is
+       * `cf_date`, so spreading the row straight in sent a column that does not
+       * exist and PostgREST rejected every insert. bm_cashflow_schedule held 0
+       * rows while bm_coupon_schedule — whose names happen to line up — held
+       * 5,554. Silent because the result was never checked.
+       */
+      await supabase.from("bm_cashflow_schedule").insert(
+        a.cashflow_schedule.map(({ date, ...c }) => ({ bond_id: bondId, cf_date: date, ...c })),
+      );
+    }
   }
 
   // Data-quality + verification status.
@@ -178,7 +189,18 @@ async function recomputeOne(supabase: Client, bond: Record<string, unknown>, hol
   await supabase.from("bm_cashflow_schedule").delete().eq("bond_id", bondId);
   if (a.ok) {
     if (a.coupon_schedule.length) await supabase.from("bm_coupon_schedule").insert(a.coupon_schedule.map((c) => ({ bond_id: bondId, ...c })));
-    if (a.cashflow_schedule.length) await supabase.from("bm_cashflow_schedule").insert(a.cashflow_schedule.map((c) => ({ bond_id: bondId, ...c })));
+    if (a.cashflow_schedule.length) {
+      /*
+       * `date` -> `cf_date`. The analytics row calls it `date`; the column is
+       * `cf_date`, so spreading the row straight in sent a column that does not
+       * exist and PostgREST rejected every insert. bm_cashflow_schedule held 0
+       * rows while bm_coupon_schedule — whose names happen to line up — held
+       * 5,554. Silent because the result was never checked.
+       */
+      await supabase.from("bm_cashflow_schedule").insert(
+        a.cashflow_schedule.map(({ date, ...c }) => ({ bond_id: bondId, cf_date: date, ...c })),
+      );
+    }
   }
   const nextCoupon = a.ok && a.coupon_schedule[0] ? a.coupon_schedule[0].pay_date : null;
   await supabase.from("bm_bonds").update({
@@ -272,7 +294,7 @@ Deno.serve(async (req) => {
         else results.push(await enrichOne(supabase, rec, holidays, remaster));   // remaster ⇒ skip provider fetches
       } catch (e) {
         results.push({ isin: String(rec.isin), status: "failed", error: String(e) });
-        if (!recompute && !remaster) await supabase.from("bm_bonds").update({ verification_status: "failed" }).eq("id", rec.id);
+        if (!recompute && !remaster) await supabase.from("bm_bonds").update({ verification_status: "failed" }).eq("id", String(rec.id));
       }
     }
     return new Response(JSON.stringify({ enriched: results.length, recomputed: recompute ? results.length : undefined, results }), { headers: { ...cors, "Content-Type": "application/json" } });

@@ -36,31 +36,39 @@ declare module 'jsr:*';
 declare module 'https://*';
 
 /**
- * supabase-js, named explicitly so `SupabaseClient` is a TYPE.
+ * supabase-js, mapped onto the REAL package types and the generated schema.
  *
- * Under the `npm:*` wildcard the whole module is `any`, which makes an imported
- * `SupabaseClient` a namespace — and `function f(db: SupabaseClient)` then fails
- * with "cannot use namespace as a type" in eight places that are perfectly
- * correct code.
- *
- * Loose on purpose. The real package types would be better, but they resolve
- * every `.from(x).insert(y)` to `never` without generated `Database` types,
- * which buries the check in ~80 false errors. Generating those types is the
- * right fix and its own piece of work; until then this keeps the signal clean.
+ * This was deliberately `any` until `Database` existed, because the real types
+ * resolve every `.from(x).insert(y)` to `never` without a schema — ~80 errors,
+ * all noise. With the schema generated, every table, column and return shape in
+ * these functions is now checked against the actual database.
  */
 declare module 'npm:@supabase/supabase-js@2' {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  export type SupabaseClient = any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  export type User = any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  export function createClient(url: string, key: string, options?: any): any;
+  /*
+   * Inline `import(...)` types, NOT top-level `import type`. A .d.ts with any
+   * top-level import or export stops being a global script and becomes a
+   * module — at which point `declare namespace Deno` below is no longer global
+   * and 263 usages across 66 files fail with "Cannot find name 'Deno'".
+   * Inline import types carry no such penalty.
+   */
+  type Db = import('./_shared/database.types.ts').Database;
+
+  export type SupabaseClient = import('@supabase/supabase-js').SupabaseClient<Db>;
+  export type User = { id: string; email?: string; user_metadata?: Record<string, unknown> };
+  export function createClient(
+    url: string,
+    key: string,
+    options?: Record<string, unknown>,
+  ): import('@supabase/supabase-js').SupabaseClient<Db>;
 }
 
 /**
  * The slice of the Deno API these functions use. Extend it when a function
  * needs more — a missing member should fail the check and be added here
  * deliberately, not be silenced with `any`.
+ *
+ * Must stay in a file with NO top-level import or export, or these stop being
+ * global and every `Deno.` usage fails at once.
  */
 declare namespace Deno {
   export const env: {

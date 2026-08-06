@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { asJson } from '../_shared/json.ts';
 
 // Public function (verify_jwt = false). Step 1-2 of the CRM staff "Forgot
 // Password with OTP" flow. Validates the email belongs to an active employee,
@@ -71,7 +72,7 @@ Deno.serve(async (req: Request) => {
     const db = createClient(supabaseUrl, serviceKey);
 
     const log = (event: string, email?: string, metadata: Record<string, unknown> = {}) =>
-      db.from("nw_password_reset_logs").insert({ email, event, ip, user_agent: userAgent, metadata });
+      db.from("nw_password_reset_logs").insert({ email, event, ip, user_agent: userAgent, metadata: asJson(metadata) });
 
     const body = await req.json().catch(() => ({}));
     const email: string = (body.email || "").trim().toLowerCase();

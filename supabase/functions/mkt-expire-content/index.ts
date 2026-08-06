@@ -183,7 +183,7 @@ Deno.serve(async (req: Request) => {
       if (!content) return json({ success: true, processed: 0, already_deleted: true });
 
       const result = await purge(
-        db, content as ContentRow, "admin_deleted",
+        db, content as unknown as ContentRow, "admin_deleted",
         (caller as { id: string }).id, String(body.note ?? ""),
       );
       if (!result.ok) return json({ error: result.error }, 500);
@@ -204,7 +204,7 @@ Deno.serve(async (req: Request) => {
     const failed: { content_no: string; error: string }[] = [];
     let processed = 0;
 
-    for (const row of (due ?? []) as ContentRow[]) {
+    for (const row of (due ?? []) as unknown as ContentRow[]) {
       const result = await purge(db, row, "expired", null, "");
       if (result.ok) processed++;
       else failed.push({ content_no: row.content_no, error: result.error });
