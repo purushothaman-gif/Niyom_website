@@ -16,10 +16,7 @@ import cors from 'cors';
 import { loadConfig } from './config.js';
 import { BseClient, BseError } from './bseClient.js';
 import { webhookRouter } from './webhooks.js';
-import { casRouter } from './cas/import.js';
 import { casRequestRouter } from './cas/requests.js';
-import { lastNavRefresh, refreshNavs } from './cas/nav.js';
-import { backfillNavOn, GRANDFATHER_DATE } from './cas/navHistory.js';
 import {
   toAppOrderResult,
   toAppScheme,
@@ -237,54 +234,13 @@ app.get('/health', async (_req, res) => {
     // Public on purpose: names of mounted routes, nothing about what they do.
     features: mountedFeatures,
     /*
-     * A NAV feed that quietly stops is worse than one that is plainly missing —
-     * the client keeps seeing a figure that looks current. Surfacing the last
-     * run here is what makes a stalled job noticeable without logging in.
+     * NAV freshness is deliberately NOT reported here any more. The refresh runs
+     * as a Supabase Edge Function on a pg_cron schedule, so this box no longer
+     * knows whether it ran — and a health endpoint that reports on a job it does
+     * not perform is worse than one that stays quiet, because it will eventually
+     * report something stale as fact. `nav_refresh_log` is the source of truth.
      */
-    nav: await lastNavRefresh(cfg),
   });
-});
-
-/**
- * Nightly NAV refresh, called by the droplet's own cron.
- *
- * Sits BEFORE the Supabase-JWT gate and authenticates with a shared secret,
- * because cron has no user session — the same shape as /verify/pan. AMFI
- * publishes once a day after the close, so this is scheduled, never polled.
- */
-app.post('/nav/refresh', async (req, res) => {
-  if (!cfg.navRefreshSecret) {
-    return res.status(503).json({ error: 'NAV refresh is not configured on this server.' });
-  }
-  if (req.header('x-nav-secret') !== cfg.navRefreshSecret) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  const result = await refreshNavs(cfg);
-  return res.status(result.ok ? 200 : 502).json(result);
-});
-
-/**
- * Backfill one past day's NAVs — in practice, 31-Jan-2018.
- *
- * Equity units bought before 01-Feb-2018 are grandfathered, and the cost of
- * acquisition depends on that day's NAV. It is a different AMFI endpoint in a
- * different column order from the nightly file, so it gets its own route rather
- * than a flag on the one above.
- *
- * Not on a schedule: a past NAV does not change. Run once and it is settled for
- * every client, including ones who have not signed up yet. Defaults to the
- * grandfathering date precisely so the common case needs no body at all.
- */
-app.post('/nav/backfill', async (req, res) => {
-  if (!cfg.navRefreshSecret) {
-    return res.status(503).json({ error: 'NAV refresh is not configured on this server.' });
-  }
-  if (req.header('x-nav-secret') !== cfg.navRefreshSecret) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  const date = typeof req.body?.date === 'string' ? req.body.date : GRANDFATHER_DATE;
-  const result = await backfillNavOn(cfg, date);
-  return res.status(result.ok ? 200 : 502).json(result);
 });
 
 // Public — BSE calls this, so it must sit BEFORE the Supabase-JWT gate.
@@ -468,7 +424,6 @@ app.use(requireCaller);
  * Mounted through mountFeature so GET /health reports it — the only way to
  * confirm from outside that a droplet is running a build containing this route.
  */
-mountFeature('/cas', 'cas', casRouter(cfg));
 // Tracking around the import: intent, consent and status. Deliberately separate
 // from /cas/import, which is the pipeline itself and stays untouched.
 mountFeature('/cas/requests', 'cas_requests', casRequestRouter(cfg));

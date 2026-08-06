@@ -41,8 +41,8 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { getDocumentProxy } from 'unpdf';
-import { extractCasText } from './extract.js';
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { CasPasswordError, extractCasText } from './extract.ts';
 
 /** `path::password` pairs, comma separated. */
 function fixtures(): { path: string; password: string }[] {
@@ -58,15 +58,20 @@ function fixtures(): { path: string; password: string }[] {
 }
 
 /**
- * The candidate extractor — what extract.ts becomes after the migration.
+ * The REFERENCE extractor — pdfjs-dist, exactly as the droplet ran it.
  *
- * The line-rebuilding loop is character-for-character the droplet's. Only the
- * document handle differs, which is the whole point: if this produces different
- * text, it is unpdf's doing and not a change in our logic.
+ * Kept as a local copy rather than an import because the droplet no longer has
+ * this code: CAS parsing moved to `_shared/cas/extract.ts`, which uses unpdf,
+ * and pdfjs-dist survives only as a root devDependency for this comparison.
+ * The line-rebuilding loop is character-for-character what shipped.
  */
-async function extractViaUnpdf(pdf: Buffer, password: string): Promise<string> {
+async function extractViaPdfjs(pdf: Buffer, password: string): Promise<string> {
   const LINE_TOLERANCE = 2;
-  const doc = await getDocumentProxy(new Uint8Array(pdf), { password });
+  const doc = await pdfjs.getDocument({
+    data: new Uint8Array(pdf),
+    password,
+    useSystemFonts: true,
+  }).promise;
 
   let out = '';
   for (let i = 1; i <= doc.numPages; i++) {
@@ -107,8 +112,8 @@ describe.skipIf(found.length === 0)('unpdf extracts the same text as pdfjs-dist'
     it(`matches byte-for-byte: ${name}`, async () => {
       const pdf = readFileSync(path);
       const [viaPdfjs, viaUnpdf] = await Promise.all([
-        extractCasText(pdf, password),
-        extractViaUnpdf(pdf, password),
+        extractViaPdfjs(pdf, password),
+        extractCasText(new Uint8Array(pdf), password),
       ]);
 
       // Reported before the assertion so a failure shows WHERE, not just that.
@@ -131,11 +136,11 @@ describe.skipIf(found.length === 0)('unpdf extracts the same text as pdfjs-dist'
        */
       const pdf = readFileSync(path);
 
-      const wrapped = await extractCasText(pdf, 'definitely-not-the-password').then(
+      const wrapped = await extractCasText(new Uint8Array(pdf), 'definitely-not-the-password').then(
         () => null,
         (e) => e as { name?: string },
       );
-      const raw = await extractViaUnpdf(pdf, 'definitely-not-the-password').then(
+      const raw = await extractViaPdfjs(pdf, 'definitely-not-the-password').then(
         () => null,
         (e) => e as { name?: string },
       );
@@ -147,10 +152,11 @@ describe.skipIf(found.length === 0)('unpdf extracts the same text as pdfjs-dist'
        * translation keys on — and unpdf raises the same `PasswordException`
        * pdfjs does, so the new extractor's catch fires unchanged.
        */
-      expect(wrapped, 'pdfjs should reject a wrong password').not.toBeNull();
-      expect(raw, 'unpdf should reject a wrong password').not.toBeNull();
-      expect(raw?.name, 'the name the new extract.ts catches on').toBe('PasswordException');
-      expect(wrapped?.name, 'the droplet translates it for the client').toBe('CasPasswordError');
+      expect(raw, 'pdfjs should reject a wrong password').not.toBeNull();
+      expect(wrapped, 'unpdf should reject a wrong password').not.toBeNull();
+      expect(raw?.name, 'what pdfjs raises').toBe('PasswordException');
+      // unpdf raises the same PasswordException, which extract.ts translates.
+      expect(wrapped instanceof CasPasswordError, 'translated for the client').toBe(true);
     }, 120_000);
 
     it(`extracts something worth parsing: ${name}`, async () => {
@@ -159,7 +165,7 @@ describe.skipIf(found.length === 0)('unpdf extracts the same text as pdfjs-dist'
        * both return an empty string agree perfectly and prove nothing — and a
        * wrong password does exactly that.
        */
-      const text = await extractViaUnpdf(readFileSync(path), password);
+      const text = await extractCasText(new Uint8Array(readFileSync(path)), password);
       expect(text.length).toBeGreaterThan(1000);
       expect(/Folio No:/i.test(text)).toBe(true);
       expect(/INF[A-Z0-9]{9}/.test(text)).toBe(true);
