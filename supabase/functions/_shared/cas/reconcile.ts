@@ -12,6 +12,23 @@
  */
 import { readStatedTotalPair, type CasHolding, type CasParseResult } from './parse.ts';
 import type { CasDetailedScheme } from './detailed.ts';
+
+/**
+ * Row ids, generated before anything is sent so children can reference their
+ * parents in one round trip per table.
+ *
+ * Web Crypto rather than `node:crypto`, which is what the droplet used: the
+ * same file has to run in Deno and in the Node test runner, and `crypto` is a
+ * global in both.
+ *
+ * This was the bug that broke the first real import through the Edge Function.
+ * Extracting this module from import.ts dropped the `node:crypto` import along
+ * with the express ones, leaving `randomUUID` undefined in three places. Nothing
+ * caught it: `supabase/` is in no tsconfig, so there is no typecheck here, and
+ * the tests that moved across covered only `reconcileDetailed` — never the row
+ * builders. It threw on every single import, before a single row was written.
+ */
+const randomUUID = (): string => crypto.randomUUID();
 /**
  * Comparing a SUM of printed figures against the total printed beside them.
  *
