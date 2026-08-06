@@ -13,12 +13,25 @@ export function fmtFull(amount: number): string {
   return `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 }
 
-export function fmtDate(d: string): string {
+/*
+ * Accepts null and undefined because the body already handles them — the guard
+ * below has been returning '—' since it was written, while the signature
+ * claimed a non-null string. Generated schema types surfaced the mismatch:
+ * plenty of date columns are nullable.
+ */
+export function fmtDate(d: string | null | undefined): string {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export function timeAgo(d: string): string {
+export function timeAgo(d: string | null | undefined): string {
+  /*
+   * Unlike fmtDate this had no guard, and its callers now pass nullable
+   * timestamp columns. `new Date(null)` is the epoch and `new Date(undefined)`
+   * is Invalid Date, so without this a null created_at rendered "56y ago" or
+   * "NaN ago" rather than admitting it did not know.
+   */
+  if (!d) return '—';
   const diff = (Date.now() - new Date(d).getTime()) / 1000;
   if (diff < 60) return 'Just now';
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;

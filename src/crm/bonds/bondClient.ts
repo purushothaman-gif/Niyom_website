@@ -42,7 +42,12 @@ export function useImportPrices() {
     mutationFn: async (rows: ImportRow[]): Promise<ImportSummary> => {
       const { data, error } = await supabase.rpc('bm_import_prices', { p_rows: rows });
       if (error) throw error;
-      return data as ImportSummary;
+      /*
+       * The RPC returns jsonb, so the generated type is `Json` — a union the
+       * specific ImportSummary shape does not overlap. Narrowing through
+       * unknown rather than pretending the two are related.
+       */
+      return data as unknown as ImportSummary;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['bm_bonds'] }); },
   });

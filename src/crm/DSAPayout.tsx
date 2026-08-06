@@ -5,6 +5,7 @@ import { fmt, PRODUCT_LABELS } from './utils';
 import { Wallet, Download, ChevronDown, FileText, RefreshCw, Loader2, FileCheck2, CheckCircle2, XCircle, Eye, Send, Lock, FileArchive } from 'lucide-react';
 import JSZip from 'jszip';
 import { generateDebitNotePdfBlob, DebitNoteParticular, computePayoutTds } from './dsaDebitNote';
+import { asJson } from '../lib/dbJson';
 
 const DEBIT_NOTE_BUCKET = 'dsa-debit-notes';
 
@@ -345,7 +346,8 @@ export default function DSAPayout({ employee }: Props) {
           net_payable_amount: net,
           generated_at: documentDate.toISOString(),
           pdf_url: path,
-          pdf_snapshot,
+          // jsonb column: the snapshot is plain data but carries app types.
+          pdf_snapshot: asJson(pdf_snapshot),
           created_by: employee.id,
         })
         .eq('id', existing.id)
@@ -363,7 +365,8 @@ export default function DSAPayout({ employee }: Props) {
           debit_note_number: number,
           generated_at: documentDate.toISOString(),
           pdf_url: path,
-          pdf_snapshot,
+          // jsonb column: the snapshot is plain data but carries app types.
+          pdf_snapshot: asJson(pdf_snapshot),
           created_by: employee.id,
         })
         .select('id').single();

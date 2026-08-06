@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { NWEmployee, NWHolding, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, PRODUCT_CHART_COLORS } from './utils';
 import { Plus, X, Pencil, Trash2, ChevronDown, Printer, TrendingUp, Percent, Shield, ArrowLeft, ArrowUp, ArrowDown, Search, Download } from 'lucide-react';
+import type { Insertable } from '../lib/dbJson';
 
 interface Props {
   employee: NWEmployee;
@@ -519,7 +520,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
       const { error: err } = await supabase.from('nw_holdings').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editHolding.id);
       if (err) { setError(err.message); setSaving(false); return; }
     } else {
-      const { error: err } = await supabase.from('nw_holdings').insert([payload]);
+      const { error: err } = await supabase.from('nw_holdings').insert([payload as Insertable<'nw_holdings'>]);
       if (err) { setError(err.message); setSaving(false); return; }
     }
 

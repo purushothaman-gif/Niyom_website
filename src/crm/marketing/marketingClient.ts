@@ -9,6 +9,7 @@
 
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import type { Insertable, Updatable } from '../../lib/dbJson';
 import {
   ContentFilters, MktAsset, MktContent, MktContentHistory, MktContentPerformanceRow,
   MktDashboardTotals, MktGenerateRequest, MktGenerateResponse, MktLeaderboardRow,
@@ -228,7 +229,7 @@ export function useSaveDraft() {
   return useMutation({
     mutationFn: async (draft: Partial<MktContent>): Promise<MktContent> => {
       const { data, error } = await supabase.from('mkt_content')
-        .insert([draft]).select(CONTENT_COLUMNS).single();
+        .insert([draft as Insertable<'mkt_content'>]).select(CONTENT_COLUMNS).single();
       if (error) throw error;
 
       const row = data as unknown as MktContent;
@@ -247,7 +248,7 @@ export function useUpdateContent() {
   return useMutation({
     mutationFn: async ({ id, patch, actorId }: { id: string; patch: Partial<MktContent>; actorId?: string }) => {
       const { data, error } = await supabase.from('mkt_content')
-        .update(patch).eq('id', id).select(CONTENT_COLUMNS).single();
+        .update(patch as Updatable<'mkt_content'>).eq('id', id).select(CONTENT_COLUMNS).single();
       if (error) throw error;
 
       const row = data as unknown as MktContent;

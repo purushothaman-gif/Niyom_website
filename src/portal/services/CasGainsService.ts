@@ -137,7 +137,9 @@ export const CasGainsService = {
     const isins = [...new Set(schemes.map((s) => s.isin).filter((i): i is string => !!i))];
 
     const [classRows, gfRows, navRows] = await Promise.all([
-      byIsinChunks<{ isin: string; effective_asset_class: AssetClass | null }>(isins, (chunk) =>
+      // Read as the column really is — text — and narrowed below. Declaring it
+      // as AssetClass here was asserting a union the database cannot guarantee.
+      byIsinChunks<{ isin: string; effective_asset_class: string | null }>(isins, (chunk) =>
         supabase.from('mf_asset_class').select('isin,effective_asset_class').in('isin', chunk),
       ),
       byIsinChunks<{ isin: string; nav: number | string }>(isins, (chunk) =>
@@ -153,8 +155,19 @@ export const CasGainsService = {
       ),
     ]);
 
+    /*
+     * `effective_asset_class` is a text column. Its inputs carry CHECK
+     * constraints, so in practice it only ever holds these three values — but
+     * "in practice" is not a guarantee, and the cost of being wrong is a tax
+     * rate applied on a value nobody recognises. Anything unexpected becomes
+     * null, which the engine already treats as "undecided": the gain is still
+     * reported, the treatment simply waits for a human.
+     */
+    const toAssetClass = (v: string | null): AssetClass | null =>
+      v === 'equity' || v === 'debt' || v === 'other' ? v : null;
+
     const assetClassByIsin = new Map<string, AssetClass | null>(
-      classRows.map((r) => [r.isin, r.effective_asset_class]),
+      classRows.map((r) => [r.isin, toAssetClass(r.effective_asset_class)]),
     );
     const grandfatherNavByIsin = new Map<string, number>(
       gfRows.map((r) => [r.isin, Number(r.nav)]).filter(([, n]) => Number.isFinite(n as number)) as [string, number][],

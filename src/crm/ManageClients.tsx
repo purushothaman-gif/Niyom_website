@@ -341,7 +341,9 @@ export default function ManageClients({ employee, onNavigate }: Props) {
         if (error) throw error;
         if (isFirst) await mirrorPrimary(bankClient.id, acct);
         showToast('Bank account added.');
-      } else {
+      } else if (bankFormOpen) {
+        // Narrowed rather than asserted: bankFormOpen is 'new' | id | null, and
+        // null here would mean updating a row with no id — nothing to do.
         const existing = bankAccounts.find(a => a.id === bankFormOpen);
         const { error } = await supabase.from('nw_client_bank_accounts')
           .update({ ...acct, updated_at: new Date().toISOString() }).eq('id', bankFormOpen);

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { NWEmployee, NWTransaction, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, TXN_LABELS, TXN_COLORS } from './utils';
 import { Plus, X, Pencil, Trash2, FileText, ExternalLink, Search, ChevronDown, ChevronRight, Percent, TrendingUp, Shield } from 'lucide-react';
+import type { Insertable } from '../lib/dbJson';
 
 interface Props { employee: NWEmployee; onNavigate?: (page: string, params?: Record<string, string>) => void; }
 
@@ -276,7 +277,7 @@ async function syncTransactionToHolding(txn: Record<string, any>) {
         insurance_revenue: txn.insurance_revenue || null,
       });
     }
-    await supabase.from('nw_holdings').insert([holdingPayload]);
+    await supabase.from('nw_holdings').insert([holdingPayload as Insertable<'nw_holdings'>]);
   }
 
   // Recalculate portfolio_value for client
@@ -691,7 +692,11 @@ export default function Transactions({ employee, onNavigate }: Props) {
       const hadHolding = await reverseTransactionFromHolding(editTxn as any);
       if (hadHolding) await syncTransactionToHolding(payload);
     } else {
-      const { error: err } = await supabase.from('nw_transactions').insert([payload]).select().single();
+      const { error: err } = await supabase
+        .from('nw_transactions')
+        .insert([payload as Insertable<'nw_transactions'>])
+        .select()
+        .single();
       if (err) {
         // 23505 = unique violation on uq_nw_transactions_one_transferred_per_deal:
         // someone booked this deal first. Say so plainly instead of leaking the
