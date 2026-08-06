@@ -567,6 +567,15 @@ verify_jwt = false
 # default verify_jwt = true (an RM/admin calls it with their own bearer token)
 # and additionally re-checks active-employee status and DSA ownership inside.
 
+# --- Cashfree payment webhook ----------------------------------------------
+# Public verify_jwt: the caller is Cashfree's server, which has no Supabase
+# session and cannot be made to present one. Authentication is by HMAC instead —
+# the function recomputes base64(HMAC-SHA256(secret, timestamp + rawBody)) over
+# the exact received bytes and rejects any mismatch with a 401 before it touches
+# the database, so the open JWT setting grants an unsigned caller nothing.
+[functions.cashfree-payment-webhook]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
