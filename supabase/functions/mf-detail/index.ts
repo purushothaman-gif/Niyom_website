@@ -59,7 +59,14 @@ interface DetailPayload {
     launch_date: string | null;
   };
   metrics: ReturnType<typeof computeAll>;
-  navHistory: NavPoint[];
+  /*
+   * NUMBERS, not NavPoint. mfapi.in sends NAV as a string and NavPoint reflects
+   * that, but `downsampleNav` parses it for the chart — so this was declared as
+   * the raw type while carrying the parsed one. Harmless at runtime today
+   * because the chart wants numbers anyway, but it is a type that lies to the
+   * next reader, and it took a typecheck to notice.
+   */
+  navHistory: { date: string; nav: number }[];
 }
 
 // deno-lint-ignore no-explicit-any

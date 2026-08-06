@@ -94,7 +94,7 @@ Deno.serve(async (req: Request) => {
 
     // Check if an auth user with this email already exists (e.g. registered on public site)
     const { data: { users: existingUsers } } = await adminClient.auth.admin.listUsers();
-    const existingUser = existingUsers?.find((u) => u.email?.toLowerCase() === normalizedEmail);
+    const existingUser = existingUsers?.find((u: { email?: string }) => u.email?.toLowerCase() === normalizedEmail);
 
     if (existingUser) {
       // Reuse existing auth user — update their password and tag as client
