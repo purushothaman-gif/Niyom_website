@@ -13,6 +13,7 @@
  */
 import express, { type NextFunction, type Request, type Response, type Router } from 'express';
 import cors from 'cors';
+import { timingSafeEqual } from 'node:crypto';
 import { loadConfig } from './config.js';
 import { BseClient, BseError } from './bseClient.js';
 import { webhookRouter } from './webhooks.js';
@@ -343,6 +344,103 @@ app.post('/verify/pan', async (req: Request, res: Response) => {
   } catch (e) {
     console.error('[verify/pan] error', (e as Error)?.message);
     res.status(502).json({ valid: false, error: 'Verification service unavailable' });
+  }
+});
+
+/**
+ * Cashfree Payment Link relay. Exactly the same shape as /verify/pan above, and
+ * for exactly the same reason: Cashfree whitelists this droplet's static IP,
+ * and Supabase Edge Functions run on Deno Deploy with no stable egress address,
+ * so send-payment-link cannot call /pg/links itself once whitelisting is on.
+ *
+ * Thin on purpose. The edge function keeps ALL business logic — who may send a
+ * link, the outstanding-balance ceiling, link_id construction, the email, the
+ * audit row. This route adds two things and nothing else: the whitelisted IP,
+ * and the Payments credentials. Keeping it dumb means a change to Cashfree's
+ * link payload ships as an edge-function deploy, with no droplet release.
+ *
+ * Sits before the Supabase-JWT gate because the caller is an edge function
+ * holding a shared secret, not a portal user with a session.
+ */
+
+/**
+ * Constant-time secret comparison.
+ *
+ * A plain `!==` leaks, through response timing, how many leading characters of
+ * a guess were right — enough to recover a secret byte by byte given enough
+ * attempts. That is worth closing on a route that creates payment links.
+ * (/verify/pan still uses a plain compare; left alone rather than churned as a
+ * drive-by, but it should get the same treatment.)
+ */
+function relaySecretOk(presented: string | undefined, expected: string | null): boolean {
+  if (!expected || !presented) return false;
+  const a = Buffer.from(presented);
+  const b = Buffer.from(expected);
+  // timingSafeEqual throws on a length mismatch, which would itself be a
+  // (coarser) leak, so equalise first and let the content compare decide.
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+app.post('/pay/link', async (req: Request, res: Response) => {
+  if (!relaySecretOk(req.header('x-relay-secret'), cfg.payRelaySecret)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!cfg.cashfreePgAppId || !cfg.cashfreePgSecret) {
+    return res.status(503).json({ error: 'Cashfree payments not configured' });
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+
+  // Validate only what makes the call meaningful. The amount ceiling is the
+  // edge function's job (it caps to the deal's outstanding balance) and is
+  // deliberately NOT duplicated here — two implementations of the same money
+  // rule is how they drift apart.
+  const linkId = String(body.link_id ?? '').trim();
+  const amount = Number(body.link_amount);
+  if (!linkId) {
+    return res.status(400).json({ error: 'link_id is required' });
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'link_amount must be a positive number' });
+  }
+
+  const base =
+    cfg.cashfreePgEnv === 'sandbox' ? 'https://sandbox.cashfree.com' : 'https://api.cashfree.com';
+
+  try {
+    const cf = await fetch(`${base}/pg/links`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-client-id': cfg.cashfreePgAppId,
+        'x-client-secret': cfg.cashfreePgSecret,
+        'x-api-version': cfg.cashfreePgApiVersion,
+      },
+      // Forwarded verbatim: this route does not know or care what a link
+      // payload contains beyond the two fields checked above.
+      body: JSON.stringify(body),
+    });
+    const data = (await cf.json().catch(() => ({}))) as Record<string, unknown>;
+
+    if (!cf.ok) {
+      console.error(`[pay/link] cashfree ${cf.status} link_id=${linkId}`, data);
+      // Pass Cashfree's own status and message through untouched so the edge
+      // function can surface the real reason (duplicate link_id, bad customer
+      // details) instead of a generic gateway error.
+      return res.status(cf.status).json({
+        error: (data.message as string) || 'Payment link creation failed',
+        cashfree: data,
+      });
+    }
+
+    console.log(
+      `[pay/link] created link_id=${linkId} amount=${amount} env=${cfg.cashfreePgEnv} status=${String(data.link_status ?? '-')}`,
+    );
+    return res.json(data);
+  } catch (e) {
+    console.error('[pay/link] error', (e as Error)?.message);
+    return res.status(502).json({ error: 'Payment gateway unavailable' });
   }
 });
 

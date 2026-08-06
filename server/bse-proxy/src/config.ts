@@ -77,6 +77,24 @@ export interface ProxyConfig {
   cashfreeVerifyClientId: string | null;
   cashfreeVerifySecret: string | null;
   cashfreeVerifyEnv: 'production' | 'sandbox';
+  /* --- Cashfree Payments relay (payment links). Same reason as the PAN relay
+   * above: Cashfree whitelists this droplet's static IP, and Supabase Edge
+   * Functions have no stable egress address. send-payment-link calls
+   * /pay/link here and this box makes the outbound call to Cashfree.
+   *
+   * Deliberately a SEPARATE secret from panRelaySecret: creating payment links
+   * moves money, looking up a PAN does not, so a leak of one must not grant the
+   * other. There is no fallback to panRelaySecret — the route stays closed
+   * until PAY_RELAY_SECRET is explicitly set.
+   *
+   * These are also separate credentials from the cashfreeVerify* pair above:
+   * the Verification Suite and the Payments gateway issue different keys and
+   * neither authenticates against the other's API. */
+  payRelaySecret: string | null;
+  cashfreePgAppId: string | null;
+  cashfreePgSecret: string | null;
+  cashfreePgEnv: 'production' | 'sandbox';
+  cashfreePgApiVersion: string;
 }
 
 export function loadConfig(): ProxyConfig {
@@ -114,5 +132,22 @@ export function loadConfig(): ProxyConfig {
     cashfreeVerifyClientId: process.env.CASHFREE_VERIFY_CLIENT_ID || null,
     cashfreeVerifySecret: process.env.CASHFREE_VERIFY_SECRET_KEY || null,
     cashfreeVerifyEnv: (process.env.CASHFREE_VERIFY_ENV === 'sandbox' ? 'sandbox' : 'production'),
+    payRelaySecret: process.env.PAY_RELAY_SECRET || null,
+    cashfreePgAppId: process.env.CASHFREE_APP_ID?.trim() || null,
+    cashfreePgSecret: process.env.CASHFREE_SECRET_KEY?.trim() || null,
+    /*
+     * Matches send-payment-link's semantics exactly: only an explicit
+     * "production" selects the live base, everything else falls to sandbox.
+     * Trimmed and lower-cased because pasted values routinely carry a trailing
+     * newline or a capital ("Production", "prod ").
+     *
+     * Sandbox is the safe default on purpose — a misconfiguration should fail
+     * to take real money, not start taking it.
+     */
+    cashfreePgEnv:
+      (process.env.CASHFREE_ENV ?? '').trim().toLowerCase() === 'production'
+        ? 'production'
+        : 'sandbox',
+    cashfreePgApiVersion: process.env.CASHFREE_API_VERSION?.trim() || '2022-09-01',
   };
 }
