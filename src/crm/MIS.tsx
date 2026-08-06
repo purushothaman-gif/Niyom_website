@@ -79,15 +79,63 @@ export default function MIS({ employee }: Props) {
 
     if (clientIds.length === 0) { setRows([]); setLoading(false); setHasLoaded(true); return; }
 
-    // Fetch transactions within the selected period.
-    const { data: txnData } = await supabase
-      .from('nw_transactions')
-      .select('*')
-      .in('client_id', clientIds)
-      .gte('txn_date', startDate)
-      .lte('txn_date', endDate);
+    // -------------------------------------------------------------------
+    // Landing-cost revenue is recognised in the month the PAYMENT arrived,
+    // not the month the deal was struck: a deal confirmed 27 Jul and cleared
+    // 5 Aug is AUGUST revenue. So the period filter cannot be a plain
+    // txn_date range any more.
+    //
+    // EVERY deal for these clients is loaded, not just the period's, because
+    // a deal struck in any earlier month can be paid inside the selected one.
+    // -------------------------------------------------------------------
+    const { data: dealAll } = await supabase
+      .from('nw_deal_confirmations')
+      .select('id, client_id, product_type, transaction_type, security_name, quantity, base_rate, landing_cost, deal_date')
+      .in('client_id', clientIds);
+    const deals = (dealAll ?? []) as any[];
+    const dealIds = deals.map(d => d.id);
 
-    const txns = (txnData as NWTransaction[]) || [];
+    // The date a deal was CLEARED: the last active payment against it, and
+    // only once it is settled in full. A part-paid deal earns nothing yet —
+    // its revenue waits for the payment that closes it.
+    const clearedOn = new Map<string, string>();
+    if (dealIds.length) {
+      const [{ data: summaries }, { data: payments }] = await Promise.all([
+        supabase.from('nw_deal_payment_summary')
+          .select('deal_id, payment_status').in('deal_id', dealIds),
+        supabase.from('nw_deal_payments')
+          .select('deal_confirmation_id, payment_date')
+          .eq('status', 'active').in('deal_confirmation_id', dealIds),
+      ]);
+      const settled = new Set(
+        ((summaries ?? []) as any[])
+          .filter(s => s.payment_status === 'fully_paid' || s.payment_status === 'over_paid')
+          .map(s => s.deal_id));
+      for (const p of (payments ?? []) as any[]) {
+        if (!settled.has(p.deal_confirmation_id) || !p.payment_date) continue;
+        const prev = clearedOn.get(p.deal_confirmation_id);
+        // ISO dates compare correctly as strings.
+        if (!prev || p.payment_date > prev) clearedOn.set(p.deal_confirmation_id, p.payment_date);
+      }
+    }
+    const inPeriod = (d: string | null | undefined) => !!d && d >= startDate && d <= endDate;
+
+    // Two fetches, merged: transactions DATED inside the period (insurance, MF
+    // trail, and landing-cost rows with no deal to date them by), and those
+    // whose deal was CLEARED inside it even though they were booked earlier.
+    const clearedThisPeriod = [...clearedOn.entries()].filter(([, d]) => inPeriod(d)).map(([id]) => id);
+    const [{ data: byDate }, { data: byPayment }] = await Promise.all([
+      supabase.from('nw_transactions').select('*')
+        .in('client_id', clientIds).gte('txn_date', startDate).lte('txn_date', endDate),
+      clearedThisPeriod.length
+        ? supabase.from('nw_transactions').select('*').in('deal_confirmation_id', clearedThisPeriod)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const uniqueTxns = new Map<string, NWTransaction>();
+    for (const t of [...((byDate ?? []) as NWTransaction[]), ...((byPayment ?? []) as NWTransaction[])]) {
+      uniqueTxns.set((t as any).id, t);
+    }
+    const txns = [...uniqueTxns.values()];
 
     const computed: MISRow[] = [];
 
@@ -117,6 +165,33 @@ export default function MIS({ employee }: Props) {
       // gated this way.)
       if (['unlisted_share', 'secondary_bond', 'primary_bond'].includes(t.product_type)
           && ((t as any).transfer_stage === 'transferred' || (t as any).deal_confirmation_id)) {
+        const dealId = (t as any).deal_confirmation_id as string | null;
+        const cleared = dealId ? clearedOn.get(dealId) : undefined;
+
+        // Which month does this earn in?
+        //   linked + settled -> the date its final payment cleared;
+        //   linked + unpaid  -> nothing yet. Shown at ₹0 in its own month so
+        //                       business we are still owed stays visible
+        //                       instead of silently vanishing from the report;
+        //   no deal at all   -> no payment to date it by, so it keeps its own
+        //                       transaction date rather than being dropped.
+        if (dealId && !cleared) {
+          if (inPeriod(t.txn_date)) {
+            computed.push({
+              ...baseRow,
+              revenue_type: 'landing_cost',
+              revenue: 0,
+              notes: '⏳ Awaiting payment — revenue is counted in the month this deal is paid in full',
+            });
+          }
+          continue;
+        }
+        const revenueDate = (dealId ? cleared : t.txn_date) as string;
+        if (!inPeriod(revenueDate)) continue;
+        // Landing-cost rows are dated by payment; the transaction date only
+        // stands in when there is no deal behind them.
+        const rowDate = { ...baseRow, date: revenueDate };
+
         const landingRaw = (t as any).landing_cost;
         const qty = t.quantity || 0;
 
@@ -148,7 +223,7 @@ export default function MIS({ employee }: Props) {
             `Qty ${qty}`,
           ].filter(Boolean).join(' | ');
           computed.push({
-            ...baseRow,
+            ...rowDate,
             revenue_type: 'landing_cost',
             revenue: 0,
             notes: `⚠ ${pending} pending — enter on this transaction to compute revenue (${known})`,
@@ -159,18 +234,26 @@ export default function MIS({ employee }: Props) {
             ? (landingCost - price) * qty
             : (price - landingCost) * qty;
           if (revenue !== 0) {
+            const basis = dealId
+              ? ` | Paid ${fmtDate(revenueDate)}`
+              : ' | Dated by transaction (no deal confirmation)';
             computed.push({
-              ...baseRow,
+              ...rowDate,
               revenue_type: 'landing_cost',
               revenue,
-              notes: `Price: ${fmt(price)} | Landing Cost: ${fmt(landingCost)} | Qty: ${qty}`,
+              notes: `Price: ${fmt(price)} | Landing Cost: ${fmt(landingCost)} | Qty: ${qty}${basis}`,
             });
           }
         }
       }
 
+      // Insurance and MF trail stay dated by the transaction — they are
+      // direct-entry revenue with no deal payment to recognise against. The
+      // txns list now also carries rows pulled in by PAYMENT date, whose own
+      // txn_date can fall outside the period, so both branches re-check it.
+
       // Insurance → flat insurance_revenue
-      if (t.product_type === 'insurance') {
+      if (t.product_type === 'insurance' && inPeriod(t.txn_date)) {
         const rev = (t as any).insurance_revenue || 0;
         if (rev > 0) {
           computed.push({
@@ -183,7 +266,8 @@ export default function MIS({ employee }: Props) {
       }
 
       // Mutual fund → trail commission at anniversary month of txn_date
-      if (t.product_type === 'mutual_fund' && (t as any).trail_percent && (t as any).trail_start_date) {
+      if (t.product_type === 'mutual_fund' && inPeriod(t.txn_date)
+          && (t as any).trail_percent && (t as any).trail_start_date) {
         if (isTrailAnniversaryInMonth((t as any).trail_start_date, selectedYear, selectedMonth)) {
           const invested = t.consolidated_amount || 0;
           const trail = (t as any).trail_percent || 0;
@@ -214,21 +298,12 @@ export default function MIS({ employee }: Props) {
       'Primary Bond': 'primary_bond',
     };
 
-    const { data: paidSumm } = await supabase
-      .from('nw_deal_payment_summary')
-      .select('deal_id')
-      .eq('payment_status', 'fully_paid');
-    const paidDealIds = new Set((paidSumm ?? []).map((s: any) => s.deal_id));
+    // Selected by the date the deal CLEARED, exactly like the transactions
+    // above — clearedOn only ever holds deals settled in full, so a part-paid
+    // deal cannot appear here either.
+    const clearedDeals = deals.filter(d => inPeriod(clearedOn.get(d.id)));
 
-    if (paidDealIds.size > 0) {
-      const { data: dealData } = await supabase
-        .from('nw_deal_confirmations')
-        .select('id, client_id, product_type, transaction_type, security_name, quantity, base_rate, landing_cost, deal_date')
-        .in('client_id', clientIds)
-        .gte('deal_date', startDate)
-        .lte('deal_date', endDate);
-      const deals = (dealData ?? []) as any[];
-
+    {
       // A deal is "booked" once ANY transaction references it — including one
       // dated in a later month, which is normal: a deal confirmed on the 29th
       // is often transferred and booked in the following month. Deriving this
@@ -237,18 +312,17 @@ export default function MIS({ employee }: Props) {
       // phantom "awaiting booking" row in the deal month while its real revenue
       // was already counted in the month it was booked — one deal, two months.
       const bookedDealIds = new Set<string>();
-      if (deals.length > 0) {
+      if (clearedDeals.length > 0) {
         const { data: bookedRows } = await supabase
           .from('nw_transactions')
           .select('deal_confirmation_id')
-          .in('deal_confirmation_id', deals.map(d => d.id));
+          .in('deal_confirmation_id', clearedDeals.map(d => d.id));
         for (const b of (bookedRows ?? []) as any[]) {
           if (b.deal_confirmation_id) bookedDealIds.add(b.deal_confirmation_id);
         }
       }
 
-      for (const d of deals) {
-        if (!paidDealIds.has(d.id)) continue;   // only fully-paid deals
+      for (const d of clearedDeals) {
         if (bookedDealIds.has(d.id)) continue;  // already counted via its transaction
         const prodNorm = DEAL_TYPE[d.product_type as string];
         if (!prodNorm) continue;                // landing-cost products only
@@ -265,7 +339,9 @@ export default function MIS({ employee }: Props) {
           client_id: d.client_id,
           client_name: client.full_name,
           client_code: client.client_code,
-          date: d.deal_date,
+          // Dated by payment, not by deal_date, so it sits in the same month
+          // its revenue is recognised in.
+          date: clearedOn.get(d.id) as string,
           product_type: prodNorm,
           product_name: d.security_name,
         };
@@ -401,7 +477,7 @@ export default function MIS({ employee }: Props) {
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--accent)' }}>Revenue</p>
           <h1 className="text-2xl font-bold text-text-primary">MIS Report</h1>
-          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Revenue is generated only from transferred and approved deals.</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Revenue is counted in the month the payment was received, not the month the deal was booked.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {hasLoaded && rows.length > 0 && (
