@@ -30,6 +30,7 @@ import {
   Loader2,
   Receipt,
   TrendingUp,
+  Upload,
 } from 'lucide-react';
 import { fmt, fmtDate } from '../../../crm/utils';
 import type { NWClient } from '../../../crm/types';
@@ -193,6 +194,17 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
           value={fy}
           onChange={setFy}
         />
+        <div className="flex items-center gap-2">
+        {onImport && (
+          <button
+            type="button"
+            onClick={onImport}
+            className="inline-flex items-center gap-1.5 rounded-token-md border border-accent/30 bg-accent/5 px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:border-accent/50 hover:bg-accent/10"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Add or update a statement
+          </button>
+        )}
         <button
           type="button"
           onClick={download}
@@ -202,6 +214,7 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
           {busy ? 'Preparing…' : 'Download Excel'}
         </button>
+        </div>
       </div>
 
       {/* ---------------------------------------------------------- headline */}
