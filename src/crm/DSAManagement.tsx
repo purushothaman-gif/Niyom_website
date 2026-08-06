@@ -7,7 +7,7 @@ import {
   Handshake, Plus, X, Upload, CheckCircle2, AlertCircle,
   Search, Phone, Mail, CreditCard, Building2, User, Eye,
   ToggleLeft, ToggleRight, Trash2, ChevronDown, Pencil,
-  KeyRound, ShieldOff, ShieldCheck, Copy, RefreshCw,
+  KeyRound, ShieldOff, ShieldCheck, Copy, RefreshCw, MailCheck,
 } from 'lucide-react';
 
 /** Policy-compliant temp password (8+, upper, lower, digit, symbol). */
@@ -366,6 +366,47 @@ export default function DSAManagement({ employee }: Props) {
   //
   // nw_current_dsa_id() requires dsa_login_enabled, so a disable takes effect on
   // the partner's very next query — no waiting for their JWT to expire.
+  // Welcome email — one partner at a time, deliberately. The confirm names the
+  // recipient because the address comes off the DSA record and is easy to get
+  // wrong; the "sent" tick is per-session only, the durable record is the
+  // welcome_email_sent row in nw_dsa_login_audit.
+  const [welcomeBusyId, setWelcomeBusyId] = useState<string | null>(null);
+  const [welcomeSentIds, setWelcomeSentIds] = useState<Set<string>>(new Set());
+
+  const sendWelcomeEmail = async (dsa: NWDSA) => {
+    if (!window.confirm(
+      `Send partner portal sign-in instructions to ${dsa.full_name}?\n\n` +
+      `It will go to ${dsa.email}.\n\n` +
+      `The email contains no password — it tells them to set their own using ` +
+      `Forgot Password on the sign-in page.`
+    )) return;
+
+    setWelcomeBusyId(dsa.id);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-partner-welcome-email`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sess.session?.access_token ?? ''}`,
+            Apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ dsa_id: dsa.id }),
+        },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { alert(body?.error || 'Could not send the welcome email.'); return; }
+      setWelcomeSentIds(prev => new Set(prev).add(dsa.id));
+      alert(`Welcome email sent to ${body?.to || dsa.email}.`);
+    } catch {
+      alert('Network error. Please try again.');
+    } finally {
+      setWelcomeBusyId(null);
+    }
+  };
+
   const setLoginEnabled = async (dsa: NWDSA, enabled: boolean) => {
     const { error } = await supabase.rpc('nw_partner_set_login_enabled', {
       p_dsa_id: dsa.id,
@@ -877,6 +918,32 @@ export default function DSAManagement({ employee }: Props) {
                         <KeyRound className="w-4 h-4" />
                       </button>
                     )
+                  )}
+                  {/* Welcome email. Only offered once the login actually exists:
+                      the mail walks the partner through signing in, and
+                      send-partner-reset-otp (the "set your own password" step it
+                      points at) requires dsa_login_enabled + an auth user. */}
+                  {(isAdmin || dsa.employee_id === employee.id) && dsa.dsa_auth_user_id && (
+                    <button onClick={() => sendWelcomeEmail(dsa)}
+                      disabled={welcomeBusyId === dsa.id || !dsa.dsa_login_enabled}
+                      title={
+                        !dsa.dsa_login_enabled
+                          ? 'Restore this partner’s login before sending the welcome email'
+                          : welcomeSentIds.has(dsa.id)
+                            ? 'Welcome email already sent — click to send again'
+                            : 'Email sign-in instructions to this partner'
+                      }
+                      className="p-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{
+                        background: 'var(--bg-raised)', border: '1px solid var(--border)',
+                        color: welcomeSentIds.has(dsa.id) ? 'var(--success)' : 'var(--text-muted)',
+                      }}
+                      onMouseEnter={e => { if (dsa.dsa_login_enabled) e.currentTarget.style.color = 'var(--accent)'; }}
+                      onMouseLeave={e => (e.currentTarget.style.color = welcomeSentIds.has(dsa.id) ? 'var(--success)' : 'var(--text-muted)')}>
+                      {welcomeBusyId === dsa.id
+                        ? <RefreshCw className="w-4 h-4 animate-spin" />
+                        : welcomeSentIds.has(dsa.id) ? <MailCheck className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
+                    </button>
                   )}
                   {/* Status toggle — stewardship: assigned employee or admin
                       (non-destructive). */}
