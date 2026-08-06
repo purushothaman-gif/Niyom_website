@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { emailFooterHtml, emailFooterText } from "../_shared/email_footer.ts";
+import { getPaymentGateway } from "../_shared/paymentGateway.ts";
 
 // Sprint 2 — Cashfree Payment Link.
 //
@@ -84,18 +85,14 @@ Deno.serve(async (req: Request) => {
     const anonKey     = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // --- Cashfree config (secrets live only here, never client-side) ---
-    // Env-switch hardening (Sprint 8): trim credentials (pasted secrets often carry
-    // a trailing newline) and compare CASHFREE_ENV trimmed + case-insensitively, so
-    // a formatting slip ("Production", "prod ", stray whitespace) can't silently
-    // route production keys to the sandbox base and fail auth.
-    const cfAppId   = Deno.env.get("CASHFREE_APP_ID")?.trim();
-    const cfSecret  = Deno.env.get("CASHFREE_SECRET_KEY")?.trim();
-    const cfVersion = Deno.env.get("CASHFREE_API_VERSION") ?? "2022-09-01";
-    const cfBase    = ((Deno.env.get("CASHFREE_ENV") ?? "").trim().toLowerCase() === "production")
-      ? "https://api.cashfree.com"
-      : "https://sandbox.cashfree.com";
-    if (!cfAppId || !cfSecret) {
+    // --- Cashfree gateway (secrets live server-side only, never client-side) ---
+    // Chooses the droplet relay when PAY_RELAY_URL/PAY_RELAY_SECRET are set, and
+    // calls Cashfree directly otherwise. The relay exists because Cashfree
+    // whitelists the droplet's static IP and this function has no stable egress
+    // address — see _shared/paymentGateway.ts. Env-switch hardening (trimmed
+    // credentials, case-insensitive CASHFREE_ENV) moved there with it.
+    const gateway = getPaymentGateway();
+    if (!gateway) {
       return json({ success: false, error: "Payment gateway is not configured." }, 500);
     }
 
@@ -191,38 +188,28 @@ Deno.serve(async (req: Request) => {
     let linkUrl: string | null = null;
     let cfLinkStatus: string | null = null;
     try {
-      const cfResp = await fetch(`${cfBase}/pg/links`, {
-        method: "POST",
-        headers: {
-          "x-client-id": cfAppId,
-          "x-client-secret": cfSecret,
-          "x-api-version": cfVersion,
-          "Content-Type": "application/json",
+      const result = await gateway.createLink({
+        link_id: linkId,
+        link_amount: chargeAmount,
+        link_currency: "INR",
+        link_purpose: `Payment for Deal Confirmation ${deal.confirmation_number}`,
+        customer_details: {
+          customer_name: deal.snap_client_name || "Client",
+          customer_email: clientTo,
+          customer_phone: customerPhone,
         },
-        body: JSON.stringify({
-          link_id: linkId,
-          link_amount: chargeAmount,
-          link_currency: "INR",
-          link_purpose: `Payment for Deal Confirmation ${deal.confirmation_number}`,
-          customer_details: {
-            customer_name: deal.snap_client_name || "Client",
-            customer_email: clientTo,
-            customer_phone: customerPhone,
-          },
-          // We send our own branded email; suppress Cashfree's notifications.
-          link_notify: { send_sms: false, send_email: false },
-        }),
+        // We send our own branded email; suppress Cashfree's notifications.
+        link_notify: { send_sms: false, send_email: false },
       });
-      const cfData = await cfResp.json().catch(() => ({} as Record<string, unknown>));
-      if (!cfResp.ok) {
-        console.error("Cashfree link error:", cfData);
-        const msg = (cfData as { message?: string }).message ?? "Could not create the payment link.";
-        return json({ success: false, error: msg }, 502);
+      if (!result.ok) {
+        console.error(`Cashfree link error (${gateway.kind}, status ${result.status}):`, result.error);
+        return json({ success: false, error: result.error ?? "Could not create the payment link." }, 502);
       }
-      linkUrl = (cfData as { link_url?: string }).link_url ?? null;
-      cfLinkStatus = (cfData as { link_status?: string }).link_status ?? null;
+      linkUrl = result.link_url;
+      cfLinkStatus = result.link_status;
     } catch (cfErr: any) {
-      console.error("Cashfree request failed:", cfErr?.message);
+      // Network-level failure reaching Cashfree or the relay.
+      console.error(`Cashfree request failed (${gateway.kind}):`, cfErr?.message);
       return json({ success: false, error: "Payment gateway is unavailable. Please try again." }, 502);
     }
     if (!linkUrl) {

@@ -5260,6 +5260,109 @@ export type Database = {
           },
         ]
       }
+      nw_payment_webhook_events: {
+        Row: {
+          amount: number | null
+          cf_payment_id: string | null
+          deal_confirmation_id: string | null
+          event_at: string | null
+          event_type: string | null
+          id: number
+          link_id: string | null
+          order_id: string | null
+          payload: Json
+          payment_id: string | null
+          payment_status: string | null
+          processing_note: string | null
+          processing_status: string
+          provider: string
+          received_at: string
+          signature_verified: boolean
+          source_ip: string | null
+        }
+        Insert: {
+          amount?: number | null
+          cf_payment_id?: string | null
+          deal_confirmation_id?: string | null
+          event_at?: string | null
+          event_type?: string | null
+          id?: never
+          link_id?: string | null
+          order_id?: string | null
+          payload: Json
+          payment_id?: string | null
+          payment_status?: string | null
+          processing_note?: string | null
+          processing_status?: string
+          provider?: string
+          received_at?: string
+          signature_verified?: boolean
+          source_ip?: string | null
+        }
+        Update: {
+          amount?: number | null
+          cf_payment_id?: string | null
+          deal_confirmation_id?: string | null
+          event_at?: string | null
+          event_type?: string | null
+          id?: never
+          link_id?: string | null
+          order_id?: string | null
+          payload?: Json
+          payment_id?: string | null
+          payment_status?: string | null
+          processing_note?: string | null
+          processing_status?: string
+          provider?: string
+          received_at?: string
+          signature_verified?: boolean
+          source_ip?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_payment_webhook_events_deal_confirmation_id_fkey"
+            columns: ["deal_confirmation_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_confirmations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_payment_webhook_events_deal_confirmation_id_fkey"
+            columns: ["deal_confirmation_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_overall_stage"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_payment_webhook_events_deal_confirmation_id_fkey"
+            columns: ["deal_confirmation_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_payment_summary"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_payment_webhook_events_deal_confirmation_id_fkey"
+            columns: ["deal_confirmation_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_transfer_eligible"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_payment_webhook_events_deal_confirmation_id_fkey"
+            columns: ["deal_confirmation_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_transfer_pending_acceptance"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_payment_webhook_events_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nw_support_tickets: {
         Row: {
           assigned_employee_id: string | null
