@@ -42,7 +42,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const client_id = (body.client_id || "").trim();
     const prefs: string[] = Array.isArray(body.investment_preferences)
-      ? [...new Set(body.investment_preferences.filter((p: string) => VALID_PREFS.has(p)))]
+      ? [...new Set<string>(body.investment_preferences.filter((p: string) => VALID_PREFS.has(p)))]
       : [];
     if (!client_id) return json({ error: "Missing client." }, 400);
     if (prefs.length === 0) return json({ error: "Select at least one product you want to access." }, 400);

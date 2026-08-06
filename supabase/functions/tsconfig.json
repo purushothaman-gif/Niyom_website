@@ -1,0 +1,49 @@
+{
+  /*
+   * Typechecking for the Edge Functions.
+   *
+   * This tree had no tsconfig at all — 91 files and 64 deployed functions with
+   * nothing checking them. A dropped import that left `randomUUID` undefined
+   * reached production and broke every CAS import; tsc catches that in under a
+   * second, which is the whole reason this file exists.
+   *
+   * Kept separate from tsconfig.app.json because the runtime is different:
+   * Deno, not the browser. `deno.d.ts` supplies the small amount of ambient
+   * typing that makes `tsc` able to read Deno-flavoured source at all.
+   */
+  "compilerOptions": {
+    "target": "ES2022",
+    /* Deno gives you fetch, Request/Response, crypto and URL — DOM is the
+       closest lib that describes them. No DOM code runs here. */
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    /* Bundler resolution accepts extensionless and explicit-.ts imports alike,
+       which is what Deno source looks like. */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+
+    /* No @types/node: these are not Node programs, and pulling Node globals in
+       would hide exactly the mistake this config exists to catch — code that
+       compiles against Node and then fails in Deno at runtime. */
+    "types": [],
+
+    /*
+     * supabase-js is deliberately left untyped (it falls to the `npm:*`
+     * wildcard). Pointing at the real package types makes every
+     * `.from(x).insert(y)` fail with `never`, because this project has no
+     * generated `Database` types — 80-odd errors that are all noise, in a check
+     * whose entire value is that its output is worth reading. Generating those
+     * types would be a real improvement and is its own piece of work.
+     */
+  },
+  "include": ["**/*.ts"],
+  /* Tests run under the repo-root vitest against Node, not here. */
+  "exclude": ["**/*.test.ts"]
+}

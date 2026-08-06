@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
     const stale = body.stale === true;            // only bonds whose price is newer than their analytics
 
     const { data: hol } = await supabase.from("bm_holiday_calendar").select("holiday_date");
-    const holidays = new Set((hol ?? []).map((h: Record<string, unknown>) => String(h.holiday_date)));
+    const holidays = new Set<string>((hol ?? []).map((h: Record<string, unknown>) => String(h.holiday_date)));
 
     // Stale-recompute sweep (used by the cron safety-net): recompute every active bond whose
     // price changed after its analytics were last computed, looping in bounded batches until

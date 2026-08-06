@@ -42,7 +42,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const client_id = (body.client_id || "").trim();
     const requested: string[] = Array.isArray(body.products)
-      ? [...new Set(body.products.filter((p: string) => ACTIVATABLE.has(p)))]
+      ? [...new Set<string>(body.products.filter((p: string) => ACTIVATABLE.has(p)))]
       : [];
     const demat_account = (body.demat_account || "").trim();
     const dp_name = (body.dp_name || "").trim();

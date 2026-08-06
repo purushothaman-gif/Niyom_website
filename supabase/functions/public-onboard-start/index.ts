@@ -177,7 +177,7 @@ Deno.serve(async (req: Request) => {
     let authUserId: string | null = null;
 
     const { data: listed } = await db.auth.admin.listUsers();
-    const existingUser = listed?.users?.find((u) => u.email?.toLowerCase() === email);
+    const existingUser = listed?.users?.find((u: { email?: string }) => u.email?.toLowerCase() === email);
 
     if (existingUser) {
       await db.auth.admin.updateUserById(existingUser.id, {

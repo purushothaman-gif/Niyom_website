@@ -196,7 +196,7 @@ Deno.serve(async (req: Request) => {
       .limit(2000);
     if (selError) throw selError;
 
-    const known = new Set((existing ?? []).map((r) => r.url));
+    const known = new Set((existing ?? []).map((r: { url: string }) => r.url));
     const fresh = articles.filter((a) => !known.has(a.url));
 
     if (fresh.length > 0) {
