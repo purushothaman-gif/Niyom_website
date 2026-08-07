@@ -185,6 +185,60 @@ describe('relay path', () => {
   });
 });
 
+describe('cancelLink', () => {
+  const creds = { CASHFREE_APP_ID: 'app', CASHFREE_SECRET_KEY: 'secret' };
+  const relayEnv = {
+    PAY_RELAY_URL: 'https://api.niyomwealth.com',
+    PAY_RELAY_SECRET: 'relay-secret',
+  };
+
+  it('cancels through Cashfree on the direct path', async () => {
+    env = { ...creds };
+    stubFetch(200, { link_status: 'CANCELLED' });
+    const out = await getPaymentGateway()!.cancelLink('DC-EMP01-001-abc');
+    expect(captured[0].url).toBe('https://sandbox.cashfree.com/pg/links/DC-EMP01-001-abc/cancel');
+    expect(captured[0].headers['x-client-secret']).toBe('secret');
+    expect(out.ok).toBe(true);
+  });
+
+  it('cancels through the droplet on the relay path', async () => {
+    env = { ...relayEnv };
+    stubFetch(200, { link_status: 'CANCELLED' });
+    const out = await getPaymentGateway()!.cancelLink('DC-EMP01-001-abc');
+    expect(captured[0].url).toBe('https://api.niyomwealth.com/pay/link/cancel');
+    expect(captured[0].headers['x-relay-secret']).toBe('relay-secret');
+    expect(captured[0].body.link_id).toBe('DC-EMP01-001-abc');
+    expect(out.ok).toBe(true);
+  });
+
+  it('escapes a link id that would otherwise alter the path', async () => {
+    env = { ...creds };
+    stubFetch(200, {});
+    await getPaymentGateway()!.cancelLink('a/../b');
+    expect(captured[0].url).toBe('https://sandbox.cashfree.com/pg/links/a%2F..%2Fb/cancel');
+  });
+
+  it('reports failure without throwing when the link is already paid', async () => {
+    // The caller treats cancellation as best-effort, so this must come back as
+    // a value rather than an exception — a throw here would abort a send whose
+    // new link is already live.
+    env = { ...creds };
+    stubFetch(409, { message: 'link is already PAID' });
+    const out = await getPaymentGateway()!.cancelLink('DC-EMP01-001-abc');
+    expect(out).toMatchObject({ ok: false, error: 'link is already PAID', status: 409 });
+  });
+
+  it("unwraps Cashfree's message from the droplet envelope on the relay path", async () => {
+    env = { ...relayEnv };
+    stubFetch(409, {
+      error: 'Link cancellation failed',
+      cashfree: { message: 'link is already PAID' },
+    });
+    const out = await getPaymentGateway()!.cancelLink('DC-EMP01-001-abc');
+    expect(out).toMatchObject({ ok: false, error: 'link is already PAID' });
+  });
+});
+
 describe('result shaping', () => {
   const creds = { CASHFREE_APP_ID: 'app', CASHFREE_SECRET_KEY: 'secret' };
 
