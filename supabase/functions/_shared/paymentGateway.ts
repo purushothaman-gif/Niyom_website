@@ -42,8 +42,25 @@ export interface PaymentLinkResult {
   status?: number;
 }
 
+export interface CancelLinkResult {
+  ok: boolean;
+  error?: string;
+  status?: number;
+}
+
 export interface PaymentGateway {
   createLink(req: PaymentLinkRequest): Promise<PaymentLinkResult>;
+  /**
+   * Cancel a previously issued link so a deal never has two live links for the
+   * same money. Best-effort by contract: callers must not fail a send because
+   * tidying an old link failed.
+   *
+   * Cashfree only cancels a link that is still ACTIVE — a PAID link is rejected,
+   * which is exactly the protection we want. We never decide locally whether a
+   * link is still open; Cashfree's own state is the authority, because our
+   * stored link_status is only ever the status at creation time.
+   */
+  cancelLink(linkId: string): Promise<CancelLinkResult>;
   /** Which path served the call, for logs and diagnostics. */
   readonly kind: "relay" | "direct";
 }
@@ -132,6 +149,24 @@ class RelayGateway implements PaymentGateway {
     }
     return toResult(data, res.status, true);
   }
+
+  async cancelLink(linkId: string): Promise<CancelLinkResult> {
+    const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/pay/link/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-relay-secret": this.secret },
+      body: JSON.stringify({ link_id: linkId }),
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      const inner = (data?.cashfree ?? {}) as Record<string, unknown>;
+      return {
+        ok: false,
+        status: res.status,
+        error: (inner?.message as string) || (data?.error as string) || "Could not cancel the link.",
+      };
+    }
+    return { ok: true, status: res.status };
+  }
 }
 
 // --- Direct to Cashfree (no whitelisting, or already on a whitelisted host) --
@@ -152,6 +187,28 @@ class CashfreeDirectGateway implements PaymentGateway {
     });
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     return toResult(data, res.status, res.ok);
+  }
+
+  async cancelLink(linkId: string): Promise<CancelLinkResult> {
+    // Cashfree Payment Links: POST /pg/links/{link_id}/cancel
+    const res = await fetch(`${cashfreeBase()}/pg/links/${encodeURIComponent(linkId)}/cancel`, {
+      method: "POST",
+      headers: {
+        "x-client-id": this.appId,
+        "x-client-secret": this.secret,
+        "x-api-version": apiVersion(),
+        "Content-Type": "application/json",
+      },
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        error: (data?.message as string) || "Could not cancel the link.",
+      };
+    }
+    return { ok: true, status: res.status };
   }
 }
 

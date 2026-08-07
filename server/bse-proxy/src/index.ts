@@ -445,6 +445,61 @@ app.post('/pay/link', async (req: Request, res: Response) => {
 });
 
 /**
+ * Cancel a previously issued payment link, so a deal never carries two live
+ * links for the same money. Same relay contract as /pay/link above.
+ *
+ * Note this route can only ever CLOSE a payment route, never open one — the
+ * worst a caller with the secret can do here is cancel a link. Cashfree refuses
+ * to cancel a link that has already been PAID, so a settled payment cannot be
+ * undone through this path.
+ */
+app.post('/pay/link/cancel', async (req: Request, res: Response) => {
+  if (!relaySecretOk(req.header('x-relay-secret'), cfg.payRelaySecret)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!cfg.cashfreePgAppId || !cfg.cashfreePgSecret) {
+    return res.status(503).json({ error: 'Cashfree payments not configured' });
+  }
+
+  const linkId = String((req.body ?? {}).link_id ?? '').trim();
+  if (!linkId) {
+    return res.status(400).json({ error: 'link_id is required' });
+  }
+
+  const base =
+    cfg.cashfreePgEnv === 'sandbox' ? 'https://sandbox.cashfree.com' : 'https://api.cashfree.com';
+
+  try {
+    const cf = await fetch(`${base}/pg/links/${encodeURIComponent(linkId)}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-client-id': cfg.cashfreePgAppId,
+        'x-client-secret': cfg.cashfreePgSecret,
+        'x-api-version': cfg.cashfreePgApiVersion,
+      },
+    });
+    const data = (await cf.json().catch(() => ({}))) as Record<string, unknown>;
+
+    if (!cf.ok) {
+      // Expected and harmless when the link is already PAID or EXPIRED. Logged
+      // at warn, not error — the caller treats cancellation as best-effort.
+      console.warn(`[pay/link/cancel] cashfree ${cf.status} link_id=${linkId}`, data);
+      return res.status(cf.status).json({
+        error: (data.message as string) || 'Link cancellation failed',
+        cashfree: data,
+      });
+    }
+
+    console.log(`[pay/link/cancel] cancelled link_id=${linkId} env=${cfg.cashfreePgEnv}`);
+    return res.json(data);
+  } catch (e) {
+    console.error('[pay/link/cancel] error', (e as Error)?.message);
+    return res.status(502).json({ error: 'Payment gateway unavailable' });
+  }
+});
+
+/**
  * BSE answers order_new with {"status":"success","data":{}} — no id, nothing
  * created — when it silently refuses an order (UCC not transaction-ready,
  * scheme/mode mismatch, or a payload it could not use). Treating that as

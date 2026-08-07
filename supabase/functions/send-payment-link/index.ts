@@ -216,6 +216,54 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: "Payment link could not be created." }, 502);
     }
 
+    // --- Retire the deal's earlier links ---------------------------------
+    // Without this, every resend leaves another live link for the SAME money.
+    // Nothing stops a client paying two of them, and the webhook would rightly
+    // record both (they are genuinely distinct payments with distinct
+    // cf_payment_ids) — leaving the deal overpaid and needing a manual unwind.
+    //
+    // Deliberately AFTER creation: cancelling first would, on a creation
+    // failure, leave the client holding no working link at all.
+    //
+    // Best-effort by design. A failure here must never fail the send — the new
+    // link is already live and the client is waiting on the email. Most
+    // failures are benign: Cashfree refuses to cancel a link that is already
+    // PAID or EXPIRED, which is exactly the protection we want, since it means
+    // a settled payment can never be closed off by this path. We never judge
+    // locally whether a link is still open — our stored link_status is only the
+    // status at creation time, so Cashfree's own state is the authority.
+    const priorLinks: { id: string; linkId: string }[] = [];
+    try {
+      const { data: priorRows } = await db
+        .from("nw_deal_email_log")
+        .select("id, metadata")
+        .eq("deal_confirmation_id", deal.id)
+        .eq("email_type", "payment_link")
+        .order("sent_at", { ascending: false })
+        .limit(20);
+      for (const row of priorRows ?? []) {
+        const prevId = (row.metadata as { cashfree_link_id?: string } | null)?.cashfree_link_id;
+        if (prevId && prevId !== linkId) priorLinks.push({ id: row.id, linkId: prevId });
+      }
+    } catch (e) {
+      console.error("prior-link lookup failed:", (e as Error)?.message);
+    }
+
+    const cancelledLinks: string[] = [];
+    for (const prev of priorLinks) {
+      try {
+        const res = await gateway.cancelLink(prev.linkId);
+        if (res.ok) {
+          cancelledLinks.push(prev.linkId);
+          console.log(`Cancelled prior payment link ${prev.linkId} on ${deal.confirmation_number}`);
+        } else {
+          console.warn(`Prior link ${prev.linkId} not cancelled (${res.status}): ${res.error}`);
+        }
+      } catch (e) {
+        console.warn(`Prior link ${prev.linkId} cancel threw:`, (e as Error)?.message);
+      }
+    }
+
     // --- Recipients: To = client, CC = owner + admin (payment-email pattern) ---
     const adminEmail = Deno.env.get("NIYOM_ADMIN_EMAIL") ?? "purushothaman@niyomwealth.com";
     let ownerEmail: string | null = null;
@@ -357,6 +405,11 @@ ${emailFooterText({ year, ref: deal.confirmation_number })}`;
           cashfree_link_status: cfLinkStatus,
           link_url: linkUrl,
           amount: chargeAmount,
+          // Which earlier links this send retired. Recorded on the NEW row
+          // rather than by updating the old ones, because this table is an
+          // append-only audit — the prior rows must keep saying what was true
+          // when they were written.
+          ...(cancelledLinks.length ? { cancelled_prior_links: cancelledLinks } : {}),
           ...(resendResp.ok ? {} : { error: respBody?.message ?? "send failed" }),
         },
       });
