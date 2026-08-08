@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { asJson } from "../_shared/json.ts";
+import { timestampAgeSeconds } from "../_shared/webhookTimestamp.ts";
 
 // Cashfree payment webhook receiver.
 // -----------------------------------------------------------------------------
@@ -167,15 +168,20 @@ Deno.serve(async (req: Request) => {
   // Replay window. The signature covers the timestamp, so an attacker cannot
   // freshen a captured delivery without the secret — this bounds how long a
   // captured-and-resent body stays acceptable.
+  //
+  // Cashfree sends epoch MILLISECONDS here (13 digits). This previously read the
+  // value as seconds, which placed every real payment delivery ~56,000 years out
+  // and rejected it as stale — while the dashboard's test payload, carrying no
+  // millisecond stamp, passed. The endpoint therefore looked healthy and refused
+  // every actual payment. timestampAgeSeconds normalises the units; the HMAC
+  // above deliberately still uses the header string verbatim, because those are
+  // the bytes Cashfree signed.
   const toleranceSeconds = Number(Deno.env.get("CASHFREE_WEBHOOK_TOLERANCE_SECONDS") ?? "") ||
     DEFAULT_TOLERANCE_SECONDS;
-  const tsSeconds = Number(timestamp);
-  if (Number.isFinite(tsSeconds)) {
-    const ageSeconds = Math.abs(Date.now() / 1000 - tsSeconds);
-    if (ageSeconds > toleranceSeconds) {
-      console.warn(`[cashfree-webhook] stale timestamp age=${Math.round(ageSeconds)}s ip=${sourceIp ?? "-"}`);
-      return json({ error: "Stale webhook timestamp" }, 401);
-    }
+  const ageSeconds = timestampAgeSeconds(timestamp);
+  if (Number.isFinite(ageSeconds) && ageSeconds > toleranceSeconds) {
+    console.warn(`[cashfree-webhook] stale timestamp age=${Math.round(ageSeconds)}s ip=${sourceIp ?? "-"}`);
+    return json({ error: "Stale webhook timestamp" }, 401);
   }
 
   // Deliberately NOT logged to the DB above this line: the endpoint is public,
