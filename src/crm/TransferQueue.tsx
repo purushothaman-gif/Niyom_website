@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
+import { edgeFunctionErrorMessage } from '../lib/edgeFunctionError';
 import { NWEmployee } from './types';
 import {
   Send, Search, ChevronLeft, ChevronRight,
@@ -330,7 +331,7 @@ export default function TransferQueue({ employee }: Props) {
         body: { dealId: preview.deal_id, remarks: remarks.trim() || null, override: true },
       });
       if (fnErr || !data?.success) {
-        throw new Error(data?.error || fnErr?.message || 'Could not complete transfer.');
+        throw new Error(await edgeFunctionErrorMessage(fnErr, data, 'Could not complete transfer.'));
       }
       setSuccessResult({
         transfer_reference: data.transfer_reference,
@@ -361,7 +362,7 @@ export default function TransferQueue({ employee }: Props) {
         body: { dealId: successResult.deal.deal_id },
       });
       if (fnErr || !data?.success) {
-        throw new Error(data?.error || fnErr?.message || 'Could not resend closure email.');
+        throw new Error(await edgeFunctionErrorMessage(fnErr, data, 'Could not resend closure email.'));
       }
       setSuccessResult(prev => prev ? { ...prev, email_status: 'sent', email_error: null } : prev);
       setResendMessage({ ok: true, text: 'Closure email resent successfully.' });

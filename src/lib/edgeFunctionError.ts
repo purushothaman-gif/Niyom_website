@@ -28,6 +28,19 @@ interface EdgeErrorBody {
   message?: string;
 }
 
+export interface EdgeErrorOptions {
+  /**
+   * Whether the library's own message ("Edge Function returned a non-2xx
+   * status code") may be shown when the body yields nothing.
+   *
+   * True for staff screens — an RM can act on a technical string, or quote it.
+   * FALSE for client-facing pages: a client signing a deal should see
+   * "Could not send the verification code", never our plumbing. Those callers
+   * get their own fallback instead.
+   */
+  allowLibraryMessage?: boolean;
+}
+
 /**
  * Best available message for a failed `functions.invoke`, in priority order:
  *
@@ -35,7 +48,8 @@ interface EdgeErrorBody {
  *      functions report business failures this way, and there `data` is real.
  *   2. the response body on `error.context` — the non-2xx case, and the one
  *      the naive pattern misses.
- *   3. `error.message` — the library's generic string; better than nothing.
+ *   3. `error.message` — the library's generic string, unless the caller has
+ *      opted out (see EdgeErrorOptions).
  *   4. `fallback`.
  *
  * Async because reading the body is. Never throws: a helper used only on the
@@ -45,6 +59,7 @@ export async function edgeFunctionErrorMessage(
   fnErr: unknown,
   data: unknown,
   fallback: string,
+  opts: EdgeErrorOptions = {},
 ): Promise<string> {
   const fromData = (data as EdgeErrorBody | null | undefined)?.error;
   if (typeof fromData === 'string' && fromData.trim()) return fromData;
@@ -70,8 +85,10 @@ export async function edgeFunctionErrorMessage(
     }
   }
 
-  const libMessage = (fnErr as { message?: unknown } | null | undefined)?.message;
-  if (typeof libMessage === 'string' && libMessage.trim()) return libMessage;
+  if (opts.allowLibraryMessage !== false) {
+    const libMessage = (fnErr as { message?: unknown } | null | undefined)?.message;
+    if (typeof libMessage === 'string' && libMessage.trim()) return libMessage;
+  }
 
   return fallback;
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
+import { edgeFunctionErrorMessage } from '../lib/edgeFunctionError';
 import { CheckCircle2, AlertCircle, ShieldCheck, Loader2, PenLine, Mail } from 'lucide-react';
 import SignaturePad from '../components/SignaturePad';
 import { buildDebitNoteHtml, generateSignedDebitNotePdfBase64, DebitNoteInput } from '../crm/dsaDebitNote';
@@ -95,7 +96,7 @@ export default function PublicDebitNoteView({ token }: Props) {
     setBusy(true); setError('');
     const { data, error: fnErr } = await supabase.functions.invoke('send-debit-note-otp', { body: { token } });
     setBusy(false);
-    if (fnErr || !data?.success) { setError(data?.error || 'Could not send the verification code.'); return; }
+    if (fnErr || !data?.success) { setError(await edgeFunctionErrorMessage(fnErr, data, 'Could not send the verification code.', { allowLibraryMessage: false })); return; }
     setOtp('');
     setPhase('otp-verify');
   }, [token]);
@@ -107,7 +108,7 @@ export default function PublicDebitNoteView({ token }: Props) {
       body: { token, otp: otp.trim() },
     });
     setBusy(false);
-    if (fnErr || !data?.verified) { setError(data?.error || 'Verification failed.'); return; }
+    if (fnErr || !data?.verified) { setError(await edgeFunctionErrorMessage(fnErr, data, 'Verification failed.', { allowLibraryMessage: false })); return; }
     setPhase('sign');
   };
 
@@ -128,7 +129,7 @@ export default function PublicDebitNoteView({ token }: Props) {
       const { data, error: fnErr } = await supabase.functions.invoke('sign-debit-note', {
         body: { token, otp: otp.trim(), signatureBase64: signature, signedPdfBase64 },
       });
-      if (fnErr || !data?.success) { setError(data?.error || 'Could not complete signing.'); setBusy(false); return; }
+      if (fnErr || !data?.success) { setError(await edgeFunctionErrorMessage(fnErr, data, 'Could not complete signing.', { allowLibraryMessage: false })); setBusy(false); return; }
       setPhase('success');
     } catch (e: any) {
       setError(e?.message || 'Something went wrong. Please try again.');

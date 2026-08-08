@@ -4,6 +4,7 @@
 
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { edgeFunctionErrorMessage } from '../../lib/edgeFunctionError';
 import { BondPublic, ImportRow, ImportSummary } from './bondTypes';
 
 export const bondQueryClient = new QueryClient({
@@ -78,7 +79,7 @@ export interface EnrichResponse { enriched: number; results: EnrichResult[] }
 // One enrichment batch (edge function loops internally, bounded by `limit`).
 export async function enrichBatch(params: { bond_ids?: string[]; isin?: string; limit?: number; recompute?: boolean; remaster?: boolean }): Promise<EnrichResponse> {
   const { data, error } = await supabase.functions.invoke('bond-enrich', { body: params });
-  if (error) throw error;
+  if (error) throw new Error(await edgeFunctionErrorMessage(error, data, 'Could not enrich the bond.'));
   return data as EnrichResponse;
 }
 

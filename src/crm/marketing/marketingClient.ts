@@ -9,6 +9,7 @@
 
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { edgeFunctionErrorMessage } from '../../lib/edgeFunctionError';
 import type { Insertable, Updatable } from '../../lib/dbJson';
 import {
   ContentFilters, MktAsset, MktContent, MktContentHistory, MktContentPerformanceRow,
@@ -206,18 +207,7 @@ export function useGenerateContent() {
   return useMutation({
     mutationFn: async (req: MktGenerateRequest): Promise<MktGenerateResponse> => {
       const { data, error } = await supabase.functions.invoke('mkt-generate-content', { body: req });
-      if (error) {
-        // Edge function errors carry the useful message in the response body.
-        let detail = error.message;
-        try {
-          const ctx = (error as { context?: Response }).context;
-          if (ctx && typeof ctx.json === 'function') {
-            const parsed = await ctx.json();
-            if (parsed?.error) detail = parsed.error;
-          }
-        } catch { /* keep the transport message */ }
-        throw new Error(detail);
-      }
+      if (error) throw new Error(await edgeFunctionErrorMessage(error, data, 'Could not generate content.'));
       if (data?.error) throw new Error(data.error);
       return data as MktGenerateResponse;
     },
@@ -290,7 +280,7 @@ export function useDeleteContent() {
       const { data, error } = await supabase.functions.invoke('mkt-expire-content', {
         body: { source: 'admin', content_id: contentId, note: note ?? '' },
       });
-      if (error) throw error;
+      if (error) throw new Error(await edgeFunctionErrorMessage(error, data, 'Could not expire the content.'));
       if (data?.error) throw new Error(data.error);
       return data;
     },

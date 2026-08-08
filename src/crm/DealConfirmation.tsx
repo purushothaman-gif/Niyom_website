@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
+import { edgeFunctionErrorMessage } from '../lib/edgeFunctionError';
 import type { Insertable } from '../lib/dbJson';
 import { NWEmployee, NWClient } from './types';
 import {
@@ -593,7 +594,7 @@ export default function DealConfirmation({ employee }: Props) {
         { body: { dealId: deal.id } }
       );
       if (fnError || !fnData?.success) {
-        throw new Error(fnData?.error || fnError?.message || 'Failed to send secure link');
+        throw new Error(await edgeFunctionErrorMessage(fnError, fnData, 'Failed to send secure link'));
       }
       setPreviewDeal(prev =>
         prev && prev.id === deal.id
