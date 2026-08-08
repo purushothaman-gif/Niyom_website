@@ -79,6 +79,22 @@ describe('edgeFunctionErrorMessage', () => {
     await expect(edgeFunctionErrorMessage({}, undefined, FALLBACK)).resolves.toBe(FALLBACK);
   });
 
+  it('still recovers a real body message on client-facing pages', async () => {
+    // opting out of the library message must not cost the useful one — a client
+    // being told "Incorrect OTP" is the whole point.
+    const err = httpError(400, { error: 'Incorrect OTP. Please try again.' });
+    const msg = await edgeFunctionErrorMessage(err, null, FALLBACK, { allowLibraryMessage: false });
+    expect(msg).toBe('Incorrect OTP. Please try again.');
+  });
+
+  it('never shows a client the library’s technical string', async () => {
+    // A client signing a deal should see our friendly wording, not our plumbing.
+    const err = httpError(500, {});
+    const msg = await edgeFunctionErrorMessage(err, null, FALLBACK, { allowLibraryMessage: false });
+    expect(msg).toBe(FALLBACK);
+    expect(msg).not.toContain('non-2xx');
+  });
+
   it('does not throw when context is not a Response', async () => {
     // A helper used only on the error path must never manufacture a second
     // error and bury the first.

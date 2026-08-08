@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
+import { edgeFunctionErrorMessage } from '../lib/edgeFunctionError';
 import html2pdf from 'html2pdf.js';
 import DealDocument, { DealDocumentData } from '../crm/DealDocument';
 import { CheckCircle2, XCircle, AlertCircle, ShieldCheck, Loader2, PenLine, Mail } from 'lucide-react';
@@ -184,7 +185,7 @@ export default function PublicDealView({ token }: Props) {
     setBusy(true); setError('');
     const { data, error: fnErr } = await supabase.functions.invoke('record-tc-acceptance', { body: { token } });
     setBusy(false);
-    if (fnErr || !data?.success) { setError(data?.error || 'Could not record your acceptance. Please try again.'); return; }
+    if (fnErr || !data?.success) { setError(await edgeFunctionErrorMessage(fnErr, data, 'Could not record your acceptance. Please try again.', { allowLibraryMessage: false })); return; }
     setPhase('otp-request');
   }, [token, tcChecked]);
 
@@ -193,7 +194,7 @@ export default function PublicDealView({ token }: Props) {
     setBusy(true); setError('');
     const { data, error: fnErr } = await supabase.functions.invoke('send-deal-otp', { body: { token, purpose: intent } });
     setBusy(false);
-    if (fnErr || !data?.success) { setError(data?.error || 'Could not send the verification code.'); return; }
+    if (fnErr || !data?.success) { setError(await edgeFunctionErrorMessage(fnErr, data, 'Could not send the verification code.', { allowLibraryMessage: false })); return; }
     setOtp('');
     setPhase('otp-verify');
   }, [token, intent]);
@@ -205,7 +206,7 @@ export default function PublicDealView({ token }: Props) {
     const { data, error: fnErr } = await supabase.functions.invoke('verify-deal-otp', {
       body: { token, otp: otp.trim(), purpose: intent },
     });
-    if (fnErr || !data?.verified) { setBusy(false); setError(data?.error || 'Verification failed.'); return; }
+    if (fnErr || !data?.verified) { setBusy(false); setError(await edgeFunctionErrorMessage(fnErr, data, 'Verification failed.', { allowLibraryMessage: false })); return; }
 
     if (intent === 'accept') {
       setBusy(false);
@@ -217,7 +218,7 @@ export default function PublicDealView({ token }: Props) {
       body: { token, otp: otp.trim(), reason: rejectReason.trim() },
     });
     setBusy(false);
-    if (rjErr || !rj?.success) { setError(rj?.error || 'Could not record your rejection.'); return; }
+    if (rjErr || !rj?.success) { setError(await edgeFunctionErrorMessage(rjErr, rj, 'Could not record your rejection.', { allowLibraryMessage: false })); return; }
     setPhase('success-rejected');
   };
 
@@ -235,7 +236,7 @@ export default function PublicDealView({ token }: Props) {
       const { data, error: fnErr } = await supabase.functions.invoke('accept-deal', {
         body: { token, otp: otp.trim(), signatureBase64: signature, signedPdfBase64 },
       });
-      if (fnErr || !data?.success) { setError(data?.error || 'Could not complete acceptance.'); setBusy(false); return; }
+      if (fnErr || !data?.success) { setError(await edgeFunctionErrorMessage(fnErr, data, 'Could not complete acceptance.', { allowLibraryMessage: false })); setBusy(false); return; }
       setPhase('success-accepted');
     } catch (e: any) {
       setError(e?.message || 'Something went wrong. Please try again.');

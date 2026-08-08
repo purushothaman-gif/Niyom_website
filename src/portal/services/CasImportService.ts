@@ -18,6 +18,7 @@
  * client to their own, so there is no server round trip to justify.
  */
 import { clientSupabase as supabase } from '../../lib/supabase';
+import { edgeFunctionErrorMessage } from '../../lib/edgeFunctionError';
 
 /** Mirrors the proxy's cap, so an oversized file fails here with a real message. */
 export const MAX_CAS_BYTES = 6 * 1024 * 1024;
@@ -116,12 +117,13 @@ export const CasImportService = {
          * Reporting error.message instead would replace every one of them with
          * "Edge Function returned a non-2xx status code".
          */
-        const body = (await (error as { context?: Response }).context
-          ?.json()
-          .catch(() => null)) as { error?: string } | null;
         return {
           ok: false,
-          error: body?.error || 'We could not read that statement. Please try again.',
+          error: await edgeFunctionErrorMessage(
+            error, null,
+            'We could not read that statement. Please try again.',
+            { allowLibraryMessage: false },
+          ),
         };
       }
 

@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { edgeFunctionErrorMessage } from '../lib/edgeFunctionError';
 import { NWEmployee, NWTransaction, NWClient, NWDSA, NWDSADebitNote } from './types';
 import { fmt, PRODUCT_LABELS } from './utils';
 import { Wallet, Download, ChevronDown, FileText, RefreshCw, Loader2, FileCheck2, CheckCircle2, XCircle, Eye, Send, Lock, FileArchive } from 'lucide-react';
@@ -532,7 +533,7 @@ export default function DSAPayout({ employee }: Props) {
       const { data, error } = await supabase.functions.invoke('send-debit-note-email', {
         body: { debitNoteId: note.id },
       });
-      if (error || !data?.success) throw new Error(data?.error || error?.message || 'Failed to send link');
+      if (error || !data?.success) throw new Error(await edgeFunctionErrorMessage(error, data, 'Failed to send link'));
       await loadDebitNotes();
       setGenStatus(note.signature_status === 'not_sent'
         ? `Signing link sent to ${note.dsa?.full_name || 'DSA'}`
