@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
+import { edgeFunctionErrorMessage } from '../lib/edgeFunctionError';
 import { NWEmployee } from './types';
 import {
   ChevronLeft, Plus, X, Loader2, CheckCircle2, AlertCircle,
@@ -343,7 +344,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         },
       });
       if (fnErr || !data?.success) {
-        throw new Error(data?.error || fnErr?.message || 'Could not record payment.');
+        throw new Error(await edgeFunctionErrorMessage(fnErr, data, 'Could not record payment.'));
       }
       showToast('Payment recorded successfully.');
       setForm(emptyForm(deal.snap_client_name, defaultBank));
@@ -425,7 +426,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         body: { paymentId: p.id, pdfBase64 },
       });
       if (fnErr || !data?.success) {
-        throw new Error(data?.error || fnErr?.message || 'Could not upload receipt.');
+        throw new Error(await edgeFunctionErrorMessage(fnErr, data, 'Could not upload receipt.'));
       }
 
       // If the server allocated a different number than our preview
@@ -461,7 +462,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         body: { dealId: deal.id },
       });
       if (fnErr || !data?.success) {
-        throw new Error(data?.error || fnErr?.message || 'Could not send reminder.');
+        throw new Error(await edgeFunctionErrorMessage(fnErr, data, 'Could not send reminder.'));
       }
       showToast('Payment reminder sent to client.');
       await load();
@@ -479,7 +480,11 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         body: { dealId: deal.id, amount },
       });
       if (fnErr || !data?.success) {
-        throw new Error(data?.error || fnErr?.message || 'Could not send payment link.');
+        // On a non-2xx, supabase-js nulls `data` and reports only "Edge Function
+        // returned a non-2xx status code" — the gateway's real reason (a Cashfree
+        // rejection, an outstanding-balance error) is left unread on the response.
+        // See lib/edgeFunctionError.
+        throw new Error(await edgeFunctionErrorMessage(fnErr, data, 'Could not send payment link.'));
       }
       showToast('Payment link sent to client.');
       await load();
@@ -497,7 +502,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         body: { paymentId: p.id },
       });
       if (fnErr || !data?.success) {
-        throw new Error(data?.error || fnErr?.message || 'Could not send receipt.');
+        throw new Error(await edgeFunctionErrorMessage(fnErr, data, 'Could not send receipt.'));
       }
       const type = data.email_type as string;
       showToast(
