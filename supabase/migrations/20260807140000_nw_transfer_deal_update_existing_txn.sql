@@ -1,0 +1,14 @@
+-- Transfer Queue is the sole transfer point. "Add New Business" from a deal now
+-- records the transaction UN-transferred (transfer_stage NULL) so the paid deal
+-- shows in the queue; the admin transfers it there. nw_transfer_deal therefore
+-- UPDATEs an existing non-transferred transaction for the deal (only one can
+-- exist per uq_nw_transactions_deal) instead of always INSERTing a second one.
+-- Applied to the hosted DB via the migration API on 2026-08-07. See
+-- pg_get_functiondef(nw_transfer_deal) for the full body — the only change vs
+-- the prior version is: select v_pending_txn (deal's non-transferred txn) and,
+-- when present, UPDATE it to 'transferred' (stamping transfer_reference,
+-- transferred_at/by, snapshot) rather than inserting a new row. The INSERT path
+-- is unchanged for deals with no booked transaction.
+--
+-- Body intentionally not duplicated here to avoid drift; it lives in the DB.
+SELECT 'nw_transfer_deal update-existing-txn: applied via migration API' AS note;

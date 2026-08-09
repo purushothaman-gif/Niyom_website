@@ -629,17 +629,17 @@ export default function Transactions({ employee, onNavigate }: Props) {
       premium_frequency: form.premium_frequency,
     });
 
-    // Booked from a confirmed deal: carry the same link the Transfer Queue
-    // writes. This is what removes the deal from that queue, and the existing
-    // uq_nw_transactions_deal unique index makes booking the same deal twice
-    // impossible from either path.
+    // Booked from a confirmed deal: link the deal but DO NOT transfer here — the
+    // Transfer Queue is the sole transfer point. Leaving transfer_stage unset
+    // keeps the paid deal in the queue, where an admin transfers it
+    // (nw_transfer_deal finalises THIS same row → 'transferred'). The
+    // uq_nw_transactions_deal unique index guarantees one transaction per deal,
+    // so the queue updates rather than double-books. The deal still counts in MIS
+    // immediately (MIS keys on deal_confirmation_id), per the paid-deal rule.
     if (!editTxn && pickedDeal) {
       Object.assign(payload, {
         deal_confirmation_id: pickedDeal.deal_id,
-        transfer_stage: 'transferred',
-        transferred_at: new Date().toISOString(),
-        transferred_by: employee.id,
-        transfer_remarks: 'Booked via Add New Business',
+        transfer_stage: null,
       });
     }
 
