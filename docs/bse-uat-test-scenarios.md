@@ -3,7 +3,7 @@
 
 **Member code:** 66899 · **Environment:** Demo
 **Companion document:** `bse-uat-process-note.md`
-**Date:** _fill on send_ · **Version:** 1.0
+**Date:** _fill on send_ · **Version:** 1.1 (5 August 2026)
 
 ### How to read this
 
@@ -20,9 +20,16 @@ A FINDING is a truthful record of what we observed; it is **not** a transcript,
 and we have not presented it as one.
 
 > **Status of this document.** Rows below marked *Not yet tested* are blocked on
-> the two open items in §11 of the process note: no callback has been received
-> from BSE, and we need a transaction-ready UCC on demo. We would rather submit
-> this honestly now than hold it back or overstate it.
+> the open items in §11 of the process note — principally the investor-side
+> journeys we cannot complete on demo (mandate authorisation, payment
+> settlement), the absence of any callback from BSE, and PAN verification not
+> completing for PAN-holder UCCs. We would rather submit this honestly now than
+> hold it back or overstate it.
+>
+> **One scenario is recorded as Fail (D14, `sxp_cancel`).** We have reported it
+> in full rather than omitting it or marking it untested, and our reasons for
+> believing the cause sits with BSE are set out in the row and in §5 of our
+> covering mail.
 
 ---
 
@@ -55,9 +62,24 @@ and we have not presented it as one.
 | B8 | Investor 2FA link for onboarding | `/v2/get_2fa_link` | `ucc_auth` returns a BSE-hosted URL | Pass | FINDING — array envelope, lowercase events; `UCC_ELOG` per the docs returns `record_not_found` |
 | B9 | UCC status with per-check breakdown | `/v2/get_ucc` | PAN, KYC, e-log, nominee 2FA, FATCA, bank returned | Pass | FINDING — bank and FATCA correctly treated as non-blocking |
 | B10 | List all UCCs under the member | `/v2/list_ucc` | Registered UCCs with status | Pass | FINDING |
-| B11 | PAN-exempt holder | `/v2/add_ucc` | `is_pan_exempt` honoured; no permanent "pending" | Not yet tested | No PAN-exempt test investor available |
+| B11 | PAN-exempt holder | `/v2/add_ucc` | `is_pan_exempt` honoured; no permanent "pending" | Pass | LIVE — `NWEXEMPT1`, registered with `is_pan_exempt: true`, `pan_exempt_category: 08`, reached **ACTIVE** and transaction-ready after investor 2FA. Confirms PAN verification, not bank verification or FATCA, is what gates activation |
 
-**Registered on demo under member 66899:** `NW-001-0008`, `NW-002-0001`.
+**Registered on demo under member 66899 — 11 UCCs, read from `/v2/list_ucc` on
+5 August 2026:**
+
+| Client code | Status | Note |
+|---|---|---|
+| `NWEXEMPT1` | **ACTIVE** | PAN-exempt; the only transaction-ready UCC we have |
+| `NW0000010` | PENDING_VERIFICATION | Investor 2FA completed; PAN verification pending |
+| `NW0000011` | PENDING_VERIFICATION | Real, independently verified PAN; PAN verification pending |
+| `NW-001-0011` | PENDING_VERIFICATION | |
+| `NW-002-0001` | PENDING_VERIFICATION | |
+| `NW-001-0008`, `NW0000001`, `NW0000003`, `NWKYCK`, `NWKYCB`, `NWKYCE` | PENDING_AUTH | Awaiting investor 2FA |
+
+**1 ACTIVE · 4 PENDING_VERIFICATION · 6 PENDING_AUTH.** The four at
+PENDING_VERIFICATION have all cleared investor authentication and are held at
+`pan_verification: FALSE — "PAN verification Pending"`. This is the dependency
+described in §11 of the process note.
 
 ---
 
@@ -89,7 +111,11 @@ and we have not presented it as one.
 | D8 | XSIP with mandate | `/sxp_register` | `exch_mandate_id` accepted | Not yet tested | Requires an authorised mandate (C7) |
 | D9 | Order book — open and closed | `/order_list` | Both sides returned and merged | Pass | FINDING — `open_close` must sit inside `filter_param` |
 | D10 | Order progresses to allotment | `/order_list` | Status moves through to allotted | Not yet tested | Blocked: requires a transaction-ready UCC and completed payment |
-| D11 | Physical vs demat mode mismatch | `/order_new` | Refused, or success-with-no-id caught by D4 | Not yet tested | Needs a scheme configured for the opposite mode |
+| D11 | Physical vs demat mode mismatch | `/order_new` | Refused, or success-with-no-id caught by D4 | Not yet tested | Needs a scheme configured for the opposite mode. Related observation on the SxP side: a physical UCC against demat-only scheme `007-DP` is refused with `MSGID_SXP_REG_NOT_ALLOWED`, so we gate every scheme on `scheme_transaction_mode_allowed` before offering it |
+| D12 | Cancel an open order | `/order_cancel` | Accepted; cancellation recorded against the order | Pass | LIVE — 05-Aug-2026, order **5001203574**: request `{id, investor:{ucc}, member, remark}` → `{"success_id":[5001203574]}`. `id` alone is refused; the `investor` block is required |
+| D13 | A cancelled order is held pending investor approval | `/order_cancel` + `/order_list` | Order unchanged until the investor approves `verify_order_cancel` | Pass | LIVE — 05-Aug-2026, order **5001203574** moved `mem_2fa: 'd' → 'p'` with status still `payment_pending`, and a `verify_order_cancel` link was issued. We report this to staff as a pending request, never as a cancelled order |
+| D14 | **Cancel a systematic plan** | `/sxp_cancel` | Accepted; cancellation recorded against the registration | **Fail** | LIVE — 05-Aug-2026. Every well-formed request returns `HTTP 400 {"status":"error","data":"","messages":null}` — no msgid, no field. **We do not believe the cause is ours:** a wrong `reg_no` returns `record_not_found` on field `id/type`, a missing plan type returns `required: Type`, and the same empty reply is returned for an active plan, an already-cancelled plan, and every payload variant tried (±`member`, ±`investor`, ±`mem_details`, ±`mem_sxp_ref_id`, ±`reason_cd_msg`, reason codes 7 and 13, type in upper and lower case). Affected registration `202600000031617` (SIP, `NWEXEMPT1`, ₹1,000 monthly). **Raised for BSE's review** |
+| D15 | Plan-cancellation field conventions | `/sxp_cancel` | Payload matches the specification | Pass | LIVE — established while investigating D14: **`sxp_type`** is read and the example's `type` is not (`required: Type`); `reg_no` must be a **string** and is the registration number (a numeric string on demo), distinct from the `id` also returned by `sxp_list`; `reason_cd` must be a **number**. Only `/sxp_cancel` exists — `/v2/`, `/s4/` and `/s2/` variants return 404 |
 
 ---
 
@@ -137,22 +163,40 @@ and we have not presented it as one.
 | Group | Pass | Not yet tested | Fail |
 |---|---|---|---|
 | A — Connectivity & scheme master | 6 | 2 | 0 |
-| B — UCC onboarding | 6 | 5 | 0 |
+| B — UCC onboarding | 7 | 4 | 0 |
 | C — Mandate | 6 | 1 | 0 |
-| D — Transacting | 8 | 3 | 0 |
+| D — Transacting | 11 | 3 | 1 |
 | E — Payment | 5 | 1 | 0 |
 | F — Negative & boundary | 9 | 0 | 0 |
 | G — Callbacks (out of scope) | 2 | 1 | 0 |
-| **Total** | **42** | **13** | **0** |
+| **Total** | **46** | **12** | **1** |
 
-**The 13 untested scenarios reduce to two dependencies**, both needing BSE:
+**The one Fail is D14, `sxp_cancel`**, described in full in that row. Order
+cancellation on the same environment works correctly (D12, D13), and the field
+conventions for plan cancellation are established (D15); what fails is BSE's
+response to a well-formed request.
 
-1. **A transaction-ready UCC on demo** — unblocks D8, D10, D11, E6, C7.
-2. **Callback registration and test events** — unblocks G3, and completes the
+**The 12 untested scenarios reduce to five dependencies**, four of which need
+BSE:
+
+1. **PAN verification completing on demo** — every PAN-holder UCC we have
+   registered is held at `pan_verification: FALSE — "PAN verification Pending"`,
+   including one using a real, independently verified PAN. Only our PAN-exempt
+   UCC has reached ACTIVE. Please advise whether demo PAN verification runs on a
+   batch cycle, or provide test PAN and bank details that will pass.
+2. **Investor-side mandate authorisation on demo** — unblocks C7 and D8 (XSIP
+   requires an authorised mandate).
+3. **Payment settlement and allotment on demo** — unblocks D10 and E6. Our
+   orders currently rest at `payment_pending`.
+4. **Callback registration and test events** — unblocks G3, and completes the
    post-trade picture.
+5. **Spare demo client codes** — B4–B7 each consume one on registration.
 
-A further four (B4–B7) are blocked on spare demo client codes, since each
-registration attempt consumes one. Two (A7, A8) exercise production-only
-controls that demo does not require.
+Two further scenarios (A7, A8) exercise production-only controls — JOSE
+encryption and `X-API-Org-ID` — which the demo environment does not require. Our
+implementation of both is complete and switchable; see §7 of our covering mail
+regarding production registration of our public key.
 
-We would welcome guidance on all three before the demo session.
+D11 additionally needs a scheme configured for the opposite transaction mode.
+
+We would welcome guidance on all of these before the demo session.

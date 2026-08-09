@@ -219,12 +219,27 @@ explain why the page looks empty.
    locally generated request. **BSE has not yet sent us a callback.** We would
    like the URL registered against member 66899 on demo and test events fired,
    so allotment and settlement can be evidenced rather than assumed.
-2. **A transaction-ready UCC on demo.** Several transacting scenarios cannot
-   complete without one. Please confirm the state of the UCCs registered under
-   our member code, or advise how to progress one to transaction-ready on demo.
-3. **Production entitlements.** `get_mis_detail` returns `authz` for our member
-   tier. We do not depend on it, but would like the production entitlement list
-   confirmed so there are no surprises after cutover.
+2. **PAN verification does not complete on demo.** Of the 11 UCCs registered
+   under member 66899, exactly one is transaction-ready — `NWEXEMPT1` — and only
+   because it was registered **PAN-exempt**. Every UCC registered with a PAN sits
+   at `pan_verification: FALSE — "PAN verification Pending"`, including
+   `NW0000011`, which uses a real PAN we independently verified as valid and
+   name-matched before sending. Four UCCs have cleared investor authentication
+   and are held at this step. Please advise whether demo PAN verification runs
+   on a batch cycle, or provide test PAN and bank details that will pass. This
+   dependency, not UCC readiness in general, is what blocks the remaining
+   transacting scenarios.
+3. **`sxp_cancel` returns an empty error.** Every well-formed plan cancellation
+   returns `HTTP 400 {"status":"error","data":"","messages":null}` — no msgid and
+   no field — while order cancellation on the same environment works correctly.
+   A wrong `reg_no` returns `record_not_found` and a missing plan type returns
+   `required: Type`, so validation is being reached and passed. Recorded as D14
+   in the accompanying document, with the variants we attempted. Grateful for
+   your team's review.
+4. **Production entitlements.** `get_mis_detail`, `get_payment_detail` and
+   `list_payment_detail` all return `authz` for our member tier. We do not depend
+   on them, but would like the production entitlement list confirmed so there are
+   no surprises after cutover.
 
 ---
 
