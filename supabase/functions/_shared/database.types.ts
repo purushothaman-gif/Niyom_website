@@ -6585,8 +6585,6 @@ export type Database = {
         Args: { max_per_category?: number }
         Returns: number
       }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
       trigger_bond_yield_refresh: { Args: never; Returns: undefined }
       trigger_commodity_price_update: { Args: never; Returns: undefined }
       trigger_mf_universe_refresh: { Args: never; Returns: undefined }
