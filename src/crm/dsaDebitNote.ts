@@ -71,6 +71,24 @@ export function computePayoutTds(gross: number): PayoutTds {
   return { gross, tds, net: gross - tds };
 }
 
+/**
+ * HTML-escape an interpolated value. Mirrors the helper in bonds/bondOutputs.ts.
+ *
+ * This template is not only turned into a PDF — PublicDebitNoteView renders it
+ * with dangerouslySetInnerHTML on an UNAUTHENTICATED page, so a payload stored
+ * in a DSA or client name (`<img src=x onerror=...>`) would execute in the
+ * partner's browser at the moment they sign. Every value that originates in the
+ * database goes through here.
+ *
+ * Single quotes are escaped too. No attribute in this template uses them today,
+ * but that is a property of the current markup, not a guarantee about the next
+ * edit to it.
+ */
+const esc = (s: unknown): string =>
+  String(s ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ));
+
 const inr = (n: number) =>
   '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -149,30 +167,32 @@ export function buildDebitNoteHtml(input: DebitNoteInput): string {
     <tr>
       <td style="padding:7px 10px;border-bottom:1px solid ${HAIR};font-size:9.5px;color:${SUB};text-align:center;vertical-align:top;">${i + 1}</td>
       <td style="padding:7px 10px;border-bottom:1px solid ${HAIR};vertical-align:top;">
-        <span style="font-size:10px;color:${INK};font-weight:600;">${p.client_name}</span>
-        <span style="font-size:8.5px;color:${MUTE};letter-spacing:0.04em;">&nbsp;&middot;&nbsp;${p.client_code}</span>
+        <span style="font-size:10px;color:${INK};font-weight:600;">${esc(p.client_name)}</span>
+        <span style="font-size:8.5px;color:${MUTE};letter-spacing:0.04em;">&nbsp;&middot;&nbsp;${esc(p.client_code)}</span>
       </td>
       <td style="padding:7px 10px;border-bottom:1px solid ${HAIR};vertical-align:top;">
-        <span style="font-size:10px;color:${INK};">${p.product_name}</span>
-        <div style="font-size:8px;color:${MUTE};text-transform:uppercase;letter-spacing:0.06em;margin-top:1px;">${PRODUCT_LABELS[p.product_type as keyof typeof PRODUCT_LABELS] || p.product_type}</div>
+        <span style="font-size:10px;color:${INK};">${esc(p.product_name)}</span>
+        <div style="font-size:8px;color:${MUTE};text-transform:uppercase;letter-spacing:0.06em;margin-top:1px;">${esc(PRODUCT_LABELS[p.product_type as keyof typeof PRODUCT_LABELS] || p.product_type)}</div>
       </td>
       <td style="padding:7px 10px;border-bottom:1px solid ${HAIR};font-size:10px;color:${INK};text-align:right;vertical-align:top;">${p.quantity.toLocaleString('en-IN')}</td>
       <td style="padding:7px 10px;border-bottom:1px solid ${HAIR};font-size:10px;color:${INK};text-align:right;vertical-align:top;font-variant-numeric:tabular-nums;">${inr(p.payout)}</td>
     </tr>`).join('');
 
+  // These three escape their own arguments, so every call site is covered
+  // without each one having to remember. Do not pass pre-escaped values in.
   const metaRow = (lbl: string, val: string) => `
     <tr>
-      <td style="${label}text-align:right;padding:3px 12px 3px 0;white-space:nowrap;">${lbl}</td>
-      <td style="font-family:${SANS};font-size:10px;color:${INK};font-weight:600;text-align:right;padding:3px 0;white-space:nowrap;">${val}</td>
+      <td style="${label}text-align:right;padding:3px 12px 3px 0;white-space:nowrap;">${esc(lbl)}</td>
+      <td style="font-family:${SANS};font-size:10px;color:${INK};font-weight:600;text-align:right;padding:3px 0;white-space:nowrap;">${esc(val)}</td>
     </tr>`;
 
   const dsaLine = (lbl: string, val: string) => `
-    <div style="font-size:9.5px;color:${SUB};margin-top:2px;"><span style="color:${MUTE};">${lbl}:</span> ${val}</div>`;
+    <div style="font-size:9.5px;color:${SUB};margin-top:2px;"><span style="color:${MUTE};">${esc(lbl)}:</span> ${esc(val)}</div>`;
 
   const bankRow = (lbl: string, val: string) => `
     <tr>
-      <td style="${label}padding:3px 14px 3px 0;white-space:nowrap;vertical-align:top;">${lbl}</td>
-      <td style="font-family:${SANS};font-size:10px;color:${INK};font-weight:600;padding:3px 0;vertical-align:top;">${val || '—'}</td>
+      <td style="${label}padding:3px 14px 3px 0;white-space:nowrap;vertical-align:top;">${esc(lbl)}</td>
+      <td style="font-family:${SANS};font-size:10px;color:${INK};font-weight:600;padding:3px 0;vertical-align:top;">${val ? esc(val) : '—'}</td>
     </tr>`;
 
   return `
@@ -201,7 +221,7 @@ export function buildDebitNoteHtml(input: DebitNoteInput): string {
     <!-- DSA information block -->
     <div style="margin-top:18px;">
       <div style="${label}margin-bottom:6px;">Debit Note To</div>
-      <div style="font-family:${SERIF};font-size:13px;font-weight:700;color:${INK};">${dsa.full_name}</div>
+      <div style="font-family:${SERIF};font-size:13px;font-weight:700;color:${INK};">${esc(dsa.full_name)}</div>
       ${dsaLine('DSA Code', dsa.dsa_code)}
       ${dsa.pan ? dsaLine('PAN', dsa.pan) : ''}
       ${dsa.mobile ? dsaLine('Mobile', dsa.mobile) : ''}
@@ -280,13 +300,13 @@ export function buildDebitNoteHtml(input: DebitNoteInput): string {
       <div style="width:300px;text-align:center;">
         <div style="height:96px;display:flex;align-items:flex-end;justify-content:center;">
           ${clientSignatureDataUrl
-            ? `<img src="${clientSignatureDataUrl}" alt="Client Signature" style="height:80px;max-width:260px;width:auto;object-fit:contain;display:inline-block;" />`
+            ? `<img src="${esc(clientSignatureDataUrl)}" alt="Client Signature" style="height:80px;max-width:260px;width:auto;object-fit:contain;display:inline-block;" />`
             : ``}
         </div>
         <div style="border-top:1px solid ${RULE};margin-top:6px;padding-top:7px;">
           <div style="${label}">Client Signature</div>
           ${signedDate
-            ? `<div style="font-size:9px;color:${SUB};margin-top:4px;">Date: ${signedDate}</div>`
+            ? `<div style="font-size:9px;color:${SUB};margin-top:4px;">Date: ${esc(signedDate)}</div>`
             : `<div style="font-size:9px;color:${MUTE};margin-top:4px;">Date: ____________________</div>`}
         </div>
       </div>
@@ -304,7 +324,7 @@ export function buildDebitNoteHtml(input: DebitNoteInput): string {
 
     <!-- Footer -->
     <div style="margin-top:32px;border-top:1px solid ${HAIR};padding-top:9px;display:flex;justify-content:space-between;font-size:7.5px;letter-spacing:0.04em;color:${MUTE};">
-      <span>Generated by ${generatedBy}</span>
+      <span>Generated by ${esc(generatedBy)}</span>
       <span>This is a system-generated debit note.</span>
     </div>
   </div>`;
