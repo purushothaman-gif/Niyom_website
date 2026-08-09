@@ -21,6 +21,13 @@
       "runtimeArgs": ["run", "preview", "--", "--port", "4173", "--strictPort"],
       "port": 4173,
       "autoPort": false
+    },
+    {
+      "name": "niyom-csp-check",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/serve-with-headers.mjs", "."],
+      "port": 4180,
+      "autoPort": false
     }
   ]
 }
