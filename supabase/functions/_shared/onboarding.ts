@@ -3,6 +3,7 @@
 // -record-doc / -submit. Kept small and dependency-light (Deno + supabase-js).
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { decideOtp, generateOtp, hashOtp } from "./otp.ts";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,8 +49,12 @@ export function isValidPan(pan: string): boolean {
   return /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan);
 }
 
-export function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+// OTP generation / hashing / verification decisions live in _shared/otp.ts,
+// which is Deno-free and unit-tested. This module only does the database I/O.
+export const generateOTP = generateOtp;
+
+function otpPepper(): string {
+  return Deno.env.get("ONBOARDING_OTP_PEPPER") ?? "";
 }
 
 export function maskPhone(phone: string): string {
@@ -81,7 +86,14 @@ export async function isRateLimited(db: SupabaseClient, phone: string): Promise<
 export async function persistOtp(db: SupabaseClient, phone: string, code: string): Promise<void> {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
   await db.from("nw_otps").delete().eq("phone", phone);
-  await db.from("nw_otps").insert({ phone, otp: code, expires_at: expiresAt });
+  // otp_hash only — the cleartext `otp` column is deprecated and left NULL
+  // pending its drop, so a leaked table dump no longer yields live codes.
+  await db.from("nw_otps").insert({
+    phone,
+    otp_hash: await hashOtp(code, phone, otpPepper()),
+    attempts: 0,
+    expires_at: expiresAt,
+  });
   await db.from("nw_otps").delete().lt("expires_at", new Date().toISOString());
 }
 
@@ -90,7 +102,9 @@ export async function persistOtp(db: SupabaseClient, phone: string, code: string
 // The code is always persisted first, so verification still works if delivery
 // fails. `phone` is retained in the signature as the OTP key but unused here.
 export async function deliverOtp(_phone: string, email: string | null, code: string): Promise<void> {
-  console.log(`[onboarding OTP] ${email ?? "-"}: ${code}`);
+  // Never log the code — edge-function logs are readable by anyone with project
+  // access and would defeat the OTP entirely.
+  console.log(`[onboarding OTP] issued for ${maskEmail(email)}`);
   if (email) await deliverOtpEmail(email, code);
 }
 
@@ -122,6 +136,11 @@ async function deliverOtpEmail(email: string, code: string): Promise<void> {
 }
 
 // Verify a submitted OTP for a phone. Consumes (deletes) the row on success.
+//
+// Wrong codes increment `attempts` and the code dies at MAX_OTP_ATTEMPTS.
+// Without that cap a 6-digit code was brute-forceable inside its 10-minute
+// window, and a success here mints a magic-link token — i.e. full account
+// takeover. Comparison is constant-time over the hashes.
 export async function checkOtp(
   db: SupabaseClient,
   phone: string,
@@ -129,21 +148,33 @@ export async function checkOtp(
 ): Promise<{ ok: boolean; error?: string }> {
   const { data: stored } = await db
     .from("nw_otps")
-    .select("otp, expires_at")
+    .select("id, otp, otp_hash, attempts, expires_at")
     .eq("phone", phone)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (!stored) return { ok: false, error: "No OTP found. Please request a new one." };
-  if (new Date(stored.expires_at) < new Date()) {
-    await db.from("nw_otps").delete().eq("phone", phone);
-    return { ok: false, error: "OTP expired. Please request a new one." };
-  }
-  if (stored.otp !== otp.trim()) return { ok: false, error: "Incorrect OTP. Please try again." };
 
-  await db.from("nw_otps").delete().eq("phone", phone);
-  return { ok: true };
+  const decision = await decideOtp(stored, otp, {
+    key: phone,
+    pepper: otpPepper(),
+    nowMs: Date.now(),
+  });
+
+  switch (decision.outcome) {
+    case "ok":
+      await db.from("nw_otps").delete().eq("phone", phone);
+      return { ok: true };
+    case "expired":
+    case "exhausted":
+      // Dead either way — burn it so the window closes now.
+      await db.from("nw_otps").delete().eq("phone", phone);
+      return { ok: false, error: decision.error };
+    case "wrong":
+      await db.from("nw_otps").update({ attempts: decision.attempts }).eq("id", stored.id);
+      return { ok: false, error: decision.error };
+  }
 }
 
 // True when a client with this PAN already exists in our records. Both PAN-verify

@@ -2822,18 +2822,21 @@ export type Database = {
           client_id: string | null
           created_at: string | null
           id: string
+          metadata: Json
         }
         Insert: {
           action: string
           client_id?: string | null
           created_at?: string | null
           id?: string
+          metadata?: Json
         }
         Update: {
           action?: string
           client_id?: string | null
           created_at?: string | null
           id?: string
+          metadata?: Json
         }
         Relationships: [
           {
@@ -5149,24 +5152,30 @@ export type Database = {
       }
       nw_otps: {
         Row: {
+          attempts: number
           created_at: string
           expires_at: string
           id: string
-          otp: string
+          otp: string | null
+          otp_hash: string | null
           phone: string
         }
         Insert: {
+          attempts?: number
           created_at?: string
           expires_at: string
           id?: string
-          otp: string
+          otp?: string | null
+          otp_hash?: string | null
           phone: string
         }
         Update: {
+          attempts?: number
           created_at?: string
           expires_at?: string
           id?: string
-          otp?: string
+          otp?: string | null
+          otp_hash?: string | null
           phone?: string
         }
         Relationships: []
