@@ -88,6 +88,11 @@ export function universeToCatalogFund(row: UniverseRow): CatalogFund {
  *                     are unknown rather than absent. Including it would show a
  *                     row of em dashes and, worse, let it sit in a ranked shelf
  *                     as though it had no return.
+ *   returns_error     the backfill reached it and found no usable history, so
+ *                     it is stamped synced but every figure is null. Filtering
+ *                     only on returns_synced_at let these through — 12 schemes
+ *                     rendering as a full row of em dashes, which is the case
+ *                     the line above claims to prevent.
  *
  * Paged rather than limited: PostgREST stops at 1000 and a silent truncation
  * would amputate the tail of every fund house past the cut. scheme_code is the
@@ -102,6 +107,7 @@ export async function listUniverseFunds(client: SupabaseClient<any>): Promise<Ca
       .select(UNIVERSE_COLUMNS)
       .not('current_nav', 'is', null)
       .not('returns_synced_at', 'is', null)
+      .is('returns_error', null)
       .order('return_3y', { ascending: false, nullsFirst: false })
       .order('scheme_code', { ascending: true })
       .range(from, from + PAGE - 1);
