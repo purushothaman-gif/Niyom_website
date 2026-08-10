@@ -685,12 +685,24 @@ export default function Transactions({ employee, onNavigate }: Props) {
       const { error: err } = await supabase.from('nw_transactions').update({ ...updatePayload, updated_at: new Date().toISOString() }).eq('id', editTxn.id);
       if (err) { setError(err.message); setSaving(false); return; }
 
-      // Keep portfolio holdings in step with the amended figures: reverse the
-      // pre-edit contribution, then re-apply the new one — but only if this
-      // transaction was actually holding-tracked (reverse returns false for
-      // sells and Transfer-Queue bookings, which must not spawn a holding here).
-      const hadHolding = await reverseTransactionFromHolding(editTxn as any);
-      if (hadHolding) await syncTransactionToHolding(payload);
+      // Keep portfolio holdings in step with the amended figures: reverse this
+      // transaction's pre-edit contribution, then apply the new one.
+      //
+      // The re-apply is NOT conditional on a holding having existed. Booking
+      // order used to decide whether a position reached the portfolio at all:
+      //   enter in this form, then transfer  -> the insert below syncs a
+      //     holding straight away, so the position shows up;
+      //   transfer first, then edit to add the landing cost -> the Transfer
+      //     Queue creates the transaction but writes no holding anywhere in its
+      //     chain (TransferQueue.tsx -> transfer-deal -> nw_transfer_deal all
+      //     leave nw_holdings alone), so reverse found nothing, returned false,
+      //     and the sync was skipped — the client's shares never appeared.
+      // Both orders describe the same business, so both must reach the
+      // portfolio. syncTransactionToHolding is a no-op for sells, and when the
+      // transaction HAD contributed, reverse above already took the old figures
+      // out, so applying here cannot double-count.
+      await reverseTransactionFromHolding(editTxn as any);
+      await syncTransactionToHolding(payload);
     } else {
       const { error: err } = await supabase
         .from('nw_transactions')
