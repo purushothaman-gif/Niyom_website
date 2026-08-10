@@ -274,20 +274,14 @@ export default function DSAPayout({ employee }: Props) {
   const loadDebitNotes = useCallback(async () => {
     // Monthly payout is grouped by DATE OF PAYMENT: a PAID note counts in the
     // month it was marked paid (paid_at), regardless of its deal month — e.g. a
-    // note for June work paid on 2 Jul appears under July. A note not yet paid
-    // has no payment date, so it stays listed under its own deal month (year/
-    // month) until it is paid, then moves to the payment month.
+    // note for June work paid on 2 Jul belongs to July. A note not yet paid has
+    // no payment date, so it stays under its deal month (year/month) until paid,
+    // then moves to the payment month.
     //
-    // Month boundaries are taken in IST (+05:30, the business timezone) so a
-    // payment entered as a business date is never pushed into an adjacent month
-    // by UTC drift. Computed via Date(...).toISOString() → clean ...Z bounds.
-    const mm = String(month).padStart(2, '0');
-    const nextMonth = month === 12 ? 1 : month + 1;
-    const nextYear = month === 12 ? selectedYear + 1 : selectedYear;
-    const nmm = String(nextMonth).padStart(2, '0');
-    const startUtc = new Date(`${selectedYear}-${mm}-01T00:00:00+05:30`).toISOString();
-    const endUtc = new Date(`${nextYear}-${nmm}-01T00:00:00+05:30`).toISOString();
-
+    // Bucketing is done in JS (the note set is small) rather than a PostgREST
+    // timestamp OR-filter, which did not filter reliably. The payment month is
+    // read in IST (+05:30, the business timezone) so a payment entered as a
+    // business date is never pushed into an adjacent month by UTC drift.
     const { data } = await supabase
       .from('dsa_debit_notes')
       // dsa_debit_note_lines(count) tells the row whether Regenerate is possible:
@@ -296,13 +290,22 @@ export default function DSAPayout({ employee }: Props) {
       .select('*, dsa:nw_dsa(full_name, dsa_code), paid_by_employee:nw_employees!paid_by(full_name), cancelled_by_employee:nw_employees!cancelled_by(full_name), dsa_debit_note_lines(count)')
       // Cancelled notes are retained for audit but excluded from the listing.
       .neq('status', 'cancelled')
-      // Paid → grouped by paid_at month; not-yet-paid → by deal month.
-      .or(`and(status.eq.paid,paid_at.gte.${startUtc},paid_at.lt.${endUtc}),and(status.neq.paid,year.eq.${selectedYear},month.eq.${month})`)
       // Most recent first. debit_note_number breaks ties for notes generated in
       // the same instant (bulk generate writes several rows).
       .order('created_at', { ascending: false })
       .order('debit_note_number', { ascending: false });
-    setDebitNotes((data as NWDSADebitNote[]) || []);
+
+    const all = (data as NWDSADebitNote[]) || [];
+    const inMonth = all.filter((n) => {
+      const paidAt = (n as any).paid_at as string | null;
+      if (n.status === 'paid' && paidAt) {
+        // paid_at is stored UTC; shift +5:30 and read the IST calendar month.
+        const ist = new Date(new Date(paidAt).getTime() + 5.5 * 3600 * 1000);
+        return ist.getUTCFullYear() === selectedYear && ist.getUTCMonth() + 1 === month;
+      }
+      return (n as any).year === selectedYear && (n as any).month === month;
+    });
+    setDebitNotes(inMonth);
   }, [selectedYear, month]);
 
   React.useEffect(() => { loadDebitNotes(); }, [loadDebitNotes]);
