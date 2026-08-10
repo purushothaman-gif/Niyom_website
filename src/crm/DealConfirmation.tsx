@@ -28,8 +28,6 @@ interface DealForm {
   quantity: string;
   base_rate: string;       // raw value user types
   rate_per_unit: string;   // adjusted = base_rate - (base_rate * 0.015/100)
-  coupon_rate: string;     // secondary/primary bonds only — prefixes the name
-  maturity_year: string;   // secondary/primary bonds only — suffixes the name
   notes: string;
 }
 
@@ -120,8 +118,6 @@ const emptyForm = (): DealForm => ({
   quantity: '',
   base_rate: '',
   rate_per_unit: '',
-  coupon_rate: '',
-  maturity_year: '',
   notes: '',
 });
 
@@ -171,19 +167,6 @@ function fmtDate(d: string) {
 // Bonds carry a coupon + maturity year in their full name, e.g.
 // "12.50% Vedika Credit Capital Limited 2031". We compose that from the plain
 // company name + coupon + year on save, and decompose it back when editing.
-const BOND_NAME_TYPES = ['Secondary Bond', 'Primary Bond'];
-function composeBondName(baseName: string, coupon: string, year: string): string {
-  const b = (baseName || '').trim();
-  const c = (coupon || '').trim();
-  const y = (year || '').trim();
-  return `${c ? c + '% ' : ''}${b}${y ? ' ' + y : ''}`.trim();
-}
-function decomposeBondName(full: string): { base: string; coupon: string; year: string } {
-  const m = (full || '').match(/^(\d+(?:\.\d+)?)%\s+(.+?)\s+(\d{4})$/);
-  if (m) return { coupon: m[1], base: m[2], year: m[3] };
-  return { coupon: '', base: full || '', year: '' };
-}
-
 function buildPdfOpts(confirmationNumber: string, dealDate: string, scale: number) {
   return {
     margin: 0,
@@ -438,23 +421,16 @@ export default function DealConfirmation({ employee }: Props) {
     setEditDeal(deal);
     // Existing product is shown locked; the operator switches Step 3 to manual to change it.
     setSecurityManual(false);
-    // Bonds store the full name (coupon% name year) — split it back into the
-    // plain name + coupon + year so the fields edit cleanly.
-    const bondParts = BOND_NAME_TYPES.includes(deal.product_type)
-      ? decomposeBondName(deal.security_name)
-      : { base: deal.security_name, coupon: '', year: '' };
     setForm({
       client_id: deal.client_id,
       deal_date: deal.deal_date,
       transaction_type: deal.transaction_type as 'Buy' | 'Sell',
       product_type: deal.product_type,
-      security_name: bondParts.base,
+      security_name: deal.security_name,
       isin: deal.isin,
       quantity: String(deal.quantity),
       base_rate: String(deal.base_rate ?? deal.rate_per_unit),
       rate_per_unit: String(deal.rate_per_unit),
-      coupon_rate: bondParts.coupon,
-      maturity_year: bondParts.year,
       notes: deal.notes,
     });
     const c = clients.find(c => c.id === deal.client_id);
@@ -503,10 +479,7 @@ export default function DealConfirmation({ employee }: Props) {
       deal_date: form.deal_date,
       transaction_type: form.transaction_type,
       product_type: form.product_type,
-      // Bonds: store the full name (e.g. "12.50% Vedika Credit Capital Limited 2031").
-      security_name: BOND_NAME_TYPES.includes(form.product_type)
-        ? composeBondName(form.security_name, form.coupon_rate, form.maturity_year)
-        : form.security_name.trim(),
+      security_name: form.security_name.trim(),
       isin: form.isin.trim().toUpperCase(),
       quantity: parseFloat(form.quantity),
       base_rate: parseFloat(form.base_rate),
@@ -911,27 +884,6 @@ export default function DealConfirmation({ employee }: Props) {
               )}
             </Field>
           </div>
-
-          {/* Bonds: coupon + maturity year build the full name */}
-          {BOND_NAME_TYPES.includes(form.product_type) && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Coupon Rate (%)" hint="Prefixes the bond name, e.g. 12.50%">
-                  <Input type="number" min="0" step="0.01" value={form.coupon_rate}
-                    onChange={e => setForm(f => ({ ...f, coupon_rate: e.target.value }))} placeholder="e.g. 12.50" />
-                </Field>
-                <Field label="Maturity Year" hint="Suffixes the bond name, e.g. 2031">
-                  <Input type="number" min="2000" max="2100" step="1" value={form.maturity_year}
-                    onChange={e => setForm(f => ({ ...f, maturity_year: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) }))} placeholder="e.g. 2031" />
-                </Field>
-              </div>
-              {form.security_name && (form.coupon_rate || form.maturity_year) && (
-                <p className="text-xs" style={{ color: 'var(--accent)' }}>
-                  Full bond name: <strong>{composeBondName(form.security_name, form.coupon_rate, form.maturity_year)}</strong>
-                </p>
-              )}
-            </>
-          )}
 
           {/* Auto-calculated values */}
           {(qty > 0 && adjRate > 0) && (
