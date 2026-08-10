@@ -1,4 +1,11 @@
-// NAV movement chart, as SVG markup.
+// NAV movement chart, as SVG markup. Shared by the CRM and the client portal.
+//
+// Lives in src/lib rather than under either surface on purpose. Both the
+// employee tools and the client portal render it, and putting it under one of
+// them would invite an import of that surface's Supabase client into the
+// other's bundle — which is exactly the mistake that once blanked the CRM.
+// This module has no data access at all: pure functions over a point array,
+// plus one type import.
 //
 // One renderer serves both surfaces: the research screen embeds the markup
 // directly, and the factsheet splices the same string into its document before
@@ -18,7 +25,7 @@
 //     which is exactly why the band labels are mandatory rather than optional
 //   - the period actually plotted is stated on the chart
 
-import type { CatalogNavPoint } from '../../../portal/types/funds';
+import type { CatalogNavPoint } from '../../portal/types/funds';
 
 export type NavRange = '1Y' | '3Y' | '5Y' | 'ALL';
 

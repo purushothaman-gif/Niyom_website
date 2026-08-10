@@ -33,7 +33,7 @@ import {
 import { fetchNavHistory, listCatalogFunds } from './crmFundCatalog';
 import {
   COMPARE_COLOURS, NAV_RANGES, buildNavSeries, navChartSvg, navCompareSvg, type NavRange,
-} from './navChart';
+} from '../../../lib/funds/navChart';
 import { EmptyState, GhostButton, PrimaryButton, inputClass, inputStyle } from '../components/shared';
 import {
   MARKET_RISK_LINE, PAST_PERFORMANCE_LINE, downloadFactsheet, renderComparison,
