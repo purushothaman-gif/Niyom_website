@@ -6,7 +6,7 @@ import type { Insertable } from '../lib/dbJson';
 import { NWEmployee, NWClient } from './types';
 import {
   FileText, Plus, Search, ChevronDown, Eye, Pencil, Trash2,
-  Download, CheckCircle2, AlertCircle, ChevronLeft, Send, Wallet,
+  Download, CheckCircle2, AlertCircle, ChevronLeft, Send, Wallet, Lock,
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import DealDocument from './DealDocument';
@@ -93,6 +93,22 @@ interface DealRecord {
 const PRODUCT_TYPES = [
   'Unlisted Share', 'Secondary Bond', 'Primary Bond',
 ];
+
+// Map an NSDL security_description (free text) to our product type. NSDL tells
+// us the instrument class (equity vs debt) but NOT primary-vs-secondary — that's
+// a transaction attribute — so any bond/debenture maps to 'Secondary Bond'; a
+// Primary issue is set by switching Step 3 to manual entry. Keyword-based so it
+// tolerates NSDL's varied descriptions. Returns '' when it can't classify (the
+// form then leaves Product Type editable rather than trapping the operator).
+function deriveProductType(securityType: string): string {
+  const t = (securityType || '').toUpperCase();
+  if (!t) return '';
+  if (/DEBENT|BOND|\bNCD\b|COMMERCIAL PAPER|CERTIFICATE OF DEPOSIT|\bSDL\b|G-?SEC|GOVERNMENT SEC|TREASURY|SECURITY RECEIPT|PERPETUAL|\bSLR\b|\bTIER\b/.test(t)) {
+    return 'Secondary Bond';
+  }
+  if (/EQUITY|SHARE|STOCK|SCRIP/.test(t)) return 'Unlisted Share';
+  return '';
+}
 
 const emptyForm = (): DealForm => ({
   client_id: '',
@@ -279,6 +295,9 @@ export default function DealConfirmation({ employee }: Props) {
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [form, setForm] = useState<DealForm>(emptyForm());
+  // Product Type is derived from the NSDL security and locked; it only becomes
+  // editable when the operator is in manual security entry ("Can't find it").
+  const [securityManual, setSecurityManual] = useState(false);
   const [selectedClient, setSelectedClient] = useState<NWClient | null>(null);
   const [clientSearch, setClientSearch] = useState('');
   const [showClientDrop, setShowClientDrop] = useState(false);
@@ -391,6 +410,7 @@ export default function DealConfirmation({ employee }: Props) {
     setSelectedClient(null);
     setClientSearch('');
     setEditDeal(null);
+    setSecurityManual(false); // locked until an NSDL security is picked
     setError('');
     setView('form');
   };
@@ -416,6 +436,8 @@ export default function DealConfirmation({ employee }: Props) {
       return;
     }
     setEditDeal(deal);
+    // Existing product is shown locked; the operator switches Step 3 to manual to change it.
+    setSecurityManual(false);
     // Bonds store the full name (coupon% name year) — split it back into the
     // plain name + coupon + year so the fields edit cleanly.
     const bondParts = BOND_NAME_TYPES.includes(deal.product_type)
@@ -806,27 +828,32 @@ export default function DealConfirmation({ employee }: Props) {
                   className="w-full pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
                   style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
                   <option value="">Select type</option>
-                  <option value="Buy">Buy</option>
-                  <option value="Sell">Sell</option>
+                  <option value="Buy">Client is Buying</option>
+                  <option value="Sell">Client is Selling</option>
                 </select>
                 <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
               </div>
             </Field>
-            <Field label="Product Type" required>
+            <Field label="Product Type" required hint={securityManual ? undefined : 'Auto-set from the selected security'}>
               <div className="relative">
-                {/* Changing the product changes the duty rate, so the adjusted
-                    rate must be re-derived from the base the RM already typed. */}
-                <select value={form.product_type} onChange={e => setForm(f => ({
-                  ...f,
-                  product_type: e.target.value,
-                  rate_per_unit: adjustRate(f.base_rate, stampDutyRateFor(e.target.value)),
-                }))}
-                  className="w-full pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
-                  style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
-                  <option value="">Select product</option>
+                {/* Locked + auto-derived from the NSDL security; editable only in
+                    manual entry. Changing the product changes the duty rate, so
+                    the adjusted rate is re-derived from the base rate. */}
+                <select value={form.product_type}
+                  disabled={!securityManual}
+                  onChange={e => setForm(f => ({
+                    ...f,
+                    product_type: e.target.value,
+                    rate_per_unit: adjustRate(f.base_rate, stampDutyRateFor(e.target.value)),
+                  }))}
+                  className="w-full pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none disabled:opacity-70 disabled:cursor-not-allowed"
+                  style={{ background: securityManual ? 'var(--bg-base)' : 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                  <option value="">{securityManual ? 'Select product' : 'Pick a security first'}</option>
                   {PRODUCT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
+                {securityManual
+                  ? <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
+                  : <Lock className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />}
               </div>
             </Field>
           </div>
@@ -835,14 +862,28 @@ export default function DealConfirmation({ employee }: Props) {
         {/* Security Details */}
         <div className="rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
           <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>Step 3 — Security / Instrument Details</p>
-          {/* NSDL-backed security lookup — auto-fills Security Name + ISIN.
-              Product Type (Step 2) stays a manual choice; manual entry remains
-              available as a fallback inside the component. */}
+          {/* NSDL-backed security lookup — auto-fills Security Name + ISIN AND
+              derives + locks Product Type (Step 2). "Can't find it? Enter
+              manually" unlocks Product Type via onManualToggle. */}
           <SecuritySearch
             key={editDeal?.id ?? 'new'}
             valueName={form.security_name}
             valueIsin={form.isin}
-            onSelect={sec => setForm(f => ({ ...f, security_name: sec.name, isin: sec.isin }))}
+            onSelect={sec => {
+              const derived = deriveProductType(sec.security_type);
+              // Classified → lock with the derived product; unclassifiable →
+              // leave editable so the operator is never trapped.
+              setSecurityManual(derived === '');
+              setForm(f => ({
+                ...f,
+                security_name: sec.name,
+                isin: sec.isin,
+                ...(derived
+                  ? { product_type: derived, rate_per_unit: adjustRate(f.base_rate, stampDutyRateFor(derived)) }
+                  : {}),
+              }));
+            }}
+            onManualToggle={manual => setSecurityManual(manual)}
             onManualChange={patch => setForm(f => ({
               ...f,
               ...(patch.security_name !== undefined ? { security_name: patch.security_name } : {}),

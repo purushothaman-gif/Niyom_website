@@ -22,6 +22,9 @@ interface Props {
   valueIsin: string;
   onSelect: (sec: SecurityResult) => void;
   onManualChange: (patch: { security_name?: string; isin?: string }) => void;
+  /** Fires when the user enters/leaves manual entry. The parent uses this to
+   *  unlock Product Type (which is otherwise auto-derived from the NSDL pick). */
+  onManualToggle?: (manual: boolean) => void;
   disabled?: boolean;
 }
 
@@ -44,7 +47,7 @@ function statusStyle(status: string): { bg: string; color: string } {
   }
 }
 
-export default function SecuritySearch({ valueName, valueIsin, onSelect, onManualChange, disabled }: Props) {
+export default function SecuritySearch({ valueName, valueIsin, onSelect, onManualChange, onManualToggle, disabled }: Props) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -164,6 +167,10 @@ export default function SecuritySearch({ valueName, valueIsin, onSelect, onManua
     setOpen(true);
   };
 
+  // Single place to flip manual mode so the parent is always told (to lock/unlock
+  // the auto-derived Product Type).
+  const switchManual = (v: boolean) => { setManual(v); onManualToggle?.(v); };
+
   return (
     <div className="space-y-4">
       {/* Search box */}
@@ -207,7 +214,7 @@ export default function SecuritySearch({ valueName, valueIsin, onSelect, onManua
             {/* Empty */}
             {!loading && !error && results.length === 0 && query.trim().length >= MIN_NAME_LEN && (
               <div className="px-4 py-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                No securities found. Use <button type="button" onClick={() => { setManual(true); setOpen(false); }} className="underline" style={{ color: 'var(--accent)' }}>manual entry</button>.
+                No securities found. Use <button type="button" onClick={() => { switchManual(true); setOpen(false); }} className="underline" style={{ color: 'var(--accent)' }}>manual entry</button>.
               </div>
             )}
             {/* Results */}
@@ -278,7 +285,7 @@ export default function SecuritySearch({ valueName, valueIsin, onSelect, onManua
       {/* Manual-entry fallback */}
       {!manual ? (
         !selected && (
-          <button type="button" onClick={() => setManual(true)}
+          <button type="button" onClick={() => switchManual(true)}
             className="text-xs flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
             <Pencil className="w-3 h-3" /> Can't find it? Enter manually
           </button>
@@ -287,7 +294,7 @@ export default function SecuritySearch({ valueName, valueIsin, onSelect, onManua
         <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Manual Entry</p>
-            <button type="button" onClick={() => setManual(false)} className="text-xs underline" style={{ color: 'var(--accent)' }}>Back to search</button>
+            <button type="button" onClick={() => switchManual(false)} className="text-xs underline" style={{ color: 'var(--accent)' }}>Back to search</button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
