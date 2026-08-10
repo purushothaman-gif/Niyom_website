@@ -19,7 +19,9 @@ import {
   ArrowLeft, Download, ImageDown, Search, TrendingUp, TrendingDown, Minus, Info,
 } from 'lucide-react';
 import type { CatalogFund } from '../../../portal/types/funds';
-import { listCatalogFunds } from './crmFundCatalog';
+import { fetchNavHistory, listCatalogFunds } from './crmFundCatalog';
+import { NAV_RANGES, buildNavSeries, navChartSvg, type NavRange } from './navChart';
+import type { CatalogNavPoint } from '../../../portal/types/funds';
 import { EmptyState, GhostButton, PrimaryButton, inputClass, inputStyle } from '../components/shared';
 import {
   MARKET_RISK_LINE, PAST_PERFORMANCE_LINE, downloadFactsheet, renderFactsheet,
@@ -193,6 +195,30 @@ function FundDetail({ fund, onBack }: { fund: CatalogFund; onBack: () => void })
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const [history, setHistory] = useState<CatalogNavPoint[]>([]);
+  const [range, setRange] = useState<NavRange>('5Y');
+  const [navLoading, setNavLoading] = useState(true);
+  const [navError, setNavError] = useState<string | null>(null);
+
+  // History is fetched once per fund; switching range re-slices in memory
+  // rather than re-hitting the function.
+  useEffect(() => {
+    let alive = true;
+    setNavLoading(true);
+    setNavError(null);
+    fetchNavHistory(fund.amfiCode)
+      .then(r => { if (alive) { setHistory(r.navHistory); setNavLoading(false); } })
+      .catch(e => {
+        if (alive) {
+          setNavError(e instanceof Error ? e.message : 'NAV history unavailable.');
+          setNavLoading(false);
+        }
+      });
+    return () => { alive = false; };
+  }, [fund.amfiCode]);
+
+  const series = useMemo(() => buildNavSeries(history, range), [history, range]);
+
   // The object URL is owned by this screen; release it when the sheet is
   // replaced or the screen closes, or each preview leaks a blob.
   useEffect(() => () => { if (sheet) URL.revokeObjectURL(sheet.previewUrl); }, [sheet]);
@@ -201,7 +227,7 @@ function FundDetail({ fund, onBack }: { fund: CatalogFund; onBack: () => void })
     setBusy(true);
     setErr(null);
     try {
-      const next = await renderFactsheet(fund);
+      const next = await renderFactsheet(fund, history, range);
       setSheet(prev => {
         if (prev) URL.revokeObjectURL(prev.previewUrl);
         return next;
@@ -241,6 +267,60 @@ function FundDetail({ fund, onBack }: { fund: CatalogFund; onBack: () => void })
             </div>
           );
         })}
+      </div>
+
+      <div className="rounded-2xl mt-4 p-4"
+        style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold uppercase tracking-wider"
+            style={{ color: 'var(--text-faint)' }}>NAV movement</p>
+          <div className="flex gap-1">
+            {NAV_RANGES.map(r => (
+              <button key={r.id} onClick={() => setRange(r.id)}
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors"
+                style={range === r.id
+                  ? { background: 'var(--accent-soft)', color: 'var(--text-on-accent)' }
+                  : { background: 'transparent', color: 'var(--text-faint)' }}>
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {navLoading ? (
+          <p className="text-sm py-10 text-center" style={{ color: 'var(--text-muted)' }}>
+            Loading NAV history…
+          </p>
+        ) : navError || series.points.length < 2 ? (
+          <p className="text-sm py-10 text-center" style={{ color: 'var(--text-faint)' }}>
+            {navError ?? 'NAV history is not available for this scheme.'}
+          </p>
+        ) : (
+          <>
+            {/*
+              Same renderer the factsheet uses, so the chart an employee shows a
+              client on screen and the one in the image they send cannot differ.
+              dangerouslySetInnerHTML is safe here: every value in the markup is
+              a number formatted by navChart, never user or API text.
+            */}
+            <svg viewBox="0 0 900 300" width="100%" height="260"
+              dangerouslySetInnerHTML={{
+                __html: navChartSvg(series, {
+                  width: 900, height: 300, uid: 'ui',
+                  line: 'var(--accent-soft)', fillFrom: 'var(--accent-soft)',
+                  axis: 'var(--border)', label: 'var(--text-faint)',
+                  fontFamily: 'inherit',
+                }),
+              }} />
+            {series.changePct !== null && (
+              <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>
+                {series.changePct >= 0 ? 'Up' : 'Down'}{' '}
+                {Math.abs(series.changePct).toFixed(1)}% over the period shown.
+                Not annualised — see trailing returns above.
+              </p>
+            )}
+          </>
+        )}
       </div>
 
       <div className="rounded-2xl mt-4 overflow-hidden"

@@ -19,11 +19,12 @@
 // font handling and the canvas-tainting rules are identical (see
 // TemplateRenderer.rasterise and brandLogo for why the emblem is a data URI).
 
-import type { CatalogFund } from '../../../portal/types/funds';
+import type { CatalogFund, CatalogNavPoint } from '../../../portal/types/funds';
 import {
   BRAND, FONT_SANS, NIYOM_LOGO_DATA_URI, esc,
 } from '../templates/brandTokens';
 import { rasterise } from '../templates/TemplateRenderer';
+import { buildNavSeries, navChartSvg, type NavRange } from './navChart';
 
 /** Mandatory on every sheet. See the compliance note above. */
 export const MARKET_RISK_LINE =
@@ -32,7 +33,7 @@ export const PAST_PERFORMANCE_LINE =
   'Past performance is not indicative of future returns and may or may not be sustained.';
 
 export const FACTSHEET_W = 1080;
-export const FACTSHEET_H = 1350;
+export const FACTSHEET_H = 1620;
 
 const INK = '#0b1a2b';
 const INK_SOFT = '#4a5a6b';
@@ -87,7 +88,11 @@ function wrap(text: string, maxWidth: number, fontSize: number, weight: number):
 
 interface Row { label: string; value: string; colour?: string; strong?: boolean }
 
-export function composeFactsheetSvg(fund: CatalogFund): string {
+export function composeFactsheetSvg(
+  fund: CatalogFund,
+  history: CatalogNavPoint[] = [],
+  range: NavRange = '5Y',
+): string {
   const W = FACTSHEET_W;
   const H = FACTSHEET_H;
   const M = 76;                       // page margin
@@ -131,17 +136,41 @@ export function composeFactsheetSvg(fund: CatalogFund): string {
                   stroke="${LINE}" stroke-width="1.5"/>`;
   }).join('');
 
+  // --- NAV chart ------------------------------------------------------------
+  // Placed directly under the trailing returns: the numbers state what happened,
+  // the curve shows how. Omitted entirely when history is unavailable rather
+  // than drawn empty, and the rows below close the gap.
+  const series = buildNavSeries(history, range);
+  const hasChart = series.points.length >= 2;
+  const chartTop = retTop + 200;
+  const chartH = 292;
+  const rangeLabel =
+    range === 'ALL' ? 'since launch' : `last ${range.replace('Y', '')} years`;
+
+  const chartSvg = hasChart
+    ? `<g transform="translate(${M},${chartTop})">${navChartSvg(series, {
+        width: contentW,
+        height: chartH,
+        uid: 'fs',
+        line: BRAND.navy,
+        fillFrom: BRAND.navy,
+        axis: LINE,
+        label: INK_SOFT,
+        caption: `NAV MOVEMENT · ${rangeLabel.toUpperCase()}`,
+        fontFamily: FONT_SANS,
+      })}</g>`
+    : '';
+
   // --- detail rows ----------------------------------------------------------
   const rows: Row[] = [
     { label: 'NAV', value: `${fmtNav(fund.nav)}  ·  ${fmtDate(fund.navDate)}`, strong: true },
     { label: 'Category', value: `${fund.category}${fund.subCategory ? ` · ${fund.subCategory}` : ''}` },
-    { label: 'Fund house', value: fund.amc || '—' },
     { label: 'Risk', value: fund.risk ?? 'See scheme documents' },
     { label: 'Minimum investment', value: fmtAmount(fund.minInvestment) },
     { label: 'Launched', value: fmtDate(fund.launchDate) },
   ];
 
-  const rowsTop = retTop + 206;
+  const rowsTop = hasChart ? chartTop + chartH + 44 : retTop + 206;
   const rowH = 74;
   const rowSvg = rows.map((r, i) => {
     const y = rowsTop + i * rowH;
@@ -208,6 +237,7 @@ export function composeFactsheetSvg(fund: CatalogFund): string {
     ${dividers}
     ${returnCells}
 
+    ${chartSvg}
     ${rowSvg}
 
     <line x1="${M}" y1="${(brandY - 34).toFixed(1)}" x2="${W - M}" y2="${(brandY - 34).toFixed(1)}"
@@ -231,8 +261,12 @@ export interface RenderedFactsheet {
   fileName: string;
 }
 
-export async function renderFactsheet(fund: CatalogFund): Promise<RenderedFactsheet> {
-  const svg = composeFactsheetSvg(fund);
+export async function renderFactsheet(
+  fund: CatalogFund,
+  history: CatalogNavPoint[] = [],
+  range: NavRange = '5Y',
+): Promise<RenderedFactsheet> {
+  const svg = composeFactsheetSvg(fund, history, range);
   const blob = await rasterise(svg, FACTSHEET_W, FACTSHEET_H);
   const safe = fund.name.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').slice(0, 70);
   return {
