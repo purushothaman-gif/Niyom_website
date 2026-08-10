@@ -97,6 +97,96 @@ export interface NavChartOptions {
 
 const fmtNav = (v: number) => `₹${v >= 1000 ? Math.round(v).toLocaleString('en-IN') : v.toFixed(2)}`;
 
+/**
+ * Multi-series comparison chart, REBASED TO 100.
+ *
+ * Absolute NAV cannot be compared across schemes: a fund at ₹450 is not
+ * "better" than one at ₹32, it is older or was issued differently, and plotting
+ * the two together on a rupee axis would say something false very persuasively.
+ * Every series is therefore indexed to 100 at the start of the window, so the
+ * chart answers the only comparable question — what ₹100 invested at the same
+ * moment would have become.
+ *
+ * The axis is labelled in index points and the rebasing is stated in the
+ * caption, so the reader is never left to assume it is rupees.
+ */
+export function navCompareSvg(
+  series: { label: string; colour: string; series: NavSeries }[],
+  o: Omit<NavChartOptions, 'line' | 'fillFrom'>,
+): string {
+  const { width: w, height: h } = o;
+  const padL = 74;
+  const padR = 16;
+  const padT = o.caption ? 34 : 12;
+  const padB = 30;
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+
+  const usable = series.filter(s => s.series.points.length >= 2);
+  if (!usable.length) {
+    return `<text x="0" y="${(h / 2).toFixed(1)}" font-family="${o.fontFamily}"
+                  font-size="20" fill="${o.label}">No overlapping NAV history to compare.</text>`;
+  }
+
+  // Rebase each series to 100 at its own first plotted point.
+  const rebased = usable.map(s => {
+    const base = s.series.points[0].nav;
+    return {
+      ...s,
+      pts: s.series.points.map(p => ({ t: p.t, v: base > 0 ? (p.nav / base) * 100 : 100 })),
+    };
+  });
+
+  const allT = rebased.flatMap(s => s.pts.map(p => p.t));
+  const allV = rebased.flatMap(s => s.pts.map(p => p.v));
+  const t0 = Math.min(...allT);
+  const t1 = Math.max(...allT);
+  const tSpan = Math.max(1, t1 - t0);
+  const vLo = Math.min(...allV);
+  const vHi = Math.max(...allV);
+  const pad = (vHi - vLo) * 0.08 || 5;
+  const vMin = vLo - pad;
+  const vMax = vHi + pad;
+  const vSpan = Math.max(1e-9, vMax - vMin);
+
+  const x = (t: number) => padL + ((t - t0) / tSpan) * plotW;
+  const y = (v: number) => padT + plotH - ((v - vMin) / vSpan) * plotH;
+
+  const bands = [0, 0.5, 1].map(f => {
+    const v = vMin + vSpan * f;
+    const gy = y(v);
+    return `
+      <line x1="${padL}" y1="${gy.toFixed(1)}" x2="${(padL + plotW).toFixed(1)}" y2="${gy.toFixed(1)}"
+            stroke="${o.axis}" stroke-width="1" stroke-dasharray="4 6"/>
+      <text x="${(padL - 12).toFixed(1)}" y="${(gy + 6).toFixed(1)}" text-anchor="end"
+            font-family="${o.fontFamily}" font-size="17" fill="${o.label}">${v.toFixed(0)}</text>`;
+  }).join('');
+
+  const lines = rebased.map(s => {
+    const d = s.pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)} ${y(p.v).toFixed(1)}`).join(' ');
+    const last = s.pts[s.pts.length - 1];
+    return `
+      <path d="${d}" fill="none" stroke="${s.colour}" stroke-width="3"
+            stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${x(last.t).toFixed(1)}" cy="${y(last.v).toFixed(1)}" r="5" fill="${s.colour}"/>`;
+  }).join('');
+
+  return `
+    ${o.caption
+      ? `<text x="0" y="16" font-family="${o.fontFamily}" font-size="20" font-weight="700"
+               letter-spacing="1.6" fill="${o.label}">${o.caption}</text>`
+      : ''}
+    ${bands}
+    ${lines}
+    <text x="${padL}" y="${(padT + plotH + 22).toFixed(1)}"
+          font-family="${o.fontFamily}" font-size="17" fill="${o.label}">${fmtYear(t0)}</text>
+    <text x="${(padL + plotW).toFixed(1)}" y="${(padT + plotH + 22).toFixed(1)}" text-anchor="end"
+          font-family="${o.fontFamily}" font-size="17" fill="${o.label}">${fmtYear(t1)}</text>`;
+}
+
+/** Distinct, colour-blind-safe line colours for comparison series. */
+export const COMPARE_COLOURS = ['#2563eb', '#d97706', '#0f8f79'];
+
 function fmtYear(t: number): string {
   return String(new Date(t).getFullYear());
 }
