@@ -30,7 +30,7 @@ import type { CatalogFund, CatalogNavPoint } from '../../../portal/types/funds';
 import {
   FUND_COLLECTIONS, byReturn, collectionById, fundsIn, searchFunds,
 } from '../../../portal/features/mutual-funds/explore/collections';
-import { fetchNavHistory, listCatalogFunds } from './crmFundCatalog';
+import { fetchNavHistory, listUniverseFunds } from './crmFundCatalog';
 import {
   COMPARE_COLOURS, NAV_RANGES, buildNavSeries, navChartSvg, navCompareSvg, type NavRange,
 } from '../../../lib/funds/navChart';
@@ -68,7 +68,7 @@ export default function FundResearch() {
 
   useEffect(() => {
     let alive = true;
-    listCatalogFunds()
+    listUniverseFunds()
       .then(rows => { if (alive) { setFunds(rows); setLoading(false); } })
       .catch(err => {
         if (alive) {
