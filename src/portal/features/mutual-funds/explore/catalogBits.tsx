@@ -65,10 +65,11 @@ export function FundIdentity({ fund, compact = false }: { fund: CatalogFund; com
 }
 
 /**
- * The provenance line that has to sit under any performance we show. The
- * curated catalog is built from AMFI NAV history for each scheme's DIRECT plan,
- * and a client transacting through a distributor buys the Regular plan, whose
- * returns are lower by its extra expense. Saying so is cheaper than being asked.
+ * The provenance line that has to sit under any performance we show.
+ *
+ * The catalog is built from the REGULAR plan of each scheme — the plan a client
+ * actually buys through an ARN distributor — so these figures are the ones they
+ * could have earned, not the flattering Direct-plan numbers we used to show.
  */
 export const RETURNS_FOOTNOTE =
-  'Returns are annualised for periods over a year and computed from AMFI NAV history for the Direct plan of each scheme. Past performance does not indicate future results.';
+  'Returns are annualised for periods over a year and computed from AMFI NAV history for the Regular plan of each scheme. Past performance does not indicate future results.';

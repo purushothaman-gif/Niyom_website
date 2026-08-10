@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { computeAll, downsampleNav, parseDate, isoDate, type NavPoint } from "../_shared/mfReturns.ts";
 import { asJson } from '../_shared/json.ts';
+import { isRegularGrowth } from '../_shared/mfPlan.ts';
 
 /**
  * update-mutual-funds
@@ -30,7 +31,7 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-// Curated funds to track. `match` locates the Direct-Growth plan in the AMFI
+// Curated funds to track. `match` locates the Regular-Growth plan in the AMFI
 // scheme list; `category` is the top-level bucket the UI filters by; `risk` is
 // a house view (mfapi.in has no risk field). ~50 well-known schemes across
 // equity, debt and hybrid.
@@ -113,14 +114,18 @@ function pickSubCategory(schemeCategory?: string): string {
   return (parts[1] ?? parts[0]).replace(/Fund$/i, "").trim();
 }
 
-/** Find the Direct-Growth scheme code for a fund name. */
+/**
+ * Find the REGULAR-Growth scheme code for a fund name.
+ *
+ * Regular because NIYOM is an ARN distributor and cannot transact Direct — this
+ * table feeds the public MF Research page, so a Direct code here publishes
+ * returns no reader could obtain through us. Rule shared via _shared/mfPlan.ts.
+ */
 function resolveCode(list: SchemeListEntry[], match: string): number | null {
   const m = match.toLowerCase();
-  const candidates = list.filter((s) => {
-    const n = s.schemeName.toLowerCase();
-    return n.includes(m) && n.includes("direct") && n.includes("growth") &&
-      !n.includes("idcw") && !n.includes("dividend");
-  });
+  const candidates = list.filter(
+    (s) => s.schemeName.toLowerCase().includes(m) && isRegularGrowth(s.schemeName),
+  );
   return candidates.length ? candidates[0].schemeCode : null;
 }
 
@@ -171,7 +176,7 @@ Deno.serve(async (req: Request) => {
         const launch_date = first ? isoDate(parseDate(first.date)) : null;
 
         const row = {
-          fund_name: detail.meta.scheme_name.replace(/\s*-\s*(direct|regular|growth).*$/i, "").trim(),
+          fund_name: detail.meta.scheme_name.replace(/\s*-\s*(regular|growth).*$/i, "").trim(),
           fund_code: String(t.code),
           category: t.category,
           sub_category: pickSubCategory(detail.meta.scheme_category),

@@ -1,11 +1,17 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { isRegularGrowth } from "../_shared/mfPlan.ts";
 
 /**
  * mf-universe
  * -----------
  * Serves the public MF Research page's "search every fund" feature from a local
- * mirror of the AMFI Direct-Growth scheme universe (`mf_scheme_cache`). mfapi.in
+ * mirror of the AMFI REGULAR-Growth scheme universe (`mf_scheme_cache`).
+ *
+ * Regular, not Direct: NIYOM is an ARN distributor and cannot transact a Direct
+ * plan, so a Direct scheme here is one we could never execute, quoted at
+ * returns nobody could earn through us. The rule lives in _shared/mfPlan.ts and
+ * is shared with the app — do not re-implement it here. mfapi.in
  * is NEVER called from the browser (CORS + payload size); this function is the
  * single server-side proxy, mirroring the nsdl-search convention.
  *
@@ -37,16 +43,6 @@ interface SchemeListEntry { schemeCode: number; schemeName: string; }
 /** Escape LIKE/ILIKE wildcards so user input can't act as a pattern. */
 function escapeLike(s: string): string {
   return s.replace(/[%_\\]/g, (m) => `\\${m}`);
-}
-
-/**
- * Keep only Direct-Growth plans (the plan variant we compute returns for) and
- * skip IDCW/dividend options — one canonical row per fund.
- */
-function isDirectGrowth(name: string): boolean {
-  const n = name.toLowerCase();
-  return n.includes("direct") && n.includes("growth") &&
-    !n.includes("idcw") && !n.includes("dividend");
 }
 
 async function getJson<T>(url: string, timeoutMs = 45000): Promise<T | null> {
@@ -90,9 +86,9 @@ async function refresh(): Promise<Response> {
    * screen filters blanks out rather than inventing a house for them.
    */
   const rows = list
-    .filter((s) => isDirectGrowth(s.schemeName))
+    .filter((s) => isRegularGrowth(s.schemeName))
     .map((s) => {
-      const scheme_name = s.schemeName.replace(/\s*-\s*direct.*$/i, "").trim();
+      const scheme_name = s.schemeName.replace(/\s*-\s*regular.*$/i, "").trim();
       return {
         scheme_code: String(s.schemeCode),
         scheme_name,
