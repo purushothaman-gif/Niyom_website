@@ -4,99 +4,47 @@
  * The discovery-side fund catalog: real trailing returns, real NAVs, real
  * categories — everything the BSE scheme master does not carry.
  *
- * Source of truth is the `mutual_funds` table, which `update-mutual-funds`
- * rebuilds from AMFI NAV history (mfapi.in), plus the `mf-detail` edge function
- * for a single fund's NAV series. Both are published market data, readable by
- * any signed-in user; nothing here is client-scoped.
+ * Source of truth is `mf_scheme_cache`, the full AMFI universe: every live
+ * scheme across all 52 fund houses, priced nightly from AMFI's own file with
+ * trailing returns computed by the same code as the CRM's research screen. It
+ * replaced the curated `mutual_funds` table, which was 36 funds from a
+ * hardcoded list — so a client searching for anything outside it found nothing.
+ * `mf-detail` still serves a single fund's NAV series. All published market
+ * data, readable by any signed-in user; nothing here is client-scoped.
+ *
+ * NOTE ON PLANS: these are DIRECT-plan schemes, one canonical row per fund, so
+ * the NAV and returns shown are Direct-plan figures. NIYOM distributes Regular
+ * plans, whose returns are lower by the distributor commission built into their
+ * expense ratio. The screen says so rather than letting a client assume the
+ * number quoted is the one they would earn through us.
  *
  * Reads go through `clientSupabase` — the portal's own auth instance — so a
  * client session is the one that runs, never a CRM session that happens to
  * share the browser (see the auth-isolation note in lib/supabase.ts).
  */
 import { clientSupabase as supabase } from '../../lib/supabase';
+import { listUniverseFunds } from '../../lib/funds/universeCatalog';
 import type {
   CatalogFund,
   CatalogFundDetail,
   CatalogNavPoint,
-  FundCategory,
   FundRecommendation,
 } from '../types/funds';
-
-interface MutualFundRow {
-  fund_name: string;
-  fund_code: string | null;
-  category: string | null;
-  sub_category: string | null;
-  fund_house: string | null;
-  risk_level: string | null;
-  current_nav: number | string | null;
-  nav_date: string | null;
-  return_ytd: number | string | null;
-  return_6m: number | string | null;
-  return_1y: number | string | null;
-  return_3y: number | string | null;
-  return_5y: number | string | null;
-  return_si: number | string | null;
-  min_investment: number | string | null;
-  launch_date: string | null;
-  updated_at: string | null;
-}
-
-/** Numerics arrive as strings over PostgREST; 0 is a real value, null is not. */
-const n = (v: number | string | null | undefined): number | null => {
-  if (v === null || v === undefined || v === '') return null;
-  const parsed = Number(v);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const CATEGORIES: FundCategory[] = ['Equity', 'Debt', 'Hybrid'];
-
-function toCatalogFund(row: MutualFundRow): CatalogFund {
-  const category = CATEGORIES.find((c) => c === row.category) ?? 'Other';
-  return {
-    amfiCode: row.fund_code ?? '',
-    name: row.fund_name,
-    amc: row.fund_house ?? '—',
-    category,
-    subCategory: row.sub_category ?? '',
-    risk: row.risk_level,
-    nav: n(row.current_nav),
-    navDate: row.nav_date,
-    returns: {
-      YTD: n(row.return_ytd),
-      '6M': n(row.return_6m),
-      '1Y': n(row.return_1y),
-      '3Y': n(row.return_3y),
-      '5Y': n(row.return_5y),
-      SI: n(row.return_si),
-    },
-    minInvestment: n(row.min_investment),
-    launchDate: row.launch_date,
-    updatedAt: row.updated_at,
-  };
-}
 
 function fnUrl(name: string): string {
   return `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${name}`;
 }
 
 export const MfCatalogService = {
-  /** The whole curated catalog. Small (tens of rows) — filtered in memory. */
-  async list(): Promise<CatalogFund[]> {
-    const { data, error } = await supabase
-      .from('mutual_funds')
-      .select(
-        'fund_name, fund_code, category, sub_category, fund_house, risk_level, current_nav, ' +
-          'nav_date, return_ytd, return_6m, return_1y, return_3y, return_5y, return_si, ' +
-          'min_investment, launch_date, updated_at',
-      )
-      .order('return_3y', { ascending: false, nullsFirst: false });
-    if (error) throw error;
-    // A row with no AMFI code cannot be charted or ordered — drop it rather
-    // than render a card that dead-ends.
-    return (data ?? [])
-      .map((r) => toCatalogFund(r as unknown as MutualFundRow))
-      .filter((f) => f.amfiCode);
+  /**
+   * The whole investable universe, best 3-year return first.
+   *
+   * ~1,700 rows rather than the old 36, fetched once and filtered in memory by
+   * the Explore screen — which is what keeps search, collections, the fund
+   * houses shelf and compare working off a single read.
+   */
+  list(): Promise<CatalogFund[]> {
+    return listUniverseFunds(supabase);
   },
 
   /**
