@@ -31,6 +31,9 @@ import {
   FUND_COLLECTIONS, byReturn, collectionById, fundsIn, searchFunds,
 } from '../../../portal/features/mutual-funds/explore/collections';
 import { fetchNavHistory, listUniverseFunds } from './crmFundCatalog';
+
+/** Cards rendered for a search. The match COUNT shown is never capped. */
+const SEARCH_RENDER_CAP = 100;
 import {
   COMPARE_COLOURS, NAV_RANGES, buildNavSeries, navChartSvg, navCompareSvg, type NavRange,
 } from '../../../lib/funds/navChart';
@@ -160,6 +163,13 @@ function ExploreHome({ funds, picked, toggle, onOpen, onOpenCollection, onOpenHo
 }) {
   const [query, setQuery] = useState('');
   const results = useMemo(() => (query.trim() ? searchFunds(funds, query) : null), [funds, query]);
+  /*
+   * The catalog is the whole AMFI universe, so a short query matches thousands
+   * of schemes and rendering every card stalls the tab. The heading keeps the
+   * TRUE match count — only the cards are capped — so an RM cannot mistake the
+   * cap for the answer.
+   */
+  const shown = useMemo(() => results?.slice(0, SEARCH_RENDER_CAP) ?? null, [results]);
 
   const topPerformers = useMemo(() => [...funds].sort(byReturn('3Y')).slice(0, 6), [funds]);
 
@@ -202,7 +212,12 @@ function ExploreHome({ funds, picked, toggle, onOpen, onOpenCollection, onOpenHo
         ) : (
           <>
             <SectionHeader title={`${results.length} result${results.length === 1 ? '' : 's'}`} />
-            <FundGrid rows={results} picked={picked} toggle={toggle} onOpen={onOpen} />
+            <FundGrid rows={shown ?? []} picked={picked} toggle={toggle} onOpen={onOpen} />
+            {shown && results.length > shown.length && (
+              <p className="mt-3 text-xs text-slate-500">
+                Showing the first {shown.length}. Add the fund house or category to narrow it down.
+              </p>
+            )}
           </>
         )
       ) : (

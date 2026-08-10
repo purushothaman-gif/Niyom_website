@@ -34,6 +34,9 @@ import { CatalogFundCard } from './CatalogFundCard';
 import { FundTable } from './FundTable';
 import { FUND_COLLECTIONS, byReturn, fundsIn, searchFunds, type ReturnKey } from './collections';
 
+/** Rows rendered for a search. The match COUNT shown to the user is never capped. */
+const SEARCH_RENDER_CAP = 100;
+
 interface Props {
   funds: CatalogFund[];
   recommendations: FundRecommendation[];
@@ -67,6 +70,15 @@ export function ExploreHome({
   const [sortBy, setSortBy] = useState<ReturnKey>('3Y');
 
   const results = useMemo(() => searchFunds(funds, query), [funds, query]);
+  /*
+   * The catalog is the whole AMFI universe now, so a one-letter query matches
+   * well over a thousand schemes. Rendering them all locks up a phone, and an
+   * endless table is not browsable anyway. The count above the table is always
+   * the TRUE total — only the rows are capped, and the screen says so, because
+   * a client who searches "HDFC" and counts 100 would otherwise conclude that
+   * is all there is.
+   */
+  const shown = useMemo(() => results.slice(0, SEARCH_RENDER_CAP), [results]);
   const searching = query.trim().length > 0;
 
   /* Recommendations are stored as codes; a pick whose catalog row has gone
@@ -134,7 +146,13 @@ export function ExploreHome({
                 <span className="font-bold text-text-primary">{results.length}</span>{' '}
                 {results.length === 1 ? 'fund' : 'funds'} matching “{query.trim()}”
               </p>
-              <FundTable funds={results} sortBy={sortBy} onSort={setSortBy} onOpen={onOpenFund} />
+              <FundTable funds={shown} sortBy={sortBy} onSort={setSortBy} onOpen={onOpenFund} />
+              {results.length > shown.length && (
+                <p className="text-xs text-text-secondary">
+                  Showing the first {shown.length}. Add the fund house or category to
+                  narrow it down.
+                </p>
+              )}
             </div>
           )
         ) : (
