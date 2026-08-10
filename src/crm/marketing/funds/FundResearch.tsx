@@ -9,15 +9,17 @@
 // cannot transact on a client's behalf from a research screen, and rendering
 // buttons that look like they might is worse than not having them.
 //
-// Data comes from MfCatalogService, the same source the portal reads, so a
-// client is never quoted numbers their own portal disagrees with.
+// Reads mutual_funds through the CRM's own supabase client (see
+// crmFundCatalog) — same table and mapping the portal uses, so a client is
+// never quoted numbers their own portal disagrees with, but without dragging
+// the portal's auth client into this bundle.
 
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft, Download, ImageDown, Search, TrendingUp, TrendingDown, Minus, Info,
 } from 'lucide-react';
-import { MfCatalogService } from '../../../portal/services/MfCatalogService';
 import type { CatalogFund } from '../../../portal/types/funds';
+import { listCatalogFunds } from './crmFundCatalog';
 import { EmptyState, GhostButton, PrimaryButton, inputClass, inputStyle } from '../components/shared';
 import {
   MARKET_RISK_LINE, PAST_PERFORMANCE_LINE, downloadFactsheet, renderFactsheet,
@@ -55,7 +57,7 @@ export default function FundResearch() {
 
   useEffect(() => {
     let alive = true;
-    MfCatalogService.list()
+    listCatalogFunds()
       .then(rows => { if (alive) { setFunds(rows); setLoading(false); } })
       .catch(err => {
         if (alive) {
