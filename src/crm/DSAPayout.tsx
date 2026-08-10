@@ -243,6 +243,7 @@ export default function DSAPayout({ employee }: Props) {
   const [cancelError, setCancelError] = useState('');
   const [payTarget, setPayTarget] = useState<NWDSADebitNote | null>(null);
   const [payDate, setPayDate] = useState('');
+  const [payRef, setPayRef] = useState('');
   const [payError, setPayError] = useState('');
 
   /** How many transactions a note covers. PostgREST returns the embedded
@@ -641,6 +642,8 @@ export default function DSAPayout({ employee }: Props) {
     if (!payTarget) return;
     if (!payDate) { setPayError('Please select the payment date.'); return; }
     if (payDate > localDateStr()) { setPayError('Payment date cannot be in the future.'); return; }
+    const ref = payRef.trim();
+    if (!ref) { setPayError('Enter the transfer / payment reference number.'); return; }
     const note = payTarget;
     setStatusBusyId(note.id);
     setGenStatus('');
@@ -649,12 +652,12 @@ export default function DSAPayout({ employee }: Props) {
       // The system audit timestamp is preserved by the marked_paid event's created_at.
       const paidAtIso = new Date(`${payDate}T00:00:00`).toISOString();
       const { error } = await supabase.from('dsa_debit_notes')
-        .update({ status: 'paid', paid_at: paidAtIso, paid_by: employee.id })
+        .update({ status: 'paid', paid_at: paidAtIso, paid_by: employee.id, payment_reference: ref } as any)
         .eq('id', note.id);
       if (error) throw error;
       await supabase.from('dsa_debit_note_events').insert({
         debit_note_id: note.id, event_type: 'marked_paid', actor: 'employee',
-        metadata: { net_payable: note.net_payable_amount ?? note.payout_amount, payment_date: payDate },
+        metadata: { net_payable: note.net_payable_amount ?? note.payout_amount, payment_date: payDate, payment_reference: ref },
       });
       setPayTarget(null);
       await loadDebitNotes();
@@ -896,6 +899,9 @@ export default function DSAPayout({ employee }: Props) {
                           {steps.map(s => (
                             <p key={s.label}><span style={{ color: s.color }}>{s.label} On:</span> {s.at}</p>
                           ))}
+                          {(note as any).payment_reference && (
+                            <p><span style={{ color: 'var(--text-muted)' }}>Ref:</span> <span className="font-mono" style={{ color: 'var(--text-secondary)' }}>{(note as any).payment_reference}</span></p>
+                          )}
                         </div>
                       ) : (
                         <span style={{ color: 'var(--text-faint)' }}>—</span>
@@ -959,7 +965,7 @@ export default function DSAPayout({ employee }: Props) {
                         )}
                         {/* Mark as Paid — admin; available for generated notes (incl. after signing) */}
                         {isAdmin && note.status === 'generated' && (
-                          <button onClick={() => { setPayTarget(note); setPayDate(localDateStr()); setPayError(''); }} disabled={busy}
+                          <button onClick={() => { setPayTarget(note); setPayDate(localDateStr()); setPayRef(''); setPayError(''); }} disabled={busy}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
                             style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--success)', border: '1px solid rgba(16,185,129,0.3)' }}>
                             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
@@ -1162,11 +1168,27 @@ export default function DSAPayout({ employee }: Props) {
                   className="w-full px-3.5 py-2.5 rounded-xl text-sm text-text-primary outline-none"
                   style={{ background: 'var(--bg-base)', border: `1px solid ${payError ? 'rgb(var(--danger-soft-rgb))' : 'var(--border)'}` }}
                 />
-                {payError && <p className="text-xs mt-1.5" style={{ color: 'rgb(var(--danger-soft-rgb))' }}>{payError}</p>}
                 <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>
                   Select the actual date the DSA was paid. The system audit time is recorded separately.
                 </p>
               </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  Transfer / Payment Reference <span style={{ color: 'var(--success)' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={payRef}
+                  onChange={e => { setPayRef(e.target.value); if (payError) setPayError(''); }}
+                  placeholder="e.g. bank UTR / NEFT / IMPS reference"
+                  className="w-full px-3.5 py-2.5 rounded-xl text-sm text-text-primary outline-none font-mono"
+                  style={{ background: 'var(--bg-base)', border: `1px solid ${payError ? 'rgb(var(--danger-soft-rgb))' : 'var(--border)'}` }}
+                />
+                <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                  The bank transaction reference for this payout — kept on record with the note.
+                </p>
+              </div>
+              {payError && <p className="text-xs" style={{ color: 'rgb(var(--danger-soft-rgb))' }}>{payError}</p>}
             </div>
             <div className="px-5 py-4 flex items-center justify-end gap-2" style={{ borderTop: '1px solid var(--border)' }}>
               <button onClick={() => setPayTarget(null)} disabled={statusBusyId === payTarget.id}
@@ -1174,7 +1196,7 @@ export default function DSAPayout({ employee }: Props) {
                 style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
                 Cancel
               </button>
-              <button onClick={confirmMarkPaid} disabled={statusBusyId === payTarget.id || !payDate}
+              <button onClick={confirmMarkPaid} disabled={statusBusyId === payTarget.id || !payDate || !payRef.trim()}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50"
                 style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--success)', border: '1px solid rgba(16,185,129,0.4)' }}>
                 {statusBusyId === payTarget.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
