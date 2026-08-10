@@ -250,6 +250,27 @@ export default function DSAPayout({ employee }: Props) {
    *  dsa_debit_note_lines existed (pre-20260718100000) have none. */
   const noteLineCount = (note: NWDSADebitNote) => note.dsa_debit_note_lines?.[0]?.count ?? 0;
 
+  // Period totals = still-pending payouts (groups) PLUS the period's already-
+  // generated ACTIVE notes (debitNotes excludes cancelled). The top cards show
+  // the WHOLE period so a fully-generated month isn't blank; `totalPayout` above
+  // remains the "still to generate" figure, surfaced as a separate indicator.
+  const genGross = debitNotes.reduce((s, n) => s + Number(n.payout_amount || 0), 0);
+  const genTds = debitNotes.reduce((s, n) => s + Number(n.tds_amount || 0), 0);
+  const genNet = debitNotes.reduce((s, n) => s + Number(n.net_payable_amount || 0), 0);
+  const genEntries = debitNotes.reduce(
+    (s, n) => s + (noteLineCount(n) || ((n as any).pdf_snapshot?.particulars?.length ?? 0)),
+    0,
+  );
+  const pendingEntries = groups.reduce((s, g) => s + g.rows.length, 0);
+  const periodGross = totalPayout + genGross;
+  const periodTds = totalTds + genTds;
+  const periodNet = totalNet + genNet;
+  const periodEntries = pendingEntries + genEntries;
+  const periodDsaIds = new Set<string>();
+  groups.forEach((g) => periodDsaIds.add(g.dsa_id));
+  debitNotes.forEach((n) => { const id = (n as any).dsa_id; if (id) periodDsaIds.add(id); });
+  const periodDsas = periodDsaIds.size;
+
   const loadDebitNotes = useCallback(async () => {
     const { data } = await supabase
       .from('dsa_debit_notes')
@@ -744,17 +765,29 @@ export default function DSAPayout({ employee }: Props) {
       {hasLoaded && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {[
-            { label: 'Gross Payout', value: fmt(totalPayout), color: 'var(--text-secondary)' },
-            { label: 'TDS @ 2%', value: `- ${fmt(totalTds)}`, color: 'rgb(var(--danger-soft-rgb))' },
-            { label: 'Net Payable', value: fmt(totalNet), color: 'var(--success)' },
-            { label: 'DSAs Involved', value: String(groups.length), color: 'var(--accent)' },
-            { label: 'Total Entries', value: String(groups.reduce((s, g) => s + g.rows.length, 0)), color: 'var(--text-secondary)' },
+            { label: 'Gross Payout', value: fmt(periodGross), color: 'var(--text-secondary)' },
+            { label: 'TDS @ 2%', value: `- ${fmt(periodTds)}`, color: 'rgb(var(--danger-soft-rgb))' },
+            { label: 'Net Payable', value: fmt(periodNet), color: 'var(--success)' },
+            { label: 'DSAs Involved', value: String(periodDsas), color: 'var(--accent)' },
+            { label: 'Total Entries', value: String(periodEntries), color: 'var(--text-secondary)' },
           ].map(s => (
             <div key={s.label} className="rounded-2xl p-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
               <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-faint)' }}>{s.label}</p>
               <p className="text-xl font-bold" style={{ color: s.color }}>{s.value}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pending indicator — the portion of the period not yet turned into a
+          debit note (the top cards now show the whole-period total). */}
+      {hasLoaded && totalPayout > 0 && (
+        <div className="rounded-xl px-4 py-2.5 text-sm flex items-center gap-2.5"
+          style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.2)', color: 'var(--text-secondary)' }}>
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} />
+          <span>
+            <strong style={{ color: 'var(--text-primary)' }}>{fmt(totalPayout)}</strong> across {pendingEntries} payout{pendingEntries === 1 ? '' : 's'} still pending — not yet in a debit note. Generate below.
+          </span>
         </div>
       )}
 
