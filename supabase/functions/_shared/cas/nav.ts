@@ -74,10 +74,29 @@ export interface SchemeClassRow {
   ambiguous: boolean;
 }
 
+/**
+ * One row per AMFI scheme code, for the scheme universe (`mf_scheme_cache`).
+ *
+ * nav_daily is keyed by ISIN because a CAS references holdings that way. The
+ * research tools key by scheme code instead, and deriving one from the other
+ * later would mean a second pass over 17k rows — so the parse emits both while
+ * it already has the line in hand.
+ */
+export interface SchemeNavRow {
+  scheme_code: string;
+  scheme_name: string;
+  current_nav: number;
+  nav_date: string;
+  /** The AMC, as AMFI names it. Empty only if a scheme precedes any heading. */
+  fund_house: string;
+}
+
 export interface AmfiFile {
   navs: NavRow[];
   /** One per ISIN — the category it was printed under, and what that means. */
   classes: SchemeClassRow[];
+  /** One per scheme code, for the research universe. */
+  schemeNavs: SchemeNavRow[];
 }
 
 /**
@@ -89,8 +108,10 @@ export interface AmfiFile {
 export function parseAmfiNav(text: string): AmfiFile {
   const navs: NavRow[] = [];
   const classes: SchemeClassRow[] = [];
+  const schemeNavs: SchemeNavRow[] = [];
   const seen = new Set<string>();
   const classified = new Set<string>();
+  const seenScheme = new Set<string>();
 
   /*
    * The heading most recently passed. Every scheme line below it belongs to it,
@@ -98,12 +119,34 @@ export function parseAmfiNav(text: string): AmfiFile {
    */
   let category = '';
 
+  /*
+   * The AMC most recently named, on the same "heading applies downward" basis.
+   *
+   * AMFI states the fund house as its own line above each block — 52 of them in
+   * the current file, spelled consistently. That is worth taking: the previous
+   * fund_house was the first three words of the scheme name, which turns
+   * "Axis Multicap Fund" and "Franklin India SHORT" into fund HOUSES and leaves
+   * a browse-by-AMC screen listing thousands of one-fund houses instead of 52.
+   */
+  let fundHouse = '';
+
   for (const line of text.split('\n')) {
     const parts = line.split(';');
     if (parts.length < 6) {
       // Not a scheme row — but it may be the heading that names the next batch.
       const heading = readCategoryHeading(line);
-      if (heading) category = heading;
+      if (heading) {
+        category = heading;
+      } else {
+        /*
+         * Everything else that is not a scheme row and names a fund house.
+         * Checked after the category test because AMFI has headings that also
+         * mention an AMC (e.g. "IL&FS Mutual Fund (IDF)"), and those are
+         * categories first.
+         */
+        const trimmed = line.trim();
+        if (trimmed && /mutual fund/i.test(trimmed)) fundHouse = trimmed;
+      }
       continue;
     }
 
@@ -114,6 +157,26 @@ export function parseAmfiNav(text: string): AmfiFile {
     // "N.A." for schemes yet to declare — a real absence, not a zero.
     const hasNav = Number.isFinite(nav) && nav > 0;
     const navDate = toIso(dateRaw);
+
+    /*
+     * Scheme-code NAV, recorded once per code.
+     *
+     * Deliberately outside the ISIN loop below: a scheme carries two ISINs but
+     * only one code, so collecting it there would emit duplicates, and a scheme
+     * whose ISIN fields are blank or malformed would be skipped entirely — it
+     * still has a code, a name and a NAV the research tools want.
+     */
+    const schemeCode = code.trim();
+    if (hasNav && navDate && schemeCode && !seenScheme.has(schemeCode)) {
+      seenScheme.add(schemeCode);
+      schemeNavs.push({
+        scheme_code: schemeCode,
+        scheme_name: name.trim(),
+        current_nav: nav,
+        nav_date: navDate,
+        fund_house: fundHouse,
+      });
+    }
 
     // One scheme carries two ISINs (growth/payout and reinvestment) against the
     // same NAV. A CAS may reference either, so both are stored.
@@ -163,7 +226,7 @@ export function parseAmfiNav(text: string): AmfiFile {
       }
     }
   }
-  return { navs, classes };
+  return { navs, classes, schemeNavs };
 }
 
 export interface NavRefreshResult {
@@ -173,6 +236,8 @@ export interface NavRefreshResult {
   navDate: string | null;
   /** Schemes whose category was captured this run. */
   classified?: number;
+  /** Scheme-universe rows given a fresh NAV this run. */
+  schemesWritten?: number;
   error?: string;
 }
 
@@ -197,7 +262,7 @@ export async function refreshNavs(cfg: SbConfig): Promise<NavRefreshResult> {
     clearTimeout(timer);
     if (!res.ok) throw new Error(`AMFI responded ${res.status}`);
 
-    const { navs: rows, classes } = parseAmfiNav(await res.text());
+    const { navs: rows, classes, schemeNavs } = parseAmfiNav(await res.text());
     parsed = rows.length;
     if (!parsed) throw new Error('AMFI returned no usable rows — the file layout may have changed.');
 
@@ -238,10 +303,69 @@ export async function refreshNavs(cfg: SbConfig): Promise<NavRefreshResult> {
       classified += Math.min(1000, classes.length - i);
     }
 
+    /*
+     * Today's NAV onto the research universe (mf_scheme_cache).
+     *
+     * This job prices the universe; it does NOT decide who is in it. That
+     * belongs to mf-universe, which keeps exactly one canonical row per fund —
+     * the Direct-Growth plan — so a fund appears once rather than once per
+     * plan-and-option permutation. AMFI's file is per plan/option, so it names
+     * ~14,000 codes against a universe of ~5,000.
+     *
+     * Hence the filter to codes already cached. Upserting the raw file instead
+     * inserts ~11,500 Regular/IDCW rows carrying nothing but a NAV — blank
+     * fund_house and blank search_name, invisible to the ILIKE search and
+     * silently tripling a table whose contract is one row per fund. Writing
+     * only what is already there keeps membership in one place.
+     *
+     * Only the NAV columns and the AMC are sent, so merge-duplicates touches
+     * exactly those and leaves category and the trailing returns — filled by
+     * other feeds on other schedules — untouched.
+     *
+     * Best-effort throughout: this is a research convenience, and it must never
+     * be the reason a refresh that already wrote nav_daily is logged as failed.
+     */
+    let schemesWritten = 0;
+    try {
+      const known = new Set<string>();
+      // PostgREST caps a page at 1000 rows, so walk it.
+      for (let offset = 0; ; offset += 1000) {
+        const page = await sbSelect<{ scheme_code: string }>(
+          cfg,
+          `mf_scheme_cache?select=scheme_code&order=scheme_code&limit=1000&offset=${offset}`,
+        );
+        for (const row of page) known.add(row.scheme_code);
+        if (page.length < 1000) break;
+      }
+
+      const priced = schemeNavs
+        .filter((r) => known.has(r.scheme_code))
+        .map(({ scheme_code, current_nav, nav_date, fund_house }) => ({
+          scheme_code,
+          current_nav,
+          nav_date,
+          // Never blank an existing house because one scheme sat above the
+          // first heading; the guess it replaces is still better than nothing.
+          ...(fund_house ? { fund_house } : {}),
+        }));
+
+      for (let i = 0; i < priced.length; i += 1000) {
+        await sbInsert(
+          cfg,
+          'mf_scheme_cache?on_conflict=scheme_code',
+          priced.slice(i, i + 1000),
+          { Prefer: 'resolution=merge-duplicates,return=minimal' },
+        );
+      }
+      schemesWritten = priced.length;
+    } catch (schemeErr) {
+      console.error('scheme-universe NAV write failed (nav_daily already written):', schemeErr);
+    }
+
     await sbInsert(cfg, 'nav_refresh_log', [
       { started_at: startedAt, finished_at: new Date().toISOString(), ok: true, rows_parsed: parsed, rows_written: written, nav_date: navDate },
     ]);
-    return { ok: true, parsed, written, navDate, classified };
+    return { ok: true, parsed, written, navDate, classified, schemesWritten };
   } catch (err) {
     const message = (err as Error)?.message ?? 'unknown';
     console.error('[nav] refresh failed:', message);

@@ -49,12 +49,6 @@ function isDirectGrowth(name: string): boolean {
     !n.includes("idcw") && !n.includes("dividend");
 }
 
-/** Best-effort fund house = leading words of the scheme name before "Fund". */
-function guessFundHouse(name: string): string {
-  const cut = name.split(/\s+(Mutual Fund|MF)\b/i)[0];
-  return cut.split(" ").slice(0, 3).join(" ");
-}
-
 async function getJson<T>(url: string, timeoutMs = 45000): Promise<T | null> {
   try {
     const controller = new AbortController();
@@ -81,6 +75,20 @@ async function refresh(): Promise<Response> {
   const list = await getJson<SchemeListEntry[]>("https://api.mfapi.in/mf");
   if (!list) throw new Error("Could not reach mfapi.in scheme list");
 
+  /*
+   * fund_house is deliberately NOT written here.
+   *
+   * It used to be the first three words of the scheme name, which is not an
+   * AMC — it made "Axis Multicap Fund" a fund house of its own. AMFI names the
+   * real house above each block of its daily file, so nav-refresh sets the
+   * column from that (52 houses, spelled consistently). This job runs at 02:00
+   * and nav-refresh at 23:45, so writing a guess here would simply overwrite
+   * the good value for most of every day.
+   *
+   * A scheme this job newly inserts therefore carries a blank house until that
+   * night's NAV run. Blank for a day beats wrong all day, and the browse-by-AMC
+   * screen filters blanks out rather than inventing a house for them.
+   */
   const rows = list
     .filter((s) => isDirectGrowth(s.schemeName))
     .map((s) => {
@@ -88,7 +96,6 @@ async function refresh(): Promise<Response> {
       return {
         scheme_code: String(s.schemeCode),
         scheme_name,
-        fund_house: guessFundHouse(scheme_name),
         search_name: scheme_name.toLowerCase(),
         last_synced_at: new Date().toISOString(),
       };

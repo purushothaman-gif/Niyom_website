@@ -429,6 +429,11 @@ verify_jwt = false
 [functions.mf-universe]
 verify_jwt = false
 
+# pg_cron reaches this through pg_net with no user session; it authenticates
+# with NAV_REFRESH_SECRET instead.
+[functions.mf-returns-backfill]
+verify_jwt = false
+
 [functions.mf-detail]
 verify_jwt = false
 
