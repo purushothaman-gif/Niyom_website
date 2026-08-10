@@ -101,7 +101,11 @@ Deno.serve(async (req: Request) => {
     await db.from("dsa_debit_note_otps").delete().eq("debit_note_id", note.id);
     await db.from("dsa_debit_note_events").insert([
       {
-        debit_note_id: note.id, event_type: "otp_verified", actor: "dsa",
+        // metadata: {} is explicit, not omitted: in a multi-row insert PostgREST
+        // unifies columns across all rows, so a missing key here is sent as NULL
+        // (bypassing the column default) and trips the NOT NULL constraint —
+        // failing the whole batch and silently dropping every signing event.
+        debit_note_id: note.id, event_type: "otp_verified", actor: "dsa", metadata: {},
         ip: req.headers.get("x-forwarded-for") ?? undefined,
         user_agent: req.headers.get("user-agent") ?? undefined,
       },
