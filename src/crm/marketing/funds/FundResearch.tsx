@@ -36,8 +36,8 @@ import {
 } from './navChart';
 import { EmptyState, GhostButton, PrimaryButton, inputClass, inputStyle } from '../components/shared';
 import {
-  MARKET_RISK_LINE, PAST_PERFORMANCE_LINE, downloadFactsheet, renderFactsheet,
-  type RenderedFactsheet,
+  MARKET_RISK_LINE, PAST_PERFORMANCE_LINE, downloadFactsheet, renderComparison,
+  renderFactsheet, type RenderedFactsheet,
 } from './fundFactsheet';
 
 /** At most three: a fourth column stops being readable on a laptop. */
@@ -392,6 +392,39 @@ function CompareView({ funds, onBack, onRemove }: {
   const [range, setRange] = useState<NavRange>('3Y');
   const [histories, setHistories] = useState<Record<string, CatalogNavPoint[]>>({});
   const [loading, setLoading] = useState(true);
+  const [sheet, setSheet] = useState<RenderedFactsheet | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [sheetErr, setSheetErr] = useState<string | null>(null);
+
+  // Revoke the previous object URL whenever it is replaced or the view closes,
+  // or each rebuild leaks a blob.
+  useEffect(() => () => { if (sheet) URL.revokeObjectURL(sheet.previewUrl); }, [sheet]);
+
+  // Changing the range or the shortlist invalidates a built sheet — better to
+  // drop it than leave a download button that hands over a stale image.
+  useEffect(() => {
+    setSheet(prev => {
+      if (prev) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+  }, [range, funds]);
+
+  const buildSheet = async () => {
+    setBusy(true);
+    setSheetErr(null);
+    try {
+      // Exactly what is on screen: same funds, same range, same colours.
+      const next = await renderComparison(funds, histories, range, COMPARE_COLOURS);
+      setSheet(prev => {
+        if (prev) URL.revokeObjectURL(prev.previewUrl);
+        return next;
+      });
+    } catch (e) {
+      setSheetErr(e instanceof Error ? e.message : 'Could not build the comparison image.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // One request per fund, in parallel. A fund whose history fails is simply
   // absent from the chart — the comparison table still stands on catalog data.
@@ -591,6 +624,32 @@ function CompareView({ funds, onBack, onRemove }: {
         &ldquo;Best&rdquo; marks only the highest figure in that row. It is a fact about past
         performance over one period, not a view on which fund suits a client.
       </p>
+
+      <div className="flex flex-wrap items-center gap-2 mt-5">
+        <PrimaryButton onClick={buildSheet} disabled={busy || loading}
+          className="flex items-center gap-2">
+          <ImageDown className="w-4 h-4" />
+          {busy ? 'Building…' : sheet ? 'Rebuild image' : 'Create comparison image'}
+        </PrimaryButton>
+        {sheet && (
+          <GhostButton onClick={() => downloadFactsheet(sheet)} className="flex items-center gap-2">
+            <Download className="w-4 h-4" /> Download PNG
+          </GhostButton>
+        )}
+      </div>
+
+      {sheetErr && <p className="text-sm mt-3" style={{ color: 'var(--danger)' }}>{sheetErr}</p>}
+
+      {sheet && (
+        <div className="mt-4">
+          <p className="text-xs mb-2" style={{ color: 'var(--text-faint)' }}>
+            Preview — share this with the client as-is.
+          </p>
+          <img src={sheet.previewUrl} alt="Fund comparison"
+            className="rounded-xl max-w-[380px] w-full"
+            style={{ border: '1px solid var(--border)' }} />
+        </div>
+      )}
 
       <Disclaimer />
     </div>

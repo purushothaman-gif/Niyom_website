@@ -24,7 +24,7 @@ import {
   BRAND, FONT_SANS, NIYOM_LOGO_DATA_URI, esc,
 } from '../templates/brandTokens';
 import { rasterise } from '../templates/TemplateRenderer';
-import { buildNavSeries, navChartSvg, type NavRange } from './navChart';
+import { buildNavSeries, navChartSvg, navCompareSvg, type NavRange } from './navChart';
 
 /** Mandatory on every sheet. See the compliance note above. */
 export const MARKET_RISK_LINE =
@@ -84,6 +84,15 @@ function wrap(text: string, maxWidth: number, fontSize: number, weight: number):
   }
   if (line) lines.push(line);
   return lines;
+}
+
+/** Measured text width, so labels can be placed after real glyphs. */
+function measure(text: string, fontSize: number, weight: number): number {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return text.length * fontSize * 0.6;
+  ctx.font = `${weight} ${fontSize}px ${FONT_SANS}`;
+  return ctx.measureText(text).width;
 }
 
 interface Row { label: string; value: string; colour?: string; strong?: boolean }
@@ -283,4 +292,225 @@ export function downloadFactsheet(sheet: RenderedFactsheet): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+/* ---------------------------- Comparison sheet ---------------------------- */
+
+export const COMPARE_W = 1080;
+export const COMPARE_H = 1720;
+
+/**
+ * Side-by-side comparison of 2-3 schemes, as a PNG.
+ *
+ * COMPLIANCE — the same rules as the single-fund sheet apply, plus one that is
+ * specific to comparison:
+ *
+ * The growth chart is REBASED TO 100, never plotted in rupees. Absolute NAV is
+ * not comparable across schemes — a fund at ₹450 is not better than one at ₹32,
+ * it is older or was issued differently — and drawing both on a rupee axis
+ * would state something false very persuasively to a client. The caption and
+ * the axis label both say the units are index points.
+ *
+ * "Best" marks only the single highest figure in a row and is labelled as a
+ * fact about one past period. Ties mark neither, so the sheet cannot manufacture
+ * a winner. Nothing here ranks the funds overall or suggests which suits a
+ * client — that judgement is the employee's conversation, not this artefact's.
+ */
+export function composeComparisonSvg(
+  funds: CatalogFund[],
+  histories: Record<string, CatalogNavPoint[]>,
+  range: NavRange = '3Y',
+  colours: string[] = ['#2563eb', '#d97706', '#0f8f79'],
+): string {
+  const W = COMPARE_W;
+  const H = COMPARE_H;
+  const M = 76;
+  const contentW = W - M * 2;
+  const headerH = 190;
+
+  const labelW = 210;
+  const colW = (contentW - labelW) / funds.length;
+
+  // --- fund column headers --------------------------------------------------
+  const nameLinesFor = (f: CatalogFund) => wrap(f.name, colW - 30, 21, 700).slice(0, 3);
+  const maxNameLines = Math.max(...funds.map(f => nameLinesFor(f).length));
+  const headTop = headerH + 44;
+  const headBlockH = 26 + maxNameLines * 26 + 22;
+
+  const columnHeads = funds.map((f, i) => {
+    const x = M + labelW + colW * i;
+    const lines = nameLinesFor(f);
+    return `
+      <circle cx="${(x + 8).toFixed(1)}" cy="${(headTop + 8).toFixed(1)}" r="7"
+              fill="${colours[i % colours.length]}"/>
+      ${lines.map((l, li) => `
+        <text x="${(x + 24).toFixed(1)}" y="${(headTop + 14 + li * 26).toFixed(1)}"
+              font-family="${FONT_SANS}" font-size="21" font-weight="700"
+              fill="${INK}">${esc(l)}</text>`).join('')}
+      <text x="${(x + 24).toFixed(1)}" y="${(headTop + 14 + lines.length * 26 + 4).toFixed(1)}"
+            font-family="${FONT_SANS}" font-size="17" font-weight="400"
+            fill="${INK_SOFT}">${esc(f.amc)}</text>`;
+  }).join('');
+
+  // --- rebased growth chart -------------------------------------------------
+  const chartTop = headTop + headBlockH + 30;
+  const chartH = 300;
+  const chartSeries = funds.map((f, i) => ({
+    label: f.name,
+    colour: colours[i % colours.length],
+    series: buildNavSeries(histories[f.amfiCode] ?? [], range),
+  }));
+  const anyHistory = chartSeries.some(s => s.series.points.length >= 2);
+  const rangeWord = range === 'ALL' ? 'since launch' : `last ${range.replace('Y', '')} years`;
+
+  const chartSvg = anyHistory
+    ? `<g transform="translate(${M},${chartTop})">${navCompareSvg(chartSeries, {
+        width: contentW, height: chartH, uid: 'cs',
+        axis: LINE, label: INK_SOFT, fontFamily: FONT_SANS,
+        caption: `GROWTH OF ₹100 · ${rangeWord.toUpperCase()}`,
+      })}</g>
+      <text x="${M}" y="${(chartTop + chartH + 22).toFixed(1)}" font-family="${FONT_SANS}"
+            font-size="17" fill="${INK_SOFT}">Each line is rebased to 100 at the start of the period. Axis is index points, not rupees.</text>`
+    : '';
+
+  // --- rows -----------------------------------------------------------------
+  const periods: { key: keyof CatalogFund['returns']; label: string }[] = [
+    { key: '6M', label: '6 months' },
+    { key: '1Y', label: '1 year' },
+    { key: '3Y', label: '3 years' },
+    { key: '5Y', label: '5 years' },
+    { key: 'SI', label: 'Since launch' },
+  ];
+
+  /** Single highest value in the row, or null on a tie. */
+  const bestOf = (key: keyof CatalogFund['returns']): string | null => {
+    const vals = funds
+      .map(f => ({ code: f.amfiCode, v: f.returns[key] }))
+      .filter((x): x is { code: string; v: number } => x.v !== null && !Number.isNaN(x.v));
+    if (vals.length < 2) return null;
+    const max = Math.max(...vals.map(v => v.v));
+    const leaders = vals.filter(v => v.v === max);
+    return leaders.length === 1 ? leaders[0].code : null;
+  };
+
+  const facts: { label: string; get: (f: CatalogFund) => string }[] = [
+    { label: 'NAV', get: f => fmtNav(f.nav) },
+    { label: 'Category', get: f => f.subCategory || f.category },
+    { label: 'Risk', get: f => f.risk ?? '—' },
+    { label: 'Minimum', get: f => fmtAmount(f.minInvestment) },
+  ];
+
+  const rowsTop = (anyHistory ? chartTop + chartH + 52 : chartTop) + 10;
+  const rowH = 62;
+
+  const returnRows = periods.map((p, i) => {
+    const y = rowsTop + i * rowH;
+    const best = bestOf(p.key);
+    return `
+      <text x="${M}" y="${(y + 38).toFixed(1)}" font-family="${FONT_SANS}" font-size="21"
+            fill="${INK_SOFT}">${esc(p.label)}</text>
+      ${funds.map((f, ci) => {
+        const v = f.returns[p.key];
+        const x = M + labelW + colW * ci + 24;
+        const text = fmtPct(v);
+        // Measured, not guessed: "+20.50%" is wider than a fixed offset assumed
+        // and the marker landed on top of the digits.
+        const after = x + measure(text, 26, 800) + 10;
+        return `
+          <text x="${x.toFixed(1)}" y="${(y + 38).toFixed(1)}" font-family="${FONT_SANS}"
+                font-size="26" font-weight="800" fill="${pctColour(v)}">${esc(text)}</text>
+          ${best === f.amfiCode
+            ? `<text x="${after.toFixed(1)}" y="${(y + 38).toFixed(1)}" font-family="${FONT_SANS}"
+                     font-size="16" font-weight="600" fill="${INK_SOFT}">best</text>`
+            : ''}`;
+      }).join('')}
+      <line x1="${M}" y1="${(y + rowH - 8).toFixed(1)}" x2="${W - M}" y2="${(y + rowH - 8).toFixed(1)}"
+            stroke="${LINE}" stroke-width="1.5"/>`;
+  }).join('');
+
+  const factsTop = rowsTop + periods.length * rowH + 8;
+  const factRows = facts.map((r, i) => {
+    const y = factsTop + i * rowH;
+    return `
+      <text x="${M}" y="${(y + 38).toFixed(1)}" font-family="${FONT_SANS}" font-size="21"
+            fill="${INK_SOFT}">${esc(r.label)}</text>
+      ${funds.map((f, ci) => `
+        <text x="${(M + labelW + colW * ci + 24).toFixed(1)}" y="${(y + 38).toFixed(1)}"
+              font-family="${FONT_SANS}" font-size="22" font-weight="600"
+              fill="${INK}">${esc(r.get(f))}</text>`).join('')}
+      ${i < facts.length - 1
+        ? `<line x1="${M}" y1="${(y + rowH - 8).toFixed(1)}" x2="${W - M}" y2="${(y + rowH - 8).toFixed(1)}"
+                 stroke="${LINE}" stroke-width="1.5"/>`
+        : ''}`;
+  }).join('');
+
+  // --- compliance, anchored to the foot -------------------------------------
+  const discSize = 19;
+  const bestNote = 'Best marks only the highest figure in that row over that one period. It is not a view on which fund suits an investor.';
+  const noteLines = wrap(bestNote, contentW, discSize, 400);
+  const riskLines = wrap(MARKET_RISK_LINE, contentW, discSize, 600);
+  const pastLines = wrap(PAST_PERFORMANCE_LINE, contentW, discSize, 400);
+  const dLH = discSize * 1.4;
+  const discH = (noteLines.length + riskLines.length + pastLines.length) * dLH + 34;
+  const discTop = H - M - discH;
+
+  const discSvg = [
+    ...noteLines.map((l, i) => `<text x="${M}" y="${(discTop + 20 + i * dLH).toFixed(1)}"
+        font-family="${FONT_SANS}" font-size="${discSize}" fill="${INK_SOFT}">${esc(l)}</text>`),
+    ...riskLines.map((l, i) => `<text x="${M}" y="${(discTop + 30 + (noteLines.length + i) * dLH).toFixed(1)}"
+        font-family="${FONT_SANS}" font-size="${discSize}" font-weight="600" fill="${INK}">${esc(l)}</text>`),
+    ...pastLines.map((l, i) => `<text x="${M}" y="${(discTop + 38 + (noteLines.length + riskLines.length + i) * dLH).toFixed(1)}"
+        font-family="${FONT_SANS}" font-size="${discSize}" fill="${INK_SOFT}">${esc(l)}</text>`),
+  ].join('');
+
+  const emblem = 62;
+  const brandY = discTop - 92;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <defs>
+      <linearGradient id="chdr" x1="0" y1="0" x2="0.7" y2="1">
+        <stop offset="0%" stop-color="${BRAND.navy}"/>
+        <stop offset="100%" stop-color="${BRAND.navyLift}"/>
+      </linearGradient>
+    </defs>
+    <rect width="${W}" height="${H}" fill="${SURFACE}"/>
+    <rect width="${W}" height="${headerH}" fill="url(#chdr)"/>
+    <text x="${M}" y="86" font-family="${FONT_SANS}" font-size="22" font-weight="700"
+          letter-spacing="3.4" fill="${BRAND.gold}">FUND COMPARISON</text>
+    <text x="${M}" y="142" font-family="${FONT_SANS}" font-size="42" font-weight="800"
+          fill="#ffffff">${funds.length} schemes, side by side</text>
+
+    ${columnHeads}
+    ${chartSvg}
+    ${returnRows}
+    ${factRows}
+
+    <line x1="${M}" y1="${(brandY - 30).toFixed(1)}" x2="${W - M}" y2="${(brandY - 30).toFixed(1)}"
+          stroke="${LINE}" stroke-width="1.5"/>
+    <image href="${NIYOM_LOGO_DATA_URI}" x="${M}" y="${brandY.toFixed(1)}"
+           width="${emblem}" height="${emblem}" preserveAspectRatio="xMidYMid meet"/>
+    <text x="${(M + emblem + 18).toFixed(1)}" y="${(brandY + 26).toFixed(1)}" font-family="${FONT_SANS}"
+          font-size="24" font-weight="700" fill="${INK}">NIYOM WEALTH</text>
+    <text x="${(M + emblem + 18).toFixed(1)}" y="${(brandY + 54).toFixed(1)}" font-family="${FONT_SANS}"
+          font-size="20" fill="${INK_SOFT}">niyomwealth.com</text>
+    <text x="${W - M}" y="${(brandY + 42).toFixed(1)}" text-anchor="end" font-family="${FONT_SANS}"
+          font-size="19" fill="${INK_SOFT}">AMFI-registered Mutual Fund Distributor</text>
+
+    ${discSvg}
+  </svg>`;
+}
+
+export async function renderComparison(
+  funds: CatalogFund[],
+  histories: Record<string, CatalogNavPoint[]>,
+  range: NavRange = '3Y',
+  colours?: string[],
+): Promise<RenderedFactsheet> {
+  const svg = composeComparisonSvg(funds, histories, range, colours);
+  const blob = await rasterise(svg, COMPARE_W, COMPARE_H);
+  return {
+    blob,
+    previewUrl: URL.createObjectURL(blob),
+    fileName: `NIYOM-fund-comparison-${funds.length}.png`,
+  };
 }
