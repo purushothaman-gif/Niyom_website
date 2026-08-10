@@ -78,6 +78,7 @@ const NAV: NavSection[] = [
     items: [
       { key: 'bonds' as CRMPage,             label: 'Bond Creation',     icon: Landmark },
       { key: 'marketing_content' as CRMPage, label: 'Content Creation',  icon: Sparkles },
+      { key: 'marketing_funds' as CRMPage,   label: 'Mutual Funds',     icon: LineChart },
     ],
   },
   {

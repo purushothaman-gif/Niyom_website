@@ -321,6 +321,7 @@ export type CRMPage =
   | 'reports'
   | 'bonds'
   | 'marketing_content'
+  | 'marketing_funds'
   | 'mis'
   | 'dsa_payout'
   | 'dsa_management'

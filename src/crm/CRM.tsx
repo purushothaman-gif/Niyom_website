@@ -15,6 +15,7 @@ import Dashboard from './Dashboard';
 import Leads from './leads/Leads';
 import Bonds from './bonds/Bonds';
 import MarketingContent from './marketing/MarketingContent';
+import FundResearch from './marketing/funds/FundResearch';
 import ClientOnboarding from './ClientOnboarding';
 import ManageClients from './ManageClients';
 import Portfolio from './Portfolio';
@@ -68,6 +69,7 @@ export default function CRM() {
     'reports',
     'bonds',
     'marketing_content',
+    'marketing_funds',
     'mis',
     'dsa_management',
     'dsa_payout',
@@ -193,6 +195,7 @@ export default function CRM() {
       // Content Creation is visible to everyone — admins get the full studio,
       // employees get the read-only approved-content gallery (branched inside).
       case 'marketing_content': return <MarketingContent employee={employee} onNavigate={navigate} />;
+      case 'marketing_funds': return <FundResearch />;
       case 'documents': return <Documents employee={employee} initialClientId={pageParams.clientId} onBack={pageParams.clientId ? () => navigate('clients') : undefined} />;
       case 'admin_documents': return isAdmin ? <AdminDocuments employee={employee} /> : <Documents employee={employee} />;
       case 'mis': return <MIS employee={employee} />;

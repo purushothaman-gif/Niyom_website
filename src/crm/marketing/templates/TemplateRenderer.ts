@@ -72,7 +72,14 @@ export function composeSvg(req: RenderRequest): string {
 }
 
 /** Rasterise an SVG string to a PNG blob at the given pixel size. */
-async function rasterise(svg: string, width: number, height: number): Promise<Blob> {
+/**
+ * SVG string -> PNG blob.
+ *
+ * Exported because the fund factsheet renders through the same path: one
+ * rasteriser means the Safari decode() workaround and the data-URI encoding
+ * choice below can't drift between the two features.
+ */
+export async function rasterise(svg: string, width: number, height: number): Promise<Blob> {
   // encodeURIComponent (not btoa) so non-Latin copy survives the trip.
   const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
