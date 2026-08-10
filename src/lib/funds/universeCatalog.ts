@@ -13,6 +13,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { splitAmfiCategory } from './amfiCategory';
+import { isDirectPlan } from '../../../supabase/functions/_shared/mfPlan';
 import type { CatalogFund } from '../../portal/types/funds';
 
 export const UNIVERSE_COLUMNS =
@@ -106,7 +107,16 @@ export async function listUniverseFunds(client: SupabaseClient<any>): Promise<Ca
       .range(from, from + PAGE - 1);
     if (error) throw error;
     const rows = (data ?? []) as unknown as UniverseRow[];
-    out.push(...rows.map(universeToCatalogFund));
+    /*
+     * Direct plans never reach a screen. mf-universe already builds the cache
+     * from Regular plans only, so this should filter nothing — it is here
+     * because that upstream rule is one edited line away from silently
+     * reintroducing schemes NIYOM cannot legally sell, and a distributor
+     * quoting Direct returns is not a bug anyone would notice by looking.
+     * Filtered after paging so a page never comes back short and ends the loop
+     * early.
+     */
+    out.push(...rows.filter((r) => !isDirectPlan(r.scheme_name)).map(universeToCatalogFund));
     if (rows.length < PAGE) break;
   }
   return out;

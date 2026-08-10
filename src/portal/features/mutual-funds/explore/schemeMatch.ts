@@ -15,6 +15,7 @@
  *     rather than us guessing between Direct and Regular, Growth and IDCW.
  */
 import type { CatalogFund, FundScheme } from '../../../types/funds';
+import { isDirectPlan } from '../../../../../supabase/functions/_shared/mfPlan';
 
 const NOISE = [
   'direct',
@@ -46,12 +47,15 @@ export function coreName(name: string): string {
     .trim();
 }
 
-/** How a BSE scheme's plan reads to a client, for the plan picker. */
+/**
+ * How a BSE scheme's plan reads to a client, for the plan picker.
+ *
+ * Only Regular reaches this — matchingSchemes drops Direct — so the plan half
+ * is constant and the picker exists to choose Growth vs IDCW.
+ */
 export function planLabel(scheme: FundScheme): string {
-  const n = scheme.name.toLowerCase();
-  const plan = n.includes('direct') ? 'Direct' : 'Regular';
-  const option = /idcw|dividend/.test(n) ? 'IDCW' : 'Growth';
-  return `${plan} · ${option}`;
+  const option = /idcw|dividend/i.test(scheme.name) ? 'IDCW' : 'Growth';
+  return `Regular · ${option}`;
 }
 
 /**
@@ -62,5 +66,13 @@ export function planLabel(scheme: FundScheme): string {
 export function matchingSchemes(fund: CatalogFund, schemes: FundScheme[]): FundScheme[] {
   const core = coreName(fund.name);
   if (!core) return [];
-  return schemes.filter((s) => coreName(s.name) === core);
+  /*
+   * Direct plans are excluded from what a client can order.
+   *
+   * This is the transaction path, so it is the one place where showing Direct
+   * would not merely mislead but produce an order NIYOM cannot place as an ARN
+   * distributor. The plan picker used to offer "Direct · Growth" alongside
+   * Regular precisely because it listed every variant it matched.
+   */
+  return schemes.filter((s) => coreName(s.name) === core && !isDirectPlan(s.name));
 }
