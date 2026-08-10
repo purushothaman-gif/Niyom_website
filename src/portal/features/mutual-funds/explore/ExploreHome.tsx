@@ -43,6 +43,11 @@ interface Props {
   /** Sends the client to the full BSE scheme master (everything we can trade). */
   onAllFunds: () => void;
   onNavigate: (view: PortalView) => void;
+  /** Comparison shortlist, by AMFI code. */
+  compare: string[];
+  onToggleCompare: (amfiCode: string) => void;
+  onOpenCompare: () => void;
+  onClearCompare: () => void;
 }
 
 export function ExploreHome({
@@ -50,6 +55,10 @@ export function ExploreHome({
   recommendations,
   holdings,
   onOpenFund,
+  compare,
+  onToggleCompare,
+  onOpenCompare,
+  onClearCompare,
   onOpenCollection,
   onAllFunds,
   onNavigate,
@@ -168,7 +177,10 @@ export function ExploreHome({
                 />
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   {topPerformers.map((f) => (
-                    <CatalogFundCard key={f.amfiCode} fund={f} onOpen={() => onOpenFund(f.amfiCode)} />
+                    <CatalogFundCard key={f.amfiCode} fund={f} onOpen={() => onOpenFund(f.amfiCode)}
+                      selected={compare.includes(f.amfiCode)}
+                      compareDisabled={compare.length >= 3}
+                      onToggleCompare={() => onToggleCompare(f.amfiCode)} />
                   ))}
                 </div>
               </section>
@@ -225,6 +237,29 @@ export function ExploreHome({
         <InvestmentsPanel holdings={holdings} onNavigate={onNavigate} />
         <ToolsPanel onAllFunds={onAllFunds} onNavigate={onNavigate} />
       </aside>
+
+      {compare.length > 0 && (
+        <div className="fixed bottom-20 left-1/2 z-40 flex max-w-[94vw] -translate-x-1/2 items-center gap-2 rounded-token-lg border border-accent bg-surface px-3 py-2 shadow-lg md:bottom-6">
+          <span className="text-xs font-semibold text-text-primary">
+            {compare.length} selected
+          </span>
+          <button
+            type="button"
+            onClick={onClearCompare}
+            className="text-xs text-text-secondary hover:text-text-primary"
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            onClick={onOpenCompare}
+            disabled={compare.length < 2}
+            className="rounded-token-sm bg-accent px-3 py-1.5 text-xs font-bold text-on-accent disabled:opacity-40"
+          >
+            {compare.length < 2 ? 'Pick 2 to compare' : `Compare ${compare.length}`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

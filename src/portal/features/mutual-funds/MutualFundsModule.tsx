@@ -9,11 +9,12 @@ import { useFundCatalog } from '../../hooks/useFundCatalog';
 import { useMfCatalog } from '../../hooks/useMfCatalog';
 import { BSEService } from '../../services/BSEService';
 import { useBseAccount } from './useBseAccount';
-import type { FundScheme, OrderType } from '../../types/funds';
+import type { CatalogFund, FundScheme, OrderType } from '../../types/funds';
 import { FundDiscoveryPage } from './discovery/FundDiscoveryPage';
 import { FundDetailsPage } from './details/FundDetailsPage';
 import { CatalogFundPage } from './explore/CatalogFundPage';
 import { CollectionPage } from './explore/CollectionPage';
+import { FundComparePage } from './compare/FundComparePage';
 import { ExploreHome } from './explore/ExploreHome';
 import { collectionById } from './explore/collections';
 import { InvestFlow } from './invest/InvestFlow';
@@ -71,6 +72,8 @@ type Screen =
    * which differs by where the order started.
    */
   | { name: 'invest'; scheme: FundScheme; orderType: OrderType; back: Screen }
+  /** Side-by-side comparison of the shortlist. */
+  | { name: 'compare' }
   | { name: 'redeem'; holdingId: string }
   | { name: 'switch'; holdingId: string };
 
@@ -97,6 +100,18 @@ export function MutualFundsModule({
   const catalog = useMfCatalog();
   const [tab, setTab] = useState<Tab>('explore');
   const [screen, setScreen] = useState<Screen>({ name: 'list' });
+  /** Comparison shortlist, by AMFI code. Capped at three: a fourth column
+      stops being readable on a phone, which is where most clients read this. */
+  const [compare, setCompare] = useState<string[]>([]);
+
+  const toggleCompare = (amfiCode: string) =>
+    setCompare((prev) =>
+      prev.includes(amfiCode)
+        ? prev.filter((c) => c !== amfiCode)
+        : prev.length >= 3
+          ? prev
+          : [...prev, amfiCode],
+    );
 
   // Ordering is gated: finish KYC first, and until live BSE is enabled we block
   // (rather than allow simulated orders). `investGate` is null only when a client
@@ -165,6 +180,19 @@ export function MutualFundsModule({
   }
 
   // --- Detail / flow screens take over the whole view ---------------------
+
+  if (screen.name === 'compare') {
+    return (
+      <FundComparePage
+        funds={compare
+          .map((c) => catalog.funds.find((f) => f.amfiCode === c))
+          .filter((f): f is CatalogFund => !!f)}
+        onBack={() => setScreen({ name: 'list' })}
+        onRemove={toggleCompare}
+        onOpenFund={(amfiCode) => setScreen({ name: 'fund', amfiCode })}
+      />
+    );
+  }
 
   if (screen.name === 'collection') {
     const collection = collectionById(screen.id);
@@ -284,6 +312,10 @@ export function MutualFundsModule({
           onOpenCollection={(id) => setScreen({ name: 'collection', id })}
           onAllFunds={() => setTab('all-funds')}
           onNavigate={onNavigate}
+          compare={compare}
+          onToggleCompare={toggleCompare}
+          onOpenCompare={() => setScreen({ name: 'compare' })}
+          onClearCompare={() => setCompare([])}
         />
       ) : tab === 'all-funds' ? (
         loading ? (

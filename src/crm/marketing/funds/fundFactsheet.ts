@@ -24,7 +24,7 @@ import {
   BRAND, FONT_SANS, NIYOM_LOGO_DATA_URI, esc,
 } from '../templates/brandTokens';
 import { rasterise } from '../templates/TemplateRenderer';
-import { buildNavSeries, navChartSvg, navCompareSvg, type NavRange } from './navChart';
+import { buildNavSeries, navChartSvg, navCompareSvg, type NavRange } from '../../../lib/funds/navChart';
 
 /** Mandatory on every sheet. See the compliance note above. */
 export const MARKET_RISK_LINE =
