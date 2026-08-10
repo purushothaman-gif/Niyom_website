@@ -73,13 +73,41 @@ class CashfreeGateway implements PanGateway {
 class RelayGateway implements PanGateway {
   constructor(private baseUrl: string, private secret: string) {}
   async verify(pan: string, name?: string): Promise<PanVerifyResult> {
-    const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/verify/pan`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-relay-secret": this.secret },
-      body: JSON.stringify(name ? { pan, name } : { pan }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/verify/pan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-relay-secret": this.secret },
+        body: JSON.stringify(name ? { pan, name } : { pan }),
+      });
+    } catch (_e) {
+      // Deno puts the URL in its network errors; the relay host is not something
+      // to show a client, so say only that the relay is unreachable.
+      throw new Error("PAN verification is unavailable — the relay is unreachable.");
+    }
     const data = await res.json().catch(() => ({} as Record<string, unknown>));
-    if (!res.ok) throw new Error((data as any)?.error || "PAN verification is unavailable.");
+    if (!res.ok) {
+      const detail = String((data as any)?.error ?? (data as any)?.message ?? "").trim();
+      // A body carrying `valid` is the relay echoing Cashfree's verdict on the
+      // PAN itself (e.g. 422 "PAN does not exist"). That is an answer, not a
+      // failure — hand it back so the caller returns its normal "could not be
+      // verified" response instead of a 500.
+      if (data && Object.prototype.hasOwnProperty.call(data, "valid")) {
+        return { valid: false, name_as_per_pan: null, message: detail || undefined };
+      }
+      // Everything else is the relay itself failing, and its raw text must never
+      // reach a user. The droplet answers a PAN_RELAY_SECRET mismatch with a bare
+      // "Unauthorized", which reads as "you are not allowed to do this" and sent
+      // us hunting for a permissions bug on 2026-08-10. Name the layer instead.
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(
+          "PAN verification is misconfigured — the relay rejected this server's credentials.",
+        );
+      }
+      throw new Error(
+        `PAN verification relay failed (HTTP ${res.status}${detail ? `: ${detail}` : ""}).`,
+      );
+    }
     return {
       valid: (data as any)?.valid === true,
       name_as_per_pan: (data as any)?.registered_name ?? null,
