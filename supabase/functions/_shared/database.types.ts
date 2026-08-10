@@ -1477,6 +1477,7 @@ export type Database = {
           net_payable_amount: number
           paid_at: string | null
           paid_by: string | null
+          payment_reference: string | null
           payout_amount: number
           pdf_snapshot: Json | null
           pdf_url: string
@@ -1513,6 +1514,7 @@ export type Database = {
           net_payable_amount?: number
           paid_at?: string | null
           paid_by?: string | null
+          payment_reference?: string | null
           payout_amount?: number
           pdf_snapshot?: Json | null
           pdf_url?: string
@@ -1549,6 +1551,7 @@ export type Database = {
           net_payable_amount?: number
           paid_at?: string | null
           paid_by?: string | null
+          payment_reference?: string | null
           payout_amount?: number
           pdf_snapshot?: Json | null
           pdf_url?: string
@@ -6226,6 +6229,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      nw_apply_txn_holding: {
+        Args: { p_txn: Database["public"]["Tables"]["nw_transactions"]["Row"] }
+        Returns: undefined
       }
       nw_assign_leads: {
         Args: { p_lead_ids: string[]; p_reason?: string; p_to_employee: string }
