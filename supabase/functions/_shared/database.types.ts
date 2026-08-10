@@ -1816,28 +1816,61 @@ export type Database = {
       }
       mf_scheme_cache: {
         Row: {
+          amfi_category: string | null
           category: string
           created_at: string
+          current_nav: number | null
           fund_house: string
           last_synced_at: string
+          launch_date: string | null
+          nav_date: string | null
+          return_1y: number | null
+          return_3y: number | null
+          return_5y: number | null
+          return_6m: number | null
+          return_si: number | null
+          returns_error: string | null
+          returns_synced_at: string | null
           scheme_code: string
           scheme_name: string
           search_name: string
         }
         Insert: {
+          amfi_category?: string | null
           category?: string
           created_at?: string
+          current_nav?: number | null
           fund_house?: string
           last_synced_at?: string
+          launch_date?: string | null
+          nav_date?: string | null
+          return_1y?: number | null
+          return_3y?: number | null
+          return_5y?: number | null
+          return_6m?: number | null
+          return_si?: number | null
+          returns_error?: string | null
+          returns_synced_at?: string | null
           scheme_code: string
           scheme_name?: string
           search_name?: string
         }
         Update: {
+          amfi_category?: string | null
           category?: string
           created_at?: string
+          current_nav?: number | null
           fund_house?: string
           last_synced_at?: string
+          launch_date?: string | null
+          nav_date?: string | null
+          return_1y?: number | null
+          return_3y?: number | null
+          return_5y?: number | null
+          return_6m?: number | null
+          return_si?: number | null
+          returns_error?: string | null
+          returns_synced_at?: string | null
           scheme_code?: string
           scheme_name?: string
           search_name?: string
@@ -6587,6 +6620,7 @@ export type Database = {
       }
       trigger_bond_yield_refresh: { Args: never; Returns: undefined }
       trigger_commodity_price_update: { Args: never; Returns: undefined }
+      trigger_mf_returns_backfill: { Args: never; Returns: undefined }
       trigger_mf_universe_refresh: { Args: never; Returns: undefined }
       trigger_mkt_expire_content: { Args: never; Returns: undefined }
       trigger_mutual_funds_update: { Args: never; Returns: undefined }

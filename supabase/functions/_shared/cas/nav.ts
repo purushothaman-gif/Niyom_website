@@ -89,6 +89,8 @@ export interface SchemeNavRow {
   nav_date: string;
   /** The AMC, as AMFI names it. Empty only if a scheme precedes any heading. */
   fund_house: string;
+  /** AMFI's category heading, e.g. "Equity Scheme - Large Cap Fund". */
+  amfi_category: string;
 }
 
 export interface AmfiFile {
@@ -175,6 +177,7 @@ export function parseAmfiNav(text: string): AmfiFile {
         current_nav: nav,
         nav_date: navDate,
         fund_house: fundHouse,
+        amfi_category: category,
       });
     }
 
@@ -340,13 +343,14 @@ export async function refreshNavs(cfg: SbConfig): Promise<NavRefreshResult> {
 
       const priced = schemeNavs
         .filter((r) => known.has(r.scheme_code))
-        .map(({ scheme_code, current_nav, nav_date, fund_house }) => ({
+        .map(({ scheme_code, current_nav, nav_date, fund_house, amfi_category }) => ({
           scheme_code,
           current_nav,
           nav_date,
-          // Never blank an existing house because one scheme sat above the
-          // first heading; the guess it replaces is still better than nothing.
+          // Never blank an existing value because one scheme sat above the
+          // first heading; what it replaces is still better than nothing.
           ...(fund_house ? { fund_house } : {}),
+          ...(amfi_category ? { amfi_category } : {}),
         }));
 
       for (let i = 0; i < priced.length; i += 1000) {
