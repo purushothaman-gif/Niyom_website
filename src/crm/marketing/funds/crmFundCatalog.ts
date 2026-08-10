@@ -15,7 +15,7 @@
 // keeping the two auth contexts apart.
 
 import { supabase } from '../../../lib/supabase';
-import type { CatalogFund, FundCategory } from '../../../portal/types/funds';
+import type { CatalogFund, CatalogNavPoint, FundCategory } from '../../../portal/types/funds';
 
 const COLUMNS =
   'fund_name, fund_code, category, sub_category, fund_house, risk_level, current_nav, ' +
@@ -72,6 +72,47 @@ function toCatalogFund(row: Row): CatalogFund {
     minInvestment: n(row.min_investment),
     launchDate: row.launch_date,
     updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * NAV history for one scheme, via the mf-detail edge function.
+ *
+ * Deliberately a bare fetch with the anon key rather than supabase.functions
+ * .invoke(): it matches what the portal does, and it keeps this module free of
+ * any auth client — the mistake that blanked the CRM was pulling an auth
+ * instance across the portal/CRM boundary.
+ *
+ * Points come back oldest-first with dates as "dd-mm-yyyy" (mfapi's format),
+ * roughly monthly over the scheme's life.
+ */
+export async function fetchNavHistory(amfiCode: string): Promise<{
+  navHistory: CatalogNavPoint[];
+  high52w: number | null;
+  low52w: number | null;
+}> {
+  const base = import.meta.env.VITE_SUPABASE_URL;
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const res = await fetch(`${base}/functions/v1/mf-detail`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(anon ? { apikey: anon, Authorization: `Bearer ${anon}` } : {}),
+    },
+    body: JSON.stringify({ code: amfiCode }),
+  });
+  if (!res.ok) throw new Error(`NAV history unavailable (${res.status})`);
+  const json = (await res.json()) as {
+    success?: boolean;
+    error?: string;
+    navHistory?: CatalogNavPoint[];
+    metrics?: { high_52w?: number; low_52w?: number };
+  };
+  if (!json.success) throw new Error(json.error ?? 'NAV history unavailable');
+  return {
+    navHistory: json.navHistory ?? [],
+    high52w: json.metrics?.high_52w ?? null,
+    low52w: json.metrics?.low_52w ?? null,
   };
 }
 
