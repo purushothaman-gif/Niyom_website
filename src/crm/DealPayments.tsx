@@ -6,6 +6,7 @@ import { NWEmployee } from './types';
 import {
   ChevronLeft, Plus, X, Loader2, CheckCircle2, AlertCircle,
   Wallet, IndianRupee, Receipt, Info, FileText, RefreshCw, Eye, Mail, Bell, CreditCard,
+  Pencil, Ban,
 } from 'lucide-react';
 import { renderPaymentReceiptPdf } from './paymentReceipt';
 
@@ -84,6 +85,7 @@ interface PaymentRow {
   utr_number: string | null;
   cheque_number: string | null;
   cheque_bank: string | null;
+  cheque_dated: string | null;
   demand_draft_number: string | null;
   payment_date: string;
   value_date: string | null;
@@ -96,6 +98,13 @@ interface PaymentRow {
   receipt_regen_count: number;
   updated_at: string;
   created_at: string;
+  // Correction support. `provider` distinguishes a hand-keyed entry (editable)
+  // from a gateway capture (not editable — Cashfree's amount is the PSP's
+  // record). `row_version` is the optimistic-concurrency token the amend RPC
+  // checks, so two people correcting the same row cannot overwrite each other.
+  provider: string | null;
+  row_version: number;
+  cancellation_reason: string | null;
 }
 
 interface EmailLogRow {
@@ -217,6 +226,8 @@ interface PaymentForm {
   receivedFromName: string;
   receivedFromBank: string;
   remarks: string;
+  // Correction only — mandatory, stored on the payment_updated audit event.
+  reason: string;
 }
 
 const emptyForm = (defaultName: string, defaultBank = ''): PaymentForm => ({
@@ -232,6 +243,25 @@ const emptyForm = (defaultName: string, defaultBank = ''): PaymentForm => ({
   receivedFromName: defaultName,
   receivedFromBank: defaultBank,
   remarks: '',
+  reason: '',
+});
+
+// Prefill the same form from an existing ledger row so a correction shows the
+// operator exactly what was recorded, not a blank slate they must re-key.
+const formFromPayment = (p: PaymentRow): PaymentForm => ({
+  amount: String(p.amount ?? ''),
+  paymentMode: p.payment_mode,
+  paymentDate: p.payment_date,
+  valueDate: p.value_date ?? '',
+  utrNumber: p.utr_number ?? '',
+  chequeNumber: p.cheque_number ?? '',
+  chequeBank: p.cheque_bank ?? '',
+  chequeDated: p.cheque_dated ?? '',
+  demandDraftNumber: p.demand_draft_number ?? '',
+  receivedFromName: p.received_from_name ?? '',
+  receivedFromBank: p.received_from_bank ?? '',
+  remarks: p.remarks ?? '',
+  reason: '',
 });
 
 // ---------------------------------------------------------------------------
@@ -246,6 +276,10 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [emailLog, setEmailLog] = useState<EmailLogRow[]>([]);
   const [showForm, setShowForm] = useState(false);
+  // Non-null while correcting an existing ledger entry; the same inline form
+  // serves both "record" and "correct" so the two can never drift apart.
+  const [editing, setEditing] = useState<PaymentRow | null>(null);
+  const [cancelling, setCancelling] = useState<PaymentRow | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccountOption[]>([]);
   const [form, setForm] = useState<PaymentForm>(emptyForm(deal.snap_client_name, deal.snap_bank_name));
   const [saving, setSaving] = useState(false);
@@ -268,7 +302,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         .select('deal_id, deal_amount, total_paid_amount, outstanding_amount, payment_status, payment_count, last_payment_at')
         .eq('deal_id', deal.id).maybeSingle(),
       supabase.from('nw_deal_payments')
-        .select('id, payment_number, receipt_number, amount, amount_inr, currency, direction, payment_mode, utr_number, cheque_number, cheque_bank, demand_draft_number, payment_date, value_date, received_from_name, received_from_bank, remarks, status, receipt_pdf_path, receipt_generated_at, receipt_regen_count, updated_at, created_at')
+        .select('id, payment_number, receipt_number, amount, amount_inr, currency, direction, payment_mode, utr_number, cheque_number, cheque_bank, cheque_dated, demand_draft_number, payment_date, value_date, received_from_name, received_from_bank, remarks, status, receipt_pdf_path, receipt_generated_at, receipt_regen_count, updated_at, created_at, provider, row_version, cancellation_reason')
         .eq('deal_confirmation_id', deal.id)
         .order('created_at', { ascending: false }),
       supabase.from('nw_deal_email_log')
@@ -315,13 +349,78 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
     if (form.paymentMode === 'cheque' && (!form.chequeNumber.trim() || !form.chequeBank.trim())) {
       return 'Cheque number and bank are required for cheque payments.';
     }
+    // The reason is what makes a correction auditable rather than a silent
+    // rewrite of a financial record; the RPC rejects a short one too.
+    if (editing && form.reason.trim().length < 5) {
+      return 'Please give a reason for the correction (at least 5 characters).';
+    }
     return null;
+  };
+
+  // ---- Correct an existing entry ---------------------------------------
+  // Sends only the fields the operator actually changed. The RPC re-validates,
+  // rejects a stale row_version, writes the payment_updated audit event with a
+  // before/after diff, and recomputes the deal's outstanding balance.
+  const submitAmendment = async (target: PaymentRow) => {
+    const patch: Record<string, string | null> = {};
+    const put = (key: string, next: string | null, prev: string | null) => {
+      const a = next === '' ? null : next;
+      const b = prev === '' ? null : prev;
+      if (a !== b) patch[key] = a;
+    };
+    if (Number(form.amount) !== Number(target.amount)) patch.amount = String(Number(form.amount));
+    put('payment_mode',        form.paymentMode,                 target.payment_mode);
+    put('payment_date',        form.paymentDate,                 target.payment_date);
+    put('value_date',          form.valueDate,                   target.value_date);
+    put('utr_number',          form.utrNumber.trim(),            target.utr_number);
+    put('cheque_number',       form.chequeNumber.trim(),         target.cheque_number);
+    put('cheque_bank',         form.chequeBank.trim(),           target.cheque_bank);
+    put('cheque_dated',        form.chequeDated,                 target.cheque_dated);
+    put('demand_draft_number', form.demandDraftNumber.trim(),    target.demand_draft_number);
+    put('received_from_name',  form.receivedFromName.trim(),     target.received_from_name);
+    put('received_from_bank',  form.receivedFromBank.trim(),     target.received_from_bank);
+    put('remarks',             form.remarks.trim(),              target.remarks);
+
+    if (Object.keys(patch).length === 0) {
+      setError('Nothing was changed.');
+      return;
+    }
+
+    const { error: rpcErr } = await supabase.rpc('nw_amend_payment', {
+      p_payment_id:  target.id,
+      p_patch:       patch,
+      p_reason:      form.reason.trim(),
+      p_row_version: target.row_version,
+    });
+    if (rpcErr) throw new Error(rpcErr.message || 'Could not correct the payment.');
+
+    showToast(
+      patch.amount !== undefined
+        ? `${target.payment_number} corrected to ${inr(Number(patch.amount))}.`
+        : `${target.payment_number} updated.`
+    );
   };
 
   const submit = async () => {
     setError('');
     const v = validate();
     if (v) { setError(v); return; }
+
+    if (editing) {
+      setSaving(true);
+      try {
+        await submitAmendment(editing);
+        setEditing(null);
+        setShowForm(false);
+        setForm(emptyForm(deal.snap_client_name, defaultBank));
+        await load();
+      } catch (err: any) {
+        setError(err?.message || 'Could not correct the payment.');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
 
     setSaving(true);
     try {
@@ -355,6 +454,49 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
     } finally {
       setSaving(false);
     }
+  };
+
+  // -----------------------------------------------------------------------
+  // Cancel (void) a ledger entry — admin only, enforced again in the RPC.
+  // The row is never deleted: it stays visible as 'cancelled' with its reason,
+  // and drops out of the paid total (the summary view counts active rows only).
+  // -----------------------------------------------------------------------
+
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+
+  const confirmCancel = async () => {
+    if (!cancelling) return;
+    if (cancelReason.trim().length < 5) {
+      setCancelError('Please give a reason (at least 5 characters).');
+      return;
+    }
+    setCancelBusy(true);
+    setCancelError('');
+    const { error: rpcErr } = await supabase.rpc('nw_cancel_payment', {
+      p_payment_id: cancelling.id,
+      p_reason:     cancelReason.trim(),
+    });
+    setCancelBusy(false);
+    if (rpcErr) { setCancelError(rpcErr.message || 'Could not cancel the payment.'); return; }
+    showToast(`${cancelling.payment_number} cancelled.`);
+    setCancelling(null);
+    setCancelReason('');
+    await load();
+  };
+
+  const openEdit = (p: PaymentRow) => {
+    setEditing(p);
+    setForm(formFromPayment(p));
+    setError('');
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditing(null);
+    setError('');
   };
 
   // -----------------------------------------------------------------------
@@ -567,7 +709,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         <div className="flex-1" />
         {!showForm && summary && summary.payment_status !== 'fully_paid' && (
           <button
-            onClick={() => { setForm(emptyForm(deal.snap_client_name, defaultBank)); setShowForm(true); }}
+            onClick={() => { setEditing(null); setForm(emptyForm(deal.snap_client_name, defaultBank)); setShowForm(true); }}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent"
             style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
           >
@@ -652,10 +794,10 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         >
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>
-              Record Payment
+              {editing ? `Correct Payment — ${editing.payment_number}` : 'Record Payment'}
             </h2>
             <button
-              onClick={() => { setShowForm(false); setError(''); }}
+              onClick={closeForm}
               className="p-1.5 rounded-lg"
               style={{ color: 'var(--text-secondary)' }}
               aria-label="Close"
@@ -663,6 +805,32 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
               <X className="w-4 h-4" />
             </button>
           </div>
+
+          {/* What is on record right now, so the operator can see the mistake
+              they are fixing without leaving the form. */}
+          {editing && (
+            <div
+              className="rounded-xl px-4 py-3 text-sm"
+              style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}
+            >
+              <p style={{ color: 'var(--text-secondary)' }}>
+                Currently recorded: <strong style={{ color: 'var(--text-primary)' }}>{inr(editing.amount_inr)}</strong>
+                {' '}by {MODE_LABEL[editing.payment_mode]} on {fmtDate(editing.payment_date)}.
+              </p>
+              {Number(form.amount) > 0 && Number(form.amount) !== Number(editing.amount) && (
+                <p className="mt-1" style={{ color: 'var(--warning)' }}>
+                  Will be corrected to <strong>{inr(Number(form.amount))}</strong> — the deal’s outstanding
+                  balance is recalculated on save.
+                </p>
+              )}
+              {editing.receipt_pdf_path && (
+                <p className="mt-1 text-xs" style={{ color: 'var(--warning)' }}>
+                  A receipt has already been issued for this payment. Regenerate it after saving,
+                  and re-send it if the client received the old one.
+                </p>
+              )}
+            </div>
+          )}
 
           {error && (
             <div
@@ -754,9 +922,20 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
             <TextArea rows={2} value={form.remarks} onChange={e => set('remarks', e.target.value)} placeholder="Any internal note for this payment…" />
           </Field>
 
+          {editing && (
+            <Field label="Reason for correction" required hint="Stored on the audit trail against this payment.">
+              <TextArea
+                rows={2}
+                value={form.reason}
+                onChange={e => set('reason', e.target.value)}
+                placeholder="e.g. Amount keyed with an extra zero — bank credit was ₹7,30,000."
+              />
+            </Field>
+          )}
+
           <div className="flex items-center justify-end gap-2 pt-1">
             <button
-              onClick={() => { setShowForm(false); setError(''); }}
+              onClick={closeForm}
               className="px-4 py-2.5 rounded-xl text-sm"
               style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
               disabled={saving}
@@ -772,7 +951,9 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                 opacity: saving ? 0.75 : 1,
               }}
             >
-              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Recording…</> : <>Record Payment</>}
+              {saving
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> {editing ? 'Saving…' : 'Recording…'}</>
+                : <>{editing ? 'Save Correction' : 'Record Payment'}</>}
             </button>
           </div>
         </div>
@@ -818,6 +999,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                   <Th>Received From</Th>
                   <Th align="right">Amount</Th>
                   <Th>Receipt</Th>
+                  <Th>Correct</Th>
                 </tr>
               </thead>
               <tbody>
@@ -832,6 +1014,12 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                     !hasReceipt ? 'Generate the receipt first.'
                     : stale     ? 'Payment data has changed. Regenerate the receipt before emailing.'
                     : null;
+                  // A hand-keyed entry can be corrected by whoever can reach
+                  // this ledger — the owning RM or an admin (RLS already scopes
+                  // who gets here, and nw_amend_payment re-checks). A gateway
+                  // capture is the PSP's record and is never rewritten.
+                  const isGateway = !!p.provider && p.provider !== 'manual';
+                  const canAmend  = canIssue && !isGateway;
                   return (
                     <tr key={p.id} style={{ borderTop: '1px solid var(--border)' }}>
                       <Td>{fmtDate(p.payment_date)}</Td>
@@ -845,7 +1033,12 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                       </Td>
                       <Td>{p.received_from_name || '—'}</Td>
                       <Td align="right" strong>
-                        {p.direction === 'refund' ? '-' : ''}{inr(Math.abs(p.amount_inr))}
+                        {/* A cancelled entry stays on the ledger but no longer
+                            counts towards the amount paid — show it struck out
+                            so the column still adds up to the summary strip. */}
+                        <span style={canIssue ? undefined : { textDecoration: 'line-through', opacity: 0.5 }}>
+                          {p.direction === 'refund' ? '-' : ''}{inr(Math.abs(p.amount_inr))}
+                        </span>
                       </Td>
                       <Td>
                         {!canIssue ? (
@@ -905,6 +1098,37 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                           </button>
                         )}
                       </Td>
+                      {/* Correction actions. Edit fixes a mis-keyed entry in
+                          place (audited); Cancel voids it outright and is
+                          admin-only, as the footnote below has always said. */}
+                      <Td>
+                        {!canAmend ? (
+                          <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                            {isGateway ? 'Gateway entry' : p.cancellation_reason || '—'}
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => openEdit(p)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold"
+                              style={{ background: 'rgba(96,165,250,0.10)', color: 'rgb(var(--info-soft-rgb))', border: '1px solid rgba(96,165,250,0.25)' }}
+                              title="Correct a mis-keyed amount or reference"
+                            >
+                              <Pencil className="w-3 h-3" /> Edit
+                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => { setCancelling(p); setCancelReason(''); setCancelError(''); }}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold"
+                                style={{ background: 'rgba(239,68,68,0.08)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.22)' }}
+                                title="Void this entry (kept in the ledger, excluded from the paid total)"
+                              >
+                                <Ban className="w-3 h-3" /> Cancel
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </Td>
                     </tr>
                   );
                 })}
@@ -917,9 +1141,62 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
       {/* Admin footnote */}
       {!isAdmin && (
         <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
-          You may record payments and view the ledger for deals you own. Cancellation of a recorded
-          payment is restricted to administrators.
+          You may record payments, correct a mis-keyed entry, and view the ledger for deals you own.
+          Cancelling a recorded payment outright is restricted to administrators.
         </p>
+      )}
+
+      {/* Cancel (void) confirmation */}
+      {cancelling && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+          <div className="w-full max-w-md rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(239,68,68,0.1)' }}>
+                <Ban className="w-5 h-5" style={{ color: 'var(--danger)' }} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-text-primary">Cancel Payment</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  {cancelling.payment_number} · {inr(cancelling.amount_inr)}
+                </p>
+              </div>
+            </div>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              The entry stays in the ledger marked cancelled and stops counting towards the amount
+              paid, so this deal’s outstanding balance goes back up. Use this to void a payment that
+              never happened — to fix a wrong amount, use <strong>Edit</strong> instead.
+            </p>
+            <Field label="Reason" required>
+              <TextArea
+                rows={2}
+                value={cancelReason}
+                onChange={e => { setCancelReason(e.target.value); setCancelError(''); }}
+                placeholder="e.g. Duplicate entry — the same UTR was recorded twice."
+              />
+            </Field>
+            {cancelError && (
+              <p className="text-xs" style={{ color: 'var(--danger)' }}>{cancelError}</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setCancelling(null); setCancelError(''); }}
+                disabled={cancelBusy}
+                className="flex-1 py-2.5 rounded-xl text-sm"
+                style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+              >
+                Keep it
+              </button>
+              <button
+                onClick={confirmCancel}
+                disabled={cancelBusy}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2"
+                style={{ background: 'var(--danger)', opacity: cancelBusy ? 0.7 : 1 }}
+              >
+                {cancelBusy ? <><Loader2 className="w-4 h-4 animate-spin" /> Cancelling…</> : 'Cancel Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast */}

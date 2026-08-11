@@ -643,7 +643,11 @@ export default function DealConfirmation({ employee }: Props) {
           rate_per_unit: previewDeal.rate_per_unit,
         }}
         employee={employee}
-        onBack={() => setView('preview')}
+        // Correcting or cancelling a payment moves the deal's outstanding
+        // balance, so refresh the list's summaries on the way out — otherwise
+        // the Payment Status pill keeps showing the pre-correction state until
+        // the whole page is reloaded.
+        onBack={() => { setView('preview'); void loadDeals(); }}
       />
     );
   }

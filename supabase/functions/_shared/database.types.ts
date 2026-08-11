@@ -6399,6 +6399,55 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      mkt_auto_batch_rollup: { Args: { p_run_date: string }; Returns: string }
+      mkt_auto_category_topics: {
+        Args: { p_category: string }
+        Returns: string[]
+      }
+      mkt_auto_claim_slots: {
+        Args: {
+          p_force?: boolean
+          p_limit?: number
+          p_run_date: string
+          p_slot_no?: number
+        }
+        Returns: {
+          category: string
+          content_id: string | null
+          content_type: string
+          created_at: string
+          cycle_no: number
+          error: string
+          id: string
+          lint_flags: Json
+          palette_id: string
+          platform: string
+          regen_count: number
+          run_date: string
+          slide_count: number | null
+          slot_no: number
+          state: string
+          template_id: string
+          updated_at: string
+          video_duration_seconds: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "mkt_auto_slots"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      mkt_auto_finish_slot: {
+        Args: {
+          p_content_id?: string
+          p_error?: string
+          p_flags?: Json
+          p_slot_id: string
+          p_state: string
+        }
+        Returns: undefined
+      }
       mkt_auto_is_run_day: { Args: { p_day: string }; Returns: boolean }
       mkt_auto_next_categories: {
         Args: { p_n: number; p_run_date: string }
@@ -6437,7 +6486,28 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      mkt_auto_recent_across_categories: {
+        Args: { p_days?: number; p_limit?: number }
+        Returns: {
+          category: string
+          headline: string
+          title: string
+          topic: string
+        }[]
+      }
+      mkt_auto_release_slot: {
+        Args: { p_note?: string; p_slot_id: string }
+        Returns: undefined
+      }
       mkt_auto_seed_cycle: { Args: { p_cycle_no: number }; Returns: undefined }
+      mkt_auto_similar_headlines: {
+        Args: { p_headline: string; p_limit?: number }
+        Returns: {
+          content_no: string
+          headline: string
+          similarity: number
+        }[]
+      }
       mkt_company_channel_stats: {
         Args: never
         Returns: {
@@ -6556,6 +6626,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      nw_amend_payment: {
+        Args: {
+          p_patch: Json
+          p_payment_id: string
+          p_reason: string
+          p_row_version?: number
+        }
+        Returns: Json
+      }
       nw_apply_txn_holding: {
         Args: { p_txn: Database["public"]["Tables"]["nw_transactions"]["Row"] }
         Returns: undefined
@@ -6565,6 +6644,10 @@ export type Database = {
         Returns: number
       }
       nw_can_see_lead: { Args: { p_lead_id: string }; Returns: boolean }
+      nw_cancel_payment: {
+        Args: { p_payment_id: string; p_reason: string }
+        Returns: Json
+      }
       nw_check_lead_duplicate: {
         Args: {
           p_email?: string
@@ -6598,6 +6681,10 @@ export type Database = {
       nw_delete_transaction_cascade: {
         Args: { p_txn_id: string }
         Returns: Json
+      }
+      nw_emit_outstanding_updated: {
+        Args: { p_deal_id: string }
+        Returns: undefined
       }
       nw_emp_owns_dsa: { Args: { p_dsa_id: string }; Returns: boolean }
       nw_finalize_receipt: {
@@ -6955,6 +7042,7 @@ export type Database = {
       trigger_commodity_price_update: { Args: never; Returns: undefined }
       trigger_mf_returns_backfill: { Args: never; Returns: undefined }
       trigger_mf_universe_refresh: { Args: never; Returns: undefined }
+      trigger_mkt_auto_generate: { Args: never; Returns: undefined }
       trigger_mkt_expire_content: { Args: never; Returns: undefined }
       trigger_mutual_funds_update: { Args: never; Returns: undefined }
       trigger_nav_refresh: { Args: never; Returns: undefined }
