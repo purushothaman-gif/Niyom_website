@@ -11,10 +11,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "typecheck": "npm run typecheck:app && npm run typecheck:functions && npm run typecheck:proxy",
+    "typecheck": "npm run typecheck:app && npm run typecheck:functions && npm run typecheck:proxy && npm run typecheck:render",
     "typecheck:app": "tsc --noEmit -p tsconfig.app.json",
     "typecheck:functions": "tsc --noEmit -p supabase/functions/tsconfig.json",
     "typecheck:proxy": "npm --prefix server/bse-proxy run typecheck",
+    "typecheck:render": "npm --prefix tools/mkt-render run typecheck",
     "gen:types": "supabase gen types typescript --project-id jlmwazuwjnhoqqloyeoj --schema public > /tmp/_db.types.ts && node -e \"const fs=require('fs');const h=fs.readFileSync('supabase/functions/_shared/database.types.ts','utf8').split('export type Json')[0];fs.writeFileSync('supabase/functions/_shared/database.types.ts',h+fs.readFileSync('/tmp/_db.types.ts','utf8'))\""
   },
   "dependencies": {
