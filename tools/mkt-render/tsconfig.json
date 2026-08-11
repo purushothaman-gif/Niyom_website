@@ -1,0 +1,32 @@
+{
+  // Two very different environments live in this package, so the compiler
+  // settings have to admit both:
+  //
+  //   src/      Node. Drives Playwright, writes files. No DOM.
+  //   harness/  Browser. Imports the CRM's real renderers, which are full of
+  //             canvas, Image, MediaRecorder and Blob.
+  //
+  // Splitting them into two tsconfigs was the first instinct and it is not
+  // worth it — `lib: ["ES2022", "DOM"]` typechecks both correctly, and the Node
+  // half simply never touches a DOM symbol. What matters is that this file is
+  // wired into the root `npm run typecheck`; a bare `tsc -p tsconfig.json` at
+  // the repo root checks ZERO files here.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*.ts", "harness/**/*.ts", "vite.config.ts"]
+}

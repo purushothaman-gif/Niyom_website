@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>NIYOM content render harness</title>
+    <style>
+      /*
+       * The page is never looked at — every pixel that matters is drawn onto an
+       * offscreen canvas and read back as a blob. A neutral background only
+       * makes a debugging screenshot legible.
+       */
+      html, body { margin: 0; background: #101014; color: #d8d8de;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      #log { padding: 16px; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <div id="log">idle</div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
