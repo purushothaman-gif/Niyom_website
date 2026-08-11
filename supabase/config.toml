@@ -536,6 +536,16 @@ verify_jwt = false
 [functions.mkt-expire-content]
 verify_jwt = false
 
+# Automated daily content generation, invoked by pg_cron via pg_net (which
+# cannot present a JWT). Unlike mkt-expire-content above, this one is NOT safe
+# to leave open — it spends Anthropic tokens and creates content published under
+# the firm's brand, so an open endpoint would be both a billing DoS and a
+# content-injection vector. verify_jwt is off only so pg_net can reach it; the
+# function itself requires either the MKT_AUTO_SECRET shared secret (compared in
+# constant time) or a valid admin JWT, and refuses everything else.
+[functions.mkt-auto-generate]
+verify_jwt = false
+
 # --- Partner Portal (DSA login) --------------------------------------------
 # Resolves a partner's PAN to the email their auth user is registered under, so
 # the browser can then call signInWithPassword. Public verify_jwt because it runs
