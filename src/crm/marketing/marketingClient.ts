@@ -15,7 +15,7 @@ import {
   ContentFilters, MktAsset, MktContent, MktContentHistory, MktContentPerformanceRow,
   MktDashboardTotals, MktGenerateRequest, MktGenerateResponse, MktLeaderboardRow,
   MktPlatformUsageRow, MktReferralLink, MktCompanyChannelStats, DownloadEventType,
-  ContentChannel,
+  ContentChannel, MktAutoBatch, MktAutoCycleStatus, MktAutoDay, MktAutoSlot,
 } from './marketingTypes';
 
 export const mktQueryClient = new QueryClient({
@@ -35,6 +35,8 @@ export const mktKeys = {
   leaderboard: () => ['mkt_analytics', 'leaderboard'] as const,
   performance: () => ['mkt_analytics', 'performance'] as const,
   platformUsage: () => ['mkt_analytics', 'platforms'] as const,
+  autoSchedule: (from: string, to: string) => ['mkt_auto', 'schedule', from, to] as const,
+  autoCycle: () => ['mkt_auto', 'cycle'] as const,
 };
 
 const CONTENT_COLUMNS =
@@ -391,5 +393,122 @@ export function usePlatformUsage() {
       if (error) throw error;
       return (data as MktPlatformUsageRow[]) ?? [];
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Automated daily batch
+//
+// Read-only from the browser except for skip days. Everything else is written
+// by the planner (pg_cron) and, later, by the generation and render pipelines
+// under the service role — so there is no client-write path to keep honest.
+// ---------------------------------------------------------------------------
+
+/** Local (IST-agnostic) YYYY-MM-DD, because run_date is a plain date column. */
+function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * The schedule strip: every planned day in a window, each with its three slots.
+ *
+ * Two queries rather than an embedded select — PostgREST resource embedding
+ * needs a declared FK relationship name, and keeping these separate means the
+ * strip still renders the batch row for a day whose slots failed to plan, which
+ * is exactly the case an admin most needs to see.
+ */
+export function useAutoSchedule(daysBack = 3, daysAhead = 14) {
+  const from = new Date(); from.setDate(from.getDate() - daysBack);
+  const to = new Date(); to.setDate(to.getDate() + daysAhead);
+  const fromIso = isoDate(from);
+  const toIso = isoDate(to);
+
+  return useQuery({
+    queryKey: mktKeys.autoSchedule(fromIso, toIso),
+    queryFn: async (): Promise<MktAutoDay[]> => {
+      const [batches, slots] = await Promise.all([
+        supabase.from('mkt_auto_batches').select('*')
+          .gte('run_date', fromIso).lte('run_date', toIso).order('run_date'),
+        supabase.from('mkt_auto_slots').select('*')
+          .gte('run_date', fromIso).lte('run_date', toIso).order('run_date').order('slot_no'),
+      ]);
+      if (batches.error) throw batches.error;
+      if (slots.error) throw slots.error;
+
+      const bySlot = new Map<string, MktAutoSlot[]>();
+      for (const s of (slots.data as unknown as MktAutoSlot[]) ?? []) {
+        const list = bySlot.get(s.run_date) ?? [];
+        list.push(s);
+        bySlot.set(s.run_date, list);
+      }
+      return ((batches.data as unknown as MktAutoBatch[]) ?? [])
+        .map(b => ({ ...b, slots: bySlot.get(b.run_date) ?? [] }));
+    },
+    // The 09:30 gate and the generation window both move state without any
+    // action in this tab.
+    refetchInterval: 120_000,
+  });
+}
+
+/** Cycle position, so an admin can see the rotation is healthy without SQL. */
+export function useAutoCycleStatus() {
+  return useQuery({
+    queryKey: mktKeys.autoCycle(),
+    queryFn: async (): Promise<MktAutoCycleStatus | null> => {
+      const { data, error } = await supabase
+        .from('mkt_auto_category_cycle')
+        .select('cycle_no, position, category, consumed_at')
+        .order('cycle_no').order('position');
+      if (error) throw error;
+
+      const rows = (data ?? []) as { cycle_no: number; position: number; category: string; consumed_at: string | null }[];
+      if (!rows.length) return null;
+
+      // The live cycle is the earliest one still holding unconsumed rows; once
+      // it empties, the planner has already seeded the next.
+      const cycle = rows.find(r => !r.consumed_at)?.cycle_no ?? Math.max(...rows.map(r => r.cycle_no));
+      const inCycle = rows.filter(r => r.cycle_no === cycle);
+
+      return {
+        cycle_no: cycle,
+        consumed: inCycle.filter(r => r.consumed_at).length,
+        total: inCycle.length,
+        next_up: inCycle.filter(r => !r.consumed_at).slice(0, 3).map(r => r.category),
+      };
+    },
+  });
+}
+
+/** Block a date — the holiday escape hatch. Planning skips it from then on. */
+export function useSkipDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ runDate, reason }: { runDate: string; reason: string }) => {
+      const { error } = await supabase.from('mkt_auto_skip_days')
+        .insert({ run_date: runDate, reason } as Insertable<'mkt_auto_skip_days'>);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['mkt_auto'] }),
+  });
+}
+
+/**
+ * Plan any run days in the window that have no batch yet.
+ *
+ * The nightly cron does this at 07:50 IST; the button exists so a new skip day
+ * or a taxonomy change can be reflected without waiting a day, and so the very
+ * first horizon can be filled the moment the module is switched on.
+ */
+export function usePlanAhead() {
+  const qc = useQueryClient();
+  // Explicit generics: a default parameter on mutationFn makes React Query
+  // infer TVariables as void, and every call site then fails to typecheck.
+  return useMutation<number, Error, number>({
+    mutationFn: async (days): Promise<number> => {
+      const { data, error } = await supabase.rpc('mkt_auto_plan_ahead', { p_days: days });
+      if (error) throw error;
+      return (data as number) ?? 0;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['mkt_auto'] }),
   });
 }

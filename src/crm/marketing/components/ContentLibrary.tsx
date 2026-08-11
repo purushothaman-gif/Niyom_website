@@ -2,7 +2,7 @@
 // history of what has already been deleted or expired.
 
 import { useState } from 'react';
-import { Search, Plus, Sparkles, BarChart3, History, Share2 } from 'lucide-react';
+import { Search, Plus, Sparkles, BarChart3, History, Share2, CalendarClock } from 'lucide-react';
 import {
   CONTENT_CATEGORIES, CONTENT_TYPES, PLATFORMS,
 } from '../marketingConstants';
@@ -15,13 +15,15 @@ interface Props {
   onOpen: (content: MktContent) => void;
   onNew: () => void;
   onAnalytics: () => void;
+  /** The automated daily batch's rotation. */
+  onAutoSchedule: () => void;
   /** Opens the gallery on the company channel, for posting as NIYOM. */
   onCompanyPosting: () => void;
 }
 
 const STATUSES: (ContentStatus | 'all')[] = ['all', 'draft', 'approved', 'rejected', 'archived'];
 
-export default function ContentLibrary({ onOpen, onNew, onAnalytics, onCompanyPosting }: Props) {
+export default function ContentLibrary({ onOpen, onNew, onAnalytics, onAutoSchedule, onCompanyPosting }: Props) {
   const [filters, setFilters] = useState<ContentFilters>(EMPTY_FILTERS);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -45,6 +47,9 @@ export default function ContentLibrary({ onOpen, onNew, onAnalytics, onCompanyPo
         <div className="flex items-center gap-2">
           <GhostButton onClick={onCompanyPosting} className="flex items-center gap-2">
             <Share2 className="w-4 h-4" /> Post for NIYOM
+          </GhostButton>
+          <GhostButton onClick={onAutoSchedule} className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4" /> Auto schedule
           </GhostButton>
           <GhostButton onClick={onAnalytics} className="flex items-center gap-2">
             <BarChart3 className="w-4 h-4" /> Analytics
