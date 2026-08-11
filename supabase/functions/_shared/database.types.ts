@@ -1925,6 +1925,251 @@ export type Database = {
           },
         ]
       }
+      mkt_auto_batches: {
+        Row: {
+          attempts: number
+          error: string
+          generated_at: string | null
+          iso_week: string
+          planned_at: string
+          publish_at: string
+          rendered_at: string | null
+          run_date: string
+          status: string
+        }
+        Insert: {
+          attempts?: number
+          error?: string
+          generated_at?: string | null
+          iso_week: string
+          planned_at?: string
+          publish_at: string
+          rendered_at?: string | null
+          run_date: string
+          status?: string
+        }
+        Update: {
+          attempts?: number
+          error?: string
+          generated_at?: string | null
+          iso_week?: string
+          planned_at?: string
+          publish_at?: string
+          rendered_at?: string | null
+          run_date?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      mkt_auto_categories: {
+        Row: {
+          active: boolean
+          category: string
+          created_at: string
+        }
+        Insert: {
+          active?: boolean
+          category: string
+          created_at?: string
+        }
+        Update: {
+          active?: boolean
+          category?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      mkt_auto_category_cycle: {
+        Row: {
+          category: string
+          consumed_at: string | null
+          cycle_no: number
+          position: number
+          run_date: string | null
+        }
+        Insert: {
+          category: string
+          consumed_at?: string | null
+          cycle_no: number
+          position: number
+          run_date?: string | null
+        }
+        Update: {
+          category?: string
+          consumed_at?: string | null
+          cycle_no?: number
+          position?: number
+          run_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mkt_auto_category_cycle_category_fkey"
+            columns: ["category"]
+            isOneToOne: false
+            referencedRelation: "mkt_auto_categories"
+            referencedColumns: ["category"]
+          },
+        ]
+      }
+      mkt_auto_content_types: {
+        Row: {
+          content_type: string
+          hard_platform: string | null
+          is_deck: boolean
+          is_video: boolean
+          soft_platform: string | null
+        }
+        Insert: {
+          content_type: string
+          hard_platform?: string | null
+          is_deck: boolean
+          is_video: boolean
+          soft_platform?: string | null
+        }
+        Update: {
+          content_type?: string
+          hard_platform?: string | null
+          is_deck?: boolean
+          is_video?: boolean
+          soft_platform?: string | null
+        }
+        Relationships: []
+      }
+      mkt_auto_skip_days: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          reason: string
+          run_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          reason?: string
+          run_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          reason?: string
+          run_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mkt_auto_skip_days_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mkt_auto_slots: {
+        Row: {
+          category: string
+          content_id: string | null
+          content_type: string
+          created_at: string
+          cycle_no: number
+          error: string
+          id: string
+          lint_flags: Json
+          palette_id: string
+          platform: string
+          regen_count: number
+          run_date: string
+          slide_count: number | null
+          slot_no: number
+          state: string
+          template_id: string
+          updated_at: string
+          video_duration_seconds: number | null
+        }
+        Insert: {
+          category: string
+          content_id?: string | null
+          content_type: string
+          created_at?: string
+          cycle_no: number
+          error?: string
+          id?: string
+          lint_flags?: Json
+          palette_id?: string
+          platform: string
+          regen_count?: number
+          run_date: string
+          slide_count?: number | null
+          slot_no: number
+          state?: string
+          template_id?: string
+          updated_at?: string
+          video_duration_seconds?: number | null
+        }
+        Update: {
+          category?: string
+          content_id?: string | null
+          content_type?: string
+          created_at?: string
+          cycle_no?: number
+          error?: string
+          id?: string
+          lint_flags?: Json
+          palette_id?: string
+          platform?: string
+          regen_count?: number
+          run_date?: string
+          slide_count?: number | null
+          slot_no?: number
+          state?: string
+          template_id?: string
+          updated_at?: string
+          video_duration_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mkt_auto_slots_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "mkt_content"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mkt_auto_slots_content_type_fkey"
+            columns: ["content_type"]
+            isOneToOne: false
+            referencedRelation: "mkt_auto_content_types"
+            referencedColumns: ["content_type"]
+          },
+          {
+            foreignKeyName: "mkt_auto_slots_run_date_fkey"
+            columns: ["run_date"]
+            isOneToOne: false
+            referencedRelation: "mkt_auto_batches"
+            referencedColumns: ["run_date"]
+          },
+        ]
+      }
+      mkt_auto_style_ledger: {
+        Row: {
+          last_used_on: string | null
+          palette_id: string
+          template_id: string
+          use_count: number
+        }
+        Insert: {
+          last_used_on?: string | null
+          palette_id: string
+          template_id: string
+          use_count?: number
+        }
+        Update: {
+          last_used_on?: string | null
+          palette_id?: string
+          template_id?: string
+          use_count?: number
+        }
+        Relationships: []
+      }
       mkt_content: {
         Row: {
           approved_at: string | null
@@ -6112,6 +6357,87 @@ export type Database = {
         }
       }
       delete_old_news: { Args: never; Returns: number }
+      mkt_auto_alert_admins: {
+        Args: { p_message: string; p_title: string }
+        Returns: number
+      }
+      mkt_auto_approve: {
+        Args: { p_content_id: string; p_hours?: number; p_note?: string }
+        Returns: {
+          approved_at: string | null
+          approved_by: string | null
+          body: string
+          caption: string
+          category: string
+          content_no: string
+          content_type: string
+          created_at: string
+          created_by: string | null
+          cta: string
+          design_spec: Json
+          expires_at: string | null
+          generation_meta: Json
+          hashtags: string[]
+          headline: string
+          id: string
+          platform_notes: Json
+          platforms: string[]
+          reject_reason: string
+          scheduled_publish_at: string | null
+          seo_keywords: string[]
+          status: string
+          suggested_post_time: string
+          template_id: string
+          title: string
+          topic: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "mkt_content"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      mkt_auto_is_run_day: { Args: { p_day: string }; Returns: boolean }
+      mkt_auto_next_categories: {
+        Args: { p_n: number; p_run_date: string }
+        Returns: {
+          category: string
+          cycle_no: number
+        }[]
+      }
+      mkt_auto_plan_ahead: { Args: { p_days?: number }; Returns: number }
+      mkt_auto_plan_day: {
+        Args: { p_force?: boolean; p_run_date: string }
+        Returns: {
+          category: string
+          content_id: string | null
+          content_type: string
+          created_at: string
+          cycle_no: number
+          error: string
+          id: string
+          lint_flags: Json
+          palette_id: string
+          platform: string
+          regen_count: number
+          run_date: string
+          slide_count: number | null
+          slot_no: number
+          state: string
+          template_id: string
+          updated_at: string
+          video_duration_seconds: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "mkt_auto_slots"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      mkt_auto_seed_cycle: { Args: { p_cycle_no: number }; Returns: undefined }
       mkt_company_channel_stats: {
         Args: never
         Returns: {

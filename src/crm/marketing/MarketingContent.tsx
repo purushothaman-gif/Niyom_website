@@ -15,6 +15,7 @@ import ContentStudio from './components/ContentStudio';
 import ContentDetail from './components/ContentDetail';
 import ContentGallery from './components/ContentGallery';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
+import AutoSchedule from './components/AutoSchedule';
 
 interface Props {
   employee: NWEmployee;
@@ -26,6 +27,8 @@ type View =
   | { name: 'studio' }
   | { name: 'detail'; content: MktContent }
   | { name: 'analytics' }
+  // The automated daily batch's rotation, visible before anything is generated.
+  | { name: 'auto' }
   // Admins posting from NIYOM's own accounts: the same gallery employees get,
   // on the company channel.
   | { name: 'company' };
@@ -46,11 +49,14 @@ export default function MarketingContent({ employee }: Props) {
           onOpen={content => setView({ name: 'detail', content })}
           onNew={() => setView({ name: 'studio' })}
           onAnalytics={() => setView({ name: 'analytics' })}
+          onAutoSchedule={() => setView({ name: 'auto' })}
           onCompanyPosting={() => setView({ name: 'company' })} />
       ) : view.name === 'studio' ? (
         <ContentStudio employee={employee}
           onBack={() => setView({ name: 'library' })}
           onSaved={content => setView({ name: 'detail', content })} />
+      ) : view.name === 'auto' ? (
+        <AutoSchedule onBack={() => setView({ name: 'library' })} />
       ) : view.name === 'detail' ? (
         <ContentDetail content={view.content} employee={employee}
           onBack={() => setView({ name: 'library' })}

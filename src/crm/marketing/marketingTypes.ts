@@ -192,6 +192,62 @@ export const EMPTY_FILTERS: ContentFilters = {
   toDate: '',
 };
 
+// --- automated daily batch -------------------------------------------------
+
+export type AutoSlotState =
+  | 'planned' | 'generating' | 'generated' | 'rendering' | 'rendered'
+  | 'approved' | 'flagged' | 'failed';
+
+export type AutoBatchStatus =
+  | 'planned' | 'generating' | 'generated' | 'rendering' | 'ready' | 'partial' | 'failed';
+
+/** One of the three pieces planned for a day. */
+export interface MktAutoSlot {
+  id: string;
+  run_date: string;
+  slot_no: number;
+  content_type: ContentType;
+  platform: string;
+  category: string;
+  cycle_no: number;
+  template_id: string;
+  palette_id: string;
+  slide_count: number | null;
+  video_duration_seconds: number | null;
+  /** Null until generation runs — or again if the content row was deleted. */
+  content_id: string | null;
+  state: AutoSlotState;
+  lint_flags: { field: string; phrase: string; label: string }[];
+  regen_count: number;
+  error: string;
+}
+
+export interface MktAutoBatch {
+  run_date: string;
+  iso_week: string;
+  status: AutoBatchStatus;
+  planned_at: string;
+  generated_at: string | null;
+  rendered_at: string | null;
+  /** 09:30 IST of run_date. Content stays invisible to employees until then. */
+  publish_at: string;
+  attempts: number;
+  error: string;
+}
+
+/** A run day with its three slots, as the schedule view consumes it. */
+export interface MktAutoDay extends MktAutoBatch {
+  slots: MktAutoSlot[];
+}
+
+/** How far through the 49-category circle the rotation currently is. */
+export interface MktAutoCycleStatus {
+  cycle_no: number;
+  consumed: number;
+  total: number;
+  next_up: string[];
+}
+
 // --- analytics RPC shapes --------------------------------------------------
 
 export interface MktDashboardTotals {
