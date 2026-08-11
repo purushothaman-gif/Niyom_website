@@ -9,8 +9,9 @@
 import { callAnthropic, ANTHROPIC_MODEL } from './anthropic.ts';
 import type { AnthropicMessage } from './anthropic.ts';
 import { lint, structuralFlags, entityLeakageFlags, REF_PLACEHOLDER } from './compliance.ts';
-import { duplicateFlags, loadHistory } from './history.ts';
+import { duplicateFlags, hardDuplicateFlags, loadHistory } from './history.ts';
 import { buildUserMessage } from './prompt.ts';
+import type { UniquenessContext } from './prompt.ts';
 import type { SbConfig } from '../cas/db.ts';
 import type { Brief, Flag, GenerateResult, TrendItem } from './types.ts';
 
@@ -20,10 +21,18 @@ export interface GenerateOptions {
   brief: Brief;
   /** Sanitised news headlines. Empty for the manual studio. */
   trends?: TrendItem[];
+  /** Extra uniqueness blocks. The manual studio passes none. */
+  uniqueness?: UniquenessContext;
   /**
-   * Skip the same-category duplicate query. The automated path runs its own,
-   * stricter uniqueness pass and does not need this one repeated.
+   * 'soft' is the studio's behaviour: exact title/headline match and hashtag
+   * overlap, reported as flags for an admin standing right there to judge.
+   *
+   * 'hard' adds trigram headline similarity, for the automated path where
+   * nobody is standing there and a near-duplicate under the firm's brand is
+   * worse than a missing post.
    */
+  duplicateMode?: 'soft' | 'hard';
+  /** Skip the duplicate query entirely (the caller runs its own). */
   skipDuplicateCheck?: boolean;
 }
 
@@ -33,7 +42,7 @@ export async function generateDraft(opts: GenerateOptions): Promise<GenerateResu
 
   const history = await loadHistory(cfg, brief.category);
   const messages: AnthropicMessage[] = [
-    { role: 'user', content: buildUserMessage(brief, history, trends) },
+    { role: 'user', content: buildUserMessage(brief, history, trends, opts.uniqueness ?? {}) },
   ];
 
   let { draft, usage } = await callAnthropic(apiKey, messages);
@@ -87,7 +96,10 @@ export async function generateDraft(opts: GenerateOptions): Promise<GenerateResu
   }
 
   if (!opts.skipDuplicateCheck) {
-    flags = [...flags, ...(await duplicateFlags(cfg, draft, brief.category))];
+    const dupes = opts.duplicateMode === 'hard'
+      ? await hardDuplicateFlags(cfg, draft, brief.category)
+      : await duplicateFlags(cfg, draft, brief.category);
+    flags = [...flags, ...dupes];
   }
 
   return { draft, flags, usage, model: ANTHROPIC_MODEL };
