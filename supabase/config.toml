@@ -466,6 +466,15 @@ verify_jwt = false
 [functions.public-onboard-pan-verify]
 verify_jwt = false
 
+# --- "Become a partner" enquiry from the mobile app. Public verify_jwt: the
+#     person has no Niyom account by definition, so there is no token to check.
+#     A partner login cannot be self-created (an RM provisions it after an
+#     agreement), so the function only records the interest as a lead in the
+#     ADMIN POOL. Abuse is bounded in-function by a mobile-already-present
+#     short-circuit plus a global hourly cap on rows this endpoint may add. ---
+[functions.public-partner-enquiry]
+verify_jwt = false
+
 [functions.public-onboard-record-doc]
 verify_jwt = false
 

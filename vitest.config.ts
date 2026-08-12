@@ -28,6 +28,14 @@ export default defineConfig({
      */
     include: [
       'src/**/*.test.ts',
+      /*
+       * The portfolio, CAS, gains and XIRR logic moved to `shared/` so the
+       * website and the mobile app run one copy of it. That move is exactly the
+       * trap the note below warns about: `src/**` alone would still have gone
+       * green while silently covering nothing. The suite was 29 files / 415
+       * tests before the move and must not be smaller after it.
+       */
+      'shared/**/*.test.ts',
       'server/bse-proxy/src/**/*.test.ts',
       /*
        * Recursive on purpose. This was `_shared/*.test.ts` — top level only —
