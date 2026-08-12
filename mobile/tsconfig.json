@@ -1,0 +1,32 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    // No `baseUrl`: TypeScript 6 deprecates it, and paths already resolve
+    // relative to this file. Kept in step with babel.config.js's aliases.
+    "paths": {
+      "@/*": ["./src/*"],
+      "@shared/*": ["../shared/*"],
+      /*
+       * Files under shared/ sit outside this project, so TypeScript would walk
+       * UP from them and resolve these to the WEBSITE's node_modules — a second
+       * copy of each library with its own class identities, which makes a
+       * perfectly valid SupabaseClient fail to satisfy `SupabaseClient`.
+       * Pinning them here matches what metro.config.js already does at runtime.
+       */
+      "@supabase/supabase-js": ["./node_modules/@supabase/supabase-js"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "../shared/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".expo", "dist"]
+}

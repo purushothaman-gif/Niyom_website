@@ -3,6 +3,15 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.tsx';
 import './index.css';
+/*
+ * Imported for its side effect: creating the three Supabase clients and handing
+ * them to `shared/`, which holds the portfolio, CAS, gains and partner logic
+ * this site shares with the mobile app. Those files look their client up lazily,
+ * so the registration only has to happen before the first query — but relying on
+ * App.tsx to happen to import this file is the kind of implicit ordering that
+ * breaks the day someone lazy-loads a route. Naming it here makes it explicit.
+ */
+import './lib/supabase';
 import { installNumberInputScrollGuard } from './lib/numberInputScrollGuard';
 
 // Guards every number field in the app against accidental trackpad edits.
