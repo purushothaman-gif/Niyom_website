@@ -434,22 +434,35 @@ export default function Transactions({ employee, onNavigate }: Props) {
   }, [isAdmin]);
   useEffect(() => { loadTxns(); }, [loadTxns]);
 
-  // Deals ready to be booked: accepted + fully paid + not already booked.
-  // nw_deal_transfer_eligible already encodes exactly that predicate, so reuse
-  // it rather than restating the rule here. It does not expose base_rate, so
-  // that is merged in from the deals table in a second read.
+  // Deals ready to be booked: eligible AND not already booked as a transaction.
+  // nw_deal_transfer_eligible encodes the eligibility rule, but since booking now
+  // records the transaction UN-transferred (transfer_stage NULL), the view still
+  // lists those already-booked deals (a not-transferred txn keeps a deal
+  // eligible for the Transfer Queue). The picker must offer only deals with NO
+  // transaction yet, so we filter out any deal that already has one. base_rate is
+  // merged from the deals table (the view doesn't expose it).
   const loadEligibleDeals = useCallback(async () => {
     const { data, error: e } = await supabase
       .from('nw_deal_transfer_eligible')
       .select('deal_id, confirmation_number, client_id, snap_client_name, product_type, transaction_type, security_name, isin, deal_date, quantity, settlement_amount, landing_cost');
     if (e || !data?.length) { setEligibleDeals([]); return; }
     const deals = data as EligibleDeal[];
+    const dealIds = deals.map(d => d.deal_id);
+    // Drop deals that already have a transaction booked (any transfer stage) —
+    // the unique index allows only one txn per deal, so these can't be re-booked.
+    const { data: booked } = await supabase
+      .from('nw_transactions')
+      .select('deal_confirmation_id')
+      .in('deal_confirmation_id', dealIds);
+    const bookedIds = new Set((booked ?? []).map((b: any) => b.deal_confirmation_id));
+    const unbooked = deals.filter(d => !bookedIds.has(d.deal_id));
+    if (!unbooked.length) { setEligibleDeals([]); return; }
     const { data: rates } = await supabase
       .from('nw_deal_confirmations')
       .select('id, base_rate')
-      .in('id', deals.map(d => d.deal_id));
+      .in('id', unbooked.map(d => d.deal_id));
     const rateById = new Map((rates ?? []).map((r: any) => [r.id, r.base_rate]));
-    setEligibleDeals(deals.map(d => ({ ...d, base_rate: rateById.get(d.deal_id) ?? null })));
+    setEligibleDeals(unbooked.map(d => ({ ...d, base_rate: rateById.get(d.deal_id) ?? null })));
   }, []);
 
   useEffect(() => { if (showAdd) loadEligibleDeals(); }, [showAdd, loadEligibleDeals]);
