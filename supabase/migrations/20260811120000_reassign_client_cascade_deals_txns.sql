@@ -1,0 +1,11 @@
+-- Client reassignment now performs a FULL HANDOVER: the client's deal
+-- confirmations and transactions follow to the new RM (previously only the
+-- client row + leads moved, leaving deals/transactions orphaned with the old
+-- owner and invisible to the new RM). Applied to the hosted DB via the CLI on
+-- 2026-08-11. The admin caller lets the accepted-deal / post-transfer
+-- immutability guards pass, so only ownership changes — no deal terms or
+-- transaction values are touched. Full function body lives in the DB
+-- (pg_get_functiondef(nw_reassign_client)); the change adds:
+--   UPDATE nw_deal_confirmations SET employee_id = p_to_employee WHERE client_id = p_client_id ...
+--   UPDATE nw_transactions       SET employee_id = p_to_employee WHERE client_id = p_client_id ...
+SELECT 'nw_reassign_client full-handover cascade applied via CLI' AS note;
