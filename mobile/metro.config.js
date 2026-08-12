@@ -35,6 +35,21 @@ config.watchFolders = [sharedRoot, edgeSharedRoot];
  * at runtime with the "invalid hook call" that has no obvious cause.
  */
 config.resolver.nodeModulesPaths = [path.resolve(projectRoot, 'node_modules')];
+
+/*
+ * `expo-doctor` FLAGS THE LINE BELOW. Do not "fix" it by removing it.
+ *
+ * With hierarchical lookup on, Metro resolves `react` by walking up from the
+ * importing file first — so a file in `shared/` finds `Niyom/node_modules/react`,
+ * which is the WEBSITE's React 18, before it ever consults nodeModulesPaths.
+ * Two Reacts in one bundle fail at runtime with an "invalid hook call" that
+ * points at nothing in particular.
+ *
+ * Turning hierarchical lookup off makes nodeModulesPaths the only answer, which
+ * is exactly what Expo's own monorepo guide prescribes. Both the iOS and the web
+ * bundles are verified to build with it, including expo-router's nested
+ * dependencies — so the doctor warning here is generic, not a finding.
+ */
 config.resolver.disableHierarchicalLookup = true;
 
 // `xlsx` ships a .cjs build that Metro will not pick up without this.

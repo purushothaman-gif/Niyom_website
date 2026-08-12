@@ -74,9 +74,9 @@ EAS Build, bundle id `com.niyomwealth.app` on both platforms.
 npx eas build --profile preview --platform all
 ```
 
-Store submission needs accounts that do not exist yet — and for a Finance-category
-app Apple requires an **organisation** account with a D-U-N-S number for Niyom
-Wealth, which takes a couple of weeks to obtain.
+**See [RELEASE.md](./RELEASE.md)** for the full path to the stores: which
+accounts are needed, the build secret that must be set before a cloud build will
+run, the Play data-safety answers, and what still blocks a first submission.
 
 ## No demo mode here
 
