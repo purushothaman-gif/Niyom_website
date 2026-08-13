@@ -1,0 +1,101 @@
+# Automated daily content — render the morning's batch.
+#
+# Draws the artwork for content that mkt-auto-generate wrote a little earlier,
+# uploads it, and hands each slot back to be finalised.
+#
+# Two things about this workflow are load-bearing and easy to break:
+#
+#   1. It must live on the repository's DEFAULT branch or `schedule` never
+#      fires. GitHub ignores cron on other branches.
+#   2. On a private repo, scheduled workflows are disabled after 60 days with no
+#      repository activity. The Auto Schedule screen in the CRM shows a batch
+#      with nothing live in red, which is the monitor for that.
+#
+# The only credential here is MKT_RENDER_SECRET, which opens four verbs on
+# mkt-auto-render-io and nothing else. There is deliberately no service-role key.
+
+name: Render daily content
+
+on:
+  schedule:
+    # Times are UTC; IST is UTC+5:30 with no DST. The publish gate is 09:30 IST
+    # (04:00 UTC), and generation finishes by ~02:55 UTC.
+    #
+    # GitHub's scheduler is best-effort and routinely runs 5-20 minutes late, so
+    # these avoid the top of the hour and leave real slack. Every run is
+    # claim-based, so the later two cost nothing when the first succeeds.
+    - cron: '20 3 * * *'   # 08:50 IST — primary
+    - cron: '40 3 * * *'   # 09:10 IST — retry
+    - cron: '55 3 * * *'   # 09:25 IST — last chance before the gate
+  workflow_dispatch:
+    inputs:
+      run_date:
+        description: 'IST run date (YYYY-MM-DD). Blank = today.'
+        required: false
+      dry_run:
+        description: 'Render but upload nothing and finalise nothing'
+        type: boolean
+        default: false
+
+# One render at a time. Overlapping runs would claim disjoint slots and work
+# correctly, but serialising keeps the logs readable and the runner minutes low.
+concurrency:
+  group: mkt-render
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+
+      - name: Set up Node
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af   # v4.1.0
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: tools/mkt-render
+        run: npm ci
+
+      - name: Install brand fonts
+        working-directory: tools/mkt-render
+        # Fails the job if fontconfig cannot see them afterwards: textFit
+        # measures glyph widths to choose line breaks, so a missing Inter
+        # produces differently-wrapped posters rather than merely different
+        # looking ones.
+        run: node scripts/install-fonts.mjs
+
+      - name: Install Chromium
+        working-directory: tools/mkt-render
+        run: npx playwright install --with-deps chromium
+
+      - name: Build the render harness
+        working-directory: tools/mkt-render
+        run: npm run build:harness
+
+      - name: Render
+        working-directory: tools/mkt-render
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          MKT_RENDER_SECRET: ${{ secrets.MKT_RENDER_SECRET }}
+          RUN_DATE: ${{ inputs.run_date }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: npx tsx src/index.ts
+
+      - name: Upload rendered assets
+        # Always, so a failed run still leaves the partial artwork to look at —
+        # which is usually the fastest way to see what went wrong.
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882   # v4.4.3
+        with:
+          name: rendered-${{ github.run_id }}
+          path: tools/mkt-render/out
+          if-no-files-found: ignore
+          retention-days: 7

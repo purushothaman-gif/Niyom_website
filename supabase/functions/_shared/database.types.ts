@@ -2035,6 +2035,27 @@ export type Database = {
         }
         Relationships: []
       }
+      mkt_auto_settings: {
+        Row: {
+          approve_window_hours: number
+          auto_approve: boolean
+          id: boolean
+          updated_at: string
+        }
+        Insert: {
+          approve_window_hours?: number
+          auto_approve?: boolean
+          id?: boolean
+          updated_at?: string
+        }
+        Update: {
+          approve_window_hours?: number
+          auto_approve?: boolean
+          id?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mkt_auto_skip_days: {
         Row: {
           created_at: string
@@ -2077,6 +2098,7 @@ export type Database = {
           palette_id: string
           platform: string
           regen_count: number
+          render_attempts: number
           run_date: string
           slide_count: number | null
           slot_no: number
@@ -2097,6 +2119,7 @@ export type Database = {
           palette_id?: string
           platform: string
           regen_count?: number
+          render_attempts?: number
           run_date: string
           slide_count?: number | null
           slot_no: number
@@ -2117,6 +2140,7 @@ export type Database = {
           palette_id?: string
           platform?: string
           regen_count?: number
+          render_attempts?: number
           run_date?: string
           slide_count?: number | null
           slot_no?: number
@@ -6404,6 +6428,36 @@ export type Database = {
         Args: { p_category: string }
         Returns: string[]
       }
+      mkt_auto_claim_render: {
+        Args: { p_limit?: number; p_run_date: string }
+        Returns: {
+          category: string
+          content_id: string | null
+          content_type: string
+          created_at: string
+          cycle_no: number
+          error: string
+          id: string
+          lint_flags: Json
+          palette_id: string
+          platform: string
+          regen_count: number
+          render_attempts: number
+          run_date: string
+          slide_count: number | null
+          slot_no: number
+          state: string
+          template_id: string
+          updated_at: string
+          video_duration_seconds: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "mkt_auto_slots"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       mkt_auto_claim_slots: {
         Args: {
           p_force?: boolean
@@ -6423,6 +6477,7 @@ export type Database = {
           palette_id: string
           platform: string
           regen_count: number
+          render_attempts: number
           run_date: string
           slide_count: number | null
           slot_no: number
@@ -6471,6 +6526,7 @@ export type Database = {
           palette_id: string
           platform: string
           regen_count: number
+          render_attempts: number
           run_date: string
           slide_count: number | null
           slot_no: number
@@ -6498,6 +6554,10 @@ export type Database = {
       mkt_auto_release_slot: {
         Args: { p_note?: string; p_slot_id: string }
         Returns: undefined
+      }
+      mkt_auto_render_failed: {
+        Args: { p_error: string; p_slot_id: string }
+        Returns: string
       }
       mkt_auto_seed_cycle: { Args: { p_cycle_no: number }; Returns: undefined }
       mkt_auto_similar_headlines: {
