@@ -6,11 +6,19 @@
   //   harness/  Browser. Imports the CRM's real renderers, which are full of
   //             canvas, Image, MediaRecorder and Blob.
   //
-  // Splitting them into two tsconfigs was the first instinct and it is not
-  // worth it — `lib: ["ES2022", "DOM"]` typechecks both correctly, and the Node
-  // half simply never touches a DOM symbol. What matters is that this file is
-  // wired into the root `npm run typecheck`; a bare `tsc -p tsconfig.json` at
-  // the repo root checks ZERO files here.
+  // One config covers both, because splitting them does not actually work
+  // here: src/renderer.ts drives Playwright, whose page.evaluate callbacks
+  // reference `window` and so need the DOM lib even though the file runs on
+  // Node.
+  //
+  // The cost is one real collision — with both the DOM lib and @types/node
+  // loaded, TS resolves `fetch` to the DOM's signature while the code runs on
+  // Node's, so a Uint8Array body needs an explicit cast (see src/index.ts).
+  // That is the only place it bites.
+  //
+  // What matters most is that this file is wired into the root
+  // `npm run typecheck`; a bare `tsc -p tsconfig.json` at the repo root checks
+  // ZERO files here.
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",

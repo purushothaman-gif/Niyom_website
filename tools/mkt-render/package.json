@@ -16,6 +16,8 @@
     "playwright": "^1.49.0"
   },
   "devDependencies": {
+    "@expo-google-fonts/gelasio": "^0.4.1",
+    "@expo-google-fonts/inter": "^0.4.2",
     "@types/node": "^20.14.0",
     "tsx": "^4.19.2",
     "typescript": "^5.5.3",

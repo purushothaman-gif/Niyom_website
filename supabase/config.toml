@@ -555,6 +555,20 @@ verify_jwt = false
 [functions.mkt-auto-generate]
 verify_jwt = false
 
+# The render worker's only door into this project, called from a GitHub Actions
+# runner (which has no Supabase session). verify_jwt is off so the runner can
+# reach it; the function requires MKT_RENDER_SECRET, compared in constant time.
+#
+# That secret is DELIBERATELY different from MKT_AUTO_SECRET. It is the one
+# credential that lives in GitHub, and it is scoped to rendering: a stolen copy
+# lets someone re-render artwork for content that already exists, and nothing
+# else — it cannot read a client record, cannot spend Anthropic tokens, and
+# cannot write outside mkt_content_assets. Sharing one secret between the two
+# functions, or handing the runner the service-role key, would give away all of
+# that in exchange for one less secret to manage.
+[functions.mkt-auto-render-io]
+verify_jwt = false
+
 # --- Partner Portal (DSA login) --------------------------------------------
 # Resolves a partner's PAN to the email their auth user is registered under, so
 # the browser can then call signInWithPassword. Public verify_jwt because it runs
