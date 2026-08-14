@@ -104,6 +104,12 @@ async function main() {
 
   const session = await openSession(m => log(m));
   let failures = 0;
+  /* Slots whose content became unavailable (expired / swept / deleted) between
+   * generation and render. That is irrecoverable data lifecycle, not a render
+   * bug, so it is recorded (the CRM Auto-Schedule monitor shows the lost slot)
+   * but does NOT fail the CI job — otherwise a render gap after downtime turns
+   * every catch-up run red. */
+  let skipped = 0;
   /* Slots claimed but not yet finalised. Anything left here when the run ends
    * has to be handed back, or it sits in 'rendering' forever and no later run
    * will pick it up — a claim is a lock, and a lock needs an owner that always
@@ -210,9 +216,19 @@ async function main() {
             : ''),
         );
       } catch (err) {
-        failures++;
         const message = err instanceof Error ? err.message : String(err);
-        console.error(`[render] ${label} FAILED: ${message}`);
+        // Content that expired / was swept / was deleted before this slot could
+        // be rendered is irrecoverable, not a render failure — record it but do
+        // not fail the CI job (a render gap after downtime would otherwise turn
+        // every catch-up run red). Genuine render errors still count and fail.
+        const contentGone = /expired|swept|no longer exist|been deleted|not found/i.test(message);
+        if (contentGone) {
+          skipped++;
+          console.warn(`[render] ${label} SKIPPED — content unavailable: ${message}`);
+        } else {
+          failures++;
+          console.error(`[render] ${label} FAILED: ${message}`);
+        }
         if (!DRY_RUN) {
           await io('fail', { slot_id: item.slot_id, error: message }).catch(e =>
             console.error(`[render] could not record failure: ${e}`),
@@ -234,6 +250,10 @@ async function main() {
     await session.close();
   }
 
+  if (skipped) {
+    // Recorded (visible in the CRM monitor) but deliberately not a CI failure.
+    log(`${skipped} slot(s) skipped — content had expired/was removed before render`);
+  }
   if (failures) {
     // Non-zero exit so GitHub surfaces it. Slots that succeeded are already
     // finalised; this only reports that the day is incomplete.

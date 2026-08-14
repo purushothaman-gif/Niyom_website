@@ -1,154 +1,193 @@
 /**
- * The first screen.
+ * The launch screen.
  *
- * Three ways in, and they are not three of the same thing — which is why the
- * layout does not treat them equally:
+ * ## Why this does not look like the website's landing page
  *
- *   Client      sign in to an existing portfolio
- *   Partner     sign in to an existing DSA account
- *   New here    open an account, or ask about becoming a partner
+ * It used to: a scrolling column of headline, sub-headline, three cards and a
+ * legal footer. That is a web page, and on a phone it reads as one — a lot of
+ * reading before the one thing anyone came here to do.
  *
- * The two sign-ins are what a returning user wants, so they lead. "New to
- * Niyom" is given its own gold-edged panel underneath rather than a third
- * identical card: someone who has no account is not choosing between three
- * doors, they are looking for the one that is open to them.
+ * An app opens on the ACTION. So the brand sits in a compact lockup at the top,
+ * the two sign-ins are large tap targets in the lower half where a thumb rests,
+ * and everything else is one line. Nothing scrolls unless the screen is small.
  *
- * "Continue your application" sits with it, because a half-finished signup is a
- * new user's problem, not a returning client's — and on the website it is the
- * single most missed link on the sign-in page.
+ * ## And why the PIN keypad can appear instead
+ *
+ * On a phone that already has a PIN saved, this screen is skipped entirely —
+ * the launch router sends them to the keypad. This is the first-run screen, and
+ * for most people it is seen once.
  */
+import { useEffect, useState } from 'react';
 import { Image, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowRight, ChevronRight, Clock, Handshake, Sparkles, Wallet } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
+import {
+  ArrowRight,
+  ChevronRight,
+  Fingerprint,
+  Handshake,
+  LineChart,
+  ShieldCheck,
+  Wallet,
+} from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import { radius, space } from '@/design/tokens';
+import { listProfiles } from '@/platform/device';
+import { font, radius, space } from '@/design/tokens';
 import { usePalette } from '@/design/ThemeProvider';
-import { AuthLayout } from '@/features/auth/AuthLayout';
 import { Text } from '@/ui/Text';
 
 export default function Welcome() {
   const p = usePalette();
+  const insets = useSafeAreaInsets();
+  const [hasPin, setHasPin] = useState(false);
+
+  useEffect(() => {
+    // If a PIN exists on this device, offer the fast way back in.
+    void Promise.all([listProfiles('client'), listProfiles('partner')]).then(([c, d]) =>
+      setHasPin(c.length + d.length > 0),
+    );
+  }, []);
 
   return (
-    <AuthLayout
-      title="Your wealth,\nin one place"
-      hideEyebrow
-      brandMark
-      subtitle="Portfolio, statements and investments — for clients and partners of Niyom Wealth."
-      footer={
-        <View style={{ gap: space[2], alignItems: 'center' }}>
-          <Text variant="caption" tone="onBrandMuted" center>
-            Niyom Wealth Distribution LLP · AMFI-registered mutual fund distributor
-          </Text>
-        </View>
-      }
+    <LinearGradient
+      colors={[...p.onBrand.gradient]}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 1 }}
+      style={{ flex: 1 }}
     >
-      <View style={{ gap: space[5] }}>
-        {/* ------------------------- Returning users ------------------------ */}
-        <View style={{ gap: space[3] }}>
-          <Text variant="overline" caps style={{ color: p.onBrand.textMuted }}>
-            Sign in
-          </Text>
+      <Svg
+        pointerEvents="none"
+        style={{ position: 'absolute', top: -200, right: -160, width: 460, height: 460 }}
+        width={460}
+        height={460}
+      >
+        <Defs>
+          <RadialGradient id="bloom" cx="50%" cy="50%" r="50%">
+            <Stop offset="0%" stopColor="#c8a45d" stopOpacity={0.24} />
+            <Stop offset="55%" stopColor="#c8a45d" stopOpacity={0.07} />
+            <Stop offset="100%" stopColor="#c8a45d" stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Circle cx={230} cy={230} r={230} fill="url(#bloom)" />
+      </Svg>
 
-          <SignInCard
+      <View
+        style={{
+          flex: 1,
+          paddingHorizontal: space[6],
+          paddingTop: insets.top + space[8],
+          paddingBottom: insets.bottom + space[5],
+        }}
+      >
+        {/* --------------------------- brand lockup ---------------------- */}
+        <Animated.View entering={FadeIn.duration(420)} style={{ alignItems: 'center' }}>
+          <Image
+            source={require('../../assets/niyom-mark.png')}
+            style={{ width: 76, height: 66 }}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+          <Text
+            style={{
+              fontFamily: font.displayBold,
+              fontSize: 27,
+              letterSpacing: -0.4,
+              color: p.onBrand.gold,
+              marginTop: space[4],
+            }}
+          >
+            Niyom Wealth
+          </Text>
+          <Text variant="small" tone="onBrandMuted" center style={{ marginTop: space[2] }}>
+            Your portfolio, in your pocket
+          </Text>
+        </Animated.View>
+
+        {/*
+          The middle carries three facts and nothing else. The buttons still sit
+          in the thumb zone, but the space above them says something rather than
+          being blank — and three short lines is not a landing page.
+        */}
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <Animated.View entering={FadeIn.duration(500).delay(160)} style={{ gap: space[5] }}>
+            <Point icon={ShieldCheck} text="AMFI-registered mutual fund distributor" />
+            <Point icon={Fingerprint} text="Unlock with a PIN or your fingerprint" />
+            <Point icon={LineChart} text="Every holding, valued at the latest NAV" />
+          </Animated.View>
+        </View>
+
+        {/* ----------------------------- actions ------------------------- */}
+        <View style={{ gap: space[3] }}>
+          {hasPin ? (
+            <Animated.View entering={FadeInDown.duration(380)}>
+              <Pressable
+                onPress={() => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  router.push('/(auth)/client-login');
+                }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: space[2],
+                  paddingVertical: space[4],
+                  borderRadius: radius.md,
+                  backgroundColor: pressed ? 'rgba(200,164,93,0.26)' : 'rgba(200,164,93,0.16)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(200,164,93,0.45)',
+                })}
+              >
+                <Text variant="bodyMedium" style={{ color: p.onBrand.gold }}>
+                  Unlock with your PIN
+                </Text>
+                <ArrowRight size={16} color={p.onBrand.gold} strokeWidth={2.4} />
+              </Pressable>
+            </Animated.View>
+          ) : null}
+
+          <Choice
             index={0}
             icon={Wallet}
-            title="Client"
-            body="Your portfolio, transactions and statements"
+            title="I'm a client"
+            body="Portfolio, statements, investments"
             onPress={() => router.push('/(auth)/client-login')}
           />
-          <SignInCard
+          <Choice
             index={1}
             icon={Handshake}
-            title="Partner"
-            body="Your sourced clients, payouts and leads"
+            title="I'm a partner"
+            body="Clients, payouts, leads"
             onPress={() => router.push('/(auth)/partner-login')}
           />
-        </View>
 
-        {/* ---------------------------- New here ---------------------------- */}
-        <Animated.View entering={FadeInDown.duration(440).delay(300)} style={{ gap: space[3] }}>
-          <Text variant="overline" caps style={{ color: p.onBrand.textMuted }}>
-            New to Niyom Wealth?
-          </Text>
-
-          <Pressable
-            onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              router.push('/(auth)/get-started');
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Open a free account"
-            style={({ pressed }) => ({
-              borderRadius: radius.lg,
-              padding: space[5],
-              backgroundColor: pressed ? 'rgba(200, 164, 93, 0.20)' : 'rgba(200, 164, 93, 0.12)',
-              borderWidth: 1,
-              borderColor: 'rgba(200, 164, 93, 0.42)',
-            })}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}>
-              <Sparkles size={16} color={p.onBrand.gold} strokeWidth={2.2} />
-              <Text variant="h3" style={{ color: p.onBrand.gold }}>
-                Open a free account
-              </Text>
-            </View>
-            <Text variant="small" tone="onBrandMuted" style={{ marginTop: space[2] }}>
-              In minutes — just your PAN, name, mobile and email. No paperwork to start.
-            </Text>
-            <View
-              style={{
-                flexDirection: 'row',
+          <Animated.View entering={FadeInDown.duration(400).delay(220)}>
+            <Pressable
+              onPress={() => router.push('/(auth)/get-started')}
+              style={({ pressed }) => ({
+                paddingVertical: space[4],
                 alignItems: 'center',
-                gap: space[1] + 2,
-                marginTop: space[4],
-              }}
+                opacity: pressed ? 0.6 : 1,
+              })}
             >
-              <Text variant="smallMedium" style={{ color: p.onBrand.gold }}>
-                Get started
+              <Text variant="small" tone="onBrandMuted">
+                New here?{' '}
+                <Text variant="bodyMedium" style={{ color: p.onBrand.gold }}>
+                  Open a free account
+                </Text>
               </Text>
-              <ArrowRight size={15} color={p.onBrand.gold} strokeWidth={2.4} />
-            </View>
-          </Pressable>
-
-          {/* The half-finished signup. Deliberately quiet but ALWAYS present:
-              someone who stopped mid-KYC has no password yet, so neither
-              sign-in card above can let them back in. */}
-          <Pressable
-            onPress={() => router.push('/(auth)/otp-login')}
-            accessibilityRole="button"
-            style={({ pressed }) => ({
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: space[3],
-              paddingVertical: space[3],
-              paddingHorizontal: space[4],
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: p.onBrand.border,
-              opacity: pressed ? 0.7 : 1,
-            })}
-          >
-            <Clock size={17} color={p.onBrand.textMuted} strokeWidth={1.9} />
-            <View style={{ flex: 1 }}>
-              <Text variant="smallMedium" tone="onBrand">
-                Continue your application
-              </Text>
-              <Text variant="caption" tone="onBrandMuted" style={{ marginTop: 1 }}>
-                Already started? Sign in with an email code — no password needed.
-              </Text>
-            </View>
-            <ChevronRight size={16} color={p.onBrand.textMuted} />
-          </Pressable>
-        </Animated.View>
+            </Pressable>
+          </Animated.View>
+        </View>
       </View>
-    </AuthLayout>
+    </LinearGradient>
   );
 }
 
-function SignInCard({
+function Choice({
   icon: Icon,
   title,
   body,
@@ -164,22 +203,23 @@ function SignInCard({
   const p = usePalette();
 
   return (
-    <Animated.View entering={FadeInDown.duration(420).delay(120 + index * 80)}>
+    <Animated.View entering={FadeInDown.duration(400).delay(80 + index * 70)}>
       <Pressable
         onPress={() => {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onPress();
         }}
         accessibilityRole="button"
-        accessibilityLabel={`${title} sign in`}
+        accessibilityLabel={title}
         style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',
           gap: space[4],
+          // 68pt tall — a deliberate, comfortable target rather than a link.
           paddingVertical: space[4],
           paddingHorizontal: space[4],
           borderRadius: radius.lg,
-          backgroundColor: pressed ? 'rgba(200, 164, 93, 0.12)' : p.onBrand.veil,
+          backgroundColor: pressed ? 'rgba(255,255,255,0.10)' : p.onBrand.veil,
           borderWidth: 1,
           borderColor: p.onBrand.border,
         })}
@@ -191,7 +231,7 @@ function SignInCard({
             borderRadius: radius.md,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: 'rgba(200, 164, 93, 0.14)',
+            backgroundColor: 'rgba(200,164,93,0.14)',
           }}
         >
           <Icon size={20} color={p.onBrand.gold} strokeWidth={1.9} />
@@ -201,7 +241,7 @@ function SignInCard({
           <Text variant="h3" tone="onBrand">
             {title}
           </Text>
-          <Text variant="caption" tone="onBrandMuted" style={{ marginTop: 2 }}>
+          <Text variant="caption" tone="onBrandMuted" style={{ marginTop: 1 }}>
             {body}
           </Text>
         </View>
@@ -209,5 +249,18 @@ function SignInCard({
         <ChevronRight size={18} color={p.onBrand.textMuted} />
       </Pressable>
     </Animated.View>
+  );
+}
+
+/** One short fact. Icon, a line of text, nothing else. */
+function Point({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
+  const p = usePalette();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[4] }}>
+      <Icon size={17} color={p.onBrand.gold} strokeWidth={1.9} />
+      <Text variant="small" tone="onBrandMuted" style={{ flex: 1 }}>
+        {text}
+      </Text>
+    </View>
   );
 }

@@ -12,17 +12,15 @@
  * different number, which is what XIRR on the dashboard is for — so the section
  * is labelled "Scheme returns" rather than "Returns".
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { CalendarClock, TrendingUp } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { fmtDate } from '@shared/crm/utils';
-import { MfCatalogService } from '@shared/portal/services/MfCatalogService';
-import { useMfCatalog } from '@shared/portal/hooks/useMfCatalog';
+import { useFundCatalog, useFundDetail } from '@/features/client/mf/queries';
 import { useClientSnapshot } from '@shared/portal/hooks/useClientSnapshot';
 import { onboardingIncomplete } from '@shared/portal/onboarding/onboardingSteps';
-import type { CatalogFundDetail } from '@shared/portal/types/funds';
 import { radius, space } from '@/design/tokens';
 import { usePalette } from '@/design/ThemeProvider';
 import { useClientId } from '@/features/auth/AuthContext';
@@ -32,7 +30,7 @@ import { Screen } from '@/ui/Screen';
 import { Card } from '@/ui/Card';
 import { Text } from '@/ui/Text';
 import { Button } from '@/ui/Button';
-import { ErrorState, SkeletonScreen, StatusPill } from '@/ui/kit';
+import { ErrorState, Skeleton, SkeletonScreen, StatusPill } from '@/ui/kit';
 
 const PERIODS = ['6M', '1Y', '3Y', '5Y', 'SI'] as const;
 
@@ -41,27 +39,13 @@ export default function Fund() {
   const clientId = useClientId();
   const p = usePalette();
 
-  const { funds } = useMfCatalog();
+  const { funds } = useFundCatalog();
   const { snapshot } = useClientSnapshot(clientId);
-  const [detail, setDetail] = useState<CatalogFundDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { detail, loading, error } = useFundDetail(code);
 
   const fund = useMemo(() => funds.find((f) => f.amfiCode === code) ?? null, [funds, code]);
   const kycPending = !!snapshot.client && onboardingIncomplete(snapshot.client);
 
-  useEffect(() => {
-    if (!code) return;
-    let alive = true;
-    setLoading(true);
-    MfCatalogService.detail(code)
-      .then((d) => alive && setDetail(d))
-      .catch((err) => alive && setError(err instanceof Error ? err.message : 'Could not load this fund.'))
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, [code]);
 
   if (!fund && loading) {
     return (
@@ -100,9 +84,21 @@ export default function Fund() {
                 <NavChart points={detail.navHistory} />
               </View>
             ) : loading ? (
-              <View style={{ marginTop: space[5] }}>
-                <SkeletonScreen rows={0} />
+              // Shaped like the chart it replaces, so nothing jumps when the
+              // real one arrives.
+              <View style={{ marginTop: space[5], gap: space[2] }}>
+                <Skeleton height={14} width="55%" />
+                <Skeleton height={150} rounded="md" />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Skeleton height={12} width={64} />
+                  <Skeleton height={12} width={64} />
+                </View>
               </View>
+            ) : error ? (
+              <Text variant="small" tone="muted" style={{ marginTop: space[5] }}>
+                The NAV history could not be loaded just now. Everything else on this page is
+                current.
+              </Text>
             ) : null}
 
             {detail?.high52w != null && detail?.low52w != null ? (

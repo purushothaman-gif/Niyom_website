@@ -19,7 +19,9 @@ import { fmt } from '@shared/crm/utils';
 import { PartnerService } from '@shared/partner/services/PartnerService';
 import { space } from '@/design/tokens';
 import { usePalette } from '@/design/ThemeProvider';
+import { useDsaId } from '@/features/auth/AuthContext';
 import { usePartnerQuery } from '@/features/partner/usePartnerData';
+import { SetPinPrompt } from '@/features/client/SetPinPrompt';
 import { Screen } from '@/ui/Screen';
 import { Card } from '@/ui/Card';
 import { Text } from '@/ui/Text';
@@ -27,6 +29,7 @@ import { Money, Delta } from '@/ui/Money';
 import { ErrorState, KpiStat, ListRow, SectionHeader, SkeletonScreen, StatusPill } from '@/ui/kit';
 
 export default function PartnerDashboard() {
+  const dsaId = useDsaId();
   const p = usePalette();
 
   const load = useCallback(
@@ -204,6 +207,7 @@ export default function PartnerDashboard() {
           ) : null}
         </View>
       )}
+      <SetPinPrompt surface="partner" id={dsaId} />
     </Screen>
   );
 }
