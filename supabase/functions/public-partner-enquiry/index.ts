@@ -34,6 +34,7 @@
 // RM silently receiving every partner enquiry.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { emailFooterHtml, emailFooterText, NOTICE_AUTOMATED } from '../_shared/email_footer.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -52,6 +53,99 @@ const HOURLY_CAP = 40;
 
 const LEAD_SOURCE = 'Partner Enquiry — App';
 const CAMPAIGN = 'app:become-a-partner';
+
+/**
+ * The house account. Used ONLY for the activity-log row so the enquiry appears
+ * in a feed — the lead itself is left unowned so an admin still assigns it.
+ * Same id the partner-submit-lead function falls back to.
+ */
+const HOUSE_EMPLOYEE_ID = '1b543112-3251-4912-847b-92982f2de563';
+
+const esc = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * Tell the desk immediately.
+ *
+ * Best-effort by design: the lead is already committed by the time this runs,
+ * so a mail failure must never turn a captured enquiry into an error the
+ * person on the phone sees. Failures are logged and swallowed.
+ */
+async function notify(v: {
+  leadCode: string;
+  fullName: string;
+  mobile: string;
+  email: string;
+  city: string;
+  arn: string;
+  note: string;
+}): Promise<void> {
+  const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+  if (!RESEND_API_KEY) return;
+
+  const to = Deno.env.get('NIYOM_PARTNER_ENQUIRY_EMAIL')
+    ?? Deno.env.get('NIYOM_ADMIN_EMAIL')
+    ?? 'purushothaman@niyomwealth.com';
+
+  const year = new Date().getFullYear();
+  const subject = `New partner enquiry — ${v.fullName} (${v.mobile})`;
+  const rows: [string, string][] = [
+    ['Lead', v.leadCode],
+    ['Name', v.fullName],
+    ['Mobile', v.mobile],
+    ['Email', v.email || '—'],
+    ['City', v.city || '—'],
+    ['ARN', v.arn || 'Not provided'],
+  ];
+
+  const text = `${v.fullName} wants to become a Niyom distribution partner.
+
+${rows.map(([k, val]) => `${k.padEnd(8)} ${val}`).join('\n')}
+${v.note ? `\nNote: ${v.note}` : ''}
+
+Submitted from the mobile app. The lead is in the ADMIN POOL (unassigned) —
+open the CRM → Leads and assign it.
+
+${emailFooterText({ year, ref: v.leadCode, notice: NOTICE_AUTOMATED })}`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
+<body style="font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.7;margin:0;padding:0;background:#f6f6f6;">
+  <div style="max-width:560px;margin:0 auto;padding:28px 24px;background:#ffffff;">
+    <div style="font-size:20px;font-weight:700;color:#111;margin-bottom:20px;border-bottom:2px solid #D4AF37;padding-bottom:14px;">Niyom Wealth</div>
+    <p style="margin:0 0 14px;"><strong>${esc(v.fullName)}</strong> wants to become a Niyom distribution partner.</p>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 16px;font-size:14px;">
+      ${rows
+        .map(
+          ([k, val]) =>
+            `<tr><td style="padding:6px 0;color:#666;width:90px;">${k}</td><td style="padding:6px 0;font-weight:600;">${esc(val)}</td></tr>`,
+        )
+        .join('')}
+    </table>
+    ${v.note ? `<div style="background:#f6f6f6;border-radius:8px;padding:14px 16px;margin:0 0 16px;white-space:pre-wrap;">${esc(v.note)}</div>` : ''}
+    <p style="margin:0 0 14px;">Submitted from the mobile app. The lead is in the <strong>admin pool</strong> and is currently unassigned — open the CRM &rarr; <strong>Leads</strong> to assign it.</p>
+    <p style="margin:18px 0 0;color:#111;font-weight:600;">Niyom Wealth Distribution LLP</p>
+    ${emailFooterHtml({ year, ref: v.leadCode, notice: NOTICE_AUTOMATED })}
+  </div>
+</body></html>`;
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Niyom Wealth <support@niyomwealth.com>',
+        to: [to],
+        reply_to: v.email || undefined,
+        subject,
+        html,
+        text,
+      }),
+    });
+    if (!res.ok) console.error('partner enquiry alert failed:', res.status, await res.text());
+  } catch (err) {
+    console.error('partner enquiry alert threw:', err);
+  }
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 200, headers: corsHeaders });
@@ -156,11 +250,15 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Could not record your enquiry. Please try again.' }, 500);
     }
 
-    // Best-effort trail for the admin queue. The lead already exists.
+    /*
+     * Trail for the admin queue. `employee_id` is the house account rather than
+     * NULL: a log row with no employee does not appear in anyone's activity
+     * feed, which is most of why these enquiries were invisible.
+     */
     try {
       await db.from('nw_activity_logs').insert([
         {
-          employee_id: null,
+          employee_id: HOUSE_EMPLOYEE_ID,
           action: 'Partner Enquiry (App)',
           description:
             `${fullName} (${mobile}) asked about becoming a distribution partner ` +
@@ -170,6 +268,9 @@ Deno.serve(async (req: Request) => {
     } catch (logErr) {
       console.error('activity log failed (lead already created):', logErr);
     }
+
+    // Email the desk. A lead nobody is told about is a lead nobody works.
+    await notify({ leadCode: lead.lead_code, fullName, mobile, email, city, arn, note });
 
     return json({ success: true, lead_code: lead.lead_code }, 200);
   } catch (err) {

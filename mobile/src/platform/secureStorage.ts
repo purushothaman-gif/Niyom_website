@@ -21,9 +21,19 @@
  * user out anyway — better to arrive there cleanly than through a parse error.
  */
 import * as SecureStore from 'expo-secure-store';
+import { chunkByBytes } from '@shared/platform/chunkByBytes';
 
-/** Comfortably under SecureStore's 2048-byte ceiling, allowing for UTF-8. */
-const CHUNK_SIZE = 1536;
+/**
+ * SecureStore's ceiling is 2048 BYTES, not characters.
+ *
+ * Chunking by character length is the trap: a session for "अनिल" or "செல்வன்"
+ * encodes to three bytes per character, so 1536 characters is 4608 bytes and
+ * the write throws. The session then never persists and the client is signed
+ * out every time they close the app — with nothing on screen to explain why,
+ * and only for clients whose names are not ASCII. Which, for an Indian wealth
+ * app, is a large share of them.
+ */
+const CHUNK_BYTES = 1800;
 
 const countKey = (key: string) => `${key}__n`;
 const partKey = (key: string, i: number) => `${key}__${i}`;
@@ -36,6 +46,7 @@ const partKey = (key: string, i: number) => `${key}__${i}`;
 function safeKey(key: string): string {
   return key.replace(/[^A-Za-z0-9._-]/g, '_');
 }
+
 
 async function readCount(key: string): Promise<number> {
   const raw = await SecureStore.getItemAsync(countKey(key));
@@ -74,10 +85,7 @@ export const secureStorage = {
     const key = safeKey(rawKey);
     try {
       await clear(key);
-      const parts: string[] = [];
-      for (let i = 0; i < value.length; i += CHUNK_SIZE) {
-        parts.push(value.slice(i, i + CHUNK_SIZE));
-      }
+      const parts = chunkByBytes(value, CHUNK_BYTES);
       await Promise.all(parts.map((part, i) => SecureStore.setItemAsync(partKey(key, i), part)));
       await SecureStore.setItemAsync(countKey(key), String(parts.length));
     } catch {

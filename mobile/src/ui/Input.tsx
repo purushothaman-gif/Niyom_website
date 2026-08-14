@@ -73,14 +73,27 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   const [reveal, setReveal] = useState(false);
   const focus = useSharedValue(0);
 
+  /*
+   * Resolved HERE, on the JS thread, and only the finished strings cross into
+   * the worklet below.
+   *
+   * `useAnimatedStyle` runs its body on the UI thread, where a plain JS
+   * function does not exist. Calling `p.accent.tint(...)` inside it threw and
+   * took the whole app down — and because that call sat behind a
+   * `focus.value > 0.5` branch it never ran until a field was focused, so the
+   * app looked fine until the first tap on the PAN box.
+   *
+   * The rule this encodes: a worklet may close over VALUES, never over
+   * functions from outside Reanimated.
+   */
+  const idleBorder = error ? p.state.danger : p.border.DEFAULT;
+  const activeBorder = error ? p.state.danger : p.accent.DEFAULT;
+  // A ring rather than a thicker border: growing the border would reflow the
+  // field by a pixel on every focus, which reads as a twitch.
+  const focusRing = `0px 0px 0px 3px ${p.accent.tint(0.16)}`;
+
   const borderStyle = useAnimatedStyle(() => ({
-    borderColor: error
-      ? p.state.danger
-      : interpolateColor(focus.value, [0, 1], [p.border.DEFAULT, p.accent.DEFAULT]),
-    // A ring rather than a thicker border: growing the border would reflow the
-    // field by a pixel on every focus, which reads as a twitch.
-    boxShadow:
-      focus.value > 0.5 && !error ? `0px 0px 0px 3px ${p.accent.tint(0.16)}` : '0px 0px 0px 0px transparent',
+    borderColor: interpolateColor(focus.value, [0, 1], [idleBorder, activeBorder]),
   }));
 
   const keyboardType: TextInputProps['keyboardType'] =
@@ -110,6 +123,10 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
             paddingVertical: multilineHeight ? space[3] : 0,
           },
           borderStyle,
+          // Driven by React state, not by the worklet — a shadow is not a prop
+          // Reanimated can interpolate anyway, so there is nothing to gain by
+          // moving it back onto the UI thread.
+          focused && !error ? { boxShadow: focusRing } : null,
         ]}
       >
         {Icon ? (

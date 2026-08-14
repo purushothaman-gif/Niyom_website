@@ -25,6 +25,7 @@ import { useClientSnapshot } from '@shared/portal/hooks/useClientSnapshot';
 import { radius, space } from '@/design/tokens';
 import { usePalette, useTheme } from '@/design/ThemeProvider';
 import { useClientId } from '@/features/auth/AuthContext';
+import { SetPinPrompt } from '@/features/client/SetPinPrompt';
 import { Screen } from '@/ui/Screen';
 import { Card } from '@/ui/Card';
 import { Text } from '@/ui/Text';
@@ -220,6 +221,7 @@ export default function Dashboard() {
           </View>
         </View>
       ) : null}
+      <SetPinPrompt surface="client" id={clientId} />
     </Screen>
   );
 }
