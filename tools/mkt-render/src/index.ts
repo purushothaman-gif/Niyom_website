@@ -16,6 +16,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { extensionFor, openSession, type RenderedAsset, type RenderSpec } from './renderer.ts';
+import { isContentGone } from './classifyError.ts';
 
 /* Every rendered asset is also written here and uploaded as a workflow
  * artifact. That is what makes it possible to eyeball a morning's output, and
@@ -221,7 +222,7 @@ async function main() {
         // be rendered is irrecoverable, not a render failure — record it but do
         // not fail the CI job (a render gap after downtime would otherwise turn
         // every catch-up run red). Genuine render errors still count and fail.
-        const contentGone = /expired|swept|no longer exist|been deleted|not found/i.test(message);
+        const contentGone = isContentGone(message);
         if (contentGone) {
           skipped++;
           console.warn(`[render] ${label} SKIPPED — content unavailable: ${message}`);

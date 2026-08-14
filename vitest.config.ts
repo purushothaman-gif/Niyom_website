@@ -38,6 +38,12 @@ export default defineConfig({
       'shared/**/*.test.ts',
       'server/bse-proxy/src/**/*.test.ts',
       /*
+       * The render worker was uncovered until its error classifier turned out
+       * to decide whether the CI job may exit zero — a loose match there
+       * reports success on a run that rendered nothing.
+       */
+      'tools/mkt-render/src/**/*.test.ts',
+      /*
        * Recursive on purpose. This was `_shared/*.test.ts` — top level only —
        * which is a trap rather than an oversight: moving the CAS parser's ~120
        * tests into `_shared/cas/` would not have failed, it would have stopped
