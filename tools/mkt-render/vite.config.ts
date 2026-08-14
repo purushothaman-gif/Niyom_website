@@ -34,6 +34,24 @@ function brandIdent(): Plugin {
  */
 export default defineConfig({
   root: resolve(here, 'harness'),
+
+  /*
+   * Stop Vite searching UPWARDS for a PostCSS config.
+   *
+   * The harness has none of its own and uses no Tailwind, so the search walked
+   * out of this sub-project and found the WEBSITE's `postcss.config.js` at the
+   * repo root — which loads `tailwindcss` and `autoprefixer`. That resolves on
+   * a dev machine, where the root `node_modules` is present, and fails in CI,
+   * where the workflow runs `npm ci` only inside tools/mkt-render:
+   *
+   *     [vite:css] Failed to load PostCSS config …
+   *     Loading PostCSS Plugin failed: Cannot find module 'tailwindcss'
+   *
+   * An empty inline config is the fix rather than adding tailwindcss here: the
+   * harness genuinely does not use it, and a dependency added only to satisfy a
+   * config it never wanted is the kind of thing nobody dares remove later.
+   */
+  css: { postcss: {} },
   publicDir: false,
   plugins: [brandIdent()],
   build: {
