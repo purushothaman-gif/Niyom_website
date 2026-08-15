@@ -83,7 +83,12 @@ jobs:
       - name: Render
         working-directory: tools/mkt-render
         env:
+          # Optional: the worker defaults to the production project URL, which is
+          # not a secret and is hardcoded in the cron migrations too. Set this
+          # variable only to point a run at a different project.
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          # Required. A repository SECRET, not a variable — they live on
+          # different tabs and the distinction has already cost one failed run.
           MKT_RENDER_SECRET: ${{ secrets.MKT_RENDER_SECRET }}
           RUN_DATE: ${{ inputs.run_date }}
           DRY_RUN: ${{ inputs.dry_run }}

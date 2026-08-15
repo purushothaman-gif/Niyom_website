@@ -23,10 +23,20 @@ import { isContentGone } from './classifyError.ts';
  * to pixel-compare the worker against a studio render without a database. */
 const outDir = resolve(dirname(fileURLToPath(import.meta.url)), '../out');
 
-const FUNCTIONS_URL = process.env.SUPABASE_URL
-  ? `${process.env.SUPABASE_URL.replace(/\/$/, '')}/functions/v1`
-  : '';
-const SECRET = process.env.MKT_RENDER_SECRET ?? '';
+/*
+ * The project URL is not a secret — it is hardcoded in the cron migrations too,
+ * with a comment saying exactly that. Defaulting it here removes a whole class
+ * of setup failure: it was previously supplied as a GitHub *variable*, which
+ * lives on a different settings tab from secrets, and a workflow that has the
+ * secret but not the variable fails in the worker's first line for a reason the
+ * name does not make obvious. The env var still overrides, for pointing a local
+ * run at a branch project.
+ */
+const DEFAULT_SUPABASE_URL = 'https://jlmwazuwjnhoqqloyeoj.supabase.co';
+
+const SUPABASE_URL = (process.env.SUPABASE_URL?.trim() || DEFAULT_SUPABASE_URL).replace(/\/$/, '');
+const FUNCTIONS_URL = `${SUPABASE_URL}/functions/v1`;
+const SECRET = process.env.MKT_RENDER_SECRET?.trim() ?? '';
 const RUN_DATE = process.env.RUN_DATE?.trim() || undefined;
 const DRY_RUN = process.env.DRY_RUN === 'true';
 
@@ -100,8 +110,22 @@ function specFor(item: ClaimItem): RenderSpec {
 }
 
 async function main() {
-  if (!FUNCTIONS_URL) throw new Error('SUPABASE_URL is not set');
-  if (!SECRET) throw new Error('MKT_RENDER_SECRET is not set');
+  /*
+   * Say what is configured before doing anything. The first CI run failed in
+   * this pre-flight and the step name ("Render") gave no hint which of several
+   * inputs was missing; one line of context turns that into a five-second
+   * diagnosis. The secret is reported only as present/absent and by length.
+   */
+  log(`target ${SUPABASE_URL}`);
+  log(`secret ${SECRET ? `present (${SECRET.length} chars)` : 'MISSING'}`);
+
+  if (!SECRET) {
+    throw new Error(
+      'MKT_RENDER_SECRET is not set. Add it as a repository SECRET (Settings → ' +
+      'Secrets and variables → Actions → Secrets), matching the MKT_RENDER_SECRET ' +
+      'Supabase function secret.',
+    );
+  }
 
   const session = await openSession(m => log(m));
   let failures = 0;
