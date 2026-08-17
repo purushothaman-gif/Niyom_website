@@ -2,6 +2,8 @@ import { X, ArrowLeft } from 'lucide-react';
 import { ReactNode } from 'react';
 
 interface LegalDocumentLayoutProps {
+  /** Defaults to the site-wide date; pass one for a newer document. */
+  effectiveDate?: string;
   title: string;
   subtitle?: string;
   icon?: ReactNode;
@@ -9,7 +11,17 @@ interface LegalDocumentLayoutProps {
   children: ReactNode;
 }
 
-export function LegalDocumentLayout({ title, subtitle, icon, onClose, children }: LegalDocumentLayoutProps) {
+export function LegalDocumentLayout({
+  title,
+  subtitle,
+  icon,
+  onClose,
+  children,
+  /* The site-wide legal effective date. Overridden only by documents published
+   * later than it — a page dated before the thing it describes existed reads as
+   * boilerplate, and a Play reviewer reads this one closely. */
+  effectiveDate = 'February 13, 2026',
+}: LegalDocumentLayoutProps) {
   return (
     <div className="min-h-screen bg-bg-base">
       <div className="sticky top-0 z-50 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white shadow-2xl border-b border-slate-700">
@@ -49,7 +61,7 @@ export function LegalDocumentLayout({ title, subtitle, icon, onClose, children }
             </div>
             <div className="flex items-center gap-2 text-sm">
               <span className="font-semibold text-text-secondary uppercase tracking-wider">Effective Date:</span>
-              <span className="text-text-secondary">February 13, 2026</span>
+              <span className="text-text-secondary">{effectiveDate}</span>
             </div>
           </div>
 

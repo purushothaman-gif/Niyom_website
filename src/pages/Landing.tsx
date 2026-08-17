@@ -639,6 +639,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                 <li><button onClick={() => onNavigate('terms')} className="hover:text-accent-soft transition-colors text-left">Terms of Use</button></li>
                 <li><button onClick={() => onNavigate('risk')} className="hover:text-accent-soft transition-colors text-left">Risk Disclosure</button></li>
                 <li><button onClick={() => onNavigate('disclaimer')} className="hover:text-accent-soft transition-colors text-left">Disclaimer</button></li>
+                <li><button onClick={() => onNavigate('accountDeletion')} className="hover:text-accent-soft transition-colors text-left">Delete Your Account</button></li>
               </ul>
             </div>
 
