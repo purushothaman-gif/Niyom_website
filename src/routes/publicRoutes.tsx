@@ -22,6 +22,7 @@ import { PrivacyPolicy } from '../pages/PrivacyPolicy';
 import { TermsOfUse } from '../pages/TermsOfUse';
 import { RiskDisclaimer } from '../pages/RiskDisclaimer';
 import { Disclaimer } from '../pages/Disclaimer';
+import { AccountDeletion } from '../pages/AccountDeletion';
 
 /** The public CTAs open the client portal login in a new tab (unchanged behaviour). */
 const openSignUp = () => window.open('/onboarding', '_blank');
@@ -35,6 +36,7 @@ const PAGE_TO_PATH: Record<string, string> = {
   terms: '/terms',
   risk: '/risk',
   disclaimer: '/disclaimer',
+  accountDeletion: '/account-deletion',
 };
 
 export interface RouteMeta {
@@ -146,6 +148,22 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
     },
     sitemap: { changefreq: 'yearly', priority: '0.3' },
     render: (navigate) => <PrivacyPolicy onClose={() => navigate('/')} />,
+  },
+  {
+    path: '/account-deletion',
+    meta: {
+      title: `Delete Your Account — ${BRAND}`,
+      description:
+        'How to request deletion of your Niyom Wealth account and personal data, what is erased, and which records Indian law requires us to retain.',
+      label: 'Delete Your Account',
+    },
+    /*
+     * Indexed on purpose. Google Play requires this URL to be publicly
+     * reachable without a login or the app installed, and reviewers check it
+     * by opening it cold.
+     */
+    sitemap: { changefreq: 'yearly', priority: '0.3' },
+    render: (navigate) => <AccountDeletion onClose={() => navigate('/')} />,
   },
   {
     path: '/terms',
