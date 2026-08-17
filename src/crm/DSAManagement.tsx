@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWDSA } from './types';
+import { PartnerOnboardLinks } from './PartnerOnboardLinks';
 import { isPasswordStrong, passwordChecks, passwordError } from '../lib/passwordPolicy';
 import {
   Handshake, Plus, X, Upload, CheckCircle2, AlertCircle,
@@ -439,6 +440,9 @@ export default function DSAManagement({ employee }: Props) {
           <Plus className="w-4 h-4" /> New DSA
         </button>
       </div>
+
+      {/* Partner self-onboarding links (copy-paste) */}
+      <PartnerOnboardLinks employee={employee} />
 
       {/* Feedback */}
       {success && (
