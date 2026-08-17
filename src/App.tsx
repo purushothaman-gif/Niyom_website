@@ -22,6 +22,7 @@ const PartnerLogin = lazy(() => import('./pages/PartnerLogin'));
 const PartnerChangePassword = lazy(() => import('./pages/PartnerChangePassword'));
 const PartnerPortal = lazy(() => import('./pages/PartnerPortal'));
 const PublicOnboarding = lazy(() => import('./pages/PublicOnboarding'));
+const PartnerOnboarding = lazy(() => import('./pages/PartnerOnboarding'));
 const ClientResetPassword = lazy(() => import('./pages/ClientResetPassword'));
 const PublicDealView = lazy(() => import('./pages/PublicDealView'));
 const PublicDebitNoteView = lazy(() => import('./pages/PublicDebitNoteView'));
@@ -281,6 +282,18 @@ function OnboardingRoute() {
   );
 }
 
+/** Public partner self-onboarding: /partner-onboarding?ref=<partner link code>. */
+function PartnerOnboardingRoute() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  return (
+    <PartnerOnboarding
+      onBack={() => navigate('/partner-login')}
+      refCode={searchParams.get('ref')}
+    />
+  );
+}
+
 /** Public, unauthenticated secure link: /deal/<token>. */
 function DealRoute() {
   const { token } = useParams();
@@ -344,6 +357,7 @@ function AppContent() {
           <Route path="/client-login" element={<ClientLoginRoute />} />
           <Route path="/client-reset-password" element={<ClientResetPassword />} />
           <Route path="/partner-login" element={<PartnerLoginRoute />} />
+          <Route path="/partner-onboarding" element={<PartnerOnboardingRoute />} />
           <Route path="/onboarding" element={<OnboardingRoute />} />
           <Route path="/crm/*" element={<CRM />} />
           <Route path="/mf-admin" element={<MfAdminApp />} />

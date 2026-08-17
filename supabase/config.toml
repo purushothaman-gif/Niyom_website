@@ -510,6 +510,15 @@ verify_jwt = false
 [functions.reset-partner-password-with-otp]
 verify_jwt = false
 
+# Partner (DSA) self-onboarding — public, pre-session (same posture as the
+# public-onboard-* client flow). Creates a DSA + login mapped to the referral
+# link's employee, then OTP-verifies.
+[functions.public-partner-onboard-start]
+verify_jwt = false
+
+[functions.public-partner-onboard-verify]
+verify_jwt = false
+
 # Device-PIN quick-login. *-pin-login are public (run before any session). The
 # *-pin-set functions verify the caller's own bearer token inside so they can
 # return spoken errors ("PIN too easy") instead of a bare 401. employee-pin-*

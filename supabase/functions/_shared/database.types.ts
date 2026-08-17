@@ -6747,6 +6747,7 @@ export type Database = {
         Returns: undefined
       }
       nw_emp_owns_dsa: { Args: { p_dsa_id: string }; Returns: boolean }
+      nw_ensure_partner_ref_links: { Args: never; Returns: undefined }
       nw_finalize_receipt: {
         Args: {
           p_generated_by: string
