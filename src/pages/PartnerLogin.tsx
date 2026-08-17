@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { partnerSupabase as supabase } from '../lib/supabase';
-import { Lock, Eye, EyeOff, ArrowRight, AlertTriangle, CreditCard, Home, ChevronLeft, Mail, CheckCircle2, KeyRound, Sparkles } from 'lucide-react';
+import { Lock, Eye, EyeOff, ArrowRight, AlertTriangle, CreditCard, Home, ChevronLeft, Mail, CheckCircle2, KeyRound, Handshake } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
 import { PinInput } from '../components/PinInput';
 import { passwordChecks, passwordError } from '../lib/passwordPolicy';
 import { getDeviceId, listSurfaceProfiles, removeSurfaceProfile, type SurfaceProfile } from '../lib/pinDevice';
-import { DEMO_DSA_ID, DEMO_PAN, DEMO_PASSWORD, isDemoCredentials, startDemoSession } from '../partner/demo/demoData';
+import { DEMO_DSA_ID, isDemoCredentials, startDemoSession } from '../partner/demo/demoData';
 
 interface Props {
   onLogin: (dsaId: string, passwordChanged: boolean) => void;
@@ -501,26 +501,24 @@ export default function PartnerLogin({ onLogin }: Props) {
                 </button>
               )}
 
-              {/* Sample portal. One click fills the published demo credentials
-                  and signs in against built-in fixtures — no account exists
-                  behind them, so nothing real is reachable this way. */}
+              {/* Become a partner — company-direct self-onboarding. No ref code, so
+                  public-partner-onboard-start maps the signup to the house account. */}
               <div className="rounded-xl p-4" style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
                 <div className="flex items-start gap-3">
-                  <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+                  <Handshake className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-text-primary">Not a partner yet?</p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                      Explore a sample portal with made-up clients and earnings — see exactly
-                      what you would get.
+                      Join Niyom Wealth as a distribution partner. Register in a few minutes,
+                      then start sourcing clients and earning payouts.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => { setPan(DEMO_PAN); setPassword(DEMO_PASSWORD); setError(''); }}
+                    <a
+                      href="/partner-onboarding"
                       className="mt-2.5 text-xs font-semibold inline-flex items-center gap-1.5"
                       style={{ color: 'var(--accent)' }}
                     >
-                      Fill demo credentials <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                      Become a Partner <ArrowRight className="w-3.5 h-3.5" />
+                    </a>
                   </div>
                 </div>
               </div>
