@@ -57,6 +57,17 @@ const inrShort = (n: number): string => {
   return `${sign}₹${a.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 };
 
+// Names are clipped HERE rather than with CSS `text-overflow:ellipsis`.
+// html2canvas derives an `overflow:hidden` element's clip box from its
+// line-height and rounds it down, which sheared the top off every name in the
+// rasterised PNG while the same markup rendered fine in the browser. No
+// overflow/ellipsis on a text node anywhere on this card, therefore — and an
+// explicit px line-height rather than a ratio, so nothing has to be rounded.
+const clipName = (name: string, max = 26): string => {
+  const n = name.trim();
+  return n.length > max ? n.slice(0, max - 1).trimEnd() + '…' : n;
+};
+
 const initials = (name: string): string =>
   name.trim().split(/\s+/).slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase() || '?';
 
@@ -99,7 +110,7 @@ export function buildTeamRevenueCardHtml(o: TeamRevenueImageOptions): string {
       <div style="width:30px;flex-shrink:0;font-size:17px;font-weight:800;color:${lead ? gold : '#7f8ea8'};text-align:center;">${i + 1}</div>
       <div style="width:46px;height:46px;flex-shrink:0;border-radius:50%;background:${lead ? `linear-gradient(135deg,${gold},#F2DB99)` : 'rgba(255,255,255,0.08)'};border:1px solid ${lead ? gold : 'rgba(255,255,255,0.14)'};display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${lead ? '#12294d' : '#c8d4e8'};">${esc(initials(e.full_name))}</div>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:19px;font-weight:700;color:${white};line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(e.full_name)}</div>
+        <div style="font-size:19px;font-weight:700;color:${white};line-height:26px;white-space:nowrap;">${esc(clipName(e.full_name))}</div>
         <div style="font-size:11.5px;color:#8fa0bd;margin-top:2px;">${esc(e.designation || 'Relationship Manager')} &nbsp;·&nbsp; ${esc(e.employee_code)}</div>
         <div style="margin-top:7px;height:7px;border-radius:4px;background:rgba(255,255,255,0.07);overflow:hidden;">
           <div style="height:7px;width:${width.toFixed(1)}%;border-radius:4px;background:${barCol};"></div>
@@ -169,8 +180,13 @@ export function buildTeamRevenueCardHtml(o: TeamRevenueImageOptions): string {
   </div>`;
 }
 
-/** Renders the card offscreen and triggers a PNG download. */
-export async function generateTeamRevenueImage(o: TeamRevenueImageOptions): Promise<void> {
+/**
+ * Rasterises the card and returns it as a PNG data URL.
+ * Split out from the download so the exact bytes a user receives can be
+ * rendered and inspected — the browser and html2canvas do NOT agree about
+ * every style, so checking the markup alone is not checking the image.
+ */
+export async function renderTeamRevenueCardPng(o: TeamRevenueImageOptions): Promise<string> {
   const holder = document.createElement('div');
   holder.style.cssText = 'position:fixed;left:-10000px;top:0;';
   holder.innerHTML = buildTeamRevenueCardHtml(o);
@@ -181,9 +197,14 @@ export async function generateTeamRevenueImage(o: TeamRevenueImageOptions): Prom
     const canvas = await html2canvas(node, {
       scale: 2, useCORS: true, backgroundColor: '#050c18', logging: false, windowWidth: 900,
     });
-    const file = `Niyom_Team_Revenue_${o.monthLabel.replace(/\s+/g, '_')}.png`;
-    download(canvas.toDataURL('image/png'), file);
+    return canvas.toDataURL('image/png');
   } finally {
     document.body.removeChild(holder);
   }
+}
+
+/** Renders the card and triggers a PNG download. */
+export async function generateTeamRevenueImage(o: TeamRevenueImageOptions): Promise<void> {
+  const dataUrl = await renderTeamRevenueCardPng(o);
+  download(dataUrl, `Niyom_Team_Revenue_${o.monthLabel.replace(/\s+/g, '_')}.png`);
 }
