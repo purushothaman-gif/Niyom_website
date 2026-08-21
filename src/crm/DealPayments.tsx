@@ -43,6 +43,10 @@ const MODE_LABEL: Record<PaymentMode, string> =
 interface DealBrief {
   id: string;
   client_id: string;
+  // 'Buy' | 'Sell', from the deal's own transaction_type. On a Sell the client
+  // is the seller and Niyom is the buyer, so the money moves the other way —
+  // see DIRECTION COPY below.
+  transaction_type: string;
   confirmation_number: string;
   snap_client_name: string;
   snap_pan: string;
@@ -141,10 +145,95 @@ const STATUS_STYLES: Record<PaymentStatus, { label: string; bg: string; color: s
   over_paid:      { label: 'Over Paid',      bg: 'rgba(239,68,68,0.10)',   color: 'var(--danger)',         border: 'rgba(239,68,68,0.25)' },
 };
 
-function StatusPill({ status }: { status: PaymentStatus }) {
+// ---------------------------------------------------------------------------
+// Direction copy
+//
+// A Buy deal collects money FROM the client. A Sell deal is the exact mirror:
+// the client is the seller, Niyom is the buyer, and Niyom pays THEM to have the
+// shares transferred to us. The ledger arithmetic is identical either way —
+// every entry settles part of the same settlement_amount — but the collection
+// words ('received', 'outstanding') and, more importantly, the collection
+// ACTIONS (a Cashfree collect link, a 'your payment is pending' reminder) are
+// wrong on a Sell. Both are switched off the deal's transaction_type below.
+// ---------------------------------------------------------------------------
+
+interface DirectionCopy {
+  ledgerTitle:           string;
+  recordCta:             string;   // header button + form submit
+  formTitle:             string;
+  correctTitle:          string;
+  totalLabel:            string;   // summary card
+  outstandingLabel:      string;   // summary card
+  counterpartyNameLabel: string;   // received_from_name
+  counterpartyBankLabel: string;   // received_from_bank
+  counterpartyBankHint:  string;
+  counterpartyColumn:    string;   // ledger column header
+  docColumn:             string;   // Receipt / Advice column header
+  generateCta:           string;
+  regenerateTitle:       string;
+  emailTitle:            string;
+  emailDisabledHint:     string;
+  recordedToast:         string;
+  emptyTitle:            string;
+  emptyHint:             string;
+  statusLabel:           Record<PaymentStatus, string>;
+}
+
+const COLLECT_COPY: DirectionCopy = {
+  ledgerTitle:           'Payment Ledger',
+  recordCta:             'Record Payment',
+  formTitle:             'Record Payment',
+  correctTitle:          'Correct Payment',
+  totalLabel:            'Total Paid',
+  outstandingLabel:      'Outstanding',
+  counterpartyNameLabel: 'Received From (Name)',
+  counterpartyBankLabel: 'Payer Bank',
+  counterpartyBankHint:  'Defaults to the client\u2019s primary bank; switch if paid from another.',
+  counterpartyColumn:    'Received From',
+  docColumn:             'Receipt',
+  generateCta:           'Generate Receipt',
+  regenerateTitle:       'Regenerate the receipt',
+  emailTitle:            'Send receipt to client',
+  emailDisabledHint:     'Generate the receipt first.',
+  recordedToast:         'Payment recorded successfully.',
+  emptyTitle:            'No payments recorded yet.',
+  emptyHint:             'Record the first payment to begin the receipt ledger.',
+  statusLabel: {
+    not_paid: 'Not Paid', partially_paid: 'Partially Paid',
+    fully_paid: 'Fully Paid', over_paid: 'Over Paid',
+  },
+};
+
+const PAYOUT_COPY: DirectionCopy = {
+  ledgerTitle:           'Payout Ledger',
+  recordCta:             'Record Payout',
+  formTitle:             'Record Payout',
+  correctTitle:          'Correct Payout',
+  totalLabel:            'Total Paid Out',
+  outstandingLabel:      'Balance Payable',
+  counterpartyNameLabel: 'Paid To (Name)',
+  counterpartyBankLabel: 'Beneficiary Bank',
+  counterpartyBankHint:  'Defaults to the client\u2019s primary bank; switch if paid to another.',
+  counterpartyColumn:    'Paid To',
+  docColumn:             'Advice',
+  generateCta:           'Generate Advice',
+  regenerateTitle:       'Regenerate the payment advice',
+  emailTitle:            'Send payment advice to client',
+  emailDisabledHint:     'Generate the payment advice first.',
+  recordedToast:         'Payout recorded successfully.',
+  emptyTitle:            'No payouts recorded yet.',
+  emptyHint:             'Record the first payout to begin the advice ledger.',
+  statusLabel: {
+    not_paid: 'Not Paid Out', partially_paid: 'Partially Paid Out',
+    fully_paid: 'Fully Paid Out', over_paid: 'Over Paid',
+  },
+};
+
+function StatusPill({ status, copy }: { status: PaymentStatus; copy: DirectionCopy }) {
   // Fall back rather than crash: a status the DB view gains before this file
   // knows about it should degrade to a plain pill, never blank the page.
   const s = STATUS_STYLES[status] ?? STATUS_STYLES.not_paid;
+  const label = copy.statusLabel[status] ?? copy.statusLabel.not_paid;
   return (
     <span
       className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg uppercase tracking-wider"
@@ -152,7 +241,7 @@ function StatusPill({ status }: { status: PaymentStatus }) {
     >
       {status === 'fully_paid' && <CheckCircle2 className="w-3.5 h-3.5" />}
       {status === 'partially_paid' && <AlertCircle className="w-3.5 h-3.5" />}
-      {s.label}
+      {label}
     </span>
   );
 }
@@ -270,6 +359,10 @@ const formFromPayment = (p: PaymentRow): PaymentForm => ({
 
 export default function DealPayments({ deal, employee, onBack }: Props) {
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
+  // Sell = client sells to us, so WE pay THEM. Everything collection-shaped is
+  // relabelled, and the two collect-only actions are withdrawn entirely.
+  const isPayout = (deal.transaction_type || '').trim().toLowerCase() === 'sell';
+  const t = isPayout ? PAYOUT_COPY : COLLECT_COPY;
 
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -445,7 +538,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
       if (fnErr || !data?.success) {
         throw new Error(await edgeFunctionErrorMessage(fnErr, data, 'Could not record payment.'));
       }
-      showToast('Payment recorded successfully.');
+      showToast(t.recordedToast);
       setForm(emptyForm(deal.snap_client_name, defaultBank));
       setShowForm(false);
       await load();
@@ -508,7 +601,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
   const previewOpen = async (path: string) => {
     const { data, error: err } = await supabase.storage.from('deal-documents')
       .createSignedUrl(path, 120);
-    if (err || !data?.signedUrl) { showToast('Could not open receipt.', false); return; }
+    if (err || !data?.signedUrl) { showToast(`Could not open ${isPayout ? 'payment advice' : 'receipt'}.`, false); return; }
     window.open(data.signedUrl, '_blank');
   };
 
@@ -549,6 +642,9 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
       : employee.role === 'super_admin' ? 'Super Admin'
       : 'Relationship Manager',
     issuedAt: new Date(),
+    // A payout cannot be acknowledged as money we received — the PDF renders
+    // as a Payment Advice instead of a Payment Receipt.
+    payout: isPayout,
   });
 
   const generateOrRegenerate = async (p: PaymentRow) => {
@@ -583,11 +679,12 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         });
       }
 
-      showToast(p.receipt_number ? 'Receipt regenerated.' : 'Receipt generated.');
+      const docNoun = isPayout ? 'Payment advice' : 'Receipt';
+      showToast(p.receipt_number ? `${docNoun} regenerated.` : `${docNoun} generated.`);
       await load();
       if (data.signed_url) window.open(data.signed_url, '_blank');
     } catch (err: any) {
-      showToast(err?.message || 'Could not generate receipt.', false);
+      showToast(err?.message || `Could not generate ${isPayout ? 'the payment advice' : 'receipt'}.`, false);
     } finally {
       setReceiptBusyId(null);
     }
@@ -647,14 +744,15 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         throw new Error(await edgeFunctionErrorMessage(fnErr, data, 'Could not send receipt.'));
       }
       const type = data.email_type as string;
+      const doc  = isPayout ? 'payment advice' : 'receipt';
       showToast(
-        type === 'payment_final' ? 'Full-payment receipt sent to client.'
-        : type === 'payment_partial' ? 'Partial-payment receipt sent to client.'
+        type === 'payment_final' ? `Full-settlement ${doc} sent to client.`
+        : type === 'payment_partial' ? `Part-settlement ${doc} sent to client.`
         : 'Email sent to client.'
       );
       await load();
     } catch (err: any) {
-      showToast(err?.message || 'Could not send receipt.', false);
+      showToast(err?.message || `Could not send ${isPayout ? 'the payment advice' : 'receipt'}.`, false);
     } finally {
       setEmailBusy(null);
     }
@@ -713,7 +811,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent"
             style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
           >
-            <Plus className="w-4 h-4" /> Record Payment
+            <Plus className="w-4 h-4" /> {t.recordCta}
           </button>
         )}
       </div>
@@ -721,7 +819,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
       {/* Title */}
       <div>
         <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'var(--accent)' }}>
-          Payment Ledger
+          {t.ledgerTitle}
         </p>
         <h1 className="text-xl font-bold text-text-primary">
           {deal.confirmation_number} — {deal.snap_client_name}
@@ -733,10 +831,10 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <SummaryCard icon={<Receipt className="w-4 h-4" />} label="Deal Amount" value={inr(summary.deal_amount)} />
-          <SummaryCard icon={<IndianRupee className="w-4 h-4" />} label="Total Paid" value={inr(summary.total_paid_amount)} tone="success" />
+          <SummaryCard icon={<IndianRupee className="w-4 h-4" />} label={t.totalLabel} value={inr(summary.total_paid_amount)} tone="success" />
           <SummaryCard
             icon={<Wallet className="w-4 h-4" />}
-            label="Outstanding"
+            label={t.outstandingLabel}
             value={inr(summary.outstanding_amount)}
             tone={summary.outstanding_amount > 0 ? 'warning' : summary.outstanding_amount < 0 ? 'danger' : 'success'}
           />
@@ -746,7 +844,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
           >
             <div>
               <p className="text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Status</p>
-              <StatusPill status={summary.payment_status} />
+              <StatusPill status={summary.payment_status} copy={t} />
             </div>
           </div>
         </div>
@@ -761,23 +859,40 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         >
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <span>
-            An excess of <strong>{inr(Math.abs(summary.outstanding_amount))}</strong> has been recorded against this deal.
-            Consider recording a refund entry once processed.
+            {isPayout ? (
+              <>
+                An excess payout of <strong>{inr(Math.abs(summary.outstanding_amount))}</strong> has been recorded
+                against this deal. Recover it from the client and record an adjusting entry once settled.
+              </>
+            ) : (
+              <>
+                An excess of <strong>{inr(Math.abs(summary.outstanding_amount))}</strong> has been recorded against this deal.
+                Consider recording a refund entry once processed.
+              </>
+            )}
           </span>
         </div>
       )}
 
-      {/* Payment reminder — only when nothing has been received */}
+      {/* Payment reminder — only when nothing has been received. A reminder
+          asks the CLIENT to pay us, so it belongs to a Buy deal only; on a Sell
+          the money is owed by us and the RM gets a plain prompt instead. */}
       {summary?.payment_status === 'not_paid' && (
-        <ReminderCard
-          lastSentAt={emailLog.find(e => e.email_type === 'payment_reminder' && e.status === 'sent')?.sent_at ?? null}
-          busy={emailBusy === 'reminder'}
-          onSend={() => sendReminder()}
-        />
+        isPayout ? (
+          <PayoutPendingCard amount={summary.outstanding_amount} />
+        ) : (
+          <ReminderCard
+            lastSentAt={emailLog.find(e => e.email_type === 'payment_reminder' && e.status === 'sent')?.sent_at ?? null}
+            busy={emailBusy === 'reminder'}
+            onSend={() => sendReminder()}
+          />
+        )
       )}
 
-      {/* Send Payment Link — available while any balance is outstanding */}
-      {summary && summary.outstanding_amount > 0 && (
+      {/* Send Payment Link — collect-only. A Cashfree link charges the client;
+          on a Sell we owe them, so there is nothing to collect and the card is
+          withdrawn (send-payment-link refuses Sell deals server-side too). */}
+      {!isPayout && summary && summary.outstanding_amount > 0 && (
         <PaymentLinkCard
           amount={summary.outstanding_amount}
           lastSentAt={emailLog.find(e => e.email_type === 'payment_link' && e.status === 'sent')?.sent_at ?? null}
@@ -794,7 +909,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
         >
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>
-              {editing ? `Correct Payment — ${editing.payment_number}` : 'Record Payment'}
+              {editing ? `${t.correctTitle} — ${editing.payment_number}` : t.formTitle}
             </h2>
             <button
               onClick={closeForm}
@@ -825,8 +940,9 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
               )}
               {editing.receipt_pdf_path && (
                 <p className="mt-1 text-xs" style={{ color: 'var(--warning)' }}>
-                  A receipt has already been issued for this payment. Regenerate it after saving,
-                  and re-send it if the client received the old one.
+                  {isPayout
+                    ? 'A payment advice has already been issued for this payout. Regenerate it after saving, and re-send it if the client received the old one.'
+                    : 'A receipt has already been issued for this payment. Regenerate it after saving, and re-send it if the client received the old one.'}
                 </p>
               )}
             </div>
@@ -895,12 +1011,16 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
               </Field>
             )}
 
-            <Field label="Received From (Name)">
-              <Input value={form.receivedFromName} onChange={e => set('receivedFromName', e.target.value)} placeholder="Payer name" />
+            <Field label={t.counterpartyNameLabel}>
+              <Input
+                value={form.receivedFromName}
+                onChange={e => set('receivedFromName', e.target.value)}
+                placeholder={isPayout ? 'Beneficiary name' : 'Payer name'}
+              />
             </Field>
             <Field
-              label="Payer Bank"
-              hint={bankAccounts.length > 1 ? 'Defaults to the client’s primary bank; switch if paid from another.' : undefined}
+              label={t.counterpartyBankLabel}
+              hint={bankAccounts.length > 1 ? t.counterpartyBankHint : undefined}
             >
               {bankAccounts.length > 1 ? (
                 <Select value={form.receivedFromBank} onChange={e => set('receivedFromBank', e.target.value)}>
@@ -953,7 +1073,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
             >
               {saving
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> {editing ? 'Saving…' : 'Recording…'}</>
-                : <>{editing ? 'Save Correction' : 'Record Payment'}</>}
+                : <>{editing ? 'Save Correction' : t.recordCta}</>}
             </button>
           </div>
         </div>
@@ -981,10 +1101,10 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
           <div className="p-10 text-center">
             <Info className="w-6 h-6 mx-auto mb-2" style={{ color: 'var(--text-muted)' }} />
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              No payments recorded yet.
+              {t.emptyTitle}
             </p>
             <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>
-              Record the first payment to begin the receipt ledger.
+              {t.emptyHint}
             </p>
           </div>
         ) : (
@@ -996,9 +1116,9 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                   <Th>Payment #</Th>
                   <Th>Mode</Th>
                   <Th>Reference</Th>
-                  <Th>Received From</Th>
+                  <Th>{t.counterpartyColumn}</Th>
                   <Th align="right">Amount</Th>
-                  <Th>Receipt</Th>
+                  <Th>{t.docColumn}</Th>
                   <Th>Correct</Th>
                 </tr>
               </thead>
@@ -1011,8 +1131,8 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                   const stale       = isStale(p);
                   const lastEmail   = lastEmailedFor(p.id);
                   const emailDisabledReason =
-                    !hasReceipt ? 'Generate the receipt first.'
-                    : stale     ? 'Payment data has changed. Regenerate the receipt before emailing.'
+                    !hasReceipt ? t.emailDisabledHint
+                    : stale     ? `Payment data has changed. Regenerate the ${isPayout ? 'payment advice' : 'receipt'} before emailing.`
                     : null;
                   // A hand-keyed entry can be corrected by whoever can reach
                   // this ledger — the owning RM or an admin (RLS already scopes
@@ -1068,7 +1188,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                               <button
                                 onClick={() => sendReceipt(p)}
                                 disabled={!!emailDisabledReason || mailBusy}
-                                title={emailDisabledReason ?? (lastEmail ? `Resend to client (last sent ${fmtDate(lastEmail.sent_at)})` : 'Send receipt to client')}
+                                title={emailDisabledReason ?? (lastEmail ? `Resend to client (last sent ${fmtDate(lastEmail.sent_at)})` : t.emailTitle)}
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold"
                                 style={emailDisabledReason
                                   ? { background: 'var(--bg-base)', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'not-allowed', opacity: 0.6 }
@@ -1094,7 +1214,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                           >
                             {receiptBusy
                               ? <><Loader2 className="w-3 h-3 animate-spin" /> Generating…</>
-                              : <><FileText className="w-3 h-3" /> Generate Receipt</>}
+                              : <><FileText className="w-3 h-3" /> {t.generateCta}</>}
                           </button>
                         )}
                       </Td>
@@ -1141,8 +1261,8 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
       {/* Admin footnote */}
       {!isAdmin && (
         <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
-          You may record payments, correct a mis-keyed entry, and view the ledger for deals you own.
-          Cancelling a recorded payment outright is restricted to administrators.
+          You may record {isPayout ? 'payouts' : 'payments'}, correct a mis-keyed entry, and view the ledger
+          for deals you own. Cancelling a recorded entry outright is restricted to administrators.
         </p>
       )}
 
@@ -1155,7 +1275,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                 <Ban className="w-5 h-5" style={{ color: 'var(--danger)' }} />
               </div>
               <div>
-                <p className="text-sm font-bold text-text-primary">Cancel Payment</p>
+                <p className="text-sm font-bold text-text-primary">{isPayout ? 'Cancel Payout' : 'Cancel Payment'}</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                   {cancelling.payment_number} · {inr(cancelling.amount_inr)}
                 </p>
@@ -1163,8 +1283,9 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
             </div>
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               The entry stays in the ledger marked cancelled and stops counting towards the amount
-              paid, so this deal’s outstanding balance goes back up. Use this to void a payment that
-              never happened — to fix a wrong amount, use <strong>Edit</strong> instead.
+              settled, so this deal’s {isPayout ? 'balance payable' : 'outstanding balance'} goes back up.
+              Use this to void an entry for money that never moved — to fix a wrong amount, use{' '}
+              <strong>Edit</strong> instead.
             </p>
             <Field label="Reason" required>
               <TextArea
@@ -1192,7 +1313,7 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2"
                 style={{ background: 'var(--danger)', opacity: cancelBusy ? 0.7 : 1 }}
               >
-                {cancelBusy ? <><Loader2 className="w-4 h-4 animate-spin" /> Cancelling…</> : 'Cancel Payment'}
+                {cancelBusy ? <><Loader2 className="w-4 h-4 animate-spin" /> Cancelling…</> : (isPayout ? 'Cancel Payout' : 'Cancel Payment')}
               </button>
             </div>
           </div>
@@ -1261,6 +1382,30 @@ function ReminderCard({ lastSentAt, busy, onSend }: {
           ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
           : <><Mail className="w-4 h-4" /> {lastSentAt ? 'Resend Reminder' : 'Send Payment Reminder'}</>}
       </button>
+    </div>
+  );
+}
+
+// The Sell-side counterpart of ReminderCard. There is nothing to chase the
+// client for — we owe them — so this states the position and stops there.
+function PayoutPendingCard({ amount }: { amount: number }) {
+  const inrFmt = (n: number) =>
+    '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (
+    <div
+      className="rounded-xl px-4 py-3 flex items-start gap-2"
+      style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}
+    >
+      <Bell className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'var(--warning)' }} />
+      <div>
+        <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+          No payout recorded yet
+        </p>
+        <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+          The client is the seller on this deal. {inrFmt(amount)} is payable by Niyom to their bank
+          account — record it here once the transfer is made.
+        </p>
+      </div>
     </div>
   );
 }

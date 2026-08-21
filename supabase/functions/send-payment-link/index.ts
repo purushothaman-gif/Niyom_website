@@ -123,7 +123,7 @@ Deno.serve(async (req: Request) => {
     // --- Load the deal (server-side source of truth) ---
     const { data: deal } = await db
       .from("nw_deal_confirmations")
-      .select("id, employee_id, acceptance_status, confirmation_number, snap_client_name, snap_email, snap_phone")
+      .select("id, employee_id, acceptance_status, transaction_type, confirmation_number, snap_client_name, snap_email, snap_phone")
       .eq("id", dealId)
       .maybeSingle();
     if (!deal) return json({ success: false, error: "Deal not found." }, 404);
@@ -138,6 +138,16 @@ Deno.serve(async (req: Request) => {
     // record-payment / upload-receipt / transfer-deal.
     if (deal.acceptance_status === "rejected") {
       return json({ success: false, error: "A payment link cannot be sent for a rejected deal." }, 409);
+    }
+    // On a Sell the client is the seller and Niyom is the buyer: the money is
+    // owed BY us TO them. A Cashfree link charges the client, so it would
+    // collect the settlement a second time from the wrong side of the deal.
+    // The UI already hides the card; this is the authoritative refusal.
+    if (String(deal.transaction_type ?? "").trim().toLowerCase() === "sell") {
+      return json({
+        success: false,
+        error: "This is a Sell deal — the client is the seller and Niyom is the payer. Record the payout instead of collecting from the client.",
+      }, 409);
     }
     if (!isValidEmail(deal.snap_email)) {
       return json({ success: false, error: "The client email on record is not a valid address." }, 400);

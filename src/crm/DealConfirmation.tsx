@@ -233,24 +233,39 @@ const PAYMENT_STATUS_STYLES: Record<'not_paid' | 'partially_paid' | 'fully_paid'
   over_paid:      { label: 'Over Paid',      bg: 'rgba(59,130,246,0.10)',  color: 'var(--info)' },
 };
 
+// On a Sell the client is the seller and Niyom is the buyer, so the ledger
+// tracks money going OUT to them. Same arithmetic, opposite direction — the
+// pill must not read "Not Paid" as though the client owed us. Mirrors the
+// wording in DealPayments.
+const PAYOUT_STATUS_LABEL: Record<'not_paid' | 'partially_paid' | 'fully_paid' | 'over_paid', string> = {
+  not_paid:       'Not Paid Out',
+  partially_paid: 'Partially Paid Out',
+  fully_paid:     'Fully Paid Out',
+  over_paid:      'Over Paid',
+};
+
 function PaymentStatusPill({
   summary,
+  transactionType,
   onClick,
 }: {
   summary?: { payment_status: 'not_paid' | 'partially_paid' | 'fully_paid' | 'over_paid'; outstanding_amount: number };
+  transactionType: string;
   onClick: () => void;
 }) {
   const status = summary?.payment_status ?? 'not_paid';
   const s = PAYMENT_STATUS_STYLES[status] ?? PAYMENT_STATUS_STYLES.not_paid;
+  const isPayout = (transactionType || '').trim().toLowerCase() === 'sell';
+  const label = isPayout ? (PAYOUT_STATUS_LABEL[status] ?? PAYOUT_STATUS_LABEL.not_paid) : s.label;
   return (
     <button
       onClick={onClick}
-      title="Open Manage Payments"
+      title={isPayout ? 'Open the payout ledger' : 'Open Manage Payments'}
       className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md uppercase tracking-wider transition-transform hover:scale-105"
       style={{ background: s.bg, color: s.color, border: `1px solid color-mix(in srgb, ${s.color} 20%, transparent)` }}
     >
       <Wallet className="w-3 h-3" />
-      {s.label}
+      {label}
     </button>
   );
 }
@@ -630,6 +645,9 @@ export default function DealConfirmation({ employee }: Props) {
         deal={{
           id: previewDeal.id,
           client_id: previewDeal.client_id,
+          // Drives the whole payment screen's direction: on a Sell the client
+          // is the seller and Niyom pays THEM, so the ledger is a payout.
+          transaction_type: previewDeal.transaction_type,
           confirmation_number: previewDeal.confirmation_number,
           snap_client_name: previewDeal.snap_client_name,
           snap_pan: previewDeal.snap_pan,
@@ -1057,6 +1075,7 @@ export default function DealConfirmation({ employee }: Props) {
                       ) : (
                         <PaymentStatusPill
                           summary={paySummaries[d.id]}
+                          transactionType={d.transaction_type}
                           onClick={() => { setPreviewDeal(d); setView('payments'); }}
                         />
                       )}
