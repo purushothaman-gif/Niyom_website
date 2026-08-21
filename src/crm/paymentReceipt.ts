@@ -11,6 +11,12 @@ import { NIYOM_COMPANY, amountInWords } from './dsaDebitNote';
 // it carries only ONE signature block on the right ("For Niyom Wealth").
 // There is no client signature block — that was correctly removed as part
 // of the Phase 3 business change.
+//
+// The same template serves BOTH directions. On a Sell deal the client is the
+// seller and Niyom is the buyer, so the money runs the other way: Niyom pays
+// the client. Acknowledging that as money "received" would be a false record,
+// so `payout: true` re-titles the document a Payment Advice and flips every
+// received/paid label with it. Layout, signature block and footer are shared.
 // ---------------------------------------------------------------------------
 
 const NIYOM_LOGO = '/niyomlogo.png';
@@ -101,6 +107,8 @@ export interface ReceiptRenderInput {
   generatedByName: string;
   generatedByRole: string;
   issuedAt: Date;
+  // true when Niyom is the payer (Sell deal) — renders a Payment Advice.
+  payout?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +119,13 @@ const STATUS_LABEL: Record<ReceiptSummaryContext['payment_status'], string> = {
   not_paid:       'NOT PAID',
   partially_paid: 'PARTIALLY PAID',
   fully_paid:     'FULLY PAID',
+  over_paid:      'OVER PAID',
+};
+
+const PAYOUT_STATUS_LABEL: Record<ReceiptSummaryContext['payment_status'], string> = {
+  not_paid:       'NOT PAID OUT',
+  partially_paid: 'PARTIALLY PAID OUT',
+  fully_paid:     'FULLY PAID OUT',
   over_paid:      'OVER PAID',
 };
 
@@ -144,6 +159,22 @@ function buildHtml(input: ReceiptRenderInput): string {
   const dateStr = fmtDate(issuedAt);
   const modeLabel = MODE_LABEL[payment.payment_mode] ?? payment.payment_mode;
   const excess = summary.outstanding_amount < 0 ? Math.abs(summary.outstanding_amount) : 0;
+  const payout = input.payout === true;
+
+  // Every phrase that names who paid whom. Nothing else about the document
+  // changes between the two directions.
+  const docTitle        = payout ? 'Payment Advice'   : 'Payment Receipt';
+  const docNoLabel      = payout ? 'Advice No.'       : 'Receipt No.';
+  const counterpartyHdr = payout ? 'Paid To'          : 'Received From';
+  const counterpartyAlt = payout ? 'Paid to'          : 'Paid by';
+  const viaLabel        = payout ? `Paid via ${modeLabel}` : `Received via ${modeLabel}`;
+  const totalToDateLbl  = payout ? 'Total Paid Out to Date' : 'Total Paid to Date';
+  const balanceLbl      = payout ? 'Balance Payable'  : 'Outstanding Balance';
+  const bigTotalLbl     = payout ? 'Amount Paid'      : 'Amount Received';
+  const nostroHdr       = payout ? 'Paid By (Niyom Wealth)' : 'Credited To (Niyom Wealth)';
+  const nostroRow       = payout ? 'Remitter'         : 'Beneficiary';
+  const partyHdr        = payout ? 'Beneficiary'      : 'Payer';
+  const statusLabels    = payout ? PAYOUT_STATUS_LABEL : STATUS_LABEL;
 
   return `
   <div style="width:794px;box-sizing:border-box;padding:44px 48px 36px;font-family:${SANS};color:${INK};background:#ffffff;">
@@ -157,9 +188,9 @@ function buildHtml(input: ReceiptRenderInput): string {
         <div style="font-size:9px;color:${SUB};margin-top:3px;">Email: ${NIYOM_COMPANY.email}</div>
       </div>
       <div style="text-align:right;padding-top:4px;">
-        <div style="font-family:${SERIF};font-size:30px;font-weight:700;letter-spacing:0.02em;color:${INK};line-height:1;">Payment Receipt</div>
+        <div style="font-family:${SERIF};font-size:30px;font-weight:700;letter-spacing:0.02em;color:${INK};line-height:1;">${docTitle}</div>
         <table style="border-collapse:collapse;margin-left:auto;margin-top:14px;">
-          ${metaRow('Receipt No.', payment.receipt_number)}
+          ${metaRow(docNoLabel, payment.receipt_number)}
           ${metaRow('Payment No.', payment.payment_number)}
           ${metaRow('Issued On', dateStr)}
         </table>
@@ -168,14 +199,14 @@ function buildHtml(input: ReceiptRenderInput): string {
 
     <div style="border-top:2px solid ${RULE};margin-top:20px;"></div>
 
-    <!-- Received From + Against Deal -->
+    <!-- Counterparty + Against Deal -->
     <div style="display:flex;margin-top:18px;gap:32px;">
       <div style="flex:1;">
-        <div style="${label}margin-bottom:6px;">Received From</div>
+        <div style="${label}margin-bottom:6px;">${counterpartyHdr}</div>
         <div style="font-family:${SERIF};font-size:13px;font-weight:700;color:${INK};">${deal.snap_client_name || '—'}</div>
         <div style="font-size:9.5px;color:${SUB};margin-top:2px;"><span style="color:${MUTE};">PAN:</span> ${deal.snap_pan || '—'}</div>
         ${payment.received_from_name && payment.received_from_name !== deal.snap_client_name
-          ? `<div style="font-size:9.5px;color:${SUB};margin-top:2px;"><span style="color:${MUTE};">Paid by:</span> ${payment.received_from_name}${payment.received_from_bank ? ` · ${payment.received_from_bank}` : ''}</div>`
+          ? `<div style="font-size:9.5px;color:${SUB};margin-top:2px;"><span style="color:${MUTE};">${counterpartyAlt}:</span> ${payment.received_from_name}${payment.received_from_bank ? ` · ${payment.received_from_bank}` : ''}</div>`
           : ''}
       </div>
       <div style="flex:1;">
@@ -200,7 +231,7 @@ function buildHtml(input: ReceiptRenderInput): string {
         <tr>
           <td style="padding:9px 10px;border-bottom:1px solid ${HAIR};vertical-align:top;">
             <div style="font-size:10.5px;color:${INK};font-weight:600;">${modeLabel}</div>
-            <div style="font-size:8.5px;color:${MUTE};text-transform:uppercase;letter-spacing:0.06em;margin-top:2px;">Received via ${modeLabel}</div>
+            <div style="font-size:8.5px;color:${MUTE};text-transform:uppercase;letter-spacing:0.06em;margin-top:2px;">${viaLabel}</div>
           </td>
           <td style="padding:9px 10px;border-bottom:1px solid ${HAIR};font-family:${TIMES};font-size:10px;color:${INK};vertical-align:top;">${referenceCell(payment)}</td>
           <td style="padding:9px 10px;border-bottom:1px solid ${HAIR};font-size:10px;color:${INK};text-align:right;vertical-align:top;">${fmtDate(payment.payment_date)}${payment.value_date ? `<div style="font-size:8.5px;color:${MUTE};margin-top:2px;">Value: ${fmtDate(payment.value_date)}</div>` : ''}</td>
@@ -218,15 +249,15 @@ function buildHtml(input: ReceiptRenderInput): string {
             <td style="font-family:${TIMES};font-size:14px;color:${INK};text-align:right;padding:9px 0 9px 14px;border-top:1px solid ${HAIR};font-variant-numeric:tabular-nums;">${inr(deal.settlement_amount)}</td>
           </tr>
           <tr>
-            <td style="font-family:${SANS};font-size:11px;color:${SUB};text-align:left;padding:9px 14px 9px 0;">Total Paid to Date</td>
+            <td style="font-family:${SANS};font-size:11px;color:${SUB};text-align:left;padding:9px 14px 9px 0;">${totalToDateLbl}</td>
             <td style="font-family:${TIMES};font-size:14px;color:${INK};text-align:right;padding:9px 0 9px 14px;font-variant-numeric:tabular-nums;">${inr(summary.total_paid_amount)}</td>
           </tr>
           <tr>
-            <td style="font-family:${SANS};font-size:11px;color:${SUB};text-align:left;padding:9px 14px 9px 0;border-bottom:1px solid ${HAIR};">Outstanding Balance</td>
+            <td style="font-family:${SANS};font-size:11px;color:${SUB};text-align:left;padding:9px 14px 9px 0;border-bottom:1px solid ${HAIR};">${balanceLbl}</td>
             <td style="font-family:${TIMES};font-size:14px;color:${INK};text-align:right;padding:9px 0 9px 14px;border-bottom:1px solid ${HAIR};font-variant-numeric:tabular-nums;">${inr(Math.max(summary.outstanding_amount, 0))}</td>
           </tr>
           <tr>
-            <td style="font-family:${TIMES};font-size:13px;letter-spacing:0.06em;text-transform:uppercase;color:#000000;font-weight:700;text-align:left;padding:16px 14px 16px 0;border-top:2px solid #000000;border-bottom:2px solid #000000;">Amount Received</td>
+            <td style="font-family:${TIMES};font-size:13px;letter-spacing:0.06em;text-transform:uppercase;color:#000000;font-weight:700;text-align:left;padding:16px 14px 16px 0;border-top:2px solid #000000;border-bottom:2px solid #000000;">${bigTotalLbl}</td>
             <td style="font-family:${TIMES};font-size:23px;font-weight:700;color:#000000;text-align:right;padding:16px 0 16px 14px;border-top:2px solid #000000;border-bottom:2px solid #000000;font-variant-numeric:tabular-nums;">${inr(payment.amount_inr)}</td>
           </tr>
         </table>
@@ -236,22 +267,22 @@ function buildHtml(input: ReceiptRenderInput): string {
         </div>
         <div style="text-align:right;margin-top:12px;">
           <div style="${label}margin-bottom:4px;">Payment Status</div>
-          <div style="font-family:${SANS};font-size:11px;font-weight:700;letter-spacing:0.1em;color:${INK};">${STATUS_LABEL[summary.payment_status] ?? STATUS_LABEL.not_paid}</div>
+          <div style="font-family:${SANS};font-size:11px;font-weight:700;letter-spacing:0.1em;color:${INK};">${statusLabels[summary.payment_status] ?? statusLabels.not_paid}</div>
           ${excess > 0 ? `<div style="font-size:9px;color:${MUTE};margin-top:3px;">Excess on record: ${inr(excess)}</div>` : ''}
         </div>
       </div>
     </div>
 
-    <!-- Payment To (left) + Remitting/Payer info (right) -->
+    <!-- Niyom's side (left) + the client's side (right) -->
     <div style="display:flex;margin-top:6px;">
       <div style="flex:1;padding-right:24px;">
-        <div style="${label}margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid ${HAIR};">Credited To (Niyom Wealth)</div>
+        <div style="${label}margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid ${HAIR};">${nostroHdr}</div>
         <table style="border-collapse:collapse;width:100%;">
-          ${kvRow('Beneficiary', NIYOM_COMPANY.name)}
+          ${kvRow(nostroRow, NIYOM_COMPANY.name)}
         </table>
       </div>
       <div style="flex:1;padding-left:24px;border-left:1px solid ${HAIR};">
-        <div style="${label}margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid ${HAIR};">Payer</div>
+        <div style="${label}margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid ${HAIR};">${partyHdr}</div>
         <table style="border-collapse:collapse;width:100%;">
           ${kvRow('Name', payment.received_from_name || deal.snap_client_name || '')}
           ${payment.received_from_bank ? kvRow('Bank', payment.received_from_bank) : ''}
@@ -267,11 +298,11 @@ function buildHtml(input: ReceiptRenderInput): string {
 
     ${(payment.payment_mode === 'cheque' || payment.payment_mode === 'demand_draft')
       ? `<div style="margin-top:16px;font-size:9.5px;color:${SUB};font-style:italic;">
-          This receipt is issued subject to realisation of the instrument by the collecting bank.
+          This ${payout ? 'advice is' : 'receipt is'} issued subject to realisation of the instrument by the collecting bank.
         </div>`
       : ''}
 
-    <!-- Single signature block (right) — the client does NOT sign a receipt -->
+    <!-- Single signature block (right) — the client signs neither document -->
     <div style="display:flex;justify-content:flex-end;margin-top:44px;">
       <div style="width:300px;text-align:center;">
         <img src="${NIYOM_SIGNATURE}" alt="Authorized Signature" style="height:96px;max-width:280px;width:auto;object-fit:contain;display:inline-block;filter:grayscale(1);" />
@@ -288,7 +319,7 @@ function buildHtml(input: ReceiptRenderInput): string {
     <div style="margin-top:32px;border-top:1px solid ${HAIR};padding-top:9px;">
       <div style="display:flex;justify-content:space-between;font-size:7.5px;letter-spacing:0.04em;color:${MUTE};">
         <span>Generated by ${generatedByName} · ${generatedByRole}</span>
-        <span>This is a system-generated payment receipt.</span>
+        <span>This is a system-generated ${payout ? 'payment advice' : 'payment receipt'}.</span>
       </div>
       <div style="font-size:7.5px;color:${MUTE};margin-top:5px;letter-spacing:0.04em;">
         ${NIYOM_COMPANY.name} · AMFI Registered Mutual Fund Distributor · ${ARN} (Valid till ${ARN_VALID_TILL})

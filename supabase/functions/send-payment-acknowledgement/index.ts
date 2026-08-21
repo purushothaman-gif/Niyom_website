@@ -68,6 +68,9 @@ function inr(n: number): string {
 
 interface Ctx {
   clientName: string;
+  // true on a Sell deal: the client is the seller, Niyom is the buyer, and the
+  // money moves from us to them. Nothing may then be worded as "received".
+  payout: boolean;
   confirmationNumber: string;
   dealAmount: number;
   totalPaid: number;
@@ -97,6 +100,24 @@ ${emailFooterText({ year: c.year, ref: c.confirmationNumber })}`;
 }
 
 function partialText(c: Ctx): string {
+  if (c.payout) {
+    return `Dear ${c.clientName},
+
+This is to confirm that ${inr(c.latestPaymentAmount ?? 0)} has been paid to your registered bank account against your Deal Confirmation.
+
+Deal Amount: ${inr(c.dealAmount)}
+Total Amount Paid Out: ${inr(c.totalPaid)}
+Balance Payable: ${inr(c.outstanding)}
+
+The remaining balance will be released shortly.
+
+Your updated Payment Advice is attached.
+
+Thank you,
+Niyom Wealth Distribution LLP
+
+${emailFooterText({ year: c.year, ref: c.confirmationNumber, notice: NOTICE_ATTACHMENT })}`;
+  }
   return `Dear ${c.clientName},
 
 Thank you for your payment.
@@ -118,6 +139,23 @@ ${emailFooterText({ year: c.year, ref: c.confirmationNumber, notice: NOTICE_ATTA
 }
 
 function fullText(c: Ctx): string {
+  if (c.payout) {
+    return `Dear ${c.clientName},
+
+Thank you.
+
+We confirm that the full consideration for your Deal Confirmation has been paid to your registered bank account.
+
+Deal Amount: ${inr(c.dealAmount)}
+Total Amount Paid Out: ${inr(c.totalPaid)}
+Balance Payable: ₹0.00
+
+Your official Payment Advice is attached.
+
+Thank you for choosing Niyom Wealth Distribution LLP.
+
+${emailFooterText({ year: c.year, ref: c.confirmationNumber, notice: NOTICE_ATTACHMENT })}`;
+  }
   return `Dear ${c.clientName},
 
 Thank you.
@@ -162,11 +200,11 @@ function balanceTable(c: Ctx, showLatest: boolean): string {
   return `<table style="width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:6px;margin:14px 0;">
     <tbody>
       ${showLatest && c.latestPaymentAmount !== undefined
-        ? amountRow("Amount Received", inr(c.latestPaymentAmount))
+        ? amountRow(c.payout ? "Amount Paid" : "Amount Received", inr(c.latestPaymentAmount))
         : ""}
       ${amountRow("Deal Amount", inr(c.dealAmount))}
-      ${amountRow("Total Amount Paid", inr(c.totalPaid))}
-      ${amountRow("Outstanding Balance", inr(c.outstanding))}
+      ${amountRow(c.payout ? "Total Amount Paid Out" : "Total Amount Paid", inr(c.totalPaid))}
+      ${amountRow(c.payout ? "Balance Payable" : "Outstanding Balance", inr(c.outstanding))}
     </tbody>
   </table>`;
 }
@@ -186,6 +224,19 @@ function reminderHtml(c: Ctx): string {
 }
 
 function partialHtml(c: Ctx): string {
+  if (c.payout) {
+    const body = `
+    <p style="font-size:15px;font-weight:600;color:#111;margin:0 0 16px;">Dear ${c.clientName},</p>
+    <p style="margin:0 0 14px;">This is to confirm that <strong>${inr(c.latestPaymentAmount ?? 0)}</strong> has been paid to your registered bank account against your Deal Confirmation.</p>
+    ${balanceTable(c, false)}
+    <p style="margin:14px 0 0;">The remaining balance will be released shortly.</p>
+    <p style="margin:14px 0 0;">Your updated Payment Advice is attached${c.receiptNumber ? ` (<span style="font-family:monospace">${c.receiptNumber}</span>)` : ""}.</p>
+    <p style="margin:18px 0 0;">Thank you,<br/><strong>Niyom Wealth Distribution LLP</strong></p>`;
+    return shellHtml(
+      "Payment made to your account. Balance payable updated. Advice attached.",
+      body, c.confirmationNumber, c.year, true
+    );
+  }
   const body = `
     <p style="font-size:15px;font-weight:600;color:#111;margin:0 0 16px;">Dear ${c.clientName},</p>
     <p style="margin:0 0 14px;">Thank you for your payment.</p>
@@ -201,6 +252,19 @@ function partialHtml(c: Ctx): string {
 }
 
 function fullHtml(c: Ctx): string {
+  if (c.payout) {
+    const body = `
+    <p style="font-size:15px;font-weight:600;color:#111;margin:0 0 16px;">Dear ${c.clientName},</p>
+    <p style="margin:0 0 14px;">Thank you.</p>
+    <p style="margin:0 0 14px;">We confirm that the full consideration for your Deal Confirmation has been paid to your registered bank account.</p>
+    ${balanceTable(c, false)}
+    <p style="margin:14px 0 0;">Your official Payment Advice is attached${c.receiptNumber ? ` (<span style="font-family:monospace">${c.receiptNumber}</span>)` : ""}.</p>
+    <p style="margin:18px 0 0;">Thank you for choosing <strong>Niyom Wealth Distribution LLP</strong>.</p>`;
+    return shellHtml(
+      "Full payment made to your account. Your official advice is attached.",
+      body, c.confirmationNumber, c.year, true
+    );
+  }
   const body = `
     <p style="font-size:15px;font-weight:600;color:#111;margin:0 0 16px;">Dear ${c.clientName},</p>
     <p style="margin:0 0 14px;">Thank you.</p>
@@ -276,7 +340,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const { data: deal } = await db.from("nw_deal_confirmations")
-      .select("id, employee_id, acceptance_status, confirmation_number, snap_client_name, snap_email")
+      .select("id, employee_id, acceptance_status, transaction_type, confirmation_number, snap_client_name, snap_email")
       .eq("id", resolvedDealId).maybeSingle();
     if (!deal) return json({ success: false, error: "Deal not found." }, 404);
     // A payment acknowledgement may be issued for a paid deal before the client
@@ -300,10 +364,20 @@ Deno.serve(async (req: Request) => {
     if (!summary) return json({ success: false, error: "Could not read payment summary." }, 500);
 
     const status = summary.payment_status as "not_paid" | "partially_paid" | "fully_paid";
+    // On a Sell the client is the seller and Niyom is the buyer, so the money is
+    // owed BY us. Every template below flips wording accordingly, and the
+    // reminder ("your payment is pending") has no valid form at all.
+    const payout = String(deal.transaction_type ?? "").trim().toLowerCase() === "sell";
 
     // --- Template selection + payload gating --------------------------
     if (status === "not_paid" && paymentId) {
       return json({ success: false, error: "No payment recorded yet — send a reminder instead." }, 409);
+    }
+    if (status === "not_paid" && payout) {
+      return json({
+        success: false,
+        error: "This is a Sell deal — Niyom owes the client, so there is no payment to remind them about. Record the payout instead.",
+      }, 409);
     }
     if (status !== "not_paid" && !paymentId) {
       return json({ success: false, error: "paymentId is required to send a payment acknowledgement." }, 400);
@@ -317,6 +391,7 @@ Deno.serve(async (req: Request) => {
 
     const ctx: Ctx = {
       clientName:         deal.snap_client_name || "Client",
+      payout,
       confirmationNumber: deal.confirmation_number,
       dealAmount:         Number(summary.deal_amount),
       totalPaid:          Number(summary.total_paid_amount),
@@ -333,12 +408,16 @@ Deno.serve(async (req: Request) => {
       html      = reminderHtml(ctx);
     } else if (status === "partially_paid") {
       emailType = "payment_partial";
-      subject   = `Payment Received – Outstanding Balance Pending`;
+      subject   = payout
+        ? `Payment Made – Balance Payable Pending`
+        : `Payment Received – Outstanding Balance Pending`;
       text      = partialText(ctx);
       html      = partialHtml(ctx);
     } else {
       emailType = "payment_final";
-      subject   = `Payment Receipt – Payment Completed`;
+      subject   = payout
+        ? `Payment Advice – Payment Completed`
+        : `Payment Receipt – Payment Completed`;
       text      = fullText(ctx);
       html      = fullHtml(ctx);
     }
