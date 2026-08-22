@@ -115,7 +115,12 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
   const worked = state.worked_minutes;
   const onOffice = state.network_status === 'office';
   const enforcing = state.enforcement_mode === 'enforce';
-  const blocked = enforcing && !state.can_punch;
+  // Two independent reasons the button can be unavailable. Kept apart because
+  // "you are outside the office network" and "it is 3am" need different
+  // sentences -- telling someone their Wi-Fi is wrong at 3am sends them
+  // hunting for a router problem that does not exist.
+  const outsideHours = state.window_blocks_next;
+  const blocked = enforcing && !onOffice && !state.network_exempt && !outsideHours;
 
   const NetIcon = onOffice ? ShieldCheck : state.network_status === 'unknown' ? WifiOff : ShieldAlert;
   const netRgb = onOffice ? '16,185,129' : enforcing ? '245,158,11' : '148,163,184';
@@ -187,6 +192,18 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
         )}
       </div>
 
+      {outsideHours && (
+        <div className="mx-5 mb-4">
+          <Notice tone="warn" title={state.day_blocked ? 'Not a working day' : 'Outside permitted hours'}>
+            {state.day_blocked
+              ? 'Attendance cannot be punched today. If you are working, ask an administrator to record it as an attendance correction.'
+              : <>Attendance can be punched between <strong>{state.window_start?.slice(0, 5)}</strong> and{' '}
+                 <strong>{state.window_end?.slice(0, 5)}</strong>. If you are working outside these hours, ask an
+                 administrator to record it as an attendance correction.</>}
+          </Notice>
+        </div>
+      )}
+
       {blocked && (
         <div className="mx-5 mb-4">
           <Notice tone="warn" title="Attendance not allowed from here">
@@ -215,7 +232,8 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
       <div className="px-5 pb-5">
         <button
           onClick={doPunch}
-          disabled={busy}
+          disabled={busy || outsideHours}
+          title={outsideHours ? 'Attendance cannot be punched at this time' : undefined}
           className="w-full py-4 rounded-2xl text-sm font-bold flex items-center justify-center gap-2.5 transition-all disabled:opacity-60 active:scale-[0.99]"
           style={{
             background: isIn ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.14)',
@@ -223,7 +241,7 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
             border: `1px solid ${isIn ? 'rgba(239,68,68,0.35)' : 'rgba(16,185,129,0.4)'}`,
           }}>
           {busy ? <Clock className="w-4 h-4 animate-spin" /> : isIn ? <LogOut className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-          {busy ? 'Recording…' : isIn ? 'PUNCH OUT' : 'PUNCH IN'}
+          {busy ? 'Recording…' : outsideHours ? 'OUTSIDE PERMITTED HOURS' : isIn ? 'PUNCH OUT' : 'PUNCH IN'}
         </button>
       </div>
 
