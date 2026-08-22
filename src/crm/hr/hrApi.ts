@@ -13,7 +13,7 @@
 
 import { supabase } from '../../lib/supabase';
 import type {
-  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch,
+  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch, HRNavContext,
   AttendanceSettings, AuditLog, BankAccount, BankTemplateColumn, BankTemplateRow,
   ComponentSlabRow, EmployeeProfile, HRAccess, HREmployee, HRModule, HRSettings,
   Holiday, LeaveBalance, LeaveRequest, LeaveType, PaySchedule, PayrollAdjustmentRow,
@@ -62,8 +62,8 @@ function unwrap<T>({ data, error }: { data: T; error: unknown }): NonNullable<T>
 export async function loadAccess(role: string): Promise<HRAccess> {
   const isAdmin = role === 'admin' || role === 'super_admin';
 
-  const { data: hrRole } = await supabase.rpc('hr_current_profile_role');
-  const resolved = (hrRole as HRAccess['hrRole']) ?? 'none';
+  const ctx = await loadNavContext();
+  const resolved = ctx.hr_role;
 
   const canView = {} as Record<HRModule, boolean>;
   const canEdit = {} as Record<HRModule, boolean>;
@@ -83,7 +83,22 @@ export async function loadAccess(role: string): Promise<HRAccess> {
   return {
     isAdmin, hrRole: resolved, canView, canEdit,
     anyAdminAccess: isAdmin || HR_MODULES.some(m => canView[m]),
+    onPayroll: ctx.on_payroll,
   };
+}
+
+/**
+ * The menu's view of the signed-in user, in one call.
+ *
+ * Fails CLOSED on the administration side and OPEN on self-service: if this
+ * cannot be resolved, do not offer HR admin screens, but do keep someone's own
+ * attendance reachable. Guessing the other way would either hand out a menu
+ * nobody is entitled to, or hide a person's own punch card from them.
+ */
+export async function loadNavContext(): Promise<HRNavContext> {
+  const { data, error } = await supabase.rpc('hr_my_nav_context');
+  if (error || !data) return { hr_role: 'none', hr_admin_access: false, on_payroll: true };
+  return data as unknown as HRNavContext;
 }
 
 // ===========================================================================

@@ -113,6 +113,19 @@ export interface HRAccess {
   canEdit: Record<HRModule, boolean>;
   /** Any admin surface at all -- decides whether the HR nav section appears. */
   anyAdminAccess: boolean;
+  /**
+   * Salaried. False for partners, who have no attendance, leave balance or
+   * payslip -- so the self-service entry is hidden rather than showing them
+   * empty screens.
+   */
+  onPayroll: boolean;
+}
+
+/** What the CRM shell needs to draw the HR menu. One round trip. */
+export interface HRNavContext {
+  hr_role: 'none' | 'manager' | 'hr_admin';
+  hr_admin_access: boolean;
+  on_payroll: boolean;
 }
 
 export type HRModule =

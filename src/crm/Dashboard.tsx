@@ -36,6 +36,23 @@ interface EmployeeStat {
 }
 
 export default function Dashboard({ employee, onNavigate }: Props) {
+  /*
+   * Partners have no attendance, leave or payslips, so the punch card and the
+   * My HR prompt are hidden for them -- the same flag the sidebar uses, so the
+   * two can never disagree. Starts true so an ordinary employee's punch card
+   * does not flicker in, and a failed lookup leaves it visible: hiding
+   * someone's own attendance because a query failed is the wrong way to fail.
+   */
+  const [onPayroll, setOnPayroll] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.rpc('hr_my_nav_context').then(({ data, error }) => {
+      if (cancelled || error || !data) return;
+      setOnPayroll((data as unknown as { on_payroll: boolean }).on_payroll);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const [stats, setStats] = useState<Stats>({ totalClients: 0, totalPortfolio: 0, verifiedClients: 0, monthlyTxns: 0 });
   const [recentTxns, setRecentTxns] = useState<NWTransaction[]>([]);
   /*
@@ -173,9 +190,11 @@ export default function Dashboard({ employee, onNavigate }: Props) {
       </div>
 
       {/* Attendance — the first thing most people need after signing in, so it
-          sits above the portfolio numbers rather than behind a menu. The card
-          renders nothing until its own state loads, and fails quietly if the
-          HR module is not reachable. */}
+          sits above the portfolio numbers rather than behind a menu. Hidden for
+          partners, who have no attendance, leave or payslips. The card renders
+          nothing until its own state loads, and fails quietly if the HR module
+          is not reachable. */}
+      {onPayroll && (
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <Suspense fallback={<div className="rounded-2xl hr-shimmer" style={{ minHeight: 200, background: 'var(--bg-surface)', border: '1px solid var(--border)' }} />}>
@@ -199,6 +218,7 @@ export default function Dashboard({ employee, onNavigate }: Props) {
           </div>
         </div>
       </div>
+      )}
 
       {/* Stats */}
       <div className={`grid gap-4 ${isAdmin ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-4'}`}>

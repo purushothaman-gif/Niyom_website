@@ -63,6 +63,9 @@ export default function HR({ employee, section, onNavigate }: {
           setAccess({
             isAdmin: false, hrRole: 'none',
             canView: emptyModules(), canEdit: emptyModules(), anyAdminAccess: false,
+            // Self-service stays reachable: hiding someone's own attendance
+            // because a capability lookup failed is the wrong way to fail.
+            onPayroll: true,
           });
         }
       })
@@ -72,8 +75,13 @@ export default function HR({ employee, section, onNavigate }: {
 
   if (loading || !access) return <Skeleton rows={6} height={70} />;
 
-  // Self-service needs no HR capability at all.
-  if (section === 'my_hr') return <MyHR employee={employee} />;
+  // Self-service needs no HR capability at all -- but it needs the person to be
+  // on payroll. A partner reaching this by URL gets an explanation rather than
+  // empty attendance, an empty leave balance and an empty payslip list.
+  if (section === 'my_hr') {
+    if (!access.onPayroll) return <NotOnPayroll />;
+    return <MyHR employee={employee} />;
+  }
 
   const needed = section === 'hr_dashboard' ? null : REQUIRES[section];
   if (needed && !access.canView[needed]) return <NoAccess />;
@@ -99,6 +107,17 @@ function emptyModules(): HRAccess['canView'] {
     employees: false, attendance: false, leave: false, holidays: false,
     salary: false, payroll: false, payslips: false, reports: false, settings: false,
   };
+}
+
+function NotOnPayroll() {
+  return (
+    <EmptyState
+      icon={ShieldAlert}
+      title="Not applicable to your record"
+      message="Attendance, leave and payslips apply to salaried employees. Your record is marked as not on payroll,
+               so there is nothing to show here. An administrator can change that in HR → Employees if it is wrong."
+    />
+  );
 }
 
 function NoAccess() {
