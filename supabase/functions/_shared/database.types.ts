@@ -2053,9 +2053,13 @@ export type Database = {
       }
       hr_attendance_settings: {
         Row: {
+          allow_out_punch_anytime: boolean
           auto_punch_out_after_minutes: number | null
+          block_on_holiday: boolean
+          block_on_weekly_off: boolean
           break_minutes: number
           early_out_before_minutes: number
+          enforce_punch_window: boolean
           enforcement_mode: string
           full_day_minutes: number
           grace_minutes: number
@@ -2067,6 +2071,8 @@ export type Database = {
           office_start: string
           overtime_after_minutes: number
           punch_cooldown_seconds: number
+          punch_window_end: string
+          punch_window_start: string
           rate_limit_per_minute: number
           rounding_minutes: number
           trusted_proxy_hops: number
@@ -2074,9 +2080,13 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          allow_out_punch_anytime?: boolean
           auto_punch_out_after_minutes?: number | null
+          block_on_holiday?: boolean
+          block_on_weekly_off?: boolean
           break_minutes?: number
           early_out_before_minutes?: number
+          enforce_punch_window?: boolean
           enforcement_mode?: string
           full_day_minutes?: number
           grace_minutes?: number
@@ -2088,6 +2098,8 @@ export type Database = {
           office_start?: string
           overtime_after_minutes?: number
           punch_cooldown_seconds?: number
+          punch_window_end?: string
+          punch_window_start?: string
           rate_limit_per_minute?: number
           rounding_minutes?: number
           trusted_proxy_hops?: number
@@ -2095,9 +2107,13 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          allow_out_punch_anytime?: boolean
           auto_punch_out_after_minutes?: number | null
+          block_on_holiday?: boolean
+          block_on_weekly_off?: boolean
           break_minutes?: number
           early_out_before_minutes?: number
+          enforce_punch_window?: boolean
           enforcement_mode?: string
           full_day_minutes?: number
           grace_minutes?: number
@@ -2109,6 +2125,8 @@ export type Database = {
           office_start?: string
           overtime_after_minutes?: number
           punch_cooldown_seconds?: number
+          punch_window_end?: string
+          punch_window_start?: string
           rate_limit_per_minute?: number
           rounding_minutes?: number
           trusted_proxy_hops?: number
@@ -8650,6 +8668,7 @@ export type Database = {
         Returns: string
       }
       hr_today: { Args: never; Returns: string }
+      hr_within_punch_window: { Args: { p_at: string }; Returns: boolean }
       mkt_auto_alert_admins: {
         Args: { p_message: string; p_title: string }
         Returns: number

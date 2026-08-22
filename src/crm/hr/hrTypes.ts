@@ -81,6 +81,14 @@ export interface PunchState {
   enforcement_mode: 'observe' | 'enforce';
   office_start: string;
   office_end: string;
+  /** Permitted punching hours, separate from office hours. */
+  window_enforced: boolean;
+  window_start: string;
+  window_end: string;
+  within_window: boolean;
+  day_blocked: boolean;
+  /** True when THIS action would be refused on time-of-day grounds. */
+  window_blocks_next: boolean;
   can_punch: boolean;
   timeline: { type: 'in' | 'out'; at: string; network: string; approval: string }[];
   error?: string;

@@ -1041,6 +1041,12 @@ function Rules({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => voi
         max_punches_per_day: s.max_punches_per_day, rate_limit_per_minute: s.rate_limit_per_minute,
         auto_punch_out_after_minutes: s.auto_punch_out_after_minutes,
         trusted_proxy_hops: s.trusted_proxy_hops,
+        enforce_punch_window: s.enforce_punch_window,
+        punch_window_start: s.punch_window_start,
+        punch_window_end: s.punch_window_end,
+        allow_out_punch_anytime: s.allow_out_punch_anytime,
+        block_on_weekly_off: s.block_on_weekly_off,
+        block_on_holiday: s.block_on_holiday,
       });
       onToast('Attendance rules saved. They apply from the next recalculation.');
     } catch (err) {
@@ -1103,6 +1109,58 @@ function Rules({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => voi
           <Field label="Auto punch-out after (minutes)" hint="Blank = never; a forgotten punch-out is simply flagged">
             <Input {...num('auto_punch_out_after_minutes')} />
           </Field>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Permitted punching hours"
+        subtitle="Refuses punches made at times nobody should be working. Separate from office hours — lateness is already handled by the late threshold above, which marks the day rather than blocking it."
+      >
+        <label className="flex items-start gap-2.5 cursor-pointer text-xs mb-4" style={{ color: 'var(--text-secondary)' }}>
+          <input type="checkbox" checked={s.enforce_punch_window} disabled={!canEdit} className="mt-0.5"
+            onChange={e => setS({ ...s, enforce_punch_window: e.target.checked })} />
+          <span><strong>Refuse punches outside the hours below.</strong> Off by default.</span>
+        </label>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <Field label="Punching allowed from">
+            <Input type="time" value={s.punch_window_start?.slice(0, 5)} disabled={!canEdit || !s.enforce_punch_window}
+              onChange={e => setS({ ...s, punch_window_start: e.target.value })} />
+          </Field>
+          <Field label="Punching allowed until" hint="Set this earlier than the start for a window that crosses midnight.">
+            <Input type="time" value={s.punch_window_end?.slice(0, 5)} disabled={!canEdit || !s.enforce_punch_window}
+              onChange={e => setS({ ...s, punch_window_end: e.target.value })} />
+          </Field>
+        </div>
+
+        <div className="mt-4">
+          <Notice tone="warn" title="Keep punch-outs exempt unless you are sure">
+            Refusing a late punch-out cannot un-work the time already spent — it just leaves the person punched in,
+            flags a missing punch-out, and makes someone raise a correction the next morning to fix a person's honesty.
+            It also makes overtime unrecordable.
+          </Notice>
+        </div>
+
+        <div className="mt-4 space-y-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={s.allow_out_punch_anytime} disabled={!canEdit} className="mt-0.5"
+              onChange={e => setS({ ...s, allow_out_punch_anytime: e.target.checked })} />
+            <span>Allow punching <strong>out</strong> at any time, even outside the hours above <em>(recommended)</em>.</span>
+          </label>
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={s.block_on_weekly_off} disabled={!canEdit} className="mt-0.5"
+              onChange={e => setS({ ...s, block_on_weekly_off: e.target.checked })} />
+            <span>
+              Also refuse punching <strong>in</strong> on a weekly off. Leaving this off is usually right — someone
+              who comes in on a Saturday is doing work, and refusing the punch loses the record of it rather than
+              preventing it.
+            </span>
+          </label>
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={s.block_on_holiday} disabled={!canEdit} className="mt-0.5"
+              onChange={e => setS({ ...s, block_on_holiday: e.target.checked })} />
+            <span>Also refuse punching <strong>in</strong> on a holiday, for the same reason.</span>
+          </label>
         </div>
       </SectionCard>
 
