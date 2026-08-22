@@ -451,6 +451,8 @@ function Approvals({ onToast, canEdit, onChanged }: {
     { kind: 'punch' | 'adjustment'; id: string; approve: boolean; label: string } | null>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  // "Trust this network" -- the address of a held punch, offered for allowlisting.
+  const [trustIp, setTrustIp] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -527,9 +529,16 @@ function Approvals({ onToast, canEdit, onChanged }: {
                             <CheckCircle2 className="w-3.5 h-3.5 inline mr-0.5" />Approve
                           </button>
                           <button onClick={() => setConfirm({ kind: 'punch', id: p.id, approve: false, label: `${nameOf(p.employee_id)} — ${p.punch_type} at ${timeOf(p.punched_at)}` })}
-                            className="text-xs font-semibold" style={{ color: 'rgb(239,68,68)' }}>
+                            className="text-xs font-semibold mr-3" style={{ color: 'rgb(239,68,68)' }}>
                             <XCircle className="w-3.5 h-3.5 inline mr-0.5" />Reject
                           </button>
+                          {p.detected_ip && (
+                            <button onClick={() => setTrustIp(String(p.detected_ip))}
+                              className="text-xs font-semibold" style={{ color: 'var(--accent-soft)' }}
+                              title="Add this address as an approved office network and clear every punch held from it">
+                              <ShieldCheck className="w-3.5 h-3.5 inline mr-0.5" />Trust network
+                            </button>
+                          )}
                         </>
                       ) : <span className="text-xs" style={{ color: 'var(--text-faint)' }}>View only</span>}
                     </td>
@@ -588,6 +597,18 @@ function Approvals({ onToast, canEdit, onChanged }: {
         </div>
       </SectionCard>
 
+      {trustIp && (
+        <TrustNetworkDialog
+          ip={trustIp}
+          pendingFromIp={punches.filter(x => String(x.detected_ip ?? '') === trustIp).length}
+          employeesFromIp={new Set(punches.filter(x => String(x.detected_ip ?? '') === trustIp)
+            .map(x => x.employee_id)).size}
+          onClose={() => setTrustIp(null)}
+          onDone={msg => { setTrustIp(null); onToast(msg); load(); onChanged(); }}
+          onError={m => onToast(m, false)}
+        />
+      )}
+
       <ConfirmDialog
         open={!!confirm}
         tone={confirm?.approve ? 'accent' : 'bad'}
@@ -603,6 +624,95 @@ function Approvals({ onToast, canEdit, onChanged }: {
         </Field>
       </ConfirmDialog>
     </div>
+  );
+}
+
+
+/**
+ * Turn a held punch's address into an approved office network.
+ *
+ * The address shown here was detected by the server for a real punch, so it is
+ * the office's actual public IP rather than something typed from memory. That
+ * is why this exists at all: on the first day of enforcement the queue IS the
+ * discovery mechanism, and copying an address between two tabs to act on it is
+ * pure friction.
+ */
+function TrustNetworkDialog({ ip, pendingFromIp, employeesFromIp, onClose, onDone, onError }: {
+  ip: string;
+  pendingFromIp: number;
+  employeesFromIp: number;
+  onClose: () => void;
+  onDone: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [name, setName] = useState('Niyom Chennai Office');
+  const [location, setLocation] = useState('Chennai');
+  const [approvePending, setApprovePending] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    if (!name.trim()) { onError('Give the network a name.'); return; }
+    setBusy(true);
+    try {
+      const res = await api.allowlistNetwork(ip, name.trim(), location.trim(), approvePending);
+      onDone(res.punches_approved > 0
+        ? `${ip} is now an approved office network. ${res.punches_approved} held punch(es) across ${res.employees_affected} employee(s) have been approved and their attendance recalculated.`
+        : `${ip} is now an approved office network. Punches from it will be approved automatically from now on.`);
+    } catch (err) {
+      onError(hrError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Trust this office network">
+      <div className="p-5 space-y-4">
+        <div className="px-4 py-3 rounded-xl"
+          style={{ background: 'rgba(var(--accent-soft-rgb),0.08)', border: '1px solid rgba(var(--accent-soft-rgb),0.25)' }}>
+          <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
+            Address detected by the server
+          </p>
+          <p className="text-lg font-bold font-mono mt-0.5" style={{ color: 'var(--accent-soft)' }}>{ip}</p>
+        </div>
+
+        <Notice tone="warn" title="Only do this if this really is a Niyom office connection">
+          Every future punch from this address counts automatically, with no review. If it is someone&rsquo;s home
+          broadband or a phone hotspot, approve their punches individually instead &mdash; allowlisting it would
+          quietly remove the location check for them from then on.
+        </Notice>
+
+        <Field label="Network name" required hint="Shown on the punch card when someone is on this network.">
+          <Input value={name} onChange={e => setName(e.target.value)} />
+        </Field>
+
+        <Field label="Location">
+          <Input value={location} onChange={e => setLocation(e.target.value)} />
+        </Field>
+
+        {pendingFromIp > 0 && (
+          <label className="flex items-start gap-2.5 cursor-pointer text-xs" style={{ color: 'var(--text-secondary)' }}>
+            <input type="checkbox" checked={approvePending} className="mt-0.5"
+              onChange={e => setApprovePending(e.target.checked)} />
+            <span>
+              Also approve the <strong>{pendingFromIp}</strong> punch(es) already held from this address
+              {employeesFromIp > 1 && <> across <strong>{employeesFromIp}</strong> employees</>}, and recalculate
+              their attendance. Only punches from this exact address are affected.
+            </span>
+          </label>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold"
+            style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+            Cancel
+          </button>
+          <PrimaryButton onClick={save} disabled={busy}>
+            {busy ? 'Saving\u2026' : 'Trust This Network'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -750,6 +860,34 @@ function Networks({ onToast, canEdit, employee }: {
         </PrimaryButton>}
         padded={false}
       >
+        {/* The address the server sees for THIS session. Stated up front rather
+            than only inside the Add dialog: if you are sitting in the office,
+            this IS the value to add, and it is the same one enforcement checks. */}
+        {myIp && canEdit && (
+          <div className="mx-5 mt-4 px-4 py-3 rounded-xl flex items-center justify-between gap-3 flex-wrap"
+            style={{ background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
+                The server currently sees you at
+              </p>
+              <p className="text-sm font-bold font-mono mt-0.5" style={{ color: 'var(--text-primary)' }}>{myIp}</p>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-faint)' }}>
+                {rows.some(n => String(n.ip_address ?? '') === myIp)
+                  ? 'Already on the approved list.'
+                  : 'Add it only if you are on the office connection right now — from home this would allowlist your home broadband.'}
+              </p>
+            </div>
+            {!rows.some(n => String(n.ip_address ?? '') === myIp) && (
+              <GhostButton onClick={() => setEditing({
+                status: 'active', location: 'Chennai', effective_from: today(),
+                name: 'Niyom Chennai Office', ip_address: myIp,
+              })}>
+                Add this address
+              </GhostButton>
+            )}
+          </div>
+        )}
+
         <div className="p-5">
           {rows.length === 0 ? (
             <EmptyState icon={Network} title="No approved networks yet"

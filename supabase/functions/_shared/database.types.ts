@@ -8511,6 +8511,16 @@ export type Database = {
         Args: { p_employee_id: string; p_from: string; p_to: string }
         Returns: number
       }
+      hr_allowlist_network: {
+        Args: {
+          p_approve_pending?: boolean
+          p_description?: string
+          p_ip: unknown
+          p_location?: string
+          p_name: string
+        }
+        Returns: Json
+      }
       hr_audit: {
         Args: {
           p_action: string
