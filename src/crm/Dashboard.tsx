@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWTransaction, NWActivityLog, NWClient } from './types';
@@ -8,6 +8,12 @@ import { CRMPage } from './types';
 import { Counter } from '../components/Reveal';
 import { HeroBackground } from '../components/HeroBackground';
 import { EmployeeAvatar } from './EmployeeAvatar';
+/*
+ * The punch card is dynamically imported so the HR module -- and the two edge
+ * function round trips it makes -- stay out of the dashboard's initial chunk.
+ * It is one card on a page that already loads five queries.
+ */
+const PunchCard = lazy(() => import('./hr/PunchCard'));
 
 interface Props { employee: NWEmployee; onNavigate: (page: CRMPage) => void; }
 
@@ -163,6 +169,34 @@ export default function Dashboard({ employee, onNavigate }: Props) {
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
             {isAdmin ? 'Full portfolio view across all employees' : "Here's what's happening across your portfolio"}
           </p>
+        </div>
+      </div>
+
+      {/* Attendance — the first thing most people need after signing in, so it
+          sits above the portfolio numbers rather than behind a menu. The card
+          renders nothing until its own state loads, and fails quietly if the
+          HR module is not reachable. */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-1">
+          <Suspense fallback={<div className="rounded-2xl hr-shimmer" style={{ minHeight: 200, background: 'var(--bg-surface)', border: '1px solid var(--border)' }} />}>
+            <PunchCard employeeName={employee.full_name} compact />
+          </Suspense>
+        </div>
+        <div className="lg:col-span-2 flex items-center justify-center rounded-2xl px-6 py-5"
+          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          <div className="text-center">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
+              Leave, holidays and payslips live in My HR
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>
+              Apply for leave, view your attendance history and download payslips.
+            </p>
+            <button onClick={() => onNavigate('my_hr' as CRMPage)}
+              className="mt-3 px-4 py-2 rounded-xl text-xs font-semibold"
+              style={{ background: 'rgba(var(--accent-soft-rgb),0.14)', color: 'var(--accent-soft)', border: '1px solid rgba(var(--accent-soft-rgb),0.3)' }}>
+              Open My HR →
+            </button>
+          </div>
         </div>
       </div>
 
