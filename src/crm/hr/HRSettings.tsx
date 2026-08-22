@@ -82,8 +82,7 @@ function Company({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => v
       await api.saveHRSettings({
         company_name: s.company_name, company_address: s.company_address,
         company_logo_url: s.company_logo_url, payslip_number_format: s.payslip_number_format,
-        payslip_footer_note: s.payslip_footer_note, signatory_name: s.signatory_name,
-        signatory_designation: s.signatory_designation, signatory_signature_url: s.signatory_signature_url,
+        payslip_footer_note: s.payslip_footer_note,
         employee_can_view_salary: s.employee_can_view_salary,
         notify_payroll_ready: s.notify_payroll_ready, notify_missing_punch: s.notify_missing_punch,
         notify_payslip_published: s.notify_payslip_published,
@@ -125,18 +124,6 @@ function Company({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => v
             <Input value={s.payslip_number_format} disabled={!canEdit}
               onChange={e => setS({ ...s, payslip_number_format: e.target.value })} />
           </Field>
-          <Field label="Authorised signatory">
-            <Input value={s.signatory_name} disabled={!canEdit}
-              onChange={e => setS({ ...s, signatory_name: e.target.value })} />
-          </Field>
-          <Field label="Signatory designation">
-            <Input value={s.signatory_designation} disabled={!canEdit}
-              onChange={e => setS({ ...s, signatory_designation: e.target.value })} />
-          </Field>
-          <Field label="Signature image URL" hint="Optional.">
-            <Input value={s.signatory_signature_url ?? ''} disabled={!canEdit}
-              onChange={e => setS({ ...s, signatory_signature_url: e.target.value })} />
-          </Field>
           <div className="sm:col-span-2">
             <Field label="Footer note">
               <Textarea rows={2} value={s.payslip_footer_note} disabled={!canEdit}
@@ -145,6 +132,8 @@ function Company({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => v
           </div>
         </div>
         <p className="text-xs mt-3" style={{ color: 'var(--text-faint)' }}>
+          Payslips carry no signature block. A signature line on a computer-generated document invites someone to
+          sign a figure they did not compute; the footer note below states that instead.<br />
           Preview of the next number: <span className="font-mono">
             {s.payslip_number_format
               .replace('{YYYY}', String(new Date().getFullYear()))

@@ -78,12 +78,18 @@ export default function EmployeesAdmin({ employee, access }: { employee: NWEmplo
     return true;
   }), [rows, q, dept, showInactive]);
 
-  const stats = useMemo(() => ({
-    total: rows.filter(r => r.status === 'active').length,
-    noSalary: 0,   // filled by the payroll dashboard, which knows the structures
-    noBank: rows.filter(r => r.status === 'active' && !r.bank).length,
-    noProfile: rows.filter(r => r.status === 'active' && !r.profile).length,
-  }), [rows]);
+  const stats = useMemo(() => {
+    const active = rows.filter(r => r.status === 'active');
+    // Partners are not missing a bank account or a profile -- they are not
+    // meant to have one, and counting them turns the tile into noise.
+    const paid = active.filter(r => r.profile?.on_payroll ?? true);
+    return {
+      total: active.length,
+      partners: active.length - paid.length,
+      noBank: paid.filter(r => !r.bank).length,
+      noProfile: paid.filter(r => !r.profile).length,
+    };
+  }, [rows]);
 
   const exportDirectory = () => exportSheet('niyom_employees', 'Employees', [
     ['Employee ID', 'Name', 'Email', 'Phone', 'Designation', 'Department', 'Employment Type',
@@ -99,7 +105,8 @@ export default function EmployeesAdmin({ employee, access }: { employee: NWEmplo
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile label="Active Employees" value={stats.total} icon={Users} />
+        <StatTile label="Active Employees" value={stats.total} icon={Users}
+          sub={stats.partners ? `${stats.partners} not on payroll` : undefined} />
         <StatTile label="Missing HR Profile" value={stats.noProfile} tone={stats.noProfile ? 'warn' : 'good'} />
         <StatTile label="Missing Bank Details" value={stats.noBank} tone={stats.noBank ? 'bad' : 'good'}
           sub={stats.noBank ? 'Cannot be paid by transfer' : 'All payable'} />
@@ -166,9 +173,11 @@ export default function EmployeesAdmin({ employee, access }: { employee: NWEmplo
                     <td>{r.designation || '—'}</td>
                     <td>{r.profile?.department || <span style={{ color: 'rgb(245,158,11)' }}>not set</span>}</td>
                     <td className="whitespace-nowrap">{day(r.joining_date)}</td>
-                    <td>{r.bank
-                      ? <span className="font-mono text-xs">•••• {r.bank.account_number.slice(-4)}</span>
-                      : <Pill value="missing" small />}</td>
+                    <td>{r.profile && !r.profile.on_payroll
+                      ? <span className="text-xs" style={{ color: 'var(--text-faint)' }}>not on payroll</span>
+                      : r.bank
+                        ? <span className="font-mono text-xs">•••• {r.bank.account_number.slice(-4)}</span>
+                        : <Pill value="missing" small />}</td>
                     <td><Pill value={r.status} small /></td>
                     <td className="text-right">
                       <button onClick={() => setSelected(r)} className="text-xs font-semibold"
@@ -256,6 +265,7 @@ function ProfileDrawer({ row, schedules, paySchedules, canEdit, onClose, onSaved
     work_schedule_id: row.profile?.work_schedule_id ?? '',
     pay_schedule_id: row.profile?.pay_schedule_id ?? '',
     network_exempt: row.profile?.network_exempt ?? false,
+    on_payroll: row.profile?.on_payroll ?? true,
     holiday_location: row.profile?.holiday_location ?? 'Chennai',
     notes: row.profile?.notes ?? '',
   }));
@@ -348,6 +358,7 @@ function ProfileDrawer({ row, schedules, paySchedules, canEdit, onClose, onSaved
               <Detail label="CRM role" value={row.role} />
               <Detail label="HR role" value={form.hr_role} />
               <Detail label="Status" value={row.status} />
+              <Detail label="Payroll" value={form.on_payroll ? 'On payroll' : 'Not on payroll'} />
             </div>
             {!row.profile && (
               <Notice tone="warn" title="No HR profile yet">
@@ -355,9 +366,15 @@ function ProfileDrawer({ row, schedules, paySchedules, canEdit, onClose, onSaved
                 default schedule, but fill this in before running payroll for them.
               </Notice>
             )}
-            {!bank && (
+            {!bank && form.on_payroll && (
               <Notice tone="warn" title="No bank account">
                 They cannot be included in a salary transfer file until an account is recorded on the Bank tab.
+              </Notice>
+            )}
+            {!form.on_payroll && (
+              <Notice tone="info" title="Not on payroll">
+                Excluded from payroll runs and from the payroll-readiness checks, so no salary structure or bank
+                details are expected. CRM access and attendance are unaffected.
               </Notice>
             )}
           </div>
@@ -411,7 +428,7 @@ function ProfileDrawer({ row, schedules, paySchedules, canEdit, onClose, onSaved
                 onChange={e => setForm({ ...form, employment_type: e.target.value })}>
                 <option value="full_time">Full time</option><option value="part_time">Part time</option>
                 <option value="intern">Intern</option><option value="contract">Contract</option>
-                <option value="consultant">Consultant</option>
+                <option value="consultant">Consultant</option><option value="partner">Partner</option>
               </Select>
             </Field>
             <Field label="Work location">
@@ -478,6 +495,18 @@ function ProfileDrawer({ row, schedules, paySchedules, canEdit, onClose, onSaved
               <Input value={form.holiday_location} disabled={!canEdit}
                 onChange={e => setForm({ ...form, holiday_location: e.target.value })} />
             </Field>
+            <div className="sm:col-span-2">
+              <label className="flex items-start gap-2.5 cursor-pointer text-xs" style={{ color: 'var(--text-secondary)' }}>
+                <input type="checkbox" checked={form.on_payroll} disabled={!canEdit} className="mt-0.5"
+                  onChange={e => setForm({ ...form, on_payroll: e.target.checked })} />
+                <span>
+                  <strong>On payroll.</strong> Turn this off for a Designated Partner or anyone else who is not
+                  salaried: they are left out of payroll runs, out of the payroll-readiness exceptions, and the
+                  nightly job stops marking them absent. They keep their CRM access, and any day they do punch is
+                  still recorded.
+                </span>
+              </label>
+            </div>
             <div className="sm:col-span-2">
               <label className="flex items-start gap-2.5 cursor-pointer text-xs" style={{ color: 'var(--text-secondary)' }}>
                 <input type="checkbox" checked={form.network_exempt} disabled={!canEdit} className="mt-0.5"

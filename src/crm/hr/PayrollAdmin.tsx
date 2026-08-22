@@ -265,7 +265,7 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
 
       const [records, lines, events, adjustments, staff, components, structures, schedules] = await Promise.all([
         api.listRunRecords(runId), api.listRunLines(runId), api.listRunEvents(runId),
-        api.listRunAdjustments(runId), api.listHREmployees(true), api.listComponents(true),
+        api.listRunAdjustments(runId), api.listHREmployees(true, true), api.listComponents(true),
         api.listStructures(), api.listPaySchedules(),
       ]);
       const structureLines = await api.listStructureLines(structures.map(s => s.id));

@@ -95,7 +95,7 @@ function TodayBoard({ onToast }: { onToast: (m: string, ok?: boolean) => void })
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [d, s] = await Promise.all([api.listDailyForDate(date), api.listHREmployees()]);
+      const [d, s] = await Promise.all([api.listDailyForDate(date), api.listHREmployees(false, true)]);
       setRows(d); setStaff(s);
     } catch (err) {
       onToast(hrError(err, 'Could not load attendance.'), false);
@@ -274,7 +274,7 @@ function Register({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [d, s] = await Promise.all([api.listDailyForRange(from, to), api.listHREmployees(true)]);
+      const [d, s] = await Promise.all([api.listDailyForRange(from, to), api.listHREmployees(true, true)]);
       setRows(d); setStaff(s);
     } catch (err) {
       onToast(hrError(err, 'Could not load the register.'), false);

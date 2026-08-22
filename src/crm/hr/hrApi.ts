@@ -278,7 +278,15 @@ export const deleteHoliday = async (id: string) => {
 // Employees
 // ===========================================================================
 
-export async function listHREmployees(includeInactive = false): Promise<HREmployee[]> {
+/**
+ * @param includeInactive  include employees whose CRM record is not active
+ * @param payrollOnly      exclude partners and anyone else not on payroll.
+ *                         Used by every screen that iterates people for pay or
+ *                         attendance, so "not salaried" is stated once.
+ */
+export async function listHREmployees(
+  includeInactive = false, payrollOnly = false,
+): Promise<HREmployee[]> {
   let q = supabase.from('nw_employees')
     .select('id, employee_code, full_name, email, phone, role, designation, avatar_url, status, joining_date')
     .order('employee_code');
@@ -293,11 +301,16 @@ export async function listHREmployees(includeInactive = false): Promise<HREmploy
     supabase.from('hr_employee_bank_accounts').select('*').in('employee_id', ids).eq('is_primary', true).eq('active', true),
   ]);
 
-  return employees.map(e => ({
+  const rows = employees.map(e => ({
     ...e,
     profile: (profiles ?? []).find(p => p.employee_id === e.id) ?? null,
     bank: (banks ?? []).find(b => b.employee_id === e.id) ?? null,
   })) as HREmployee[];
+
+  // A missing profile counts as on payroll: a new hire is salaried until
+  // someone says otherwise, and defaulting the other way would quietly drop
+  // them out of their first payroll run.
+  return payrollOnly ? rows.filter(r => r.profile?.on_payroll ?? true) : rows;
 }
 
 export const saveProfile = async (employeeId: string, patch: Partial<EmployeeProfile>) =>
