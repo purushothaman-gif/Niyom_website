@@ -171,6 +171,20 @@ export const listPendingPunches = async (): Promise<AttendancePunch[]> =>
 export const reviewPunch = async (punchId: string, approve: boolean, note: string) =>
   unwrap(await supabase.rpc('hr_review_punch', { p_punch_id: punchId, p_approve: approve, p_note: note }));
 
+/**
+ * Allowlist an office address and clear the punches held from it, in one go.
+ *
+ * One RPC rather than "create network" followed by N "approve punch" calls: a
+ * half-applied version leaves an approved network with punches still sitting in
+ * the queue, which reads as a bug and has to be cleaned up by hand.
+ */
+export const allowlistNetwork = async (
+  ip: string, name: string, location: string, approvePending: boolean, description = '',
+) => unwrap(await supabase.rpc('hr_allowlist_network', {
+  p_ip: ip, p_name: name, p_location: location,
+  p_approve_pending: approvePending, p_description: description,
+})) as { ok: boolean; network_id: string; ip: string; punches_approved: number; employees_affected: number };
+
 // ---- Corrections
 
 export const listAdjustments = async (opts: { employeeId?: string; pendingOnly?: boolean } = {}) => {
