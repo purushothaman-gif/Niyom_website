@@ -34,6 +34,8 @@ interface NavItem {
    * the menu cannot offer a page the database will refuse.
    */
   hrOnly?: boolean;
+  /** Shown only to salaried employees. Partners have nothing behind it. */
+  payrollOnly?: boolean;
 }
 
 // The sidebar is grouped by the nature of the work: acquisition, servicing,
@@ -103,7 +105,7 @@ const NAV: NavSection[] = [
     // own details behind one entry rather than six.
     id: 'me', label: 'My Workspace',
     items: [
-      { key: 'my_hr' as CRMPage,             label: 'My HR',             icon: Fingerprint },
+      { key: 'my_hr' as CRMPage,             label: 'My HR',             icon: Fingerprint, payrollOnly: true },
     ],
   },
   {
@@ -155,16 +157,22 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
    * database on mount. A failure leaves it as-is rather than guessing upward.
    */
   const [hasHrAccess, setHasHrAccess] = useState(isAdmin);
+  /*
+   * Is this person salaried? Partners are not: no attendance, no leave balance,
+   * no payslip, so "My HR" is hidden for them rather than offering four empty
+   * screens. Starts true so an ordinary employee's own entry never flickers
+   * away, and a failed lookup leaves it visible -- hiding someone's own
+   * attendance because a query failed is the wrong way to fail.
+   */
+  const [onPayroll, setOnPayroll] = useState(true);
+
   useEffect(() => {
-    if (isAdmin) return;
     let cancelled = false;
-    supabase.rpc('hr_current_profile_role').then(({ data }) => {
-      if (cancelled) return;
-      const role = (data as string | null) ?? 'none';
-      if (role === 'none') { setHasHrAccess(false); return; }
-      supabase.from('hr_role_permissions')
-        .select('can_view').eq('hr_role', role).eq('can_view', true).limit(1)
-        .then(({ data: perms }) => { if (!cancelled) setHasHrAccess((perms?.length ?? 0) > 0); });
+    supabase.rpc('hr_my_nav_context').then(({ data, error }) => {
+      if (cancelled || error || !data) return;
+      const ctx = data as unknown as { hr_admin_access: boolean; on_payroll: boolean };
+      setHasHrAccess(isAdmin || ctx.hr_admin_access);
+      setOnPayroll(ctx.on_payroll);
     });
     return () => { cancelled = true; };
   }, [isAdmin]);
@@ -206,7 +214,8 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
   };
 
   const canSee = (n: NavItem) =>
-    (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin) && (!n.hrOnly || hasHrAccess);
+    (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin)
+    && (!n.hrOnly || hasHrAccess) && (!n.payrollOnly || onPayroll);
   // Filter items by role; a section whose items are all hidden disappears along
   // with its heading (e.g. Documents for an admin who only has the Vault).
   const navSections: NavSection[] = NAV.flatMap(s => {

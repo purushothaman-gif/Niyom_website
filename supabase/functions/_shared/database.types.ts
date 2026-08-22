@@ -8608,6 +8608,7 @@ export type Database = {
         Returns: string
       }
       hr_match_network: { Args: { p_ip: unknown }; Returns: string }
+      hr_my_nav_context: { Args: never; Returns: Json }
       hr_payroll_approve: {
         Args: { p_note?: string; p_run_id: string }
         Returns: Json
