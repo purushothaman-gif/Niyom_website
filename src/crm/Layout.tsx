@@ -6,6 +6,8 @@ import {
   FileText, UserCog, Settings, LogOut, Bell, ChevronRight, X, Home,
   FolderOpen, Shield, BarChart3, Wallet, Handshake, ClipboardList,
   Send, Target, Landmark, LifeBuoy, Sparkles, LineChart,
+  CalendarCheck, CalendarClock, CalendarDays, Coins, Receipt, Fingerprint,
+  BadgeIndianRupee, SlidersHorizontal,
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
@@ -24,6 +26,14 @@ interface NavItem {
   icon: typeof LayoutDashboard;
   adminOnly?: boolean;
   hideForAdmin?: boolean;
+  /**
+   * Shown only to someone with HR capability. That is a third axis on top of
+   * adminOnly, because HR access is deliberately independent of the CRM role:
+   * an hr_admin is not a CRM admin, and a CRM admin always has HR access.
+   * Resolved from the same SECURITY DEFINER helpers the RLS policies call, so
+   * the menu cannot offer a page the database will refuse.
+   */
+  hrOnly?: boolean;
 }
 
 // The sidebar is grouped by the nature of the work: acquisition, servicing,
@@ -89,9 +99,32 @@ const NAV: NavSection[] = [
     ],
   },
   {
+    // Self-service, visible to everyone: attendance, leave, payslips and their
+    // own details behind one entry rather than six.
+    id: 'me', label: 'My Workspace',
+    items: [
+      { key: 'my_hr' as CRMPage,             label: 'My HR',             icon: Fingerprint },
+    ],
+  },
+  {
+    id: 'hr', label: 'HR & Payroll',
+    items: [
+      { key: 'hr_dashboard' as CRMPage,      label: 'HR Dashboard',      icon: LayoutDashboard, hrOnly: true },
+      { key: 'hr_employees' as CRMPage,      label: 'Employees',         icon: UserCog,         hrOnly: true },
+      { key: 'hr_attendance' as CRMPage,     label: 'Attendance',        icon: CalendarCheck,   hrOnly: true },
+      { key: 'hr_leave' as CRMPage,          label: 'Leave',             icon: CalendarClock,   hrOnly: true },
+      { key: 'hr_holidays' as CRMPage,       label: 'Holidays',          icon: CalendarDays,    hrOnly: true },
+      { key: 'hr_salary' as CRMPage,         label: 'Salary',            icon: Coins,           hrOnly: true },
+      { key: 'hr_payroll' as CRMPage,        label: 'Payroll',           icon: BadgeIndianRupee, hrOnly: true },
+      { key: 'hr_payslips' as CRMPage,       label: 'Payslips',          icon: Receipt,         hrOnly: true },
+      { key: 'hr_reports' as CRMPage,        label: 'HR Reports',        icon: BarChart3,       hrOnly: true },
+      { key: 'hr_settings' as CRMPage,       label: 'HR Settings',       icon: SlidersHorizontal, hrOnly: true },
+    ],
+  },
+  {
     id: 'administration', label: 'Administration',
     items: [
-      { key: 'employees' as CRMPage,         label: 'Employees',         icon: UserCog, adminOnly: true },
+      { key: 'employees' as CRMPage,         label: 'Directory',         icon: Users, adminOnly: true },
     ],
   },
 ];
@@ -111,6 +144,30 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
   const unread = alerts.filter(a => !a.read).length;
+
+  /*
+   * Does this user have any HR administration access?
+   *
+   * Not derivable from `employee.role`: HR capability is a separate axis
+   * (hr_employee_profiles.hr_role plus hr_role_permissions), so an ordinary
+   * employee can be an hr_admin and a CRM admin always is one. Starts as
+   * `isAdmin` so an admin's menu does not flicker, and is corrected from the
+   * database on mount. A failure leaves it as-is rather than guessing upward.
+   */
+  const [hasHrAccess, setHasHrAccess] = useState(isAdmin);
+  useEffect(() => {
+    if (isAdmin) return;
+    let cancelled = false;
+    supabase.rpc('hr_current_profile_role').then(({ data }) => {
+      if (cancelled) return;
+      const role = (data as string | null) ?? 'none';
+      if (role === 'none') { setHasHrAccess(false); return; }
+      supabase.from('hr_role_permissions')
+        .select('can_view').eq('hr_role', role).eq('can_view', true).limit(1)
+        .then(({ data: perms }) => { if (!cancelled) setHasHrAccess((perms?.length ?? 0) > 0); });
+    });
+    return () => { cancelled = true; };
+  }, [isAdmin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,9 +197,16 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
     if (a.action_url && a.action_url.includes('/leads')) onNavigate('leads' as CRMPage);
     else if (a.action_url && a.action_url.includes('/support-tickets')) onNavigate('support_tickets' as CRMPage);
     else if (a.action_url && a.action_url.includes('/clients')) onNavigate('clients' as CRMPage);
+    // HR alerts carry a full /crm/<page> path; route to it when it is a page
+    // this user can actually reach, and fall back to their own HR page.
+    else if (a.action_url && a.action_url.startsWith('/crm/hr_')) {
+      onNavigate(a.action_url.replace('/crm/', '') as CRMPage);
+    }
+    else if (a.action_url && a.action_url.includes('/my_hr')) onNavigate('my_hr' as CRMPage);
   };
 
-  const canSee = (n: NavItem) => (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin);
+  const canSee = (n: NavItem) =>
+    (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin) && (!n.hrOnly || hasHrAccess);
   // Filter items by role; a section whose items are all hidden disappears along
   // with its heading (e.g. Documents for an admin who only has the Vault).
   const navSections: NavSection[] = NAV.flatMap(s => {

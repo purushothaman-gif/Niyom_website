@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { SurfaceSetPinPrompt } from '../components/SurfaceSetPinPrompt';
@@ -31,6 +31,14 @@ import Settings from './Settings';
 import DealConfirmation from './DealConfirmation';
 import TransferQueue from './TransferQueue';
 import SupportTickets from './SupportTickets';
+/*
+ * HR is lazy on purpose. Statically imported it added ~260 KB (~64 KB gzipped)
+ * to the CRM chunk that every employee downloads on every page load, for ten
+ * screens most of them open once a month. Measured, not assumed: the chunk went
+ * 1,208 KB -> 1,469 KB.
+ */
+const HR = lazy(() => import('./hr/HR'));
+import type { HRSection } from './hr/HR';
 
 export default function CRM() {
   const [employee, setEmployee] = useState<NWEmployee | null>(null);
@@ -77,6 +85,17 @@ export default function CRM() {
     'admin_documents',
     'employees',
     'support_tickets',
+    'my_hr',
+    'hr_dashboard',
+    'hr_employees',
+    'hr_attendance',
+    'hr_leave',
+    'hr_holidays',
+    'hr_salary',
+    'hr_payroll',
+    'hr_payslips',
+    'hr_reports',
+    'hr_settings',
     'settings'
   ];
 
@@ -209,6 +228,30 @@ export default function CRM() {
       case 'deal_confirmation': return <DealConfirmation employee={employee} />;
       case 'transfer_queue': return isAdmin ? <TransferQueue employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
       case 'support_tickets': return <SupportTickets employee={employee} onNavigate={navigate} />;
+      // HR & Payroll. Every one of these pages resolves its own capability
+      // through HR.tsx rather than being gated here -- an `isAdmin` check in
+      // this switch would be a second source of truth to drift from the RLS
+      // policies, and `my_hr` is deliberately open to every employee.
+      case 'my_hr':
+      case 'hr_dashboard':
+      case 'hr_employees':
+      case 'hr_attendance':
+      case 'hr_leave':
+      case 'hr_holidays':
+      case 'hr_salary':
+      case 'hr_payroll':
+      case 'hr_payslips':
+      case 'hr_reports':
+      case 'hr_settings':
+        return (
+          <Suspense fallback={
+            <div className="flex items-center justify-center py-24">
+              <LogoLoader size={40} />
+            </div>
+          }>
+            <HR employee={employee} section={page as HRSection} onNavigate={navigate} />
+          </Suspense>
+        );
       case 'settings': return <Settings employee={employee} />;
       default: return <Dashboard employee={employee} onNavigate={navigate} />;
     }

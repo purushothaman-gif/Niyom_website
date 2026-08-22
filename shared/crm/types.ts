@@ -331,4 +331,18 @@ export type CRMPage =
   | 'deal_confirmation'
   | 'transfer_queue'
   | 'support_tickets'
+  // HR & Payroll. `my_hr` is the single self-service entry every employee sees;
+  // the `hr_*` pages are the administrative surfaces, each gated on its own
+  // capability (see src/crm/hr/HR.tsx).
+  | 'my_hr'
+  | 'hr_dashboard'
+  | 'hr_employees'
+  | 'hr_attendance'
+  | 'hr_leave'
+  | 'hr_holidays'
+  | 'hr_salary'
+  | 'hr_payroll'
+  | 'hr_payslips'
+  | 'hr_reports'
+  | 'hr_settings'
   | 'settings';

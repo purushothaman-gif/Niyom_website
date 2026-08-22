@@ -753,3 +753,46 @@ input[type='range'] {
   .niyom-loader__arc { animation: none; }
   .niyom-loader__mark { animation: niyomGlow 2.4s ease-in-out infinite; }
 }
+
+/* ---------------------------------------------------------------------------
+   HR & Payroll
+   --------------------------------------------------------------------------- */
+
+/* Skeleton placeholder. Used while an HR screen's first fetch is in flight, so
+   the layout does not jump when the data lands. */
+.hr-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.hr-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(var(--accent-soft-rgb), 0) 0%,
+    rgba(var(--accent-soft-rgb), 0.07) 50%,
+    rgba(var(--accent-soft-rgb), 0) 100%
+  );
+  animation: hr-shimmer 1.4s infinite;
+}
+@keyframes hr-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+/* Respect a reduced-motion preference: the placeholder still reads as "loading"
+   without a moving highlight. */
+@media (prefers-reduced-motion: reduce) {
+  .hr-shimmer::after { animation: none; }
+}
+
+/* Monthly attendance register: a 31-column grid needs its first column pinned
+   or the employee name scrolls away from the row you are reading. */
+.hr-register th.hr-sticky,
+.hr-register td.hr-sticky {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-surface);
+}
