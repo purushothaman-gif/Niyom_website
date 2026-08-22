@@ -3780,6 +3780,7 @@ export type Database = {
       }
       hr_settings: {
         Row: {
+          attendance_tracking_from: string | null
           company_address: string
           company_logo_url: string
           company_name: string
@@ -3797,6 +3798,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          attendance_tracking_from?: string | null
           company_address?: string
           company_logo_url?: string
           company_name?: string
@@ -3814,6 +3816,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          attendance_tracking_from?: string | null
           company_address?: string
           company_logo_url?: string
           company_name?: string

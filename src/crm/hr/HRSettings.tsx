@@ -83,6 +83,7 @@ function Company({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => v
         company_name: s.company_name, company_address: s.company_address,
         company_logo_url: s.company_logo_url, payslip_number_format: s.payslip_number_format,
         payslip_footer_note: s.payslip_footer_note,
+        attendance_tracking_from: s.attendance_tracking_from,
         employee_can_view_salary: s.employee_can_view_salary,
         notify_payroll_ready: s.notify_payroll_ready, notify_missing_punch: s.notify_missing_punch,
         notify_payslip_published: s.notify_payslip_published,
@@ -144,6 +145,28 @@ function Company({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => v
               .replace('{SEQ}', '0001')}
           </span>
         </p>
+      </SectionCard>
+
+      <SectionCard
+        title="Attendance cut-over"
+        subtitle="The first day attendance was actually tracked here."
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="Attendance tracked from"
+            hint="Leave blank only if attendance has always been tracked in this system.">
+            <Input type="date" value={s.attendance_tracking_from ?? ''} disabled={!canEdit}
+              onChange={e => setS({ ...s, attendance_tracking_from: e.target.value || null })} />
+          </Field>
+        </div>
+        <div className="mt-3">
+          <Notice tone="info">
+            A working day before this date with no punches is recorded as <strong>on duty</strong>, not absent —
+            there could be no punch data, so treating it as absence would turn history into loss of pay. Holidays,
+            weekly offs and approved leave still take precedence, and any day that does have punches is computed
+            from them. Moving this date <strong>changes past pay</strong>: everything after it becomes ordinary
+            attendance, where an unpunched working day is absence.
+          </Notice>
+        </div>
       </SectionCard>
 
       <SectionCard title="Visibility and notifications">
