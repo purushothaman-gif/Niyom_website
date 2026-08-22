@@ -116,6 +116,15 @@ export interface EmployeeForPayroll {
 export interface PayrollRules {
   lop_divisor_mode: LopDivisorMode;
   round_net_to_rupee: boolean;
+  /**
+   * Round every component to the whole rupee as it is computed.
+   *
+   * Payroll systems differ here and the difference is visible on the payslip:
+   * pro-rating 6,915 over 28/31 days gives 6,245.81 with paise kept and 6,246
+   * without. Carrying paise a system does not use makes every historical
+   * payslip disagree with the one the employee already has.
+   */
+  round_components_to_rupee?: boolean;
 }
 
 export interface PayrollPeriod {

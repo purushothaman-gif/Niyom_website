@@ -2847,6 +2847,7 @@ export type Database = {
           payment_day: number | null
           period_start_day: number
           processing_day: number | null
+          round_components_to_rupee: boolean
           round_net_to_rupee: boolean
           updated_at: string
         }
@@ -2865,6 +2866,7 @@ export type Database = {
           payment_day?: number | null
           period_start_day?: number
           processing_day?: number | null
+          round_components_to_rupee?: boolean
           round_net_to_rupee?: boolean
           updated_at?: string
         }
@@ -2883,6 +2885,7 @@ export type Database = {
           payment_day?: number | null
           period_start_day?: number
           processing_day?: number | null
+          round_components_to_rupee?: boolean
           round_net_to_rupee?: boolean
           updated_at?: string
         }

@@ -336,6 +336,10 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
           rules: {
             lop_divisor_mode: (schedule?.lop_divisor_mode ?? run.lop_divisor_mode) as 'calendar_days',
             round_net_to_rupee: schedule?.round_net_to_rupee ?? true,
+            // Must come from the schedule: computing a month here with paise
+            // when the historical runs were settled in whole rupees would make
+            // the same employee's payslips disagree month to month.
+            round_components_to_rupee: schedule?.round_components_to_rupee ?? false,
           },
         }));
       }
