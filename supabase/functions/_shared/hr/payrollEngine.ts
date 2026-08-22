@@ -61,9 +61,22 @@ export function lopDivisor(mode: LopDivisorMode, att: AttendanceSummary): number
 /**
  * The fraction of a full month's entitlement that is actually payable.
  *
- * `payable_days` mode pays strictly for the days earned out of the working
- * days; every other mode deducts a day rate per LOP day, which is the same
- * thing when working_days is the divisor and different when it is not.
+ * Driven by UNPAYABLE days -- calendar days minus payable days -- rather than
+ * by `lop_days`, and that distinction is the whole point.
+ *
+ * `lop_days` counts absence by someone who was employed and expected to work.
+ * It deliberately EXCLUDES the days before a joiner started and after a leaver
+ * finished, because those are not absence and counting them as such would dock
+ * a joiner for not existing yet (see summariseAttendance). But those days are
+ * still not payable, and reading only `lop_days` here meant a mid-month joiner
+ * came out at a ratio of 1.0 -- a full month's pay for a fortnight's work.
+ *
+ * Both modules were correct in isolation; they disagreed at the seam. The
+ * shortfall against the calendar covers both causes at once and needs no
+ * special case for either.
+ *
+ * `payable_days` mode is different in kind: it pays strictly for days earned
+ * out of the organisation's working days, so it keeps its own formula.
  */
 export function payableRatio(mode: LopDivisorMode, att: AttendanceSummary): number {
   const divisor = lopDivisor(mode, att);
@@ -74,7 +87,9 @@ export function payableRatio(mode: LopDivisorMode, att: AttendanceSummary): numb
     return Math.min(1, Math.max(0, ratio));
   }
 
-  const ratio = (divisor - att.lop_days) / divisor;
+  // Everything the month did not pay for, whatever the reason.
+  const unpayable = Math.max(0, att.calendar_days - att.payable_days);
+  const ratio = (divisor - unpayable) / divisor;
   return Math.min(1, Math.max(0, ratio));
 }
 
@@ -149,6 +164,21 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   const exceptions: PayrollException[] = [];
   const byId = new Map(components.map(c => [c.id, c]));
 
+  /*
+   * Whole rupees or paise -- a per-organisation choice.
+   *
+   * Applied as each component is SETTLED, not once at the end, and the
+   * difference is not cosmetic. On a gross of 27,657 the basic is 13,828.50.
+   * Round at settlement and HRA is 50% of 13,829 = 6,915; round only at output
+   * and it is 50% of 13,828.50 = 6,914. Three rupees a month move between HRA
+   * and the balancing allowance -- the gross is identical either way, so the
+   * error hides in the totals and only shows up per component, which is exactly
+   * where a reconstructed payslip is compared against the original.
+   */
+  const money = rules.round_components_to_rupee
+    ? (n: number) => Math.round(n)
+    : round2;
+
   const divisor = lopDivisor(rules.lop_divisor_mode, attendance);
 
   // ---- No structure: nothing to compute, and the run must not silently pay 0.
@@ -186,7 +216,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   // Pass A -- fixed. Basic is almost always fixed and everything else keys off it.
   for (const { line, component } of earningRows) {
     if (component.calc_type !== 'fixed') continue;
-    const v = valueOf(component, line, ctx);
+    const v = money(valueOf(component, line, ctx));
     ctx.byId.set(component.id, v);
     if (component.code === 'BASIC') ctx.basic = v;
   }
@@ -201,7 +231,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   for (const { line, component } of earningRows) {
     if (component.calc_type === 'fixed' || component.calc_type === 'balance') continue;
     if (component.percent_of === 'gross') continue;  // needs the balance first
-    ctx.byId.set(component.id, valueOf(component, line, ctx));
+    ctx.byId.set(component.id, money(valueOf(component, line, ctx)));
   }
 
   // Pass C -- the balancing component absorbs the remainder of monthly gross.
@@ -216,7 +246,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     const allocated = earningRows
       .filter(r => r.component.calc_type !== 'balance' && r.component.include_in_gross)
       .reduce((sum, r) => sum + (ctx.byId.get(r.component.id) ?? 0), 0);
-    ctx.byId.set(balanceRows[0].component.id, round2(Math.max(0, structure.gross_monthly - allocated)));
+    ctx.byId.set(balanceRows[0].component.id, money(Math.max(0, structure.gross_monthly - allocated)));
   }
 
   // Gross of the FULL month, which is the base for gross-percentage components.
@@ -229,7 +259,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   // circular, and no real component is defined that way.
   for (const { line, component } of earningRows) {
     if (component.calc_type === 'percent_of' && component.percent_of === 'gross') {
-      ctx.byId.set(component.id, valueOf(component, line, ctx));
+      ctx.byId.set(component.id, money(valueOf(component, line, ctx)));
     }
   }
   ctx.gross = round2(earningRows
@@ -253,8 +283,8 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
 
   const proratedBase = new Map<string, number>();
   for (const { component } of earningRows) {
-    const base = ctx.byId.get(component.id) ?? 0;
-    const amount = component.prorate_on_lop ? round2(base * ratio) : base;
+    const base = money(ctx.byId.get(component.id) ?? 0);
+    const amount = component.prorate_on_lop ? money(base * ratio) : base;
     proratedBase.set(component.id, amount);
     if (component.prorate_on_lop) lopAmount += base - amount;
 
@@ -275,7 +305,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
 
   const proratedBasic = proratedBase.get(
     earningRows.find(r => r.component.code === 'BASIC')?.component.id ?? '') ??
-    round2(ctx.basic * ratio);
+    money(ctx.basic * ratio);
 
   const proratedGross = round2(earningRows
     .filter(r => r.component.include_in_gross)
@@ -297,13 +327,13 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
       // a property of the salary, not of how many days happened to be worked.
       if (!isEligible(component, ctx.gross)) continue;
 
-      const base = valueOf(component, line, dctx);
+      const base = money(valueOf(component, line, dctx));
       if (base === 0 && component.calc_type === 'fixed' && (line?.amount_monthly ?? 0) === 0) continue;
 
       // Fixed deductions (PT, TDS) are a monthly figure, not a day rate, so
       // they are not scaled down by LOP unless the component says so.
       const amount = component.prorate_on_lop && component.calc_type === 'fixed'
-        ? round2(base * ratio)
+        ? money(base * ratio)
         : base;
 
       dctx.byId.set(component.id, amount);
@@ -331,8 +361,8 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   // =========================================================================
   for (const adj of adjustments) {
     const component = adj.component_id ? byId.get(adj.component_id) : undefined;
-    const base = round2(adj.amount);
-    const amount = adj.prorate_on_lop ? round2(base * ratio) : base;
+    const base = money(adj.amount);
+    const amount = adj.prorate_on_lop ? money(base * ratio) : base;
 
     lines.push({
       component_id: adj.component_id,

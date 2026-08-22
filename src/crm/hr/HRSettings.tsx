@@ -213,6 +213,7 @@ function Schedules({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) =>
         payment_day: editing.payment_day,
         attendance_cutoff_day: editing.attendance_cutoff_day,
         round_net_to_rupee: editing.round_net_to_rupee,
+        round_components_to_rupee: editing.round_components_to_rupee,
       });
       onToast('Pay schedule saved. It applies to runs calculated from now on.');
       setEditing(null);
@@ -308,6 +309,16 @@ function Schedules({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) =>
               <input type="checkbox" checked={editing.round_net_to_rupee}
                 onChange={e => setEditing({ ...editing, round_net_to_rupee: e.target.checked })} />
               Round net pay to the nearest rupee
+            </label>
+            <label className="flex items-start gap-2.5 cursor-pointer text-xs" style={{ color: 'var(--text-secondary)' }}>
+              <input type="checkbox" checked={editing.round_components_to_rupee} className="mt-0.5"
+                onChange={e => setEditing({ ...editing, round_components_to_rupee: e.target.checked })} />
+              <span>
+                Round every payslip component to the whole rupee.{' '}
+                <strong>Changing this changes the figures</strong> — a percentage component is taken from the
+                settled value of the one above it, so turning it off mid-year would make an employee's payslips
+                disagree month to month.
+              </span>
             </label>
             <div className="flex justify-end gap-2">
               <button onClick={() => setEditing(null)} className="px-4 py-2 rounded-xl text-sm font-semibold"
