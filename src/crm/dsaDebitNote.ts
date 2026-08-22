@@ -1,6 +1,10 @@
 import html2pdf from 'html2pdf.js';
 import { NWDSA } from './types';
 import { PRODUCT_LABELS } from './utils';
+import { amountInWords } from '../lib/money';
+
+// Re-exported for the existing importers (payment receipt, tests).
+export { amountInWords };
 
 // Company + bank constants (mirrors the deal confirmation document)
 export const NIYOM_COMPANY = {
@@ -93,50 +97,6 @@ const inr = (n: number) =>
   '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // ---------- Amount in words (Indian numbering) ----------
-export function amountInWords(amount: number): string {
-  const num = Math.floor(Math.abs(amount));
-  const paise = Math.round((Math.abs(amount) - num) * 100);
-
-  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
-    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen',
-    'Eighteen', 'Nineteen'];
-  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-  const twoDigit = (n: number): string => {
-    if (n < 20) return ones[n];
-    return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
-  };
-
-  const threeDigit = (n: number): string => {
-    const h = Math.floor(n / 100);
-    const rest = n % 100;
-    let s = '';
-    if (h) s += ones[h] + ' Hundred';
-    if (rest) s += (h ? ' ' : '') + twoDigit(rest);
-    return s;
-  };
-
-  if (num === 0) {
-    return paise ? `${twoDigit(paise)} Paise Only` : 'Zero Only';
-  }
-
-  const crore = Math.floor(num / 10000000);
-  const lakh = Math.floor((num % 10000000) / 100000);
-  const thousand = Math.floor((num % 100000) / 1000);
-  const hundred = num % 1000;
-
-  const parts: string[] = [];
-  if (crore) parts.push(twoDigit(crore) + ' Crore');
-  if (lakh) parts.push(twoDigit(lakh) + ' Lakh');
-  if (thousand) parts.push(twoDigit(thousand) + ' Thousand');
-  if (hundred) parts.push(threeDigit(hundred));
-
-  let words = parts.join(' ').trim();
-  if (amount < 0) words = 'Minus ' + words;
-  words = 'Rupees ' + words;
-  if (paise) words += ` and ${twoDigit(paise)} Paise`;
-  return words + ' Only';
-}
 
 // ---------- HTML template ----------
 // Single-page A4 accounting-document layout inspired by a classic debit-note

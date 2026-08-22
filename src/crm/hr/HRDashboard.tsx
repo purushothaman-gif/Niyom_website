@@ -50,7 +50,10 @@ export default function HRDashboard({ access, onNavigate }: {
     try {
       const today = new Date().toISOString().slice(0, 10);
       const [staff, daily, pendingPunches, corrections, leave, structures, runs] = await Promise.all([
-        api.listHREmployees(),
+        // Payroll-eligible only: a partner has no salary structure and no bank
+        // details ON PURPOSE, and listing that as an exception every morning
+        // trains people to ignore the exception list.
+        api.listHREmployees(false, true),
         api.listDailyForDate(today),
         access.canView.attendance ? api.listPendingPunches() : Promise.resolve([]),
         access.canView.attendance ? api.listAdjustments({ pendingOnly: true }) : Promise.resolve([]),

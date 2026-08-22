@@ -2385,6 +2385,7 @@ export type Database = {
           id: string
           network_exempt: boolean
           notes: string
+          on_payroll: boolean
           pan: string | null
           pay_schedule_id: string | null
           personal_email: string | null
@@ -2420,6 +2421,7 @@ export type Database = {
           id?: string
           network_exempt?: boolean
           notes?: string
+          on_payroll?: boolean
           pan?: string | null
           pay_schedule_id?: string | null
           personal_email?: string | null
@@ -2455,6 +2457,7 @@ export type Database = {
           id?: string
           network_exempt?: boolean
           notes?: string
+          on_payroll?: boolean
           pan?: string | null
           pay_schedule_id?: string | null
           personal_email?: string | null

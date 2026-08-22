@@ -77,3 +77,56 @@ export function initials(name: string): string {
     .map((w) => w[0]?.toUpperCase() ?? '')
     .join('');
 }
+
+/**
+ * Rupees in words, Indian numbering: "Rupees Twenty-Five Thousand ... Only".
+ *
+ * Lives here rather than in dsaDebitNote because three documents need it -- the
+ * debit note, the payment receipt and the payslip -- and that module imports
+ * html2pdf at module scope, which wants a browser. A pure formatter should not
+ * drag a PDF renderer into everything that spells out an amount.
+ */
+export function amountInWords(amount: number): string {
+  const num = Math.floor(Math.abs(amount));
+  const paise = Math.round((Math.abs(amount) - num) * 100);
+
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen',
+    'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const twoDigit = (n: number): string => {
+    if (n < 20) return ones[n];
+    return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+  };
+
+  const threeDigit = (n: number): string => {
+    const h = Math.floor(n / 100);
+    const rest = n % 100;
+    let s = '';
+    if (h) s += ones[h] + ' Hundred';
+    if (rest) s += (h ? ' ' : '') + twoDigit(rest);
+    return s;
+  };
+
+  if (num === 0) {
+    return paise ? `${twoDigit(paise)} Paise Only` : 'Zero Only';
+  }
+
+  const crore = Math.floor(num / 10000000);
+  const lakh = Math.floor((num % 10000000) / 100000);
+  const thousand = Math.floor((num % 100000) / 1000);
+  const hundred = num % 1000;
+
+  const parts: string[] = [];
+  if (crore) parts.push(twoDigit(crore) + ' Crore');
+  if (lakh) parts.push(twoDigit(lakh) + ' Lakh');
+  if (thousand) parts.push(twoDigit(thousand) + ' Thousand');
+  if (hundred) parts.push(threeDigit(hundred));
+
+  let words = parts.join(' ').trim();
+  if (amount < 0) words = 'Minus ' + words;
+  words = 'Rupees ' + words;
+  if (paise) words += ` and ${twoDigit(paise)} Paise`;
+  return words + ' Only';
+}
