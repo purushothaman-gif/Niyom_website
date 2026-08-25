@@ -100,6 +100,11 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
     bizConv: (String(val("business_day_convention") ?? "following") as BizConv),
     holidays,
     cleanPricePer100: numOrNull(bond.latest_price),
+    // Coupon-entitlement inputs — null for every existing bond (columns not yet populated),
+    // so accrued stays on the existing cum-interest calc until a security carries them.
+    recordDateISO: (val("record_date") as string) ?? null,
+    exInterestDateISO: (val("ex_interest_date") as string) ?? null,
+    couponEntitlementRule: (val("coupon_entitlement_rule") as string) ?? null,
   });
 
   // Persist schedules (replace).
@@ -184,6 +189,9 @@ async function recomputeOne(supabase: Client, bond: Record<string, unknown>, hol
     bizConv: (String(bond.business_day_convention ?? "following") as BizConv),
     holidays,
     cleanPricePer100: numOrNull(bond.latest_price),
+    recordDateISO: (bond.record_date as string) ?? null,
+    exInterestDateISO: (bond.ex_interest_date as string) ?? null,
+    couponEntitlementRule: (bond.coupon_entitlement_rule as string) ?? null,
   });
   await supabase.from("bm_coupon_schedule").delete().eq("bond_id", bondId);
   await supabase.from("bm_cashflow_schedule").delete().eq("bond_id", bondId);
@@ -215,6 +223,7 @@ function analyticsJson(a: ReturnType<typeof computeAnalytics>) {
   return {
     accrued_per_100: a.accrued_per_100, accrued_days: a.accrued_days, accrual_convention: a.accrual_convention,
     coupon_to_seller: a.coupon_to_seller, next_coupon_for_accrual: a.next_coupon_for_accrual,
+    record_date: a.record_date, ex_interest_date: a.ex_interest_date,
     clean_price: a.clean_price, dirty_price: a.dirty_price,
     current_yield: a.current_yield, ytm: a.ytm, macaulay_duration: a.macaulay_duration,
     modified_duration: a.modified_duration, days_to_maturity: a.days_to_maturity,
