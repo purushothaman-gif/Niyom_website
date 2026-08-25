@@ -22,6 +22,13 @@ export interface AnalyticsInput {
   holidays: Set<string>;              // ISO holiday dates
   cleanPricePer100?: number | null;
   settlementISO?: string;
+  // Ex-interest / record-date convention for cum-vs-ex accrued. NOT a fixed rule —
+  // it comes from the bond's own terms. Provide EITHER the exact record date of the
+  // upcoming coupon, OR the number of days before the coupon the register closes
+  // (per the debenture trust deed). If NEITHER is given, accrued defaults to
+  // cum-interest (the standard treatment; never zeroed near the coupon).
+  recordDateISO?: string | null;
+  exInterestDays?: number | null;
 }
 
 export interface CashflowRow { seq: number; date: string; interest_per_100: number; principal_per_100: number; total_per_100: number; remark: string }
@@ -33,6 +40,10 @@ export interface AnalyticsResult {
   coupon_schedule: CouponRow[];
   cashflow_schedule: CashflowRow[];
   accrued_per_100: number;
+  accrued_days: number;                       // days of interest accrued (negative if ex-interest rebate)
+  accrual_convention: 'cum' | 'ex' | 'none';  // how accrued was determined
+  coupon_to_seller: boolean;                   // seller keeps the upcoming coupon (ex-interest)
+  next_coupon_for_accrual: string | null;      // the coupon the accrual is measured against
   clean_price: number | null;
   dirty_price: number | null;
   current_yield: number | null;
@@ -160,7 +171,8 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
   const settlementISO = toISO(settlement);
   const empty: AnalyticsResult = {
     ok: false, settlement_date: settlementISO, coupon_schedule: [], cashflow_schedule: [],
-    accrued_per_100: 0, clean_price: input.cleanPricePer100 ?? null, dirty_price: null, current_yield: null,
+    accrued_per_100: 0, accrued_days: 0, accrual_convention: 'none', coupon_to_seller: false, next_coupon_for_accrual: null,
+    clean_price: input.cleanPricePer100 ?? null, dirty_price: null, current_yield: null,
     ytm: null, macaulay_duration: null, modified_duration: null, days_to_maturity: null, years_to_maturity: null,
     total_future_interest_per_100: 0, total_future_principal_per_100: 0, assumed_bullet: true,
   };
@@ -243,8 +255,33 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
     prev = scheduledD;
   }
 
-  // ---- accrued + prices + yields + duration ----
-  const accrued = zero ? 0 : +(100 * ((coupon ?? 0) / 100) * dcf(lastCoupon, settlement, input.dayCount)).toFixed(4);
+  // ---- accrued interest: cum- vs ex-interest, decided by the record date (NOT a fixed cutoff) ----
+  // nextCoupon = first coupon strictly after settlement; lastCoupon = the coupon before it.
+  // The register closes on the record date (ex-date). If the trade settles on/after the ex-date
+  // (and before the coupon pays), the upcoming coupon belongs to the SELLER, so the buyer holds
+  // to the coupon date without receiving it → accrued is a NEGATIVE rebate. Otherwise the buyer
+  // becomes the holder of record and pays the seller normal (positive) cum-interest.
+  const nextCoupon = zero ? maturity : scheduled[0];
+  const exDate = input.recordDateISO
+    ? toDate(input.recordDateISO)
+    : (input.exInterestDays != null && input.exInterestDays >= 0 ? addDays(nextCoupon, -input.exInterestDays) : null);
+  // The ex-date must belong to THIS coupon period (a fixed record date from the data
+  // applies only to its own coupon, not to later ones once settlement moves past it).
+  const exValid = exDate !== null && exDate > lastCoupon && exDate <= nextCoupon;
+  const isEx = !zero && exValid && settlement >= (exDate as Date) && settlement < nextCoupon;
+  let accrued: number, accrued_days: number, accrual_convention: 'cum' | 'ex' | 'none';
+  if (zero) {
+    accrued = 0; accrued_days = 0; accrual_convention = 'none';
+  } else if (isEx) {
+    accrued_days = -days(settlement, nextCoupon);   // negative: days remaining to the coupon
+    accrued = +(100 * ((coupon ?? 0) / 100) * dcf(settlement, nextCoupon, input.dayCount) * -1).toFixed(4);
+    accrual_convention = 'ex';
+  } else {
+    accrued_days = days(lastCoupon, settlement);
+    accrued = +(100 * ((coupon ?? 0) / 100) * dcf(lastCoupon, settlement, input.dayCount)).toFixed(4);
+    accrual_convention = 'cum';
+  }
+  const coupon_to_seller = isEx;
   const clean = input.cleanPricePer100 ?? null;
   const dirty = clean !== null ? +(clean + accrued).toFixed(4) : null;
   const current_yield = (clean && coupon) ? +((coupon / clean) * 100).toFixed(4) : null;
@@ -269,7 +306,9 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
 
   return {
     ok: true, settlement_date: settlementISO, coupon_schedule: couponSched, cashflow_schedule: cashflow,
-    accrued_per_100: accrued, clean_price: clean, dirty_price: dirty, current_yield,
+    accrued_per_100: accrued, accrued_days, accrual_convention, coupon_to_seller,
+    next_coupon_for_accrual: zero ? null : toISO(nextCoupon),
+    clean_price: clean, dirty_price: dirty, current_yield,
     ytm, macaulay_duration: mac, modified_duration: mod,
     days_to_maturity: dtm, years_to_maturity: +(dtm / 365).toFixed(3),
     total_future_interest_per_100: +totInt.toFixed(4), total_future_principal_per_100: +totPrin.toFixed(4),
