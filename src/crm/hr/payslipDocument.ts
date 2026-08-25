@@ -18,7 +18,7 @@
  */
 
 import { supabase } from '../../lib/supabase';
-import { buildPayslipHtml, type PayslipData } from './payslipTemplate';
+import { buildPayslipHtml, financialYearStart, type PayslipData } from './payslipTemplate';
 
 // Re-exported so existing importers of this module keep working; the document
 // itself now lives in ./payslipTemplate, which has no database dependency.
@@ -47,7 +47,74 @@ export async function loadPayslipData(payslipId: string): Promise<PayslipData> {
 
   if (!record) throw new Error('The payroll record behind this payslip is not available.');
 
-  return { payslip, record, lines: lines ?? [], settings: settings ?? null };
+  return {
+    payslip,
+    record,
+    lines: lines ?? [],
+    settings: settings ?? null,
+    ytd: await loadYearToDate(record.employee_id, payslip.period_year, payslip.period_month),
+  };
+}
+
+/**
+ * Year-to-date per component, for the Indian financial year up to and including
+ * this month.
+ *
+ * DERIVED, never stored. Writing a YTD onto each payroll line at calculation
+ * time would be faster to read and would start drifting the first time a run
+ * was reopened and recalculated -- the earlier months' stored totals would
+ * still describe figures that no longer exist. Summing the runs on demand
+ * cannot go stale.
+ *
+ * Only APPROVED runs count. A draft month is not pay that has happened, and
+ * including it would show an employee a year-to-date figure that could still
+ * change.
+ *
+ * Returns an empty object on failure rather than throwing: a payslip whose YTD
+ * column is missing is still a correct payslip, and refusing to produce one at
+ * all because the history could not be read would be the worse outcome.
+ */
+async function loadYearToDate(
+  employeeId: string, year: number, month: number,
+): Promise<Record<string, number>> {
+  try {
+    const fy = financialYearStart(year, month);
+
+    const { data: runs } = await supabase
+      .from('hr_payroll_runs')
+      .select('id, period_year, period_month, status')
+      .in('status', ['approved', 'locked', 'paid']);
+
+    // Filter in code: the window spans a year boundary, which is awkward and
+    // error-prone to express as a SQL predicate on two integer columns.
+    const inWindow = (runs ?? []).filter(r => {
+      const k = r.period_year * 12 + r.period_month;
+      return k >= fy.year * 12 + fy.month && k <= year * 12 + month;
+    });
+    if (inWindow.length === 0) return {};
+
+    const { data: records } = await supabase
+      .from('hr_payroll_employee_records')
+      .select('id')
+      .eq('employee_id', employeeId)
+      .in('run_id', inWindow.map(r => r.id));
+    if (!records || records.length === 0) return {};
+
+    const { data: lines } = await supabase
+      .from('hr_payroll_lines')
+      .select('component_code, amount')
+      .in('record_id', records.map(r => r.id));
+
+    const totals: Record<string, number> = {};
+    for (const l of lines ?? []) {
+      totals[l.component_code] = (totals[l.component_code] ?? 0) + Number(l.amount);
+    }
+    // Guard against float drift accumulating across a year of additions.
+    for (const k of Object.keys(totals)) totals[k] = Math.round(totals[k] * 100) / 100;
+    return totals;
+  } catch {
+    return {};
+  }
 }
 
 /* ------------------------------------------------------------------- print */
