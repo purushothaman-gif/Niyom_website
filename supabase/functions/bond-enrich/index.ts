@@ -213,7 +213,9 @@ async function recomputeOne(supabase: Client, bond: Record<string, unknown>, hol
 
 function analyticsJson(a: ReturnType<typeof computeAnalytics>) {
   return {
-    accrued_per_100: a.accrued_per_100, clean_price: a.clean_price, dirty_price: a.dirty_price,
+    accrued_per_100: a.accrued_per_100, accrued_days: a.accrued_days, accrual_convention: a.accrual_convention,
+    coupon_to_seller: a.coupon_to_seller, next_coupon_for_accrual: a.next_coupon_for_accrual,
+    clean_price: a.clean_price, dirty_price: a.dirty_price,
     current_yield: a.current_yield, ytm: a.ytm, macaulay_duration: a.macaulay_duration,
     modified_duration: a.modified_duration, days_to_maturity: a.days_to_maturity,
     years_to_maturity: a.years_to_maturity, total_future_interest_per_100: a.total_future_interest_per_100,
