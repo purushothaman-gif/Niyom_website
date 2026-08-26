@@ -33,6 +33,15 @@ export interface TeamRevenueEntry {
   revenue: number;
   /** Number of revenue-earning entries behind the figure. */
   entries: number;
+  /**
+   * Contracted monthly gross from the salary structure in force during the
+   * month (hr_salary_structures.gross_monthly). null when the employee has no
+   * active structure — the multiple then reads '—' rather than a fake 0×.
+   *
+   * NOTE: the rupee figure never appears on the card, only the multiple. It is
+   * still derivable from revenue ÷ multiple by anyone holding the image.
+   */
+  grossMonthly: number | null;
 }
 
 export interface TeamRevenueImageOptions {
@@ -68,6 +77,27 @@ const clipName = (name: string, max = 26): string => {
   return n.length > max ? n.slice(0, max - 1).trimEnd() + '…' : n;
 };
 
+/**
+ * Performance multiple: revenue earned in the month against one month of the
+ * employee's contracted gross. 1.00× means the month covered its own salary
+ * cost exactly. Returns null when there is no salary structure to divide by.
+ */
+export function perfMultiple(e: Pick<TeamRevenueEntry, 'revenue' | 'grossMonthly'>): number | null {
+  if (e.grossMonthly === null || !(e.grossMonthly > 0)) return null;
+  return e.revenue / e.grossMonthly;
+}
+
+const fmtMultiple = (m: number | null): string => (m === null ? '—' : `${m.toFixed(2)}×`);
+
+// Colour reads at a glance: cleared its cost, or did not.
+const multipleColor = (m: number | null): string => {
+  if (m === null) return '#5f6d84';
+  if (m >= 2)     return '#7BE3A5';
+  if (m >= 1)     return '#E4CE92';
+  if (m > 0)      return '#D9954A';
+  return '#7f8ea8';
+};
+
 const initials = (name: string): string =>
   name.trim().split(/\s+/).slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase() || '?';
 
@@ -93,6 +123,11 @@ export function buildTeamRevenueCardHtml(o: TeamRevenueImageOptions): string {
   const { darkBlue, gold, goldSoft, white } = NIYOM_BRAND;
   const list = [...o.entries].sort((a, b) => b.revenue - a.revenue);
   const total = list.reduce((s, e) => s + e.revenue, 0);
+  // Team multiple is total revenue over total gross — NOT the average of the
+  // individual multiples, which would weight a ₹23k salary the same as a ₹50k
+  // one and overstate the team.
+  const grossTotal = list.reduce((s, e) => s + (e.grossMonthly ?? 0), 0);
+  const teamMultiple = grossTotal > 0 ? total / grossTotal : null;
   // Bars are scaled to the top earner, so the picture shows the SPREAD of the
   // month rather than each person's share of a total nobody is chasing.
   const peak = Math.max(...list.map(e => Math.abs(e.revenue)), 1);
@@ -105,6 +140,7 @@ export function buildTeamRevenueCardHtml(o: TeamRevenueImageOptions): string {
       : lead ? `linear-gradient(90deg,${gold},#F2DB99)`
              : 'linear-gradient(90deg,rgba(200,162,75,0.55),rgba(200,162,75,0.22))';
     const amtCol = e.revenue < 0 ? '#FF8A80' : lead ? '#F2DB99' : white;
+    const m      = perfMultiple(e);
     return `
     <div style="display:flex;align-items:center;gap:16px;padding:14px 26px;${lead ? `background:rgba(200,162,75,0.09);border-left:3px solid ${gold};` : 'border-left:3px solid transparent;'}">
       <div style="width:30px;flex-shrink:0;font-size:17px;font-weight:800;color:${lead ? gold : '#7f8ea8'};text-align:center;">${i + 1}</div>
@@ -116,7 +152,11 @@ export function buildTeamRevenueCardHtml(o: TeamRevenueImageOptions): string {
           <div style="height:7px;width:${width.toFixed(1)}%;border-radius:4px;background:${barCol};"></div>
         </div>
       </div>
-      <div style="width:190px;flex-shrink:0;text-align:right;">
+      <div style="width:104px;flex-shrink:0;text-align:center;">
+        <div style="font-size:23px;font-weight:800;color:${multipleColor(m)};line-height:28px;">${fmtMultiple(m)}</div>
+        <div style="font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:#7f8ea8;margin-top:1px;">${m === null ? 'no structure' : 'of salary'}</div>
+      </div>
+      <div style="width:172px;flex-shrink:0;text-align:right;">
         <div style="font-size:24px;font-weight:800;color:${amtCol};line-height:1.15;">${inrShort(e.revenue)}</div>
         <div style="font-size:11px;color:#8fa0bd;margin-top:2px;">${e.entries === 0 && e.revenue === 0
           ? 'No revenue this month'
@@ -155,6 +195,11 @@ export function buildTeamRevenueCardHtml(o: TeamRevenueImageOptions): string {
         <div style="font-size:44px;font-weight:900;color:${white};line-height:1.1;margin-top:4px;">${inrShort(total)}</div>
         <div style="font-size:12px;color:#8fa0bd;margin-top:2px;">${inr(total)}</div>
       </div>
+      <div style="text-align:center;">
+        <div style="font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:${goldSoft};font-weight:700;">Team performance</div>
+        <div style="font-size:44px;font-weight:900;color:${multipleColor(teamMultiple)};line-height:1.1;margin-top:4px;">${fmtMultiple(teamMultiple)}</div>
+        <div style="font-size:12px;color:#8fa0bd;margin-top:2px;">revenue per ₹1 of salary</div>
+      </div>
       <div style="text-align:right;">
         <div style="font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:${goldSoft};font-weight:700;">Team</div>
         <div style="font-size:44px;font-weight:900;color:${white};line-height:1.1;margin-top:4px;">${list.length}</div>
@@ -169,8 +214,9 @@ export function buildTeamRevenueCardHtml(o: TeamRevenueImageOptions): string {
 
     <!-- Footer -->
     <div style="padding:16px 34px 22px;display:flex;justify-content:space-between;align-items:center;gap:18px;">
-      <div style="font-size:10.5px;color:#7f8ea8;line-height:1.55;max-width:520px;">
+      <div style="font-size:10.5px;color:#7f8ea8;line-height:1.55;max-width:560px;">
         Revenue is counted in the month the payment was received, not the month the deal was booked.<br/>
+        Performance × = revenue per ₹1 of gross salary; <strong style="color:${goldSoft};">1.00× covers the month's salary</strong>.<br/>
         <span style="color:${goldSoft};">Internal — for team discussion only.</span> Not for circulation outside Niyom Wealth.
       </div>
       <div style="font-size:10.5px;color:#7f8ea8;text-align:right;line-height:1.5;white-space:nowrap;">
