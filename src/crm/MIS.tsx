@@ -69,6 +69,27 @@ export default function MIS({ employee }: Props) {
       const allClients = (clientData as NWClient[]) || [];
       const allRows = await computeMisRows(allClients, startDate, endDate, selectedYear, selectedMonth);
 
+      // Contracted monthly gross for the structure in force during THIS month.
+      // Effective-dated, so a mid-year revision is picked up in the month it
+      // takes effect rather than being applied backwards over the whole year.
+      // Readable here because hr_can_view('salary') is true for CRM admins and
+      // this button is admin-only; a non-admin simply gets no rows and every
+      // multiple falls back to '—'.
+      const { data: salaryRows } = await supabase
+        .from('hr_salary_structures')
+        .select('employee_id, gross_monthly, effective_from, effective_to')
+        .eq('status', 'active')
+        .lte('effective_from', endDate)
+        .or(`effective_to.is.null,effective_to.gte.${startDate}`)
+        .order('effective_from', { ascending: true });
+      // Ascending, so the last write per employee is the latest structure that
+      // had taken effect by the end of the month.
+      const grossByEmp = new Map<string, number>();
+      for (const r of (salaryRows ?? []) as { employee_id: string; gross_monthly: number | string }[]) {
+        const g = Number(r.gross_monthly);
+        if (Number.isFinite(g) && g > 0) grossByEmp.set(r.employee_id, g);
+      }
+
       const byEmp = new Map<string, { revenue: number; entries: number }>();
       for (const r of allRows) {
         if (!r.employee_id) continue;          // unassigned client — no one to credit
@@ -89,6 +110,7 @@ export default function MIS({ employee }: Props) {
           designation:   e.designation,
           revenue:       byEmp.get(e.id)?.revenue ?? 0,
           entries:       byEmp.get(e.id)?.entries ?? 0,
+          grossMonthly:  grossByEmp.get(e.id) ?? null,
         }));
 
       await generateTeamRevenueImage({
