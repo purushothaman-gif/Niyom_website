@@ -130,6 +130,10 @@ const ATTENDANCE_TONE: Record<string, [string, string]> = {
   on_duty:      ['16,185,129', 'On Duty'],
   not_joined:   ['148,163,184','Not Joined'],
   exited:       ['148,163,184','Exited'],
+  // Undecided days. Blue rather than green: they are not attendance yet, and
+  // grey would read as "nothing expected here" like a weekly off.
+  working:      ['59,130,246', 'Working'],
+  upcoming:     ['148,163,184','Upcoming'],
 };
 
 const PAYROLL_TONE: Record<string, [string, string]> = {

@@ -68,12 +68,16 @@ export default function HRDashboard({ access, onNavigate }: {
 
       setSnap({
         staff,
-        presentToday: staff.filter(s => ['present', 'on_duty', 'half_day'].includes(status(s.id) ?? '')).length,
+        presentToday: staff.filter(s => ['present', 'on_duty', 'half_day', 'working'].includes(status(s.id) ?? '')).length,
         absentToday: staff.filter(s => status(s.id) === 'absent').length,
         onLeaveToday: staff.filter(s => ['paid_leave', 'unpaid_leave'].includes(status(s.id) ?? '')).length,
         notPunched: staff.filter(s => {
           const d = daily.find(x => x.employee_id === s.id);
-          return !d?.first_in_at && !['weekly_off', 'holiday', 'paid_leave', 'unpaid_leave', 'not_joined', 'exited'].includes(d?.status ?? '');
+          // 'upcoming' and 'working' stay in scope: this card is about TODAY,
+          // where "not settled yet" and "has not punched yet" are the same
+          // thing. The first_in_at check already excludes anyone who has.
+          return !d?.first_in_at && !['weekly_off', 'holiday', 'paid_leave', 'unpaid_leave', 'not_joined', 'exited']
+            .includes(d?.status ?? '');
         }).length,
         pendingPunches: pendingPunches.length,
         pendingCorrections: corrections.length,

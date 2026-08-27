@@ -19,7 +19,10 @@ export interface DailyRow {
   work_date: string;
   status:
     | 'present' | 'half_day' | 'absent' | 'weekly_off' | 'holiday'
-    | 'paid_leave' | 'unpaid_leave' | 'on_duty' | 'not_joined' | 'exited';
+    | 'paid_leave' | 'unpaid_leave' | 'on_duty' | 'not_joined' | 'exited'
+    // Days whose outcome is not settled yet: today while it is still running,
+    // and future working days. Provisionally payable in full.
+    | 'working' | 'upcoming';
   payable_fraction: number;
   worked_minutes: number;
   is_late: boolean;
@@ -31,6 +34,8 @@ export interface DailyRow {
 /** Days that are neither a weekly off nor a holiday -- what someone is expected to work. */
 const WORKING_STATUSES = new Set([
   'present', 'half_day', 'absent', 'paid_leave', 'unpaid_leave', 'on_duty',
+  // Still expected to be worked -- they just have not been settled yet.
+  'working', 'upcoming',
 ]);
 
 export function summariseAttendance(rows: DailyRow[]): AttendanceSummary {
@@ -57,8 +62,18 @@ export function summariseAttendance(rows: DailyRow[]): AttendanceSummary {
       case 'holiday':      s.holiday_days += 1; break;
       case 'weekly_off':   s.weekly_off_days += 1; break;
       case 'absent':       s.absent_days += 1; break;
-      // not_joined / exited are outside the employment window: they are
-      // neither worked nor payable, and must not read as absence.
+      /*
+       * Deliberately counted nowhere else.
+       *
+       * not_joined / exited are outside the employment window: neither worked
+       * nor payable, and they must not read as absence.
+       *
+       * working / upcoming are inside it but undecided. They are payable (the
+       * loop above already added their fraction, so they do not become LOP)
+       * and they are working_days, but they are NOT present_days -- claiming
+       * attendance for a day that has not happened would overstate every
+       * report that quotes present days.
+       */
       default: break;
     }
 
