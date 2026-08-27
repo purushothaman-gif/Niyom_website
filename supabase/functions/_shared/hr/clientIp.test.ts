@@ -97,6 +97,57 @@ describe('resolveClientIp', () => {
   });
 });
 
+describe('the chain Supabase actually produces', () => {
+  /*
+   * A REGRESSION TEST FOR A REAL OUTAGE OF THE CONTROL.
+   *
+   * Supabase's edge appends its own hop, so a punch arrives as
+   *
+   *     106.51.22.75,106.51.22.75, 99.82.173.147
+   *
+   * where the last entry is AWS Global Accelerator (13.248.x / 99.82.x are
+   * Amazon) and ROTATES on every request. Reading the right-most entry meant
+   * reading Amazon: a different "office IP" appeared every few punches, and
+   * worse, once those pool addresses were trusted the restriction stopped
+   * restricting anything -- every punch on earth arrives through that same
+   * pool, so a punch from home auto-approved exactly like one from the office.
+   *
+   * The setting to get right is trusted_proxy_hops, and for this platform it
+   * is 1, not 0. These cases pin that down against the real recorded chains.
+   */
+  const AWS = ['99.82.173.147', '99.82.173.148', '13.248.117.200', '13.248.117.204'];
+
+  it('reads the client, not the rotating Amazon hop', () => {
+    for (const aws of AWS) {
+      const chain = `106.51.22.75,106.51.22.75, ${aws}`;
+      expect(resolveClientIp(h({ 'x-forwarded-for': chain }), 1).ip).toBe('106.51.22.75');
+      // and demonstrates what the wrong setting did
+      expect(resolveClientIp(h({ 'x-forwarded-for': chain }), 0).ip).toBe(aws);
+    }
+  });
+
+  it('collapses every rotating hop onto one stable office address', () => {
+    const chains = AWS.map(a => `106.51.22.75,106.51.22.75, ${a}`);
+    const resolved = new Set(chains.map(c => resolveClientIp(h({ 'x-forwarded-for': c }), 1).ip));
+    expect(resolved.size).toBe(1);
+  });
+
+  it('still separates a punch made from somewhere else', () => {
+    const office = resolveClientIp(h({ 'x-forwarded-for': '106.51.22.75,106.51.22.75, 99.82.173.147' }), 1).ip;
+    const mobile = resolveClientIp(h({ 'x-forwarded-for': '152.57.80.145,152.57.80.145, 99.82.173.169' }), 1).ip;
+    expect(office).toBe('106.51.22.75');
+    expect(mobile).toBe('152.57.80.145');
+    expect(office).not.toBe(mobile);
+  });
+
+  it('a spoofed header still cannot reach the trusted position', () => {
+    // Whatever the client prepends, the infrastructure entries are appended
+    // after it, so counting from the right never lands on client-written text.
+    const spoofed = '203.0.113.10, 106.51.22.75,106.51.22.75, 99.82.173.147';
+    expect(resolveClientIp(h({ 'x-forwarded-for': spoofed }), 1).ip).toBe('106.51.22.75');
+  });
+});
+
 describe('isProbablyIp', () => {
   it('accepts valid IPv4 and IPv6', () => {
     expect(isProbablyIp('10.0.0.1')).toBe(true);
