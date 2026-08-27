@@ -512,8 +512,9 @@ function ProfileDrawer({ row, schedules, paySchedules, canEdit, onClose, onSaved
                 <input type="checkbox" checked={form.network_exempt} disabled={!canEdit} className="mt-0.5"
                   onChange={e => setForm({ ...form, network_exempt: e.target.checked })} />
                 <span>
-                  <strong>Exempt from the office network requirement.</strong> Their punches auto-approve from anywhere.
-                  Meant for genuinely field-based staff — it removes the location control entirely for this person.
+                  <strong>Exempt from the office location requirement.</strong> Their punches are accepted from
+                  anywhere, however far from the office. Meant for genuinely field-based staff — it removes the
+                  presence check entirely for this person, so it is worth reviewing when someone moves to a desk role.
                 </span>
               </label>
             </div>

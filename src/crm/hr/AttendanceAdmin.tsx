@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CalendarRange, CheckCircle2, ClipboardCheck, Download, Network, RefreshCw, ShieldCheck, XCircle,
+  CalendarRange, CheckCircle2, ClipboardCheck, Download, MapPin, Network, RefreshCw, ShieldCheck, XCircle,
 } from 'lucide-react';
 import type { NWEmployee } from '../types';
 import * as api from './hrApi';
@@ -24,13 +24,14 @@ import {
 import { useToast } from './useToast';
 import type {
   AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch,
-  AttendanceSettings, HRAccess, HREmployee,
+  AttendanceSettings, HRAccess, HREmployee, OfficeLocation,
 } from './hrTypes';
 import { formatDuration } from '../../lib/hr/attendanceSummary';
 import { exportSheet, exportWorkbook, periodStamp } from './hrExcel';
 import { looksLikeInfrastructure } from './infrastructureIp';
+import { getPosition, type GeoResult } from './geolocation';
 
-type Tab = 'today' | 'register' | 'approvals' | 'networks' | 'rules';
+type Tab = 'today' | 'register' | 'approvals' | 'offices' | 'networks' | 'rules';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const today = () => iso(new Date());
@@ -64,7 +65,8 @@ export default function AttendanceAdmin({ employee, access }: { employee: NWEmpl
           { key: 'today',     label: 'Today' },
           { key: 'register',  label: 'Monthly Register' },
           { key: 'approvals', label: 'Approvals', count: pendingCount },
-          { key: 'networks',  label: 'Office Networks' },
+          { key: 'offices',   label: 'Office Locations' },
+          { key: 'networks',  label: 'Networks (audit)' },
           { key: 'rules',     label: 'Rules' },
         ]}
       />
@@ -72,6 +74,7 @@ export default function AttendanceAdmin({ employee, access }: { employee: NWEmpl
       {tab === 'today'     && <TodayBoard onToast={show} />}
       {tab === 'register'  && <Register onToast={show} canEdit={access.canEdit.attendance} />}
       {tab === 'approvals' && <Approvals onToast={show} canEdit={access.canEdit.attendance} onChanged={refreshCounts} />}
+      {tab === 'offices'   && <Offices onToast={show} canEdit={access.canEdit.attendance} employee={employee} />}
       {tab === 'networks'  && <Networks onToast={show} canEdit={access.canEdit.attendance} employee={employee} />}
       {tab === 'rules'     && <Rules onToast={show} canEdit={access.canEdit.attendance} />}
 
@@ -718,6 +721,386 @@ function TrustNetworkDialog({ ip, pendingFromIp, employeesFromIp, onClose, onDon
 }
 
 /* ======================================================================== */
+/* Office locations (geofences)                                              */
+/* ======================================================================== */
+
+function Offices({ onToast, canEdit, employee }: {
+  onToast: (m: string, ok?: boolean) => void; canEdit: boolean; employee: NWEmployee;
+}) {
+  const [rows, setRows] = useState<OfficeLocation[]>([]);
+  const [settings, setSettings] = useState<AttendanceSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<Partial<OfficeLocation> | null>(null);
+  const [retireId, setRetireId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // This admin's own fix, used only to offer "use where I am standing now".
+  // Taken on demand rather than on load: asking for GPS to render a settings
+  // page trains people to dismiss the prompt.
+  const [here, setHere] = useState<GeoResult | null>(null);
+  const [fixing, setFixing] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [o, s] = await Promise.all([api.listOffices(), api.getAttendanceSettings()]);
+      setRows(o); setSettings(s);
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setLoading(false);
+    }
+  }, [onToast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const locate = async () => {
+    setFixing(true);
+    const fix = await getPosition();
+    setHere(fix);
+    setFixing(false);
+    if (!fix.ok) { onToast(fix.message, false); return; }
+    if (fix.accuracy > 100) {
+      onToast(`Your position is only accurate to about ${Math.round(fix.accuracy)} m. `
+        + 'Set the geofence from inside the office, on a device with a clear signal.', false);
+    }
+  };
+
+  const save = async () => {
+    if (!editing) return;
+    const lat = Number(editing.latitude), lon = Number(editing.longitude);
+    if (!editing.name?.trim()) { onToast('Give the office a name.', false); return; }
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) { onToast('Enter both latitude and longitude.', false); return; }
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) { onToast('Those coordinates are out of range.', false); return; }
+    if (lat === 0 && lon === 0) { onToast('0, 0 is in the Atlantic — that is an empty coordinate, not an office.', false); return; }
+    const radius = Number(editing.radius_metres ?? 100);
+    if (!Number.isFinite(radius) || radius < 20 || radius > 5000) {
+      onToast('The radius must be between 20 and 5000 metres.', false); return;
+    }
+    setBusy(true);
+    try {
+      const payload = {
+        name: editing.name.trim(),
+        address: editing.address?.trim() ?? '',
+        latitude: lat,
+        longitude: lon,
+        radius_metres: Math.round(radius),
+        status: editing.status ?? 'active',
+        description: editing.description ?? '',
+        effective_from: editing.effective_from ?? today(),
+        effective_to: editing.effective_to || null,
+        created_by: employee.id,
+      };
+      if (editing.id) await api.updateOffice(editing.id, payload);
+      else await api.createOffice(payload);
+      onToast('Office location saved. It applies to the next punch.');
+      setEditing(null);
+      load();
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const retire = async () => {
+    if (!retireId) return;
+    setBusy(true);
+    try {
+      await api.retireOffice(retireId);
+      onToast('Office retired. Punches already recorded keep their location history.');
+      setRetireId(null);
+      load();
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setMode = async (location_mode: 'off' | 'observe' | 'enforce') => {
+    if (location_mode === 'enforce' && !rows.some(o => o.status === 'active')) {
+      onToast('Add an active office location first — enforcing with none configured would refuse everybody.', false);
+      return;
+    }
+    try {
+      setSettings(await api.saveAttendanceSettings({ location_mode }));
+      onToast(
+        location_mode === 'enforce' ? 'Location checks are being enforced. Off-site punches are held for approval.'
+        : location_mode === 'observe' ? 'Observe mode. Locations are recorded on every punch, nothing is refused.'
+        : 'Location checks are off. Punches record no position at all.');
+    } catch (err) {
+      onToast(hrError(err), false);
+    }
+  };
+
+  const saveSetting = async (patch: Partial<AttendanceSettings>) => {
+    try {
+      setSettings(await api.saveAttendanceSettings(patch));
+      onToast('Saved.');
+    } catch (err) {
+      onToast(hrError(err), false);
+    }
+  };
+
+  if (loading) return <Skeleton rows={5} />;
+
+  const mode = (settings?.location_mode ?? 'off') as 'off' | 'observe' | 'enforce';
+  const active = rows.filter(o => o.status === 'active');
+
+  return (
+    <div className="space-y-5">
+      {mode === 'enforce' && active.length === 0 && (
+        <Notice tone="bad" title="Enforcing with no office configured">
+          Location checks are switched on but no geofence has been drawn, so there is nothing to measure against and
+          every punch is being accepted unverified. Add the office below.
+        </Notice>
+      )}
+
+      {mode === 'observe' && (
+        <Notice tone="info" title="Observe mode — nothing is being refused yet">
+          Every punch records where it was made and how far that is from the office, but none are refused. Let a
+          normal week run, check the register, confirm that people genuinely at their desks read as <em>inside</em>,
+          and only then enforce. A radius set too tight rejects the far end of the floor.
+        </Notice>
+      )}
+
+      <SectionCard
+        title="Location verification"
+        subtitle="Where attendance may be marked from. The distance is computed on the server for every punch — the browser is only asked for a position, never trusted to judge it."
+        actions={canEdit && (
+          <div className="flex items-center gap-2">
+            {(['off', 'observe', 'enforce'] as const).map(m => (
+              <button key={m} onClick={() => setMode(m)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold capitalize"
+                style={{
+                  background: mode === m ? 'rgba(59,130,246,0.15)' : 'var(--bg-base)',
+                  color: mode === m ? 'rgb(59,130,246)' : 'var(--text-muted)',
+                  border: `1px solid ${mode === m ? 'rgba(59,130,246,0.35)' : 'var(--border)'}`,
+                }}>{m}</button>
+            ))}
+          </div>
+        )}
+      >
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          <strong style={{ color: 'var(--text-secondary)' }}>Off</strong> asks for no position at all.{' '}
+          <strong style={{ color: 'var(--text-secondary)' }}>Observe</strong> records the position and distance on
+          every punch and allows it either way.{' '}
+          <strong style={{ color: 'var(--text-secondary)' }}>Enforce</strong> accepts a punch made inside an office
+          geofence and refuses one made demonstrably outside it. What happens when the position simply cannot be
+          read is set by <em>Missing or unusable position</em> below.
+        </p>
+
+        {canEdit && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-4">
+            <Field label="Accuracy limit (metres)"
+              hint="A fix vaguer than this is refused rather than guessed at. 150 suits indoor Wi-Fi positioning.">
+              <Input type="number" min={20} max={2000} defaultValue={settings?.max_accuracy_metres ?? 150}
+                onBlur={e => {
+                  const v = Number(e.target.value);
+                  if (v >= 20 && v <= 2000 && v !== settings?.max_accuracy_metres) saveSetting({ max_accuracy_metres: v });
+                }} />
+            </Field>
+            <Field label="Simulated locations"
+              hint="Android and desktop browsers can report a faked position. Refusing them is the default.">
+              <Select value={settings?.reject_mock_location ? 'reject' : 'flag'}
+                onChange={e => saveSetting({ reject_mock_location: e.target.value === 'reject' })}>
+                <option value="reject">Refuse the punch</option>
+                <option value="flag">Record and flag only</option>
+              </Select>
+            </Field>
+            <Field label="Missing or unusable position"
+              hint="A punch made demonstrably outside the office is always refused. This covers the case where the position could not be read at all.">
+              <Select value={settings?.require_gps ? 'refuse' : 'pending'}
+                onChange={e => saveSetting({ require_gps: e.target.value === 'refuse' })}>
+                <option value="refuse">Refuse the punch</option>
+                <option value="pending">Accept, hold for admin approval</option>
+              </Select>
+            </Field>
+            <Field label="Network address"
+              hint="The IP is kept on every punch as an audit trail. It no longer decides anything on its own.">
+              <Select value={settings?.network_check ?? 'audit'}
+                onChange={e => saveSetting({ network_check: e.target.value })}>
+                <option value="audit">Record only</option>
+                <option value="corroborate">Record, and treat office network as supporting evidence</option>
+              </Select>
+            </Field>
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title="Office locations"
+        subtitle="Set the geofence from inside the office on a phone with a clear view of the sky. Coordinates are never shown to employees — they are told only whether they are inside, and roughly how far away."
+        actions={canEdit && <PrimaryButton onClick={() => setEditing({
+          status: 'active', radius_metres: 100, effective_from: today(), name: 'Niyom Chennai Office',
+        })}>
+          <MapPin className="w-3.5 h-3.5 inline mr-1" />Add Office
+        </PrimaryButton>}
+        padded={false}
+      >
+        <div className="p-5">
+          {rows.length === 0 ? (
+            <EmptyState icon={MapPin} title="No office location set yet"
+              message="Until one is added, location verification can only observe. Nobody's coordinates are invented for them — the office must be recorded from the office." />
+          ) : (
+            <TableWrap>
+              <thead>
+                <tr>
+                  <th className="text-left">Name</th><th className="text-left">Address</th>
+                  <th className="text-left">Coordinates</th><th className="text-right">Radius</th>
+                  <th className="text-left">Effective</th><th className="text-left">Status</th>
+                  <th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(o => (
+                  <tr key={o.id}>
+                    <td>
+                      <p className="font-semibold" style={{ color: 'var(--text-primary)' }}>{o.name}</p>
+                      {o.description && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{o.description}</p>}
+                    </td>
+                    <td className="text-xs">{o.address || '—'}</td>
+                    <td className="font-mono text-xs whitespace-nowrap">
+                      {Number(o.latitude).toFixed(6)}, {Number(o.longitude).toFixed(6)}
+                    </td>
+                    <td className="text-right tabular-nums">{o.radius_metres} m</td>
+                    <td className="text-xs whitespace-nowrap">
+                      {dayLabel(o.effective_from)}{o.effective_to ? ` → ${dayLabel(o.effective_to)}` : ''}
+                    </td>
+                    <td><Pill value={o.status} small /></td>
+                    <td className="text-right whitespace-nowrap">
+                      {canEdit && (
+                        <>
+                          <button onClick={() => setEditing(o)} className="text-xs font-semibold mr-3"
+                            style={{ color: 'var(--accent-soft)' }}>Edit</button>
+                          {o.status === 'active' && (
+                            <button onClick={() => setRetireId(o.id)} className="text-xs font-semibold"
+                              style={{ color: 'rgb(239,68,68)' }}>Retire</button>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableWrap>
+          )}
+        </div>
+      </SectionCard>
+
+      {editing && (
+        <Modal open onClose={() => setEditing(null)} title={editing.id ? 'Edit office location' : 'Add office location'}>
+          <div className="p-5 space-y-4">
+            <Notice tone="info">
+              Stand in the middle of the office and use <strong>the position I am at now</strong> below, or paste the
+              coordinates from a maps app. The radius should cover the whole floor plus a little — a fence drawn tight
+              around the reception desk rejects people at the far window.
+            </Notice>
+
+            <div className="px-4 py-3 rounded-xl" style={{ background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
+                    Your current position
+                  </p>
+                  <p className="text-sm font-bold font-mono mt-0.5" style={{ color: 'var(--text-primary)' }}>
+                    {here?.ok
+                      ? `${here.latitude.toFixed(6)}, ${here.longitude.toFixed(6)}`
+                      : fixing ? 'Checking…' : 'Not checked yet'}
+                  </p>
+                  {here?.ok && (
+                    <p className="text-[11px] mt-0.5" style={{ color: here.accuracy > 100 ? 'rgb(245,158,11)' : 'var(--text-faint)' }}>
+                      Accurate to about {Math.round(here.accuracy)} m
+                      {here.accuracy > 100 && ' — too vague to anchor a geofence on'}
+                    </p>
+                  )}
+                  {here && !here.ok && (
+                    <p className="text-[11px] mt-0.5" style={{ color: 'rgb(239,68,68)' }}>{here.message}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <GhostButton onClick={locate} disabled={fixing}>{fixing ? 'Checking…' : 'Check my position'}</GhostButton>
+                  {here?.ok && (
+                    <GhostButton onClick={() => setEditing({
+                      ...editing, latitude: here.latitude, longitude: here.longitude,
+                    })}>Use this position</GhostButton>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <Field label="Office name" required>
+              <Input value={editing.name ?? ''} onChange={e => setEditing({ ...editing, name: e.target.value })}
+                placeholder="Niyom Chennai Office" />
+            </Field>
+
+            <Field label="Address">
+              <Input value={editing.address ?? ''} onChange={e => setEditing({ ...editing, address: e.target.value })}
+                placeholder="Street, area, city" />
+            </Field>
+
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Latitude" required>
+                <Input value={editing.latitude ?? ''} placeholder="13.082680"
+                  onChange={e => setEditing({ ...editing, latitude: e.target.value as never })} />
+              </Field>
+              <Field label="Longitude" required>
+                <Input value={editing.longitude ?? ''} placeholder="80.270721"
+                  onChange={e => setEditing({ ...editing, longitude: e.target.value as never })} />
+              </Field>
+              <Field label="Radius (m)" hint="20–5000">
+                <Input type="number" min={20} max={5000} value={editing.radius_metres ?? 100}
+                  onChange={e => setEditing({ ...editing, radius_metres: Number(e.target.value) })} />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Status">
+                <Select value={editing.status ?? 'active'} onChange={e => setEditing({ ...editing, status: e.target.value })}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </Select>
+              </Field>
+              <Field label="Effective from">
+                <Input type="date" value={editing.effective_from ?? today()}
+                  onChange={e => setEditing({ ...editing, effective_from: e.target.value })} />
+              </Field>
+              <Field label="Effective to" hint="Blank = open-ended">
+                <Input type="date" value={editing.effective_to ?? ''}
+                  onChange={e => setEditing({ ...editing, effective_to: e.target.value || null })} />
+              </Field>
+            </div>
+
+            <Field label="Description">
+              <Input value={editing.description ?? ''} onChange={e => setEditing({ ...editing, description: e.target.value })}
+                placeholder="Second floor, main entrance side" />
+            </Field>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setEditing(null)} className="px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                Cancel
+              </button>
+              <PrimaryButton onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save Office'}</PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      <ConfirmDialog
+        open={!!retireId}
+        title="Retire this office location?"
+        message="Punches already recorded keep the office they were judged against and their distances. Future punches will be measured against the remaining active offices only."
+        confirmLabel="Retire"
+        busy={busy}
+        onCancel={() => setRetireId(null)}
+        onConfirm={retire}
+      />
+    </div>
+  );
+}
+
+/* ======================================================================== */
 /* Office networks                                                           */
 /* ======================================================================== */
 
@@ -749,7 +1132,9 @@ function Networks({ onToast, canEdit, employee }: {
       const state = await api.getPunchState();
       setMyIp(state.detected_ip ?? null);
       setChain(state.forwarded_for ?? null);
-      setHops(state.trusted_proxy_hops ?? 0);
+      // From settings, not from the punch state: hr_37 stopped returning the
+      // hop count to every caller, and this screen already has the row.
+      setHops(s?.trusted_proxy_hops ?? 0);
     } catch (err) {
       onToast(hrError(err), false);
     } finally {
@@ -832,18 +1217,17 @@ function Networks({ onToast, canEdit, employee }: {
         </Notice>
       )}
 
-      {observing && (
-        <Notice tone="info" title="Observe mode — nothing is being blocked yet">
-          Every punch is being recorded with the network it came from, but none are refused or held. Let a normal week
-          run, check the detected IPs in the Approvals and Today tabs, add the ones that are genuinely the office below,
-          and only then switch on enforcement. Turning it on before the real addresses are known is how people end up
-          locked out at the door.
-        </Notice>
-      )}
+      <Notice tone="info" title="The IP address is an audit field, not the door">
+        A public IP identifies an internet connection, not a place: it rotates, it can be reached from anywhere over a
+        VPN, and it changed often enough here to demand a fresh approval most days. Attendance is now judged by
+        distance from the office on the <strong>Office Locations</strong> tab. Every punch still records the address it
+        came from, and it is still worth keeping the office connections listed below — corroborating evidence when a
+        position looks wrong is exactly what it is good for.
+      </Notice>
 
       <SectionCard
-        title="Network enforcement"
-        subtitle="Where attendance may be punched from. Checked on the server for every punch — never in the browser."
+        title="Network enforcement (legacy)"
+        subtitle="Superseded by Office Locations. Kept because it still decides what happens when a punch arrives with no usable position at all."
         actions={canEdit && (
           <div className="flex items-center gap-2">
             <button onClick={() => setMode('observe')}
@@ -864,16 +1248,17 @@ function Networks({ onToast, canEdit, employee }: {
         )}
       >
         <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-          <strong style={{ color: 'var(--text-secondary)' }}>Observe</strong> records the network a punch came from and
-          allows it either way. <strong style={{ color: 'var(--text-secondary)' }}>Enforce</strong> auto-approves punches
-          from the networks below and holds every other punch as <em>pending</em> until an administrator approves it —
-          nobody is turned away, but off-network time does not count until someone says so.
+          Attendance eligibility is now decided by <strong style={{ color: 'var(--text-secondary)' }}>where</strong> the
+          punch was made, on the <strong style={{ color: 'var(--text-secondary)' }}>Office Locations</strong> tab. This
+          setting only applies to a punch that carried no position — <strong style={{ color: 'var(--text-secondary)' }}>Observe</strong>{' '}
+          lets it through, <strong style={{ color: 'var(--text-secondary)' }}>Enforce</strong> holds it as <em>pending</em>{' '}
+          for an administrator.
         </p>
       </SectionCard>
 
       <SectionCard
-        title="Approved office networks"
-        subtitle="Public IPs only. A private address such as 192.168.x.x identifies nothing — every office in the country has one."
+        title="Known office networks"
+        subtitle="Recorded alongside each punch as supporting evidence. Public IPs only — a private address such as 192.168.x.x identifies nothing."
         actions={canEdit && <PrimaryButton onClick={() => setEditing({ status: 'active', location: 'Chennai', effective_from: today() })}>
           <Network className="w-3.5 h-3.5 inline mr-1" />Add Network
         </PrimaryButton>}

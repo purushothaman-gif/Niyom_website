@@ -14,6 +14,7 @@ type T = Database['public']['Tables'];
 export type HRSettings          = T['hr_settings']['Row'];
 export type AttendanceSettings  = T['hr_attendance_settings']['Row'];
 export type AllowedNetwork      = T['hr_allowed_networks']['Row'];
+export type OfficeLocation      = T['hr_office_locations']['Row'];
 export type AttendancePunch     = T['hr_attendance_punches']['Row'];
 export type AttendanceAdjustment= T['hr_attendance_adjustments']['Row'];
 export type AttendanceDaily     = T['hr_attendance_daily']['Row'];
@@ -67,7 +68,6 @@ export interface PunchState {
   detected_ip: string | null;
   /** The full X-Forwarded-For chain, and the hop setting that picked from it. */
   forwarded_for: string | null;
-  trusted_proxy_hops: number;
   punched_in: boolean;
   next_action: 'in' | 'out';
   last_punch_at: string | null;
@@ -79,6 +79,13 @@ export interface PunchState {
   late_minutes: number;
   has_pending_punch: boolean;
   network_status: 'office' | 'off_network' | 'unknown';
+  /** Location verdict. The office coordinates are never sent to the browser. */
+  location_mode: 'off' | 'observe' | 'enforce';
+  location_status: 'inside' | 'outside' | 'unavailable' | 'inaccurate' | 'not_configured' | 'mock' | null;
+  distance_m: number | null;
+  location_ok: boolean;
+  location_exempt: boolean;
+  office_configured: boolean;
   network_name: string;
   network_exempt: boolean;
   enforcement_mode: 'observe' | 'enforce';
@@ -93,7 +100,7 @@ export interface PunchState {
   /** True when THIS action would be refused on time-of-day grounds. */
   window_blocks_next: boolean;
   can_punch: boolean;
-  timeline: { type: 'in' | 'out'; at: string; network: string; approval: string }[];
+  timeline: { type: 'in' | 'out'; at: string; location: string | null; distance_m: number | null; approval: string }[];
   error?: string;
 }
 
@@ -104,6 +111,9 @@ export interface PunchResult {
   error?: string;
   punch_type?: 'in' | 'out';
   network_status?: string;
+  location_status?: string;
+  distance_m?: number;
+  verification_method?: string;
   network_name?: string;
   approval_status?: string;
 }
