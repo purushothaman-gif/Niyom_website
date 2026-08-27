@@ -306,70 +306,90 @@ export async function computeMisRows(
       // unbooked whenever its own month was viewed, so it reappeared here as a
       // phantom "awaiting booking" row in the deal month while its real revenue
       // was already counted in the month it was booked — one deal, two months.
-      const bookedDealIds = new Set<string>();
+      // Booking is now per LINE (a deal can hold several products, each booked
+      // as its own transaction), so eligibility here is per line_item: recognise
+      // a deal's un-booked lines even when its other lines are already booked.
+      const bookedItemIds = new Set<string>();
+      const itemsByDeal = new Map<string, any[]>();
       if (clearedDeals.length > 0) {
-        const { data: bookedRows } = await supabase
-          .from('nw_transactions')
-          .select('deal_confirmation_id')
-          .in('deal_confirmation_id', clearedDeals.map(d => d.id));
+        const dealIds = clearedDeals.map(d => d.id);
+        const [{ data: bookedRows }, { data: itemRows }] = await Promise.all([
+          supabase.from('nw_transactions').select('deal_item_id').in('deal_confirmation_id', dealIds),
+          supabase.from('nw_deal_confirmation_items')
+            .select('id, deal_id, sort_order, product_type, security_name, quantity, base_rate, landing_cost')
+            .in('deal_id', dealIds),
+        ]);
         for (const b of (bookedRows ?? []) as any[]) {
-          if (b.deal_confirmation_id) bookedDealIds.add(b.deal_confirmation_id);
+          if (b.deal_item_id) bookedItemIds.add(b.deal_item_id);
+        }
+        for (const it of (itemRows ?? []) as any[]) {
+          const arr = itemsByDeal.get(it.deal_id) ?? [];
+          arr.push(it);
+          itemsByDeal.set(it.deal_id, arr);
         }
       }
 
       for (const d of clearedDeals) {
-        if (bookedDealIds.has(d.id)) continue;  // already counted via its transaction
-        const prodNorm = DEAL_TYPE[d.product_type as string];
-        if (!prodNorm) continue;                // landing-cost products only
         const client = clientList.find(c => c.id === d.client_id);
         if (!client) continue;
+        // Fall back to the header as a single pseudo-line if a deal somehow has
+        // no item rows, so nothing is silently dropped.
+        const lines = (itemsByDeal.get(d.id) ?? []).slice().sort((a, b) => a.sort_order - b.sort_order);
+        const effLines = lines.length ? lines : [{
+          id: null, product_type: d.product_type, security_name: d.security_name,
+          quantity: d.quantity, base_rate: d.base_rate, landing_cost: d.landing_cost,
+        }];
 
-        const qty = d.quantity || 0;
-        const price = Number(d.base_rate);      // client pays base rate × qty
-        // Same guard as the transaction branch above: a missing base rate must
-        // not be read as zero, or the landing cost is reported as a pure loss.
-        const priceMissing = d.base_rate === null || d.base_rate === undefined || d.base_rate === ''
-          || !Number.isFinite(price) || price <= 0;
-        const baseRow = {
-          client_id: d.client_id,
-          employee_id: client.employee_id ?? null,
-          client_name: client.full_name,
-          client_code: client.client_code,
-          // Dated by payment, not by deal_date, so it sits in the same month
-          // its revenue is recognised in.
-          date: clearedOn.get(d.id) as string,
-          product_type: prodNorm,
-          product_name: d.security_name,
-        };
+        for (const ln of effLines) {
+          if (ln.id && bookedItemIds.has(ln.id)) continue;  // this line already counted via its transaction
+          const prodNorm = DEAL_TYPE[ln.product_type as string];
+          if (!prodNorm) continue;                          // landing-cost products only
 
-        const landingMissing = d.landing_cost === null || d.landing_cost === undefined;
-        if (priceMissing || landingMissing) {
-          // Paid but not fully priced yet — show it so it isn't lost, without
-          // guessing revenue. Enter the missing field (book it) to compute it.
-          const pending = [priceMissing ? 'Base rate' : null, landingMissing ? 'landing cost' : null]
-            .filter(Boolean).join(' and ');
-          const known = [
-            priceMissing ? null : `Price ${fmt(price)}`,
-            landingMissing ? null : `Landing ${fmt(Number(d.landing_cost))}`,
-            `Qty ${qty}`,
-          ].filter(Boolean).join(' | ');
-          computed.push({
-            ...baseRow,
-            revenue_type: 'landing_cost',
-            revenue: 0,
-            notes: `⚠ Paid, awaiting booking — enter ${pending} to compute revenue (${known})`,
-          });
-        } else {
-          const landing = Number(d.landing_cost);
-          const revenue = d.transaction_type === 'Sell'
-            ? (landing - price) * qty
-            : (price - landing) * qty;
-          computed.push({
-            ...baseRow,
-            revenue_type: 'landing_cost',
-            revenue,
-            notes: `Paid deal (not yet booked) — Price ${fmt(price)} | Landing ${fmt(landing)} | Qty ${qty}`,
-          });
+          const qty = ln.quantity || 0;
+          const price = Number(ln.base_rate);               // client pays base rate × qty
+          // A missing base rate must not be read as zero, or the landing cost is
+          // reported as a pure loss.
+          const priceMissing = ln.base_rate === null || ln.base_rate === undefined || ln.base_rate === ''
+            || !Number.isFinite(price) || price <= 0;
+          const baseRow = {
+            client_id: d.client_id,
+            employee_id: client.employee_id ?? null,
+            client_name: client.full_name,
+            client_code: client.client_code,
+            // Dated by payment, not by deal_date, so it sits in the same month
+            // its revenue is recognised in.
+            date: clearedOn.get(d.id) as string,
+            product_type: prodNorm,
+            product_name: ln.security_name,
+          };
+
+          const landingMissing = ln.landing_cost === null || ln.landing_cost === undefined;
+          if (priceMissing || landingMissing) {
+            const pending = [priceMissing ? 'Base rate' : null, landingMissing ? 'landing cost' : null]
+              .filter(Boolean).join(' and ');
+            const known = [
+              priceMissing ? null : `Price ${fmt(price)}`,
+              landingMissing ? null : `Landing ${fmt(Number(ln.landing_cost))}`,
+              `Qty ${qty}`,
+            ].filter(Boolean).join(' | ');
+            computed.push({
+              ...baseRow,
+              revenue_type: 'landing_cost',
+              revenue: 0,
+              notes: `⚠ Paid, awaiting booking — enter ${pending} to compute revenue (${known})`,
+            });
+          } else {
+            const landing = Number(ln.landing_cost);
+            const revenue = d.transaction_type === 'Sell'
+              ? (landing - price) * qty
+              : (price - landing) * qty;
+            computed.push({
+              ...baseRow,
+              revenue_type: 'landing_cost',
+              revenue,
+              notes: `Paid deal (not yet booked) — Price ${fmt(price)} | Landing ${fmt(landing)} | Qty ${qty}`,
+            });
+          }
         }
       }
     }

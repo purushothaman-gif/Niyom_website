@@ -18,17 +18,24 @@ type AcceptanceStatus = 'pending' | 'viewed' | 'accepted' | 'rejected' | 'expire
 
 interface Props { employee: NWEmployee; }
 
-interface DealForm {
-  client_id: string;
-  deal_date: string;
-  transaction_type: 'Buy' | 'Sell' | '';
+// One security line within a deal. A deal is single-direction (Buy or Sell,
+// on the header); each line carries its own security + quantity + rate.
+interface LineItemForm {
   product_type: string;
   security_name: string;
   isin: string;
   quantity: string;
   base_rate: string;       // raw value user types
-  rate_per_unit: string;   // adjusted = base_rate - (base_rate * 0.015/100)
+  rate_per_unit: string;   // adjusted = base_rate - (base_rate * duty%/100)
+  manual: boolean;         // security entered manually → product_type editable
+}
+
+interface DealForm {
+  client_id: string;
+  deal_date: string;
+  transaction_type: 'Buy' | 'Sell' | '';
   notes: string;
+  lines: LineItemForm[];
 }
 
 interface DealRecord {
@@ -83,6 +90,21 @@ interface DealRecord {
   revenue_basis_entered_at?: string | null;
   revenue_basis_last_modified_by?: string | null;
   revenue_basis_last_modified_at?: string | null;
+  // Line items (one row per security). Attached by the list query.
+  items?: DealItemRecord[];
+}
+
+interface DealItemRecord {
+  id: string;
+  sort_order: number;
+  product_type: string;
+  security_name: string;
+  isin: string;
+  quantity: number;
+  base_rate: number;
+  rate_per_unit: number;
+  line_settlement: number;
+  line_stamp_duty: number;
 }
 
 // Deal Confirmations are raised ONLY for Unlisted Shares and Bonds (the products
@@ -108,17 +130,22 @@ function deriveProductType(securityType: string): string {
   return '';
 }
 
-const emptyForm = (): DealForm => ({
-  client_id: '',
-  deal_date: new Date().toISOString().split('T')[0],
-  transaction_type: '',
+const emptyLine = (): LineItemForm => ({
   product_type: '',
   security_name: '',
   isin: '',
   quantity: '',
   base_rate: '',
   rate_per_unit: '',
+  manual: false,
+});
+
+const emptyForm = (): DealForm => ({
+  client_id: '',
+  deal_date: new Date().toISOString().split('T')[0],
+  transaction_type: '',
   notes: '',
+  lines: [emptyLine()],
 });
 
 // Stamp duty rate (percent) by product type.
@@ -293,9 +320,6 @@ export default function DealConfirmation({ employee }: Props) {
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [form, setForm] = useState<DealForm>(emptyForm());
-  // Product Type is derived from the NSDL security and locked; it only becomes
-  // editable when the operator is in manual security entry ("Can't find it").
-  const [securityManual, setSecurityManual] = useState(false);
   const [selectedClient, setSelectedClient] = useState<NWClient | null>(null);
   const [clientSearch, setClientSearch] = useState('');
   const [showClientDrop, setShowClientDrop] = useState(false);
@@ -326,12 +350,31 @@ export default function DealConfirmation({ employee }: Props) {
   // and under/over-stated the total on screen — ₹0.25 on 2050×100, and up to
   // ₹37 on large-quantity trades. The stored figure was always correct; only
   // this on-screen preview was wrong.
-  const qty = parseFloat(form.quantity) || 0;
-  const baseRate = parseFloat(form.base_rate) || 0;
-  const adjRate = parseFloat(form.rate_per_unit) || 0;
-  const dutyRate = stampDutyRateFor(form.product_type);
-  const settlementAmount = Math.round(qty * baseRate * 100) / 100;
-  const stampDuty = Math.round(qty * baseRate * dutyRate / 100 * 100) / 100;
+  // Per-line and deal-level figures. Each line's settlement is qty x base rate;
+  // stamp duty is carved out of that per its product's duty rate. The deal
+  // totals are the sums — matching the DB (header totals = SUM of line items).
+  const lineCalc = (ln: LineItemForm) => {
+    const qty = parseFloat(ln.quantity) || 0;
+    const baseRate = parseFloat(ln.base_rate) || 0;
+    const dutyRate = stampDutyRateFor(ln.product_type);
+    return {
+      qty,
+      baseRate,
+      adjRate: parseFloat(ln.rate_per_unit) || 0,
+      dutyRate,
+      settlement: Math.round(qty * baseRate * 100) / 100,
+      stamp: Math.round(qty * baseRate * dutyRate / 100 * 100) / 100,
+    };
+  };
+  const totalSettlement = form.lines.reduce((s, ln) => s + lineCalc(ln).settlement, 0);
+  const totalStampDuty = form.lines.reduce((s, ln) => s + lineCalc(ln).stamp, 0);
+
+  // Line mutators.
+  const updateLine = (idx: number, patch: Partial<LineItemForm>) =>
+    setForm(f => ({ ...f, lines: f.lines.map((ln, i) => (i === idx ? { ...ln, ...patch } : ln)) }));
+  const addLine = () => setForm(f => ({ ...f, lines: [...f.lines, emptyLine()] }));
+  const removeLine = (idx: number) =>
+    setForm(f => ({ ...f, lines: f.lines.length > 1 ? f.lines.filter((_, i) => i !== idx) : f.lines }));
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -342,11 +385,13 @@ export default function DealConfirmation({ employee }: Props) {
     setLoading(true);
     let q = supabase
       .from('nw_deal_confirmations')
-      .select('*, client:nw_clients(full_name, client_code)')
+      .select('*, client:nw_clients(full_name, client_code), items:nw_deal_confirmation_items(id, sort_order, product_type, security_name, isin, quantity, base_rate, rate_per_unit, line_settlement, line_stamp_duty)')
       .order('created_at', { ascending: false });
     if (!isAdmin) q = q.eq('employee_id', employee.id);
     const { data } = await q;
     const rows = (data as DealRecord[]) || [];
+    // Nested selects don't guarantee order — keep line items in sort_order.
+    rows.forEach(r => { if (r.items) r.items.sort((a, b) => a.sort_order - b.sort_order); });
     setDeals(rows);
     setLoading(false);
 
@@ -408,7 +453,6 @@ export default function DealConfirmation({ employee }: Props) {
     setSelectedClient(null);
     setClientSearch('');
     setEditDeal(null);
-    setSecurityManual(false); // locked until an NSDL security is picked
     setError('');
     setView('form');
   };
@@ -434,19 +478,29 @@ export default function DealConfirmation({ employee }: Props) {
       return;
     }
     setEditDeal(deal);
-    // Existing product is shown locked; the operator switches Step 3 to manual to change it.
-    setSecurityManual(false);
+    // Build the line list from the deal's items; fall back to the header (a
+    // legacy deal that somehow has no item rows) so editing never starts empty.
+    const items = (deal.items && deal.items.length)
+      ? [...deal.items].sort((a, b) => a.sort_order - b.sort_order)
+      : [{
+          product_type: deal.product_type, security_name: deal.security_name, isin: deal.isin,
+          quantity: deal.quantity, base_rate: deal.base_rate ?? deal.rate_per_unit, rate_per_unit: deal.rate_per_unit,
+        } as DealItemRecord];
     setForm({
       client_id: deal.client_id,
       deal_date: deal.deal_date,
       transaction_type: deal.transaction_type as 'Buy' | 'Sell',
-      product_type: deal.product_type,
-      security_name: deal.security_name,
-      isin: deal.isin,
-      quantity: String(deal.quantity),
-      base_rate: String(deal.base_rate ?? deal.rate_per_unit),
-      rate_per_unit: String(deal.rate_per_unit),
       notes: deal.notes,
+      lines: items.map(it => ({
+        product_type: it.product_type,
+        security_name: it.security_name,
+        isin: it.isin,
+        quantity: String(it.quantity),
+        base_rate: String(it.base_rate ?? it.rate_per_unit),
+        rate_per_unit: String(it.rate_per_unit),
+        // Existing product shown locked; operator switches a line to manual to change it.
+        manual: false,
+      })),
     });
     const c = clients.find(c => c.id === deal.client_id);
     setSelectedClient(c || null);
@@ -466,11 +520,16 @@ export default function DealConfirmation({ employee }: Props) {
     if (!form.client_id) { setError('Please select a client.'); return false; }
     if (!form.deal_date) { setError('Deal date is required.'); return false; }
     if (!form.transaction_type) { setError('Transaction type is required.'); return false; }
-    if (!form.product_type.trim()) { setError('Product type is required.'); return false; }
-    if (!form.security_name.trim()) { setError('Security / Company name is required.'); return false; }
-    if (!form.isin.trim()) { setError('ISIN number is required.'); return false; }
-    if (!form.quantity || isNaN(parseFloat(form.quantity)) || parseFloat(form.quantity) <= 0) { setError('Valid quantity is required.'); return false; }
-    if (!form.base_rate || isNaN(parseFloat(form.base_rate)) || parseFloat(form.base_rate) <= 0) { setError('Valid rate per unit is required.'); return false; }
+    if (!form.lines.length) { setError('Add at least one product.'); return false; }
+    for (let i = 0; i < form.lines.length; i++) {
+      const ln = form.lines[i];
+      const n = form.lines.length > 1 ? ` (product ${i + 1})` : '';
+      if (!ln.product_type.trim()) { setError(`Product type is required${n}.`); return false; }
+      if (!ln.security_name.trim()) { setError(`Security / Company name is required${n}.`); return false; }
+      if (!ln.isin.trim()) { setError(`ISIN number is required${n}.`); return false; }
+      if (!ln.quantity || isNaN(parseFloat(ln.quantity)) || parseFloat(ln.quantity) <= 0) { setError(`Valid quantity is required${n}.`); return false; }
+      if (!ln.base_rate || isNaN(parseFloat(ln.base_rate)) || parseFloat(ln.base_rate) <= 0) { setError(`Valid rate per unit is required${n}.`); return false; }
+    }
     setError('');
     return true;
   };
@@ -482,6 +541,10 @@ export default function DealConfirmation({ employee }: Props) {
 
     const addr = [selectedClient.address, selectedClient.city, selectedClient.state].filter(Boolean).join(', ');
 
+    // The header mirrors the FIRST line (the DB recompute trigger re-affirms
+    // this once items are written); its settlement_amount/stamp_duty become the
+    // SUM of the line items. The line items are the source of truth.
+    const first = form.lines[0];
     const payload: Record<string, any> = {
       client_id: form.client_id,
       // Own the deal by the client's relationship manager, not the logged-in
@@ -493,12 +556,12 @@ export default function DealConfirmation({ employee }: Props) {
       status,
       deal_date: form.deal_date,
       transaction_type: form.transaction_type,
-      product_type: form.product_type,
-      security_name: form.security_name.trim(),
-      isin: form.isin.trim().toUpperCase(),
-      quantity: parseFloat(form.quantity),
-      base_rate: parseFloat(form.base_rate),
-      rate_per_unit: parseFloat(form.rate_per_unit),
+      product_type: first.product_type,
+      security_name: first.security_name.trim(),
+      isin: first.isin.trim().toUpperCase(),
+      quantity: parseFloat(first.quantity),
+      base_rate: parseFloat(first.base_rate),
+      rate_per_unit: parseFloat(first.rate_per_unit),
       // Snapshot columns are NOT NULL DEFAULT '' — coalesce so a client with no
       // demat (Mutual Funds / FD / Insurance) or any null field can't break the insert.
       snap_client_name: selectedClient.full_name || '',
@@ -514,6 +577,18 @@ export default function DealConfirmation({ employee }: Props) {
       snap_email: selectedClient.email || '',
       notes: form.notes,
     };
+
+    // One row per line. stamp_duty_rate is defaulted by the DB from product_type.
+    const itemRows = (dealId: string) => form.lines.map((ln, idx) => ({
+      deal_id: dealId,
+      sort_order: idx,
+      product_type: ln.product_type,
+      security_name: ln.security_name.trim(),
+      isin: ln.isin.trim().toUpperCase(),
+      quantity: parseFloat(ln.quantity),
+      base_rate: parseFloat(ln.base_rate),
+      rate_per_unit: parseFloat(ln.rate_per_unit),
+    }));
 
     if (editDeal) {
       const wasSigned = editDeal.acceptance_status === 'accepted';
@@ -541,9 +616,15 @@ export default function DealConfirmation({ employee }: Props) {
         payload.signed_pdf_path = null;
       }
 
+      // Reset the header to pending FIRST (so item RLS/guards permit the rewrite),
+      // then replace the line items. The recompute trigger re-derives totals.
       const { error: err } = await supabase.from('nw_deal_confirmations').update(payload).eq('id', editDeal.id);
+      if (err) { setSaving(false); setError(err.message); return; }
+      const { error: delErr } = await supabase.from('nw_deal_confirmation_items').delete().eq('deal_id', editDeal.id);
+      if (delErr) { setSaving(false); setError(delErr.message); return; }
+      const { error: insErr } = await supabase.from('nw_deal_confirmation_items').insert(itemRows(editDeal.id) as Insertable<'nw_deal_confirmation_items'>[]);
       setSaving(false);
-      if (err) { setError(err.message); return; }
+      if (insErr) { setError(insErr.message); return; }
 
       if (wasSigned) {
         await supabase.from('nw_deal_confirmation_events').insert([
@@ -563,11 +644,22 @@ export default function DealConfirmation({ employee }: Props) {
     } else {
       const confNum = await supabase.rpc('nw_generate_confirmation_number', { p_employee_id: employee.id });
       payload.confirmation_number = confNum.data || `DC-${Date.now()}`;
-      const { error: err } = await supabase
+      const { data: created, error: err } = await supabase
         .from('nw_deal_confirmations')
-        .insert([payload as Insertable<'nw_deal_confirmations'>]);
+        .insert([payload as Insertable<'nw_deal_confirmations'>])
+        .select('id')
+        .single();
+      if (err || !created) { setSaving(false); setError(err?.message || 'Could not create the deal.'); return; }
+      const { error: insErr } = await supabase
+        .from('nw_deal_confirmation_items')
+        .insert(itemRows(created.id) as Insertable<'nw_deal_confirmation_items'>[]);
       setSaving(false);
-      if (err) { setError(err.message); return; }
+      if (insErr) {
+        // Roll back the orphan header so a failed line insert doesn't leave a
+        // zero-total deal behind.
+        await supabase.from('nw_deal_confirmations').delete().eq('id', created.id);
+        setError(insErr.message); return;
+      }
       showToast(status === 'confirmed' ? 'Deal confirmation created.' : 'Draft saved.');
     }
 
@@ -813,11 +905,11 @@ export default function DealConfirmation({ employee }: Props) {
         {/* Deal Details */}
         <div className="rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
           <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>Step 2 — Deal Information</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Deal Date" required>
               <Input type="date" value={form.deal_date} onChange={e => setForm(f => ({ ...f, deal_date: e.target.value }))} />
             </Field>
-            <Field label="Transaction Type" required>
+            <Field label="Transaction Type" required hint="Applies to every product in this deal — a deal is all-buy or all-sell.">
               <div className="relative">
                 <select value={form.transaction_type} onChange={e => setForm(f => ({ ...f, transaction_type: e.target.value as 'Buy' | 'Sell' }))}
                   className="w-full pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
@@ -829,99 +921,116 @@ export default function DealConfirmation({ employee }: Props) {
                 <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
               </div>
             </Field>
-            <Field label="Product Type" required hint={securityManual ? undefined : 'Auto-set from the selected security'}>
-              <div className="relative">
-                {/* Locked + auto-derived from the NSDL security; editable only in
-                    manual entry. Changing the product changes the duty rate, so
-                    the adjusted rate is re-derived from the base rate. */}
-                <select value={form.product_type}
-                  disabled={!securityManual}
-                  onChange={e => setForm(f => ({
-                    ...f,
-                    product_type: e.target.value,
-                    rate_per_unit: adjustRate(f.base_rate, stampDutyRateFor(e.target.value)),
-                  }))}
-                  className="w-full pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none disabled:opacity-70 disabled:cursor-not-allowed"
-                  style={{ background: securityManual ? 'var(--bg-base)' : 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-                  <option value="">{securityManual ? 'Select product' : 'Pick a security first'}</option>
-                  {PRODUCT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-                {securityManual
-                  ? <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
-                  : <Lock className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />}
-              </div>
-            </Field>
           </div>
         </div>
 
-        {/* Security Details */}
+        {/* Security Details — one card per product line */}
         <div className="rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>Step 3 — Security / Instrument Details</p>
-          {/* NSDL-backed security lookup — auto-fills Security Name + ISIN AND
-              derives + locks Product Type (Step 2). "Can't find it? Enter
-              manually" unlocks Product Type via onManualToggle. */}
-          <SecuritySearch
-            key={editDeal?.id ?? 'new'}
-            valueName={form.security_name}
-            valueIsin={form.isin}
-            onSelect={sec => {
-              const derived = deriveProductType(sec.security_type);
-              // Classified → lock with the derived product; unclassifiable →
-              // leave editable so the operator is never trapped.
-              setSecurityManual(derived === '');
-              setForm(f => ({
-                ...f,
-                security_name: sec.name,
-                isin: sec.isin,
-                ...(derived
-                  ? { product_type: derived, rate_per_unit: adjustRate(f.base_rate, stampDutyRateFor(derived)) }
-                  : {}),
-              }));
-            }}
-            onManualToggle={manual => setSecurityManual(manual)}
-            onManualChange={patch => setForm(f => ({
-              ...f,
-              ...(patch.security_name !== undefined ? { security_name: patch.security_name } : {}),
-              ...(patch.isin !== undefined ? { isin: patch.isin } : {}),
-            }))}
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Quantity" required>
-              <Input type="number" min="0" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} placeholder="0" />
-            </Field>
-            <Field label={`Rate per ${form.product_type === 'Unlisted Share' ? 'Share' : 'Unit'} (₹)`} required hint="Rate automatically adjusted after applicable charges deduction.">
-              <Input
-                type="number" min="0" step="0.01"
-                value={form.base_rate}
-                onChange={e => {
-                  const adj = adjustRate(e.target.value, stampDutyRateFor(form.product_type));
-                  setForm(f => ({ ...f, base_rate: e.target.value, rate_per_unit: adj }));
-                }}
-                placeholder="Enter base rate"
-              />
-              {form.rate_per_unit && (
-                <p className="text-xs mt-1.5 font-semibold" style={{ color: 'var(--accent)' }}>
-                  Adjusted Rate: ₹{parseFloat(form.rate_per_unit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-              )}
-            </Field>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>Step 3 — Products</p>
+            <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{form.lines.length} product{form.lines.length !== 1 ? 's' : ''}</span>
           </div>
 
-          {/* Auto-calculated values */}
-          {(qty > 0 && adjRate > 0) && (
-            <div className="rounded-xl p-4 grid grid-cols-2 gap-4 mt-2" style={{ background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.15)' }}>
+          {form.lines.map((ln, idx) => {
+            const calc = lineCalc(ln);
+            const unit = ln.product_type === 'Unlisted Share' ? 'Share' : 'Unit';
+            return (
+              <div key={`${editDeal?.id ?? 'new'}-${idx}`} className="rounded-xl p-4 space-y-4" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>Product {idx + 1}</p>
+                  {form.lines.length > 1 && (
+                    <button type="button" onClick={() => removeLine(idx)}
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg" style={{ color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                      <Trash2 className="w-3.5 h-3.5" /> Remove
+                    </button>
+                  )}
+                </div>
+
+                {/* NSDL security lookup — auto-fills name + ISIN and derives + locks
+                    this line's Product Type. "Can't find it" unlocks it. */}
+                <SecuritySearch
+                  key={`sec-${editDeal?.id ?? 'new'}-${idx}`}
+                  valueName={ln.security_name}
+                  valueIsin={ln.isin}
+                  onSelect={sec => {
+                    const derived = deriveProductType(sec.security_type);
+                    updateLine(idx, {
+                      security_name: sec.name,
+                      isin: sec.isin,
+                      manual: derived === '',
+                      ...(derived
+                        ? { product_type: derived, rate_per_unit: adjustRate(ln.base_rate, stampDutyRateFor(derived)) }
+                        : {}),
+                    });
+                  }}
+                  onManualToggle={manual => updateLine(idx, { manual })}
+                  onManualChange={patch => updateLine(idx, {
+                    ...(patch.security_name !== undefined ? { security_name: patch.security_name } : {}),
+                    ...(patch.isin !== undefined ? { isin: patch.isin } : {}),
+                  })}
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Field label="Product Type" required hint={ln.manual ? undefined : 'Auto-set from the security'}>
+                    <div className="relative">
+                      <select value={ln.product_type}
+                        disabled={!ln.manual}
+                        onChange={e => updateLine(idx, { product_type: e.target.value, rate_per_unit: adjustRate(ln.base_rate, stampDutyRateFor(e.target.value)) })}
+                        className="w-full pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none disabled:opacity-70 disabled:cursor-not-allowed"
+                        style={{ background: ln.manual ? 'var(--bg-base)' : 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                        <option value="">{ln.manual ? 'Select product' : 'Pick a security first'}</option>
+                        {PRODUCT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                      {ln.manual
+                        ? <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
+                        : <Lock className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />}
+                    </div>
+                  </Field>
+                  <Field label="Quantity" required>
+                    <Input type="number" min="0" value={ln.quantity} onChange={e => updateLine(idx, { quantity: e.target.value })} placeholder="0" />
+                  </Field>
+                  <Field label={`Rate per ${unit} (₹)`} required hint="Adjusted after applicable charges.">
+                    <Input
+                      type="number" min="0" step="0.01"
+                      value={ln.base_rate}
+                      onChange={e => updateLine(idx, { base_rate: e.target.value, rate_per_unit: adjustRate(e.target.value, stampDutyRateFor(ln.product_type)) })}
+                      placeholder="Enter base rate"
+                    />
+                    {ln.rate_per_unit && (
+                      <p className="text-xs mt-1.5 font-semibold" style={{ color: 'var(--accent)' }}>
+                        Adjusted: ₹{parseFloat(ln.rate_per_unit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    )}
+                  </Field>
+                </div>
+
+                {(calc.qty > 0 && calc.adjRate > 0) && (
+                  <div className="flex flex-wrap gap-x-8 gap-y-1 text-xs pt-1" style={{ color: 'var(--text-muted)' }}>
+                    <span>Stamp Duty: <span className="font-semibold" style={{ color: 'var(--accent)' }}>{fmt(calc.stamp)}</span></span>
+                    <span>Line Settlement: <span className="font-semibold" style={{ color: 'var(--success)' }}>{fmt(calc.settlement)}</span></span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <button type="button" onClick={addLine}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold"
+            style={{ background: 'rgba(var(--accent-rgb),0.08)', color: 'var(--accent)', border: '1px dashed rgba(var(--accent-rgb),0.4)' }}>
+            <Plus className="w-4 h-4" /> Add another product
+          </button>
+
+          {/* Deal total across all lines */}
+          {totalSettlement > 0 && (
+            <div className="rounded-xl p-4 grid grid-cols-2 gap-4 mt-1" style={{ background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.15)' }}>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-faint)' }}>Stamp Duty / Charges</p>
-                <p className="text-lg font-black" style={{ color: 'var(--accent)' }}>{fmt(stampDuty)}</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--border-stronger)' }}>
-                  {dutyRate > 0 ? `(Rate × Qty) × ${dutyRate}%` : `No stamp duty on ${form.product_type || 'this product'}`}
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-faint)' }}>Total Stamp Duty / Charges</p>
+                <p className="text-lg font-black" style={{ color: 'var(--accent)' }}>{fmt(totalStampDuty)}</p>
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-faint)' }}>Settlement Amount</p>
-                <p className="text-lg font-black" style={{ color: 'var(--success)' }}>{fmt(settlementAmount)}</p>
-                {/* Duty is carved OUT of the entered rate, never added on top. */}
-                <p className="text-xs mt-0.5" style={{ color: 'var(--border-stronger)' }}>Rate × Qty (duty included)</p>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-faint)' }}>Total Settlement Amount</p>
+                <p className="text-lg font-black" style={{ color: 'var(--success)' }}>{fmt(totalSettlement)}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--border-stronger)' }}>Sum of all products (duty included)</p>
               </div>
             </div>
           )}
@@ -1032,7 +1141,11 @@ export default function DealConfirmation({ employee }: Props) {
                     </td>
                     <td className="px-5 py-3.5">
                       <p className="text-sm text-text-primary">{d.security_name}</p>
-                      <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{d.isin}</p>
+                      {d.items && d.items.length > 1 ? (
+                        <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>+{d.items.length - 1} more product{d.items.length - 1 !== 1 ? 's' : ''}</p>
+                      ) : (
+                        <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{d.isin}</p>
+                      )}
                     </td>
                     <td className="px-5 py-3.5">
                       <span className={`text-xs font-bold px-2 py-1 rounded-lg ${d.transaction_type === 'Buy' ? 'text-c-emerald bg-emerald-900/20' : 'text-c-red bg-red-900/20'}`}>

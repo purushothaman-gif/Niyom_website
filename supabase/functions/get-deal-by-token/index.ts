@@ -18,12 +18,13 @@ function json(body: unknown, status = 200) {
 }
 
 // Fields safe to expose on the public page (no internal notes / employee ids)
-function sanitize(deal: Record<string, any>) {
+function sanitize(deal: Record<string, any>, items: Record<string, any>[]) {
   return {
     confirmation_number: deal.confirmation_number,
     deal_date: deal.deal_date,
     created_at: deal.created_at,
     transaction_type: deal.transaction_type,
+    // The header still mirrors line 0 for any legacy single-line rendering path.
     product_type: deal.product_type,
     security_name: deal.security_name,
     isin: deal.isin,
@@ -31,6 +32,18 @@ function sanitize(deal: Record<string, any>) {
     rate_per_unit: deal.rate_per_unit,
     stamp_duty: deal.stamp_duty,
     settlement_amount: deal.settlement_amount,
+    // Line items — one entry per security. The document renders these as a table
+    // and totals stamp_duty / settlement across them.
+    items: (items || []).map((i) => ({
+      sort_order: i.sort_order,
+      product_type: i.product_type,
+      security_name: i.security_name,
+      isin: i.isin,
+      quantity: i.quantity,
+      rate_per_unit: i.rate_per_unit,
+      line_stamp_duty: i.line_stamp_duty,
+      line_settlement: i.line_settlement,
+    })),
     snap_client_name: deal.snap_client_name,
     snap_pan: deal.snap_pan,
     snap_dp_name: deal.snap_dp_name,
@@ -116,7 +129,13 @@ Deno.serve(async (req: Request) => {
       deal.acceptance_status = "viewed";
     }
 
-    return json({ valid: true, deal: sanitize(deal) });
+    const { data: items } = await db
+      .from("nw_deal_confirmation_items")
+      .select("sort_order, product_type, security_name, isin, quantity, rate_per_unit, line_stamp_duty, line_settlement")
+      .eq("deal_id", deal.id)
+      .order("sort_order", { ascending: true });
+
+    return json({ valid: true, deal: sanitize(deal, items || []) });
   } catch (err: any) {
     console.error("get-deal-by-token error:", err?.message);
     return json({ valid: false, reason: "error" }, 500);
