@@ -24,7 +24,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -37,6 +37,7 @@ export type Database = {
           bse_code: string
           business_day_convention: string
           callable: boolean
+          coupon_entitlement_rule: string | null
           coupon_frequency: string
           coupon_rate: number | null
           coupon_type: string
@@ -48,6 +49,7 @@ export type Database = {
           default_margin_type: string
           default_margin_value: number | null
           enriched_at: string | null
+          ex_interest_date: string | null
           exchange_listed: string
           extracted_name: string
           face_value: number | null
@@ -81,6 +83,7 @@ export type Database = {
           rating: string
           rating_agency: string
           rating_date: string | null
+          record_date: string | null
           redemption_date: string | null
           redemption_schedule: Json
           redemption_value: number | null
@@ -104,6 +107,7 @@ export type Database = {
           bse_code?: string
           business_day_convention?: string
           callable?: boolean
+          coupon_entitlement_rule?: string | null
           coupon_frequency?: string
           coupon_rate?: number | null
           coupon_type?: string
@@ -115,6 +119,7 @@ export type Database = {
           default_margin_type?: string
           default_margin_value?: number | null
           enriched_at?: string | null
+          ex_interest_date?: string | null
           exchange_listed?: string
           extracted_name?: string
           face_value?: number | null
@@ -148,6 +153,7 @@ export type Database = {
           rating?: string
           rating_agency?: string
           rating_date?: string | null
+          record_date?: string | null
           redemption_date?: string | null
           redemption_schedule?: Json
           redemption_value?: number | null
@@ -171,6 +177,7 @@ export type Database = {
           bse_code?: string
           business_day_convention?: string
           callable?: boolean
+          coupon_entitlement_rule?: string | null
           coupon_frequency?: string
           coupon_rate?: number | null
           coupon_type?: string
@@ -182,6 +189,7 @@ export type Database = {
           default_margin_type?: string
           default_margin_value?: number | null
           enriched_at?: string | null
+          ex_interest_date?: string | null
           exchange_listed?: string
           extracted_name?: string
           face_value?: number | null
@@ -215,6 +223,7 @@ export type Database = {
           rating?: string
           rating_agency?: string
           rating_date?: string | null
+          record_date?: string | null
           redemption_date?: string | null
           redemption_schedule?: Json
           redemption_value?: number | null
@@ -5568,6 +5577,108 @@ export type Database = {
           },
         ]
       }
+      nw_deal_confirmation_items: {
+        Row: {
+          base_rate: number
+          brokerage_amount: number | null
+          created_at: string
+          deal_id: string
+          id: string
+          insurance_revenue: number | null
+          isin: string
+          landing_cost: number | null
+          line_settlement: number | null
+          line_stamp_duty: number | null
+          product_type: string
+          quantity: number
+          rate_per_unit: number
+          security_name: string
+          sort_order: number
+          stamp_duty_rate: number | null
+          trail_percent: number | null
+          trail_start_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          base_rate?: number
+          brokerage_amount?: number | null
+          created_at?: string
+          deal_id: string
+          id?: string
+          insurance_revenue?: number | null
+          isin?: string
+          landing_cost?: number | null
+          line_settlement?: number | null
+          line_stamp_duty?: number | null
+          product_type?: string
+          quantity?: number
+          rate_per_unit?: number
+          security_name?: string
+          sort_order?: number
+          stamp_duty_rate?: number | null
+          trail_percent?: number | null
+          trail_start_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          base_rate?: number
+          brokerage_amount?: number | null
+          created_at?: string
+          deal_id?: string
+          id?: string
+          insurance_revenue?: number | null
+          isin?: string
+          landing_cost?: number | null
+          line_settlement?: number | null
+          line_stamp_duty?: number | null
+          product_type?: string
+          quantity?: number
+          rate_per_unit?: number
+          security_name?: string
+          sort_order?: number
+          stamp_duty_rate?: number | null
+          trail_percent?: number | null
+          trail_start_date?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_deal_confirmation_items_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_confirmations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_deal_confirmation_items_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_overall_stage"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_deal_confirmation_items_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_payment_summary"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_deal_confirmation_items_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_transfer_eligible"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_deal_confirmation_items_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_transfer_pending_acceptance"
+            referencedColumns: ["deal_id"]
+          },
+        ]
+      }
       nw_deal_confirmations: {
         Row: {
           acceptance_status: string
@@ -7894,6 +8005,7 @@ export type Database = {
           coupon_rate: number | null
           created_at: string | null
           deal_confirmation_id: string | null
+          deal_item_id: string | null
           dsa_code: string | null
           dsa_id: string | null
           dsa_price: number | null
@@ -7945,6 +8057,7 @@ export type Database = {
           coupon_rate?: number | null
           created_at?: string | null
           deal_confirmation_id?: string | null
+          deal_item_id?: string | null
           dsa_code?: string | null
           dsa_id?: string | null
           dsa_price?: number | null
@@ -7996,6 +8109,7 @@ export type Database = {
           coupon_rate?: number | null
           created_at?: string | null
           deal_confirmation_id?: string | null
+          deal_item_id?: string | null
           dsa_code?: string | null
           dsa_id?: string | null
           dsa_price?: number | null
@@ -8082,6 +8196,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "nw_deal_transfer_pending_acceptance"
             referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_transactions_deal_item_id_fkey"
+            columns: ["deal_item_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_confirmation_items"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "nw_transactions_dsa_id_fkey"
@@ -8466,6 +8587,7 @@ export type Database = {
           bse_code: string
           business_day_convention: string
           callable: boolean
+          coupon_entitlement_rule: string | null
           coupon_frequency: string
           coupon_rate: number | null
           coupon_type: string
@@ -8477,6 +8599,7 @@ export type Database = {
           default_margin_type: string
           default_margin_value: number | null
           enriched_at: string | null
+          ex_interest_date: string | null
           exchange_listed: string
           extracted_name: string
           face_value: number | null
@@ -8510,6 +8633,7 @@ export type Database = {
           rating: string
           rating_agency: string
           rating_date: string | null
+          record_date: string | null
           redemption_date: string | null
           redemption_schedule: Json
           redemption_value: number | null
@@ -9034,6 +9158,10 @@ export type Database = {
       nw_current_dsa_id: { Args: never; Returns: string }
       nw_current_emp_is_admin: { Args: never; Returns: boolean }
       nw_current_employee_id: { Args: never; Returns: string }
+      nw_deal_recompute_from_items: {
+        Args: { p_deal_id: string }
+        Returns: undefined
+      }
       nw_delete_deal_cascade: { Args: { p_deal_id: string }; Returns: Json }
       nw_delete_lead: { Args: { p_lead_id: string }; Returns: undefined }
       nw_delete_transaction_cascade: {

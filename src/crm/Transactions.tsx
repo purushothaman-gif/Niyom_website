@@ -21,6 +21,21 @@ const TXN_TYPES = ['buy', 'sell'];
 // never be booked twice. Only the revenue basis (landing cost / DSA landing)
 // is left for the operator to type.
 
+// One un-booked line of an eligible deal — the unit of manual booking now that
+// a deal can hold several products. Each line books as its own transaction.
+interface EligibleItem {
+  id: string;               // nw_deal_confirmation_items.id → nw_transactions.deal_item_id
+  sort_order: number;
+  product_type: string;     // deal-side label, e.g. 'Unlisted Share'
+  security_name: string;
+  isin: string | null;
+  quantity: number | null;
+  base_rate: number | null;
+  rate_per_unit: number | null;
+  line_settlement: number | null;
+  landing_cost: number | null;
+}
+
 interface EligibleDeal {
   deal_id: string;
   confirmation_number: string;
@@ -35,6 +50,7 @@ interface EligibleDeal {
   settlement_amount: number | null;
   landing_cost: number | null;
   base_rate?: number | null; // merged in — not exposed by the view
+  items: EligibleItem[];     // un-booked lines only
 }
 
 // Deal product labels are the exact values of PRODUCT_LABELS, so invert it
@@ -403,6 +419,10 @@ export default function Transactions({ employee, onNavigate }: Props) {
   const [dealSearch, setDealSearch] = useState('');
   const [showDealDrop, setShowDealDrop] = useState(false);
   const [pickedDeal, setPickedDeal] = useState<EligibleDeal | null>(null);
+  // The specific line being booked, and (for multi-line deals) the deal whose
+  // lines are being shown for selection before a line is picked.
+  const [pickedDealItem, setPickedDealItem] = useState<EligibleItem | null>(null);
+  const [expandedDeal, setExpandedDeal] = useState<EligibleDeal | null>(null);
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
 
@@ -448,21 +468,35 @@ export default function Transactions({ employee, onNavigate }: Props) {
     if (e || !data?.length) { setEligibleDeals([]); return; }
     const deals = data as EligibleDeal[];
     const dealIds = deals.map(d => d.deal_id);
-    // Drop deals that already have a transaction booked (any transfer stage) —
-    // the unique index allows only one txn per deal, so these can't be re-booked.
-    const { data: booked } = await supabase
-      .from('nw_transactions')
-      .select('deal_confirmation_id')
-      .in('deal_confirmation_id', dealIds);
-    const bookedIds = new Set((booked ?? []).map((b: any) => b.deal_confirmation_id));
-    const unbooked = deals.filter(d => !bookedIds.has(d.deal_id));
-    if (!unbooked.length) { setEligibleDeals([]); return; }
-    const { data: rates } = await supabase
-      .from('nw_deal_confirmations')
-      .select('id, base_rate')
-      .in('id', unbooked.map(d => d.deal_id));
-    const rateById = new Map((rates ?? []).map((r: any) => [r.id, r.base_rate]));
-    setEligibleDeals(unbooked.map(d => ({ ...d, base_rate: rateById.get(d.deal_id) ?? null })));
+
+    // Line items for these deals, and which lines already have a transaction.
+    // A deal can hold several products; each line books individually now, so
+    // eligibility is per-LINE: a deal shows only the lines not yet booked.
+    const [{ data: items }, { data: booked }] = await Promise.all([
+      supabase.from('nw_deal_confirmation_items')
+        .select('id, deal_id, sort_order, product_type, security_name, isin, quantity, base_rate, rate_per_unit, line_settlement, landing_cost')
+        .in('deal_id', dealIds),
+      supabase.from('nw_transactions')
+        .select('deal_item_id')
+        .in('deal_confirmation_id', dealIds),
+    ]);
+    const bookedItemIds = new Set((booked ?? []).map((b: any) => b.deal_item_id).filter(Boolean));
+    const itemsByDeal = new Map<string, EligibleItem[]>();
+    (items ?? []).forEach((it: any) => {
+      if (bookedItemIds.has(it.id)) return; // already booked → not offered
+      const arr = itemsByDeal.get(it.deal_id) ?? [];
+      arr.push(it as EligibleItem);
+      itemsByDeal.set(it.deal_id, arr);
+    });
+
+    const withItems = deals
+      .map(d => ({
+        ...d,
+        base_rate: null as number | null,
+        items: (itemsByDeal.get(d.deal_id) ?? []).sort((a, b) => a.sort_order - b.sort_order),
+      }))
+      .filter(d => d.items.length > 0);
+    setEligibleDeals(withItems);
   }, []);
 
   useEffect(() => { if (showAdd) loadEligibleDeals(); }, [showAdd, loadEligibleDeals]);
@@ -494,20 +528,31 @@ export default function Transactions({ employee, onNavigate }: Props) {
     });
   };
 
-  // Pre-fill the form from a confirmed deal. Everything the deal already
-  // states is copied and then locked; the operator only supplies the revenue
-  // basis. per_unit_price takes the deal's BASE rate (the raw rate the RM
-  // entered) — that matches how this desk actually books business.
+  // Choosing a deal: a single-line deal books that line straight away; a
+  // multi-line deal expands to its un-booked lines so the operator picks one.
   const selectDeal = (d: EligibleDeal) => {
-    const mapped = DEAL_PRODUCT_TO_TYPE[(d.product_type || '').trim().toLowerCase()];
+    setError('');
+    if (d.items.length === 1) {
+      selectDealLine(d, d.items[0]);
+    } else {
+      setExpandedDeal(d);
+    }
+  };
+
+  // Pre-fill the form from ONE line of a confirmed deal. Everything the line
+  // already states is copied and locked; the operator only supplies the revenue
+  // basis. per_unit_price takes the line's BASE rate (the raw rate the RM
+  // entered). Each line links via deal_item_id and books as its own transaction.
+  const selectDealLine = (d: EligibleDeal, item: EligibleItem) => {
+    const mapped = DEAL_PRODUCT_TO_TYPE[(item.product_type || '').trim().toLowerCase()];
     if (!mapped) {
-      setError(`Deal ${d.confirmation_number} is product type "${d.product_type}", which has no matching business product. Book it manually.`);
+      setError(`"${item.security_name}" is product type "${item.product_type}", which has no matching business product. Book it manually.`);
       return;
     }
-    const qty = d.quantity != null ? String(d.quantity) : '';
-    const rate = d.base_rate != null ? String(d.base_rate) : '';
     setPickedDeal(d);
-    setDealSearch(`${d.confirmation_number} — ${d.snap_client_name}`);
+    setPickedDealItem(item);
+    setExpandedDeal(null);
+    setDealSearch(`${d.confirmation_number} — ${d.snap_client_name} · ${item.security_name}`);
     setShowDealDrop(false);
     setError('');
     setForm(prev => ({
@@ -515,20 +560,22 @@ export default function Transactions({ employee, onNavigate }: Props) {
       client_id: d.client_id,
       txn_type: (d.transaction_type || 'Buy').toLowerCase() === 'sell' ? 'sell' : 'buy',
       product_type: mapped,
-      product_name: d.security_name || '',
-      isin: d.isin || '',
-      quantity: qty,
-      per_unit_price: rate,
+      product_name: item.security_name || '',
+      isin: item.isin || '',
+      quantity: item.quantity != null ? String(item.quantity) : '',
+      per_unit_price: item.base_rate != null ? String(item.base_rate) : '',
       txn_date: d.deal_date || prev.txn_date,
-      // Trust the deal's settlement figure rather than recomputing qty × rate:
+      // Trust the line's settlement figure rather than recomputing qty × rate:
       // the signed note is the source of truth for what the client owed.
-      consolidated_amount: d.settlement_amount != null ? String(d.settlement_amount) : '',
-      landing_cost: d.landing_cost != null ? String(d.landing_cost) : prev.landing_cost,
+      consolidated_amount: item.line_settlement != null ? String(item.line_settlement) : '',
+      landing_cost: item.landing_cost != null ? String(item.landing_cost) : prev.landing_cost,
     }));
   };
 
   const clearPickedDeal = () => {
     setPickedDeal(null);
+    setPickedDealItem(null);
+    setExpandedDeal(null);
     setDealSearch('');
     setForm(emptyForm());
     setError('');
@@ -649,9 +696,10 @@ export default function Transactions({ employee, onNavigate }: Props) {
     // uq_nw_transactions_deal unique index guarantees one transaction per deal,
     // so the queue updates rather than double-books. The deal still counts in MIS
     // immediately (MIS keys on deal_confirmation_id), per the paid-deal rule.
-    if (!editTxn && pickedDeal) {
+    if (!editTxn && pickedDeal && pickedDealItem) {
       Object.assign(payload, {
         deal_confirmation_id: pickedDeal.deal_id,
+        deal_item_id: pickedDealItem.id,
         transfer_stage: null,
       });
     }
@@ -723,11 +771,11 @@ export default function Transactions({ employee, onNavigate }: Props) {
         .select()
         .single();
       if (err) {
-        // 23505 = unique violation on uq_nw_transactions_one_transferred_per_deal:
-        // someone booked this deal first. Say so plainly instead of leaking the
-        // constraint name.
-        setError(err.code === '23505' && pickedDeal
-          ? `Deal ${pickedDeal.confirmation_number} has already been booked as business. Refresh the deal list.`
+        // 23505 = unique violation on uq_nw_transactions_deal_item: this line was
+        // booked first (by someone else, or another tab). Say so plainly instead
+        // of leaking the constraint name.
+        setError(err.code === '23505' && pickedDealItem
+          ? `"${pickedDealItem.security_name}" on deal ${pickedDeal?.confirmation_number} has already been booked. Refresh the deal list.`
           : err.message);
         setSaving(false);
         return;
@@ -803,7 +851,7 @@ export default function Transactions({ employee, onNavigate }: Props) {
             )}
           </div>
 
-          {!pickedDeal && (
+          {!pickedDeal && !expandedDeal && (
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-faint)' }} />
               <input
@@ -835,9 +883,15 @@ export default function Transactions({ employee, onNavigate }: Props) {
                         </span>
                       </div>
                       <p className="text-sm mt-0.5 truncate" style={{ color: 'var(--text-primary)' }}>{d.snap_client_name}</p>
-                      <p className="text-xs truncate" style={{ color: 'var(--text-faint)' }}>
-                        {d.security_name}{d.quantity != null ? ` · Qty ${d.quantity}` : ''}{d.isin ? ` · ${d.isin}` : ''}
-                      </p>
+                      {d.items.length > 1 ? (
+                        <p className="text-xs truncate" style={{ color: 'var(--accent)' }}>
+                          {d.items.length} products to book — choose one
+                        </p>
+                      ) : (
+                        <p className="text-xs truncate" style={{ color: 'var(--text-faint)' }}>
+                          {d.security_name}{d.quantity != null ? ` · Qty ${d.quantity}` : ''}{d.isin ? ` · ${d.isin}` : ''}
+                        </p>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -848,12 +902,44 @@ export default function Transactions({ employee, onNavigate }: Props) {
             </div>
           )}
 
+          {/* Multi-line deal chosen → pick which product to book (one transaction
+              per product). The deal reappears here until every line is booked. */}
+          {!pickedDeal && expandedDeal && (
+            <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center justify-between">
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  <span className="font-mono mr-2" style={{ color: 'var(--accent)' }}>{expandedDeal.confirmation_number}</span>
+                  {expandedDeal.snap_client_name} — pick a product to book
+                </p>
+                <button type="button" onClick={() => setExpandedDeal(null)} className="text-xs" style={{ color: 'var(--text-faint)' }}>← back</button>
+              </div>
+              {expandedDeal.items.map(it => (
+                <button key={it.id} type="button" onClick={() => selectDealLine(expandedDeal, it)}
+                  className="w-full text-left px-3 py-2.5 rounded-lg transition-colors"
+                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.08)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-surface)')}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{it.security_name}</span>
+                    <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      {it.line_settlement != null ? fmt(Number(it.line_settlement)) : '—'}
+                    </span>
+                  </div>
+                  <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                    {it.product_type}{it.quantity != null ? ` · Qty ${it.quantity}` : ''}{it.isin ? ` · ${it.isin}` : ''}
+                  </p>
+                </button>
+              ))}
+              <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Book each product one at a time — enter its landing cost, then repeat for the rest.</p>
+            </div>
+          )}
+
           {pickedDeal && (
             <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               <span className="font-mono text-xs mr-2" style={{ color: 'var(--accent)' }}>{pickedDeal.confirmation_number}</span>
-              {pickedDeal.snap_client_name} · {pickedDeal.security_name}
+              {pickedDeal.snap_client_name} · {pickedDealItem?.security_name ?? pickedDeal.security_name}
               <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>
-                Deal details are locked below. Add the landing cost{showDsaPrice ? ' and DSA landing' : ''} to finish.
+                Product details are locked below. Add the landing cost{showDsaPrice ? ' and DSA landing' : ''} to finish{pickedDeal.items.length > 1 ? ' — then book the deal’s other products the same way' : ''}.
               </p>
             </div>
           )}

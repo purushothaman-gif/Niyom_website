@@ -7,6 +7,17 @@ import React from 'react';
 //
 // The root element id is the html2pdf target; keep it stable.
 
+export interface DealDocumentItem {
+  sort_order?: number;
+  product_type: string;
+  security_name: string;
+  isin: string;
+  quantity: number;
+  rate_per_unit: number;
+  line_stamp_duty: number;
+  line_settlement: number;
+}
+
 export interface DealDocumentData {
   confirmation_number: string;
   deal_date: string;
@@ -19,6 +30,11 @@ export interface DealDocumentData {
   rate_per_unit: number;
   stamp_duty: number;
   settlement_amount: number;
+  // Line items — one per security. When more than one is present the document
+  // renders them as a table with a grand-total row. Absent / single-item deals
+  // fall back to the original single-security layout, so existing deals are
+  // visually unchanged.
+  items?: DealDocumentItem[];
   snap_client_name: string;
   snap_pan: string;
   snap_dp_name: string;
@@ -178,23 +194,56 @@ export default function DealDocument({ deal, signatureDataUrl, acceptedDate, pdf
 
         <div style={{ marginBottom: '14px' }}>
           <p style={sectionTitleStyle}>Security / Instrument Details</p>
-          <table style={tableStyle}>
-            <tbody>
-              {[
-                ['Security / Company Name', deal.security_name, false],
-                ['ISIN Number', deal.isin, false],
-                ['Quantity', deal.quantity.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), false],
-                [`Rate per ${deal.product_type === 'Unlisted Share' ? 'Share' : 'Unit'} (₹)`, `${(Math.round(deal.rate_per_unit * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Per ${deal.product_type === 'Unlisted Share' ? 'Share' : 'Unit'}`, false],
-                ['Stamp Duty / Charges (₹)', `${(Math.round((deal.stamp_duty || 0) * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, false],
-                ['Settlement Amount (₹)', fmt(deal.settlement_amount), true],
-              ].map(([label, value, bold]) => (
-                <tr key={label as string}>
-                  <td style={cellLabelStyle}>{label}</td>
-                  <td style={bold ? cellValueBoldStyle : cellValueStyle}>{value}</td>
+          {(deal.items && deal.items.length > 1) ? (
+            /* Multi-product: one row per security, with a grand-total row. */
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  {['#', 'Security / Company Name', 'ISIN', 'Product', 'Quantity', 'Rate (₹)', 'Stamp Duty (₹)', 'Settlement (₹)'].map((h, i) => (
+                    <th key={i} style={{ ...cellStyle, fontWeight: 700, textAlign: 'center', fontSize: '8px' }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {deal.items.map((it, i) => (
+                  <tr key={i}>
+                    <td style={{ ...cellValueStyle, width: '4%' }}>{i + 1}</td>
+                    <td style={{ ...cellStyle, textAlign: 'left' }}>{it.security_name}</td>
+                    <td style={cellValueStyle}>{it.isin}</td>
+                    <td style={cellValueStyle}>{it.product_type}</td>
+                    <td style={{ ...cellValueStyle, textAlign: 'right' }}>{Number(it.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={{ ...cellValueStyle, textAlign: 'right' }}>{(Math.round(Number(it.rate_per_unit) * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={{ ...cellValueStyle, textAlign: 'right' }}>{(Math.round(Number(it.line_stamp_duty || 0) * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td style={{ ...cellValueStyle, textAlign: 'right' }}>{Number(it.line_settlement || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={6} style={{ ...cellValueBoldStyle, textAlign: 'right' }}>TOTAL</td>
+                  <td style={{ ...cellValueBoldStyle, textAlign: 'right' }}>{(Math.round((deal.stamp_duty || 0) * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td style={{ ...cellValueBoldStyle, textAlign: 'right' }}>{fmt(deal.settlement_amount)}</td>
+                </tr>
+              </tbody>
+            </table>
+          ) : (
+            /* Single security — original layout, unchanged. */
+            <table style={tableStyle}>
+              <tbody>
+                {[
+                  ['Security / Company Name', deal.security_name, false],
+                  ['ISIN Number', deal.isin, false],
+                  ['Quantity', deal.quantity.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), false],
+                  [`Rate per ${deal.product_type === 'Unlisted Share' ? 'Share' : 'Unit'} (₹)`, `${(Math.round(deal.rate_per_unit * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Per ${deal.product_type === 'Unlisted Share' ? 'Share' : 'Unit'}`, false],
+                  ['Stamp Duty / Charges (₹)', `${(Math.round((deal.stamp_duty || 0) * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, false],
+                  ['Settlement Amount (₹)', fmt(deal.settlement_amount), true],
+                ].map(([label, value, bold]) => (
+                  <tr key={label as string}>
+                    <td style={cellLabelStyle}>{label}</td>
+                    <td style={bold ? cellValueBoldStyle : cellValueStyle}>{value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
 
         <div style={{ marginBottom: '14px' }}>
