@@ -159,3 +159,49 @@ describe('formatDuration', () => {
     expect(formatDuration(-5)).toBe('0h 0m');
   });
 });
+
+/*
+ * A payroll run made mid-month sees days that have not happened yet. Before
+ * hr_38 those rows were written as 'absent' with payable_fraction 0, so running
+ * payroll on the 15th docked the employee for the rest of the month.
+ */
+describe('a month still in progress', () => {
+  const working  = () => day({ status: 'working', payable_fraction: 1, worked_minutes: 90 });
+  const upcoming = () => day({ status: 'upcoming', payable_fraction: 1 });
+
+  const s = summariseAttendance(month(
+    repeat(14, present),   // the fortnight already worked
+    repeat(1, working),    // today, still running
+    repeat(12, upcoming),  // the rest of the month
+    repeat(4, weekOff),
+  ));
+
+  it('does not dock pay for days that have not happened', () => {
+    expect(s.absent_days).toBe(0);
+    expect(s.lop_days).toBe(0);
+    expect(s.payable_days).toBe(31);
+  });
+
+  it('still expects those days to be worked', () => {
+    expect(s.working_days).toBe(27);
+    expect(s.weekly_off_days).toBe(4);
+  });
+
+  it('does not claim attendance for a day nobody has finished', () => {
+    // 14 settled days only. Counting the other 13 would overstate every report
+    // that quotes present days.
+    expect(s.present_days).toBe(14);
+  });
+
+  it('an unfinished day is never absence, however little was worked', () => {
+    const t = summariseAttendance([day({ status: 'working', payable_fraction: 1, worked_minutes: 5 })]);
+    expect(t.absent_days).toBe(0);
+    expect(t.lop_days).toBe(0);
+  });
+
+  it('a day that is genuinely over and unworked is still absence', () => {
+    const t = summariseAttendance(month(repeat(20, present), repeat(2, absent)));
+    expect(t.absent_days).toBe(2);
+    expect(t.lop_days).toBe(2);
+  });
+});

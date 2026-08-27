@@ -138,7 +138,8 @@ function TodayBoard({ onToast }: { onToast: (m: string, ok?: boolean) => void })
     const leave   = merged.filter(m => m.day?.status === 'paid_leave' || m.day?.status === 'unpaid_leave').length;
     const off     = merged.filter(m => m.day?.status === 'weekly_off' || m.day?.status === 'holiday').length;
     const notIn   = merged.filter(m => !m.day?.first_in_at &&
-                      !['weekly_off', 'holiday', 'paid_leave', 'unpaid_leave', 'not_joined', 'exited'].includes(m.day?.status ?? '')).length;
+                      !['weekly_off', 'holiday', 'paid_leave', 'unpaid_leave', 'not_joined', 'exited',
+                        'working', 'upcoming'].includes(m.day?.status ?? '')).length;
     const late    = merged.filter(m => m.day?.is_late).length;
     const pending = merged.filter(m => m.day?.has_pending_punch).length;
     return { total: merged.length, present, half, leave, off, notIn, late, pending };
@@ -257,6 +258,9 @@ function TodayBoard({ onToast }: { onToast: (m: string, ok?: boolean) => void })
 const STATUS_CODE: Record<string, string> = {
   present: 'P', half_day: 'H', absent: 'A', weekly_off: 'W', holiday: 'F',
   paid_leave: 'L', unpaid_leave: 'U', on_duty: 'D', not_joined: '-', exited: '-',
+  // A day still running, and one that has not arrived. Neither is attendance
+  // yet, so neither gets a letter that reads as a verdict.
+  working: '•', upcoming: '·',
 };
 
 function Register({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => void; canEdit: boolean }) {
@@ -331,7 +335,7 @@ function Register({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => 
       summary.push([
         s.employee_code, s.full_name, s.profile?.department ?? '',
         mine.length,
-        count(r => !['weekly_off', 'holiday', 'not_joined', 'exited'].includes(r.status)),
+        count(r => !['weekly_off', 'holiday', 'not_joined', 'exited', 'upcoming'].includes(r.status)),
         count(r => r.status === 'present' || r.status === 'on_duty') + count(r => r.status === 'half_day') * 0.5,
         count(r => r.status === 'paid_leave'), count(r => r.status === 'unpaid_leave'),
         count(r => r.status === 'holiday'), count(r => r.status === 'weekly_off'),
@@ -412,7 +416,7 @@ function Register({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => 
                           : c.status === 'present' || c.status === 'on_duty' ? '16,185,129'
                           : c.status === 'half_day' ? '245,158,11'
                           : c.status === 'absent' || c.status === 'unpaid_leave' ? '239,68,68'
-                          : c.status === 'paid_leave' ? '59,130,246'
+                          : c.status === 'paid_leave' || c.status === 'working' ? '59,130,246'
                           : c.status === 'holiday' ? '139,92,246'
                           : '148,163,184';
                         return (
