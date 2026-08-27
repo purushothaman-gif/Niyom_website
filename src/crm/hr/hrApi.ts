@@ -13,7 +13,7 @@
 
 import { supabase } from '../../lib/supabase';
 import type {
-  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch, HRNavContext,
+  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch, HRNavContext, OfficeLocation,
   AttendanceSettings, AuditLog, BankAccount, BankTemplateColumn, BankTemplateRow,
   ComponentSlabRow, EmployeeProfile, HRAccess, HREmployee, HRModule, HRSettings,
   Holiday, LeaveBalance, LeaveRequest, LeaveType, PaySchedule, PayrollAdjustmentRow,
@@ -129,6 +129,25 @@ export const savePaySchedule = async (id: string, patch: Partial<PaySchedule>) =
 export const saveWorkSchedule = async (id: string, patch: Partial<WorkSchedule>) =>
   unwrap(await supabase.from('hr_work_schedules').update(patch).eq('id', id).select().single());
 
+// ---- Office geofences (HR-readable only; employees never see the coordinates)
+
+export const listOffices = async (): Promise<OfficeLocation[]> =>
+  (await supabase.from('hr_office_locations').select('*').order('created_at', { ascending: false })).data ?? [];
+
+export const createOffice = async (row: Partial<OfficeLocation>) =>
+  unwrap(await supabase.from('hr_office_locations').insert(row as never).select().single());
+
+export const updateOffice = async (id: string, patch: Partial<OfficeLocation>) =>
+  unwrap(await supabase.from('hr_office_locations').update(patch).eq('id', id).select().single());
+
+/*
+ * Retired, not deleted. Punches reference the office they were judged against;
+ * deleting the row would null that reference and quietly rewrite the record of
+ * where somebody was standing.
+ */
+export const retireOffice = async (id: string) =>
+  unwrap(await supabase.from('hr_office_locations').update({ status: 'inactive' }).eq('id', id).select().single());
+
 // ---- Allowed networks (HR-readable only; employees never see the office IPs)
 
 export const listNetworks = async (): Promise<AllowedNetwork[]> =>
@@ -154,12 +173,21 @@ export const deleteNetwork = async (id: string) => {
  * the edge function because the browser must not be told what the office IPs
  * are, and because the preview must use the same rule as the punch itself.
  */
-export const getPunchState = (): Promise<PunchState> =>
-  callFunction<PunchState>('hr-attendance-state', {});
+export const getPunchState = (fix?: { latitude: number; longitude: number; accuracy: number }) =>
+  callFunction<PunchState>('hr-attendance-state', fix ?? {});
 
-/** The only way to create a punch. */
-export const punch = (punch_type: 'in' | 'out'): Promise<PunchResult> =>
-  callFunction<PunchResult>('hr-attendance-punch', { punch_type, source: 'web' });
+/**
+ * The only way to create a punch.
+ *
+ * The coordinates are REPORTED, not trusted: the server holds the office
+ * position, computes the distance itself, and decides. Sending them from here
+ * is unavoidable -- a GPS fix has no other source.
+ */
+export const punch = (
+  punch_type: 'in' | 'out',
+  fix?: { latitude: number; longitude: number; accuracy: number },
+): Promise<PunchResult> =>
+  callFunction<PunchResult>('hr-attendance-punch', { punch_type, source: 'web', ...(fix ?? {}) });
 
 export const listMyDaily = async (employeeId: string, from: string, to: string): Promise<AttendanceDaily[]> =>
   (await supabase.from('hr_attendance_daily').select('*')

@@ -1982,18 +1982,26 @@ export type Database = {
           approved_by: string | null
           created_at: string
           detected_ip: unknown
+          distance_m: number | null
           employee_id: string
           enforcement_mode: string
           forwarded_for: string | null
+          gps_accuracy_m: number | null
           id: string
+          is_mock_location: boolean | null
+          latitude: number | null
+          location_status: string | null
+          longitude: number | null
           network_id: string | null
           network_name: string
           network_status: string
+          office_location_id: string | null
           punch_type: string
           punched_at: string
           review_note: string
           source: string
           user_agent: string
+          verification_method: string
           work_date: string
         }
         Insert: {
@@ -2002,18 +2010,26 @@ export type Database = {
           approved_by?: string | null
           created_at?: string
           detected_ip?: unknown
+          distance_m?: number | null
           employee_id: string
           enforcement_mode?: string
           forwarded_for?: string | null
+          gps_accuracy_m?: number | null
           id?: string
+          is_mock_location?: boolean | null
+          latitude?: number | null
+          location_status?: string | null
+          longitude?: number | null
           network_id?: string | null
           network_name?: string
           network_status: string
+          office_location_id?: string | null
           punch_type: string
           punched_at?: string
           review_note?: string
           source?: string
           user_agent?: string
+          verification_method?: string
           work_date: string
         }
         Update: {
@@ -2022,18 +2038,26 @@ export type Database = {
           approved_by?: string | null
           created_at?: string
           detected_ip?: unknown
+          distance_m?: number | null
           employee_id?: string
           enforcement_mode?: string
           forwarded_for?: string | null
+          gps_accuracy_m?: number | null
           id?: string
+          is_mock_location?: boolean | null
+          latitude?: number | null
+          location_status?: string | null
+          longitude?: number | null
           network_id?: string | null
           network_name?: string
           network_status?: string
+          office_location_id?: string | null
           punch_type?: string
           punched_at?: string
           review_note?: string
           source?: string
           user_agent?: string
+          verification_method?: string
           work_date?: string
         }
         Relationships: [
@@ -2058,6 +2082,13 @@ export type Database = {
             referencedRelation: "hr_allowed_networks"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "hr_attendance_punches_office_location_id_fkey"
+            columns: ["office_location_id"]
+            isOneToOne: false
+            referencedRelation: "hr_office_locations"
+            referencedColumns: ["id"]
+          },
         ]
       }
       hr_attendance_settings: {
@@ -2075,7 +2106,11 @@ export type Database = {
           half_day_minutes: number
           id: number
           late_after_minutes: number
+          location_mode: string
+          max_accuracy_metres: number
+          max_plausible_speed_kmh: number
           max_punches_per_day: number
+          network_check: string
           office_end: string
           office_start: string
           overtime_after_minutes: number
@@ -2083,6 +2118,8 @@ export type Database = {
           punch_window_end: string
           punch_window_start: string
           rate_limit_per_minute: number
+          reject_mock_location: boolean
+          require_gps: boolean
           rounding_minutes: number
           trusted_proxy_hops: number
           updated_at: string
@@ -2102,7 +2139,11 @@ export type Database = {
           half_day_minutes?: number
           id?: number
           late_after_minutes?: number
+          location_mode?: string
+          max_accuracy_metres?: number
+          max_plausible_speed_kmh?: number
           max_punches_per_day?: number
+          network_check?: string
           office_end?: string
           office_start?: string
           overtime_after_minutes?: number
@@ -2110,6 +2151,8 @@ export type Database = {
           punch_window_end?: string
           punch_window_start?: string
           rate_limit_per_minute?: number
+          reject_mock_location?: boolean
+          require_gps?: boolean
           rounding_minutes?: number
           trusted_proxy_hops?: number
           updated_at?: string
@@ -2129,7 +2172,11 @@ export type Database = {
           half_day_minutes?: number
           id?: number
           late_after_minutes?: number
+          location_mode?: string
+          max_accuracy_metres?: number
+          max_plausible_speed_kmh?: number
           max_punches_per_day?: number
+          network_check?: string
           office_end?: string
           office_start?: string
           overtime_after_minutes?: number
@@ -2137,6 +2184,8 @@ export type Database = {
           punch_window_end?: string
           punch_window_start?: string
           rate_limit_per_minute?: number
+          reject_mock_location?: boolean
+          require_gps?: boolean
           rounding_minutes?: number
           trusted_proxy_hops?: number
           updated_at?: string
@@ -2842,6 +2891,62 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      hr_office_locations: {
+        Row: {
+          address: string
+          created_at: string
+          created_by: string | null
+          description: string
+          effective_from: string
+          effective_to: string | null
+          id: string
+          latitude: number
+          longitude: number
+          name: string
+          radius_metres: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          latitude: number
+          longitude: number
+          name: string
+          radius_metres?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          latitude?: number
+          longitude?: number
+          name?: string
+          radius_metres?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hr_office_locations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       hr_pay_schedules: {
         Row: {
@@ -8709,6 +8814,10 @@ export type Database = {
         Args: { p_approve: boolean; p_note?: string; p_request_id: string }
         Returns: Json
       }
+      hr_distance_metres: {
+        Args: { lat1: number; lat2: number; lon1: number; lon2: number }
+        Returns: number
+      }
       hr_employee_salary_visible: { Args: never; Returns: boolean }
       hr_is_holiday: {
         Args: { p_date: string; p_location: string }
@@ -8733,6 +8842,16 @@ export type Database = {
       }
       hr_match_network: { Args: { p_ip: unknown }; Returns: string }
       hr_my_nav_context: { Args: never; Returns: Json }
+      hr_nearest_office: {
+        Args: { p_lat: number; p_lon: number }
+        Returns: {
+          distance_m: number
+          inside: boolean
+          office_id: string
+          office_name: string
+          radius_m: number
+        }[]
+      }
       hr_payroll_approve: {
         Args: { p_note?: string; p_run_id: string }
         Returns: Json
@@ -8767,9 +8886,12 @@ export type Database = {
       hr_publish_payslips: { Args: { p_run_id: string }; Returns: Json }
       hr_punch_state: {
         Args: {
+          p_accuracy_m?: number
           p_detected_ip?: unknown
           p_employee_id: string
           p_forwarded_for?: string
+          p_latitude?: number
+          p_longitude?: number
         }
         Returns: Json
       }
@@ -8784,9 +8906,13 @@ export type Database = {
       }
       hr_record_punch: {
         Args: {
+          p_accuracy_m?: number
           p_detected_ip: unknown
           p_employee_id: string
           p_forwarded_for?: string
+          p_is_mock?: boolean
+          p_latitude?: number
+          p_longitude?: number
           p_punch_type: string
           p_source?: string
           p_user_agent?: string

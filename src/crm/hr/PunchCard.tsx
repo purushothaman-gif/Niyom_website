@@ -5,16 +5,20 @@
  * hurry -- so it is a single card with a live clock, the current state, an
  * honest statement about the network, and one big button. Nothing else.
  *
- * The network verdict shown here comes from the SERVER (hr-attendance-state),
- * not from anything the browser can see. The browser is never told which IPs
- * are allowed -- hr_allowed_networks is HR-readable only, because an employee
- * who could list it would know exactly what to spoof. Disabling the button is a
- * courtesy, not a control: the same check runs again inside the punch endpoint.
+ * Presence is verified by LOCATION, not by which network the phone is on. The
+ * browser reports a GPS fix; the server holds the office coordinates, computes
+ * the distance itself and decides. The card is never told where the office is
+ * or how large the geofence is -- that is exactly what someone would need to
+ * fake a convincing position. It is told a verdict and a rounded distance.
+ *
+ * Disabling the button is a courtesy, not a control: the same checks run again
+ * inside the punch endpoint, which is the only thing that can create a punch.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Clock, LogIn, LogOut, MapPin, ShieldAlert, ShieldCheck, WifiOff } from 'lucide-react';
+import { Clock, LogIn, LogOut, MapPin, MapPinOff, Navigation, ShieldCheck } from 'lucide-react';
 import { getPunchState, punch } from './hrApi';
+import { getPosition, formatDistance, type GeoResult } from './geolocation';
 import type { PunchState } from './hrTypes';
 import { formatDuration } from '../../lib/hr/attendanceSummary';
 import { Notice } from './hrUi';
@@ -44,13 +48,27 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [now, setNow] = useState(() => new Date());
+  // The last fix we obtained, and whatever went wrong getting one. Kept apart
+  // so a stale fix is never silently reused after a later failure.
+  const [geo, setGeo] = useState<GeoResult | null>(null);
+  const [locating, setLocating] = useState(true);
   const mounted = useRef(true);
 
   useEffect(() => () => { mounted.current = false; }, []);
 
   const load = useCallback(async () => {
+    setLocating(true);
+    // Ask the browser first, then let the server judge the fix. Sending the
+    // position with the state request means the card can say "you are 450
+    // metres away" before anyone presses anything.
+    const fix = await getPosition();
+    if (!mounted.current) return;
+    setGeo(fix);
+    setLocating(false);
+
     try {
-      const s = await getPunchState();
+      const s = await getPunchState(
+        fix.ok ? { latitude: fix.latitude, longitude: fix.longitude, accuracy: fix.accuracy } : undefined);
       if (!mounted.current) return;
       if ((s as { error?: string }).error) {
         setMessage({ text: (s as { error?: string }).error!, ok: false });
@@ -66,11 +84,18 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
-  // A ticking clock, and a refresh every two minutes so the worked-time figure
-  // and the network verdict stay honest if someone changes Wi-Fi mid-shift.
+  /*
+   * A ticking clock, and a slower refresh so the worked-time figure and the
+   * location verdict stay honest if someone walks out mid-shift.
+   *
+   * Five minutes, not the two this used when the verdict came from the network.
+   * Each refresh now takes a real high-accuracy GPS reading, and polling the
+   * satellite chip every two minutes drains a phone for a number that changes
+   * a few times a day.
+   */
   useEffect(() => {
     const tick = window.setInterval(() => setNow(new Date()), 1000);
-    const refresh = window.setInterval(load, 120_000);
+    const refresh = window.setInterval(load, 300_000);
     return () => { window.clearInterval(tick); window.clearInterval(refresh); };
   }, [load]);
 
@@ -79,7 +104,24 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
     setBusy(true);
     setMessage(null);
     try {
-      const res = await punch(state.next_action);
+      /*
+       * A FRESH fix, not the one from page load. Someone could otherwise open
+       * the page at the office and press the button an hour later from
+       * elsewhere, and the stale coordinates would still say "inside".
+       */
+      const fix = await getPosition();
+      if (!mounted.current) return;
+      setGeo(fix);
+
+      if (!fix.ok && state.location_mode === 'enforce' && !state.location_exempt) {
+        setMessage({ text: fix.message, ok: false });
+        setBusy(false);
+        return;
+      }
+
+      const res = await punch(
+        state.next_action,
+        fix.ok ? { latitude: fix.latitude, longitude: fix.longitude, accuracy: fix.accuracy } : undefined);
       if (res.ok) {
         setMessage({ text: res.message ?? 'Recorded.', ok: res.approval_status !== 'pending' });
       } else {
@@ -113,20 +155,17 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
 
   const isIn = state.punched_in;
   const worked = state.worked_minutes;
-  const onOffice = state.network_status === 'office';
-  const enforcing = state.enforcement_mode === 'enforce';
+  const enforcing = state.location_mode === 'enforce';
+  const inside = state.location_status === 'inside';
   // Two independent reasons the button can be unavailable. Kept apart because
-  // "you are outside the office network" and "it is 3am" need different
-  // sentences -- telling someone their Wi-Fi is wrong at 3am sends them
-  // hunting for a router problem that does not exist.
+  // "you are not at the office" and "it is 3am" need different sentences --
+  // telling someone their location is wrong at 3am sends them walking to a desk
+  // that will not help.
   const outsideHours = state.window_blocks_next;
-  const blocked = enforcing && !onOffice && !state.network_exempt && !outsideHours;
-
-  const NetIcon = onOffice ? ShieldCheck : state.network_status === 'unknown' ? WifiOff : ShieldAlert;
-  const netRgb = onOffice ? '16,185,129' : enforcing ? '245,158,11' : '148,163,184';
-  const netLabel = onOffice
-    ? (state.network_name || 'Office network')
-    : state.network_status === 'unknown' ? 'Network not detected' : 'Outside the office network';
+  // Blocked on LOCATION, and only when that is the actual reason -- an
+  // out-of-hours punch gets its own message below rather than being reported as
+  // a location problem.
+  const blocked = enforcing && !state.location_ok && !outsideHours;
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
@@ -163,52 +202,69 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
         <Fact label="Working"   value={formatDuration(worked)} />
       </div>
 
-      {/* Network verdict -- server decided */}
-      <div className="mx-5 mb-4 px-3.5 py-2.5 rounded-xl flex items-center gap-2.5"
-        style={{ background: `rgba(${netRgb},0.08)`, border: `1px solid rgba(${netRgb},0.25)` }}>
-        <NetIcon className="w-4 h-4 flex-shrink-0" style={{ color: `rgb(${netRgb})` }} />
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold truncate" style={{ color: `rgb(${netRgb})` }}>{netLabel}</p>
-          {!onOffice && !enforcing && (
-            <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
-              Recorded for review — network checks are not being enforced yet.
-            </p>
-          )}
-          {state.network_exempt && (
-            <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
-              You are exempt from the office network requirement.
-            </p>
-          )}
-        </div>
-        {(state.is_late || state.has_pending_punch) && (
-          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+      {/* Where you are, as the server judged it. Never the office position. */}
+      {state.location_mode !== 'off' && (() => {
+        const rgb = locating ? '148,163,184'
+          : inside ? '16,185,129'
+          : state.location_status === 'not_configured' ? '148,163,184'
+          : enforcing ? '239,68,68' : '245,158,11';
+        const Icon = locating ? Navigation : inside ? ShieldCheck : MapPinOff;
+        const headline = locating ? 'Checking your office location…'
+          : inside ? 'You are within the office attendance area.'
+          : state.location_status === 'outside' ? 'Attendance can only be marked from the Niyom office.'
+          : state.location_status === 'inaccurate' ? 'Your location is not precise enough yet.'
+          : state.location_status === 'mock' ? 'Your device is reporting a simulated location.'
+          : state.location_status === 'not_configured' ? 'Office location has not been set up yet.'
+          : (geo && !geo.ok ? geo.message : 'Your location could not be read.');
+        return (
+          <div className="mx-5 mb-4 px-3.5 py-2.5 rounded-xl flex items-start gap-2.5"
+            style={{ background: `rgba(${rgb},0.08)`, border: `1px solid rgba(${rgb},0.25)` }}>
+            <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${locating ? 'animate-pulse' : ''}`}
+              style={{ color: `rgb(${rgb})` }} />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold" style={{ color: `rgb(${rgb})` }}>
+                {inside && '✓ '}{headline}
+              </p>
+              {!locating && state.distance_m !== null && !inside && (
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                  You are approximately {formatDistance(state.distance_m)} from the office.
+                </p>
+              )}
+              {!locating && !inside && !enforcing && state.location_status !== 'not_configured' && (
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-faint)' }}>
+                  Recorded for review — location checks are not being enforced yet.
+                </p>
+              )}
+              {state.location_exempt && (
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-faint)' }}>
+                  You are exempt from the office location requirement.
+                </p>
+              )}
+              {!locating && !inside && (
+                <button onClick={load} className="text-[11px] font-semibold mt-1 underline"
+                  style={{ color: `rgb(${rgb})` }}>
+                  Check my location again
+                </button>
+              )}
+            </div>
             {state.is_late && (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md"
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md flex-shrink-0"
                 style={{ background: 'rgba(245,158,11,0.14)', color: 'rgb(245,158,11)' }}>
                 Late {state.late_minutes}m
               </span>
             )}
           </div>
-        )}
-      </div>
-
-      {outsideHours && (
-        <div className="mx-5 mb-4">
-          <Notice tone="warn" title={state.day_blocked ? 'Not a working day' : 'Outside permitted hours'}>
-            {state.day_blocked
-              ? 'Attendance cannot be punched today. If you are working, ask an administrator to record it as an attendance correction.'
-              : <>Attendance can be punched between <strong>{state.window_start?.slice(0, 5)}</strong> and{' '}
-                 <strong>{state.window_end?.slice(0, 5)}</strong>. If you are working outside these hours, ask an
-                 administrator to record it as an attendance correction.</>}
-          </Notice>
-        </div>
-      )}
+        );
+      })()}
 
       {blocked && (
         <div className="mx-5 mb-4">
           <Notice tone="warn" title="Attendance not allowed from here">
-            You are currently outside the approved office network. Connect to the Niyom office Wi-Fi and try again —
-            or punch anyway and it will be held for an admin to approve.
+            {state.location_status === 'outside'
+              ? <>You need to be at the Niyom office to mark attendance. If you are at the office and still see this,
+                  step near a window so your phone can get a clearer signal, then check again.</>
+              : geo && !geo.ok ? geo.message
+              : 'Your location could not be confirmed. Check that location access is on for this site and try again.'}
           </Notice>
         </div>
       )}
@@ -232,7 +288,7 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
       <div className="px-5 pb-5">
         <button
           onClick={doPunch}
-          disabled={busy || outsideHours}
+          disabled={busy || outsideHours || locating}
           title={outsideHours ? 'Attendance cannot be punched at this time' : undefined}
           className="w-full py-4 rounded-2xl text-sm font-bold flex items-center justify-center gap-2.5 transition-all disabled:opacity-60 active:scale-[0.99]"
           style={{
@@ -241,7 +297,10 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
             border: `1px solid ${isIn ? 'rgba(239,68,68,0.35)' : 'rgba(16,185,129,0.4)'}`,
           }}>
           {busy ? <Clock className="w-4 h-4 animate-spin" /> : isIn ? <LogOut className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-          {busy ? 'Recording…' : outsideHours ? 'OUTSIDE PERMITTED HOURS' : isIn ? 'PUNCH OUT' : 'PUNCH IN'}
+          {busy ? 'Checking your location…'
+            : outsideHours ? 'OUTSIDE PERMITTED HOURS'
+            : locating ? 'CHECKING LOCATION…'
+            : isIn ? 'PUNCH OUT' : 'PUNCH IN'}
         </button>
       </div>
 
@@ -258,9 +317,12 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
                   style={{ background: t.type === 'in' ? 'rgb(16,185,129)' : 'rgb(239,68,68)' }} />
                 <span className="font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>{timeIST(t.at)}</span>
                 <span style={{ color: 'var(--text-muted)' }}>{t.type === 'in' ? 'Punched in' : 'Punched out'}</span>
-                {t.network !== 'office' && (
+                {t.location && t.location !== 'inside' && (
                   <span className="inline-flex items-center gap-1" style={{ color: 'var(--text-faint)' }}>
-                    <MapPin className="w-3 h-3" /> off network
+                    <MapPin className="w-3 h-3" />
+                    {t.location === 'outside' && t.distance_m != null
+                      ? formatDistance(t.distance_m) + ' away'
+                      : t.location.replace(/_/g, ' ')}
                   </span>
                 )}
                 {t.approval === 'pending' && (
