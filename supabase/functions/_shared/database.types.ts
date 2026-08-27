@@ -8766,7 +8766,11 @@ export type Database = {
       }
       hr_publish_payslips: { Args: { p_run_id: string }; Returns: Json }
       hr_punch_state: {
-        Args: { p_detected_ip?: unknown; p_employee_id: string }
+        Args: {
+          p_detected_ip?: unknown
+          p_employee_id: string
+          p_forwarded_for?: string
+        }
         Returns: Json
       }
       hr_recompute_all_for_date: { Args: { p_date: string }; Returns: number }

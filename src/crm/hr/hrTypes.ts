@@ -65,6 +65,9 @@ export interface PunchState {
   server_time: string;
   /** The caller's OWN public IP as the server sees it -- never the allowlist. */
   detected_ip: string | null;
+  /** The full X-Forwarded-For chain, and the hop setting that picked from it. */
+  forwarded_for: string | null;
+  trusted_proxy_hops: number;
   punched_in: boolean;
   next_action: 'in' | 'out';
   last_punch_at: string | null;

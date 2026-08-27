@@ -28,6 +28,7 @@ import type {
 } from './hrTypes';
 import { formatDuration } from '../../lib/hr/attendanceSummary';
 import { exportSheet, exportWorkbook, periodStamp } from './hrExcel';
+import { looksLikeInfrastructure } from './infrastructureIp';
 
 type Tab = 'today' | 'register' | 'approvals' | 'networks' | 'rules';
 
@@ -729,6 +730,12 @@ function Networks({ onToast, canEdit, employee }: {
   const [editing, setEditing] = useState<Partial<AllowedNetwork> | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [myIp, setMyIp] = useState<string | null>(null);
+  // The whole forwarded chain and the hop setting, shown beside the chosen
+  // address. Without this the only symptom of a wrong hop setting is a slow
+  // drip of "trust this network" prompts, which reads as a flaky ISP rather
+  // than a misconfiguration.
+  const [chain, setChain] = useState<string | null>(null);
+  const [hops, setHops] = useState(0);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -741,6 +748,8 @@ function Networks({ onToast, canEdit, employee }: {
       // with what enforcement actually does.
       const state = await api.getPunchState();
       setMyIp(state.detected_ip ?? null);
+      setChain(state.forwarded_for ?? null);
+      setHops(state.trusted_proxy_hops ?? 0);
     } catch (err) {
       onToast(hrError(err), false);
     } finally {
@@ -813,6 +822,16 @@ function Networks({ onToast, canEdit, employee }: {
 
   return (
     <div className="space-y-5">
+      {myIp && looksLikeInfrastructure(myIp) && (
+        <Notice tone="bad" title="The detected address looks like cloud infrastructure, not an office">
+          <strong className="font-mono">{myIp}</strong> is in a hosting provider's range, which means the server is
+          reading a proxy in front of the API rather than the person punching. Allowlisting it would approve
+          <em> every</em> punch from anywhere, because they all arrive through that same proxy. Raise
+          <strong> Trusted proxy hops</strong> on the Rules tab by one and check this again — the chain below shows
+          which entry is being taken.
+        </Notice>
+      )}
+
       {observing && (
         <Notice tone="info" title="Observe mode — nothing is being blocked yet">
           Every punch is being recorded with the network it came from, but none are refused or held. Let a normal week
@@ -871,6 +890,14 @@ function Networks({ onToast, canEdit, employee }: {
                 The server currently sees you at
               </p>
               <p className="text-sm font-bold font-mono mt-0.5" style={{ color: 'var(--text-primary)' }}>{myIp}</p>
+              {chain && (
+                <p className="text-[11px] mt-1 font-mono break-all" style={{ color: 'var(--text-faint)' }}>
+                  Full chain: {chain}
+                  <span className="ml-1" style={{ color: 'var(--text-muted)' }}>
+                    (taking entry {hops + 1} from the right)
+                  </span>
+                </p>
+              )}
               <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-faint)' }}>
                 {rows.some(n => String(n.ip_address ?? '') === myIp)
                   ? 'Already on the approved list.'
