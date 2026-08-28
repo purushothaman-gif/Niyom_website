@@ -39,15 +39,32 @@ export interface PartnerBond {
   bond_name: string | null;
   issuer_name: string | null;
   coupon_rate: number | null;
+  coupon_type: string | null;
   coupon_frequency: string | null;
   maturity_date: string | null;
+  next_coupon_date: string | null;
+  issue_date: string | null;
   rating: string | null;
+  rating_agency: string | null;
+  security_type: string | null;
+  seniority: string | null;
+  tax_status: string | null;
+  trustee: string | null;
+  day_count_convention: string | null;
+  principal_repayment_structure: string | null;
   min_investment: number | null;
   face_value: number | null;
   partner_base: number | null;
   self_markup_percent: number | null;
   partner_price: number | null;
-  analytics: { ytm?: number | null } | null;
+  analytics: {
+    ytm?: number | null;
+    years_to_maturity?: number | null;
+    accrued_per_100?: number | null;
+    total_future_interest_per_100?: number | null;
+    total_future_principal_per_100?: number | null;
+    [k: string]: unknown;
+  } | null;
 }
 
 function isAccessRevoked(message?: string) {
@@ -213,6 +230,18 @@ export const PartnerService = {
     return (data ?? []) as PartnerBond[];
   },
 
+  /** A single bond for the partner detail page. null if not resolvable for this DSA. */
+  async getBond(id: string): Promise<PartnerBond | null> {
+    if (isDemoSession()) return null;
+    const { data, error } = await supabase.rpc('nw_partner_bond', { p_id: id as unknown as string });
+    if (error) {
+      if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
+      throw error;
+    }
+    const rows = (data ?? []) as PartnerBond[];
+    return rows[0] ?? null;
+  },
+
   /** Set the partner's own bond markup (0..5%). Server enforces the cap. */
   async setBondMarkup(percent: number): Promise<void> {
     if (isDemoSession()) return;
@@ -222,4 +251,70 @@ export const PartnerService = {
       throw error;
     }
   },
+
+  /**
+   * Place a bond order on behalf of one of the partner's clients, at the partner's
+   * per-bond price. Goes through the place-partner-bond-order edge function, which
+   * re-derives the price server-side and routes the order to the client's RM.
+   */
+  async placeBondOrder(input: { clientId: string; bondId: string; units: number; margin: number; notes?: string }): Promise<PartnerBondOrder> {
+    if (isDemoSession()) throw new Error('Not available in the demo portal.');
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token;
+    const anon = getEnv().supabaseAnonKey;
+    const res = await fetch(`${getEnv().supabaseUrl}/functions/v1/place-partner-bond-order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? anon}`, Apikey: anon },
+      body: JSON.stringify({
+        client_id: input.clientId, bond_id: input.bondId, units: input.units,
+        margin: input.margin, notes: input.notes ?? '',
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body?.order) throw new Error(body?.error || 'Could not place the order. Please try again.');
+    return body.order as PartnerBondOrder;
+  },
+
+  /** Mint a shareable per-bond link at a per-bond margin (0..5%). Returns the token. */
+  async createBondShare(bondId: string, margin: number): Promise<string> {
+    if (isDemoSession()) throw new Error('Not available in the demo portal.');
+    const { data, error } = await supabase.rpc('nw_partner_create_bond_share', {
+      p_bond_id: bondId as unknown as string, p_margin: margin,
+    });
+    if (error) {
+      if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
+      throw error;
+    }
+    return String(data);
+  },
+
+  /** Bond orders this partner raised (RLS scopes to their own dsa_id), newest first. */
+  async getMyBondOrders(): Promise<PartnerBondOrder[]> {
+    if (isDemoSession()) return [];
+    const { data, error } = await supabase
+      .from('nw_bond_orders')
+      .select('id, ref, bond_name, isin, units, price_per_100, amount, status, partner_markup_percent, created_at, client:nw_clients(full_name, client_code)')
+      .order('created_at', { ascending: false });
+    if (error) {
+      if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
+      throw error;
+    }
+    return (data ?? []) as unknown as PartnerBondOrder[];
+  },
 };
+
+export type PartnerBondOrderStatus = 'submitted' | 'deal_sent' | 'accepted' | 'cancelled';
+
+export interface PartnerBondOrder {
+  id: string;
+  ref: string;
+  bond_name: string;
+  isin: string;
+  units: number;
+  price_per_100: number;
+  amount: number | null;
+  status: PartnerBondOrderStatus;
+  partner_markup_percent: number | null;
+  created_at: string;
+  client?: { full_name: string | null; client_code: string | null } | null;
+}

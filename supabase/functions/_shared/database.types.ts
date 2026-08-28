@@ -24,7 +24,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -5399,12 +5399,15 @@ export type Database = {
           client_id: string
           created_at: string
           deal_id: string | null
+          dsa_id: string | null
           face_value: number | null
           id: string
           isin: string
           notes: string
+          partner_markup_percent: number | null
           price_per_100: number
           ref: string
+          source: string
           status: string
           units: number
           updated_at: string
@@ -5417,12 +5420,15 @@ export type Database = {
           client_id: string
           created_at?: string
           deal_id?: string | null
+          dsa_id?: string | null
           face_value?: number | null
           id?: string
           isin?: string
           notes?: string
+          partner_markup_percent?: number | null
           price_per_100: number
           ref?: string
+          source?: string
           status?: string
           units: number
           updated_at?: string
@@ -5435,12 +5441,15 @@ export type Database = {
           client_id?: string
           created_at?: string
           deal_id?: string | null
+          dsa_id?: string | null
           face_value?: number | null
           id?: string
           isin?: string
           notes?: string
+          partner_markup_percent?: number | null
           price_per_100?: number
           ref?: string
+          source?: string
           status?: string
           units?: number
           updated_at?: string
@@ -5508,6 +5517,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "nw_deal_transfer_pending_acceptance"
             referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_bond_orders_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -8146,6 +8162,58 @@ export type Database = {
         }
         Relationships: []
       }
+      nw_partner_bond_shares: {
+        Row: {
+          bond_id: string
+          created_at: string
+          dsa_id: string
+          expires_at: string
+          id: string
+          margin_percent: number
+          token: string
+        }
+        Insert: {
+          bond_id: string
+          created_at?: string
+          dsa_id: string
+          expires_at?: string
+          id?: string
+          margin_percent?: number
+          token: string
+        }
+        Update: {
+          bond_id?: string
+          created_at?: string
+          dsa_id?: string
+          expires_at?: string
+          id?: string
+          margin_percent?: number
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_partner_bond_shares_bond_id_fkey"
+            columns: ["bond_id"]
+            isOneToOne: false
+            referencedRelation: "bm_bonds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_partner_bond_shares_bond_id_fkey"
+            columns: ["bond_id"]
+            isOneToOne: false
+            referencedRelation: "bm_bonds_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_partner_bond_shares_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nw_password_reset_logs: {
         Row: {
           created_at: string
@@ -9834,6 +9902,35 @@ export type Database = {
         Returns: undefined
       }
       nw_notify_dropped_signups: { Args: never; Returns: undefined }
+      nw_partner_bond: {
+        Args: { p_id: string }
+        Returns: {
+          analytics: Json
+          bond_name: string
+          coupon_frequency: string
+          coupon_rate: number
+          coupon_type: string
+          day_count_convention: string
+          face_value: number
+          id: string
+          isin: string
+          issue_date: string
+          issuer_name: string
+          maturity_date: string
+          min_investment: number
+          next_coupon_date: string
+          partner_base: number
+          partner_price: number
+          principal_repayment_structure: string
+          rating: string
+          rating_agency: string
+          security_type: string
+          self_markup_percent: number
+          seniority: string
+          tax_status: string
+          trustee: string
+        }[]
+      }
       nw_partner_bonds: {
         Args: never
         Returns: {
@@ -9841,16 +9938,26 @@ export type Database = {
           bond_name: string
           coupon_frequency: string
           coupon_rate: number
+          coupon_type: string
+          day_count_convention: string
           face_value: number
           id: string
           isin: string
+          issue_date: string
           issuer_name: string
           maturity_date: string
           min_investment: number
+          next_coupon_date: string
           partner_base: number
           partner_price: number
+          principal_repayment_structure: string
           rating: string
+          rating_agency: string
+          security_type: string
           self_markup_percent: number
+          seniority: string
+          tax_status: string
+          trustee: string
         }[]
       }
       nw_partner_client_portfolio: {
@@ -9895,6 +10002,10 @@ export type Database = {
           sourced_on: string
           verification_status: string
         }[]
+      }
+      nw_partner_create_bond_share: {
+        Args: { p_bond_id: string; p_margin: number }
+        Returns: string
       }
       nw_partner_debit_notes: {
         Args: never

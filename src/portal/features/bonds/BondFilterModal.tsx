@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'react';
 import { X, Check } from 'lucide-react';
-import type { ClientBond } from '../../../../shared/portal/services/BondOrderService';
+import type { FilterableBond } from './bondMath';
 
 export interface BondFilters {
   yield: string[];
@@ -27,11 +27,11 @@ export function countFilters(f: BondFilters): number {
 }
 
 // ---- derivations shared with the list ----
-export function yieldOf(b: ClientBond): number | null {
+export function yieldOf(b: FilterableBond): number | null {
   const v = b.analytics?.ytm ?? b.coupon_rate;
   return v == null ? null : Number(v);
 }
-export function tenureYearsOf(b: ClientBond): number | null {
+export function tenureYearsOf(b: FilterableBond): number | null {
   const y = b.analytics?.years_to_maturity;
   if (y != null && Number.isFinite(y)) return Number(y);
   if (b.maturity_date) {
@@ -40,7 +40,7 @@ export function tenureYearsOf(b: ClientBond): number | null {
   }
   return null;
 }
-export function minInvOf(b: ClientBond): number | null {
+export function minInvOf(b: FilterableBond): number | null {
   const v = b.min_investment ?? b.face_value;
   return v == null ? null : Number(v);
 }
@@ -56,14 +56,14 @@ const FREQ_LABEL: Record<string, string> = {
   annually: 'Annual', yearly: 'Annual', cumulative: 'Cumulative',
   'at-maturity': 'At maturity', 'at_maturity': 'At maturity', maturity: 'At maturity',
 };
-export function payoutOf(b: ClientBond): string {
+export function payoutOf(b: FilterableBond): string {
   const v = (b.coupon_frequency || '').toLowerCase().replace(/\s+/g, '_');
   if (!v) return '';
   return FREQ_LABEL[v] ?? FREQ_LABEL[v.replace(/_/g, '-')] ?? (v.charAt(0).toUpperCase() + v.slice(1).replace(/_/g, ' '));
 }
 const titleCase = (s: string) => s.length <= 4 ? s.toUpperCase() : s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-export function taxOf(b: ClientBond): string { return (b.tax_status || '').trim(); }
-export function collateralOf(b: ClientBond): string { return (b.security_type || '').trim(); }
+export function taxOf(b: FilterableBond): string { return (b.tax_status || '').trim(); }
+export function collateralOf(b: FilterableBond): string { return (b.security_type || '').trim(); }
 
 const YIELD_OPTS = [
   { k: 'lt8', label: 'Up to 8%' },
@@ -130,7 +130,7 @@ export function passMinInv(m: number | null, keys: string[]): boolean {
 const GRADE_ORDER = ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'C', 'D'];
 
 /** Does a bond pass the whole filter set? */
-export function matchesFilters(b: ClientBond, f: BondFilters): boolean {
+export function matchesFilters(b: FilterableBond, f: BondFilters): boolean {
   if (!passYield(yieldOf(b), f.yield)) return false;
   if (!passTenure(tenureYearsOf(b), f.tenure)) return false;
   if (!passMinInv(minInvOf(b), f.minInv)) return false;
@@ -149,7 +149,7 @@ export function BondFilterModal({
   onApply,
   onClose,
 }: {
-  bonds: ClientBond[];
+  bonds: FilterableBond[];
   initial: BondFilters;
   onApply: (f: BondFilters) => void;
   onClose: () => void;

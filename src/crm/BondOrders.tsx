@@ -29,7 +29,10 @@ interface OrderRow {
   deal_id: string | null;
   notes: string;
   created_at: string;
+  source: string | null;
+  partner_markup_percent: number | null;
   client: { full_name: string | null; client_code: string | null; email: string | null; phone: string | null } | null;
+  dsa: { full_name: string | null; dsa_code: string | null } | null;
 }
 
 const STATUSES: Array<{ value: OrderStatus; label: string; color: string }> = [
@@ -74,7 +77,7 @@ export default function BondOrders({ employee, onNavigate }: Props) {
     setError('');
     const { data, error: err } = await supabase
       .from('nw_bond_orders')
-      .select('*, client:nw_clients(full_name, client_code, email, phone)')
+      .select('*, client:nw_clients(full_name, client_code, email, phone), dsa:nw_dsa(full_name, dsa_code)')
       .order('created_at', { ascending: false });
     if (err) setError(err.message);
     setOrders((data as unknown as OrderRow[]) ?? []);
@@ -225,7 +228,14 @@ export default function BondOrders({ employee, onNavigate }: Props) {
                   >
                     <td className="px-5 py-3.5 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>{o.ref}</td>
                     <td className="px-5 py-3.5">
-                      <div className="text-sm font-semibold text-text-primary">{o.client?.full_name ?? '—'}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-text-primary">{o.client?.full_name ?? '—'}</span>
+                        {o.source === 'partner' && (
+                          <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ color: 'var(--accent)', background: 'rgba(var(--accent-rgb),0.12)' }}>
+                            via {o.dsa?.full_name || 'partner'}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[11px]" style={{ color: 'var(--text-faint)' }}>{o.client?.client_code ?? ''}</div>
                     </td>
                     <td className="px-5 py-3.5 text-sm text-text-primary max-w-xs truncate">{o.bond_name || o.isin}</td>
@@ -297,6 +307,14 @@ export default function BondOrders({ employee, onNavigate }: Props) {
               <DrawerRow label="Quantity" value={`${active.units} unit${active.units === 1 ? '' : 's'}`} />
               <DrawerRow label="Face value" value={inr(active.face_value)} />
               <DrawerRow label="Client price / ₹100" value={inr(active.price_per_100)} />
+              {active.source === 'partner' && (
+                <>
+                  <DrawerRow label="Placed by partner" value={active.dsa?.full_name || active.dsa?.dsa_code || '—'} />
+                  {active.partner_markup_percent != null && (
+                    <DrawerRow label="Partner margin" value={`${Number(active.partner_markup_percent).toFixed(2)}%`} />
+                  )}
+                </>
+              )}
               <div className="border-t pt-2.5" style={{ borderColor: 'var(--border-subtle)' }}>
                 <DrawerRow label="Indicative amount" value={inr(active.amount)} strong />
               </div>

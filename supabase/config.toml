@@ -500,6 +500,23 @@ verify_jwt = false
 [functions.place-bond-order]
 verify_jwt = false
 
+# Partner-portal bond ordering on behalf of a client. Public verify_jwt: runs with
+# the partner's own bearer + is_partner, resolves the DSA, verifies the client is
+# theirs, re-derives the partner price server-side (cost × per-bond margin, capped
+# 5%), inserts the order (source='partner') routed to the client's RM, emails the RM.
+[functions.place-partner-bond-order]
+verify_jwt = false
+
+# Public bond-offer landing (partner shared link). resolve-bond-share maps a share
+# token to the bond at the partner's price (cost never included); submit-bond-offer
+# turns a recipient's intent into a real order (if they match a client of the DSA)
+# or a lead to the DSA's RM. Both fully public — no session exists on the link.
+[functions.resolve-bond-share]
+verify_jwt = false
+
+[functions.submit-bond-offer]
+verify_jwt = false
+
 # Client "Forgot Password" — 6-digit OTP code flow (no magic link, which email
 # scanners pre-consume). Both public because they run before any session exists;
 # PAN-enumeration-safe, rate-limited, and code-hashed with a server pepper.
