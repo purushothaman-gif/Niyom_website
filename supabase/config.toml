@@ -493,6 +493,13 @@ verify_jwt = false
 [functions.raise-support-ticket]
 verify_jwt = false
 
+# Client-portal bond ordering. Public verify_jwt: runs with the client's own
+# bearer token and verifies ownership + is_client inside the function; re-derives
+# the price server-side (approved markup only) and inserts the order (fires the RM
+# in-app alert trigger), then emails the assigned RM.
+[functions.place-bond-order]
+verify_jwt = false
+
 # Client "Forgot Password" — 6-digit OTP code flow (no magic link, which email
 # scanners pre-consume). Both public because they run before any session exists;
 # PAN-enumeration-safe, rate-limited, and code-hashed with a server pepper.

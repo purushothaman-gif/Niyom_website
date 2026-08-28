@@ -13,7 +13,7 @@ import { ActivateProductsModal } from './features/onboarding/ActivateProductsMod
 import { PortfolioPage } from './features/portfolio/PortfolioPage';
 import { AllocationPage } from './features/allocation/AllocationPage';
 import { MutualFundsModule } from './features/mutual-funds/MutualFundsModule';
-import { BondsPage } from './features/bonds/BondsPage';
+import { BondsModule } from './features/bonds/BondsModule';
 import { TransactionsPage } from './features/transactions/TransactionsPage';
 import { ReportsPage } from './features/reports/ReportsPage';
 import { CapitalGainsPage } from './features/gains/CapitalGainsPage';
@@ -116,7 +116,13 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
           onNavigate={navigate}
         />
       );
-    if (view === 'bonds') return <BondsPage />;
+    if (view === 'bonds')
+      return (
+        <BondsModule
+          clientId={clientId}
+          onboardingComplete={client?.onboarding_status === 'active'}
+        />
+      );
     if (view === 'transactions') return <TransactionsPage clientId={clientId} client={client} />;
     if (view === 'documents') return <DocumentsPage clientId={clientId} />;
     if (view === 'notifications') return <NotificationsPage client={client} onNavigate={navigate} />;

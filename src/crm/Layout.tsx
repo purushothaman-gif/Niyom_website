@@ -76,6 +76,7 @@ const NAV: NavSection[] = [
       { key: 'documents' as CRMPage,         label: 'Client Documents',  icon: FolderOpen, hideForAdmin: true },
       { key: 'admin_documents' as CRMPage,   label: 'Document Vault',    icon: Shield, adminOnly: true },
       { key: 'support_tickets' as CRMPage,   label: 'Support Tickets',   icon: LifeBuoy },
+      { key: 'bond_orders' as CRMPage,       label: 'Bond Orders',       icon: Receipt },
     ],
   },
   {
@@ -205,6 +206,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
     setShowAlerts(false);
     if (a.action_url && a.action_url.includes('/leads')) onNavigate('leads' as CRMPage);
     else if (a.action_url && a.action_url.includes('/support-tickets')) onNavigate('support_tickets' as CRMPage);
+    else if (a.action_url && a.action_url.includes('/bond-orders')) onNavigate('bond_orders' as CRMPage);
     else if (a.action_url && a.action_url.includes('/clients')) onNavigate('clients' as CRMPage);
     // HR alerts carry a full /crm/<page> path; route to it when it is a page
     // this user can actually reach, and fall back to their own HR page.

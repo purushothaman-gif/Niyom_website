@@ -5390,6 +5390,127 @@ export type Database = {
           },
         ]
       }
+      nw_bond_orders: {
+        Row: {
+          amount: number | null
+          assigned_employee_id: string | null
+          bond_id: string | null
+          bond_name: string
+          client_id: string
+          created_at: string
+          deal_id: string | null
+          face_value: number | null
+          id: string
+          isin: string
+          notes: string
+          price_per_100: number
+          ref: string
+          status: string
+          units: number
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          assigned_employee_id?: string | null
+          bond_id?: string | null
+          bond_name?: string
+          client_id: string
+          created_at?: string
+          deal_id?: string | null
+          face_value?: number | null
+          id?: string
+          isin?: string
+          notes?: string
+          price_per_100: number
+          ref?: string
+          status?: string
+          units: number
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          assigned_employee_id?: string | null
+          bond_id?: string | null
+          bond_name?: string
+          client_id?: string
+          created_at?: string
+          deal_id?: string | null
+          face_value?: number | null
+          id?: string
+          isin?: string
+          notes?: string
+          price_per_100?: number
+          ref?: string
+          status?: string
+          units?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_bond_orders_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_bond_orders_bond_id_fkey"
+            columns: ["bond_id"]
+            isOneToOne: false
+            referencedRelation: "bm_bonds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_bond_orders_bond_id_fkey"
+            columns: ["bond_id"]
+            isOneToOne: false
+            referencedRelation: "bm_bonds_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_bond_orders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_bond_orders_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_confirmations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_bond_orders_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_overall_stage"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_bond_orders_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_payment_summary"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_bond_orders_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_transfer_eligible"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_bond_orders_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_transfer_pending_acceptance"
+            referencedColumns: ["deal_id"]
+          },
+        ]
+      }
       nw_client_bank_accounts: {
         Row: {
           account_number: string
@@ -9463,6 +9584,32 @@ export type Database = {
           value: string
         }[]
       }
+      nw_client_bond: {
+        Args: { p_id: string }
+        Returns: {
+          analytics: Json
+          bond_name: string
+          client_price: number
+          coupon_frequency: string
+          coupon_rate: number
+          coupon_type: string
+          day_count_convention: string
+          face_value: number
+          id: string
+          isin: string
+          issue_date: string
+          issuer_name: string
+          maturity_date: string
+          min_investment: number
+          next_coupon_date: string
+          principal_repayment_structure: string
+          rating: string
+          rating_agency: string
+          security_type: string
+          tax_status: string
+          trustee: string
+        }[]
+      }
       nw_client_bonds: {
         Args: never
         Returns: {
@@ -9471,13 +9618,22 @@ export type Database = {
           client_price: number
           coupon_frequency: string
           coupon_rate: number
+          coupon_type: string
+          day_count_convention: string
           face_value: number
           id: string
           isin: string
+          issue_date: string
           issuer_name: string
           maturity_date: string
           min_investment: number
+          next_coupon_date: string
+          principal_repayment_structure: string
           rating: string
+          rating_agency: string
+          security_type: string
+          tax_status: string
+          trustee: string
         }[]
       }
       nw_current_client_code: { Args: never; Returns: string }
