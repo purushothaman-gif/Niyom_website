@@ -41,6 +41,7 @@ export interface OrderBreakdown {
   face: number;
   faceValueTotal: number;   // units × face (redemption principal)
   pricePer100: number;
+  pricePerUnit: number;     // price for one bond = face × price/100
   premium: number;          // (price − 100)/100 × face × units; negative = discount
   investment: number;       // units × face × price/100  (principal ± premium)
   accruedPer100: number;
@@ -73,8 +74,10 @@ export function breakdown(b: ClientBond, units: number): OrderBreakdown {
     estMaturityValue = r2(units * face * ((prin + (Number(futInt) || 0)) / 100));
   }
 
+  const pricePerUnit = r2(face * (pricePer100 / 100));
+
   return {
-    units, face, faceValueTotal, pricePer100, premium, investment,
+    units, face, faceValueTotal, pricePer100, pricePerUnit, premium, investment,
     accruedPer100, accrued, stampDuty, amountPayable, estMaturityValue,
   };
 }
