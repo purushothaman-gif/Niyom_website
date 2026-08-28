@@ -5,7 +5,7 @@ import {
   LayoutDashboard, UserPlus, Users, PieChart, ArrowLeftRight,
   FileText, UserCog, Settings, LogOut, Bell, ChevronRight, X, Home,
   FolderOpen, Shield, BarChart3, Wallet, Handshake, ClipboardList,
-  Send, Target, Landmark, LifeBuoy, Sparkles, LineChart,
+  Send, Target, Landmark, LifeBuoy, Sparkles, LineChart, BadgePercent,
   CalendarCheck, CalendarClock, CalendarDays, Coins, Receipt, Fingerprint,
   BadgeIndianRupee, SlidersHorizontal,
 } from 'lucide-react';
@@ -89,6 +89,7 @@ const NAV: NavSection[] = [
     id: 'marketing', label: 'Marketing Tools',
     items: [
       { key: 'bonds' as CRMPage,             label: 'Bond Creation',     icon: Landmark },
+      { key: 'bond_pricing' as CRMPage,      label: 'Bond Pricing',      icon: BadgePercent },
       { key: 'marketing_content' as CRMPage, label: 'Content Creation',  icon: Sparkles },
       { key: 'marketing_funds' as CRMPage,   label: 'Mutual Funds',     icon: LineChart },
     ],

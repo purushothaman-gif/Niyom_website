@@ -320,6 +320,7 @@ export type CRMPage =
   | 'transactions'
   | 'reports'
   | 'bonds'
+  | 'bond_pricing'
   | 'marketing_content'
   | 'marketing_funds'
   | 'mis'
