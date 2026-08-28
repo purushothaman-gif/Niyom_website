@@ -36,6 +36,7 @@ export type PortalView =
   | 'portfolio'
   | 'allocation'
   | 'mutual-funds'
+  | 'bonds'
   | 'transactions'
   | 'sip'
   | 'reports'
@@ -117,7 +118,7 @@ export const NAV_GROUPS: NavGroup[] = [
         description: 'Explore funds and invest',
         icon: TrendingUp,
       },
-      { key: 'bonds', label: 'Bonds', description: 'Fixed income', icon: Landmark, comingSoon: true },
+      { view: 'bonds', key: 'bonds', label: 'Bonds', description: 'Fixed income', icon: Landmark },
       {
         key: 'fixed-deposits',
         label: 'Fixed Deposits',
@@ -222,6 +223,7 @@ export const VIEW_TITLES: Record<PortalView, string> = {
   portfolio: 'My Portfolio',
   allocation: 'Asset Allocation',
   'mutual-funds': 'Mutual Funds',
+  bonds: 'Bonds',
   transactions: 'Transactions',
   sip: 'Systematic Plans',
   reports: 'Reports',
@@ -243,6 +245,7 @@ export const VIEW_SUBTITLES: Partial<Record<PortalView, string>> = {
   portfolio: 'Every holding you have with us, valued at the latest published NAV.',
   allocation: 'How your money is spread across asset classes, products and fund houses.',
   'mutual-funds': 'Research funds, start a SIP or invest a lump sum.',
+  bonds: 'Fixed-income options curated for you, with your indicative price.',
   transactions: 'Every purchase, redemption, switch and payout on your account.',
   sip: 'Your systematic plans — instalments, dates and amounts.',
   reports: 'Download your transaction and holdings statements.',
