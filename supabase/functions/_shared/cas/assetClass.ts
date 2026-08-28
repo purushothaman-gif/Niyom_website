@@ -115,7 +115,14 @@ const RULES: { match: RegExp; assetClass: AssetClass; ambiguous?: boolean }[] = 
   },
   {
     // Some retirement and children's plans are equity-oriented, others hybrid.
-    match: /solution\s*oriented|life\s*cycle/i,
+    //
+    // The children's heading is matched on its own name as well: since
+    // 19-Aug-2026 AMFI also files these under "Children's Fund - Childrens'
+    // Fund", without the "Solution Oriented" prefix. Both spellings are the
+    // same funds, and they must not fall through to the unrecognised default
+    // — that says `other`, which is a 24-month holding period for a fund that
+    // may well be equity-oriented.
+    match: /solution\s*oriented|life\s*cycle|children.?s'?\s*fund/i,
     assetClass: 'equity',
     ambiguous: true,
   },

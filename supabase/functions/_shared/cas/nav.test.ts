@@ -32,6 +32,78 @@ const FILE = [
   '999999;INF999X01AB1;-;A Fund Yet To Declare;N.A.;05-Aug-2026',
 ].join('\n');
 
+/**
+ * The same schemes as AMFI prints them since 19-Aug-2026: `Plan` and `Option`
+ * are columns of their own, and the scheme name no longer spells them out.
+ * Lines are verbatim from NAVAll.txt (27-Aug-2026).
+ */
+const FILE_WITH_PLAN = [
+  'Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date',
+  '',
+  "Open Ended Schemes(Children\u2019s Fund - Childrens' Fund)",
+  '',
+  'Axis Mutual Fund',
+  '',
+  "135762;INF846K01WO1;-;Axis Children's Fund;Direct Plan;Growth Option;30.4829;27-Aug-2026",
+  "135763;INF846K01WS2;INF846K01WQ6;Axis Children's Fund;Direct Plan;IDCW Option;28.1333;27-Aug-2026",
+  '',
+  'Open Ended Schemes(Equity Schemes - ELSS- Tax Saver Fund)',
+  '',
+  'Quant Mutual Fund',
+  '',
+  '120847;INF966L01986;-;Quant ELSS Tax Saver Fund;Direct Plan;Growth Option;467.1777;27-Aug-2026',
+  '999998;INF999X01AB2;-;A Fund Yet To Declare;Regular Plan;Growth Option;N.A.;27-Aug-2026',
+].join('\n');
+
+describe('the file AMFI publishes now, with Plan and Option as columns', () => {
+  it('reads the NAV and the date from their named columns, not fixed ones', () => {
+    /*
+     * The regression this whole layout apparatus exists for. Read by position,
+     * `Net Asset Value` landed on "Direct Plan", every Number() gave NaN, and
+     * the refresh logged "no usable rows" for nine nights while every client
+     * portfolio kept showing 18-Aug prices as if they were current.
+     */
+    const { navs } = parseAmfiNav(FILE_WITH_PLAN);
+    const quant = navs.find((n) => n.isin === 'INF966L01986');
+    expect(quant?.nav).toBe(467.1777);
+    expect(quant?.nav_date).toBe('2026-08-27');
+    expect(quant?.amfi_code).toBe('120847');
+  });
+
+  it('keeps plan and option in the scheme name, which no longer carries them', () => {
+    // Two ISINs of one fund differ only by plan and option. Dropping those
+    // leaves identically named rows in a search that has to tell them apart.
+    const { navs } = parseAmfiNav(FILE_WITH_PLAN);
+    expect(navs.find((n) => n.isin === 'INF846K01WO1')?.scheme_name).toBe(
+      "Axis Children's Fund - Direct Plan - Growth Option",
+    );
+    expect(navs.find((n) => n.isin === 'INF846K01WS2')?.scheme_name).toBe(
+      "Axis Children's Fund - Direct Plan - IDCW Option",
+    );
+  });
+
+  it('still reads both ISINs, and still skips an undeclared NAV', () => {
+    const { navs } = parseAmfiNav(FILE_WITH_PLAN);
+    expect(navs.find((n) => n.isin === 'INF846K01WQ6')?.nav).toBe(28.1333);
+    expect(navs.some((n) => n.isin === 'INF999X01AB2')).toBe(false);
+  });
+
+  it('classifies under the new headings too', () => {
+    const { classes } = parseAmfiNav(FILE_WITH_PLAN);
+    expect(classes.find((c) => c.isin === 'INF966L01986')?.asset_class).toBe('equity');
+    // AMFI dropped the "Solution Oriented" prefix from the children's heading.
+    // Unrecognised, it would default to `other` — a 24-month holding period.
+    const child = classes.find((c) => c.isin === 'INF846K01WO1');
+    expect(child?.asset_class).toBe('equity');
+    expect(child?.ambiguous).toBe(true);
+  });
+
+  it('reads the fund house from its own line, as before', () => {
+    const { schemeNavs } = parseAmfiNav(FILE_WITH_PLAN);
+    expect(schemeNavs.find((s) => s.scheme_code === '120847')?.fund_house).toBe('Quant Mutual Fund');
+  });
+});
+
 describe('NAV rows', () => {
   it('reads both ISINs of a scheme against the same NAV', () => {
     const { navs } = parseAmfiNav(FILE);
