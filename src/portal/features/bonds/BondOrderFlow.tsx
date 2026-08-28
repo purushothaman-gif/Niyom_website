@@ -88,19 +88,17 @@ export function BondOrderFlow({
 
       <Card padding="md" className="space-y-1">
         <h3 className="mb-2 text-sm font-bold text-text-primary">Investment overview</h3>
-        <Row label={`Principal (${units} × ${inr(bd.face)})`} value={inr(bd.faceValueTotal)} />
-        <Row
-          label={bd.premium >= 0 ? 'Premium' : 'Discount'}
-          value={`${bd.premium < 0 ? '−' : ''}${inr(Math.abs(bd.premium))}`}
-        />
-        <div className="border-t border-border-subtle pt-1.5">
-          <Row label="Investment amount" value={inr(bd.investment)} />
-        </div>
+        <Row label={`Investment amount (${units} × ${inr(bd.pricePerUnit)})`} value={inr(bd.investment)} />
         <Row label="Accrued interest" value={inr(bd.accrued)} />
         <Row label="Stamp duty" value="Finalised at confirmation" muted />
         <div className="mt-1 rounded-token-md bg-bg-surface px-3 py-2.5">
           <Row label="Amount payable (indicative)" value={inr(bd.amountPayable)} strong />
         </div>
+        {bd.estMaturityValue != null && (
+          <div className="pt-1">
+            <Row label="Expected returns" value={inr(bd.estMaturityValue)} />
+          </div>
+        )}
       </Card>
 
       <label className="flex cursor-pointer items-start gap-2.5 rounded-token-md border border-border bg-bg-surface px-3 py-3">
