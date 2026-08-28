@@ -4,22 +4,17 @@
 // (indicative); base price / cost / margin never reach here.
 
 import { useMemo, useState } from 'react';
-import { Landmark, TrendingUp, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Landmark, TrendingUp, ArrowRight, ShieldCheck, SlidersHorizontal, X } from 'lucide-react';
 import { inr, inrCompact, pct, shortDate } from '../../../lib/money';
 import { Card } from '../../components/Card';
 import { StatusPill } from '../../components/StatusPill';
 import { MiniStat, Pill, Blank } from '../../ui/kit';
 import type { ClientBond } from '../../../../shared/portal/services/BondOrderService';
 import { tenureLabel } from './bondMath';
-
-type QuickFilter = 'all' | 'short' | 'high_yield' | 'low_min';
-
-const FILTERS: Array<{ value: QuickFilter; label: string }> = [
-  { value: 'all', label: 'All' },
-  { value: 'short', label: 'Short tenure' },
-  { value: 'high_yield', label: 'High yield' },
-  { value: 'low_min', label: 'Low minimum' },
-];
+import {
+  BondFilterModal, EMPTY_FILTERS, countFilters, matchesFilters, filterChips, removeFilter,
+  type BondFilters,
+} from './BondFilterModal';
 
 /** A short marketing tag derived from the bond's own numbers. */
 function derivedTag(b: ClientBond): { label: string; tone: 'accent' | 'success' } | null {
@@ -45,21 +40,12 @@ export function BondsListPage({
   bonds: ClientBond[];
   onOpen: (bond: ClientBond) => void;
 }) {
-  const [filter, setFilter] = useState<QuickFilter>('all');
+  const [filters, setFilters] = useState<BondFilters>(EMPTY_FILTERS);
+  const [showFilter, setShowFilter] = useState(false);
 
-  const shown = useMemo(() => {
-    return bonds.filter((b) => {
-      const ytm = b.analytics?.ytm;
-      const yrs = b.analytics?.years_to_maturity;
-      const min = Number(b.min_investment) || Number(b.face_value) || 0;
-      switch (filter) {
-        case 'short': return yrs != null && yrs > 0 && yrs < 3;
-        case 'high_yield': return ytm != null && ytm >= 11;
-        case 'low_min': return min > 0 && min <= 200000;
-        default: return true;
-      }
-    });
-  }, [bonds, filter]);
+  const shown = useMemo(() => bonds.filter((b) => matchesFilters(b, filters)), [bonds, filters]);
+  const activeCount = countFilters(filters);
+  const chips = filterChips(filters);
 
   if (bonds.length === 0) {
     return (
@@ -76,27 +62,54 @@ export function BondsListPage({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          {FILTERS.map((f) => {
-            const active = f.value === filter;
-            return (
-              <button
-                key={f.value}
-                type="button"
-                onClick={() => setFilter(f.value)}
-                className={`rounded-token-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  active
-                    ? 'border-accent/30 bg-selected text-accent'
-                    : 'border-border bg-bg-raised text-text-muted hover:text-text-primary'
-                }`}
-              >
-                {f.label}
-              </button>
-            );
-          })}
+        <p className="text-sm text-text-secondary">
+          {activeCount > 0 ? `${shown.length} of ${bonds.length}` : bonds.length} bond{bonds.length === 1 ? '' : 's'}
+        </p>
+        <div className="flex items-center gap-2">
+          <p className="hidden text-xs text-text-faint sm:block">Prices are indicative, per ₹100 face value.</p>
+          <button
+            type="button"
+            onClick={() => setShowFilter(true)}
+            className="inline-flex items-center gap-2 rounded-token-md border border-border bg-bg-raised px-3.5 py-2 text-xs font-semibold text-text-primary transition-colors hover:border-accent/40"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" /> Filter
+            {activeCount > 0 && (
+              <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] leading-none text-on-accent">{activeCount}</span>
+            )}
+          </button>
         </div>
-        <p className="text-xs text-text-faint">Prices are indicative, per ₹100 face value.</p>
       </div>
+
+      {chips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {chips.map((chip) => (
+            <button
+              key={`${chip.cat}:${chip.k}`}
+              type="button"
+              onClick={() => setFilters((f) => removeFilter(f, chip.cat, chip.k))}
+              className="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-selected px-2.5 py-1 text-[11px] font-semibold text-accent"
+            >
+              {chip.label} <X className="h-3 w-3" />
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setFilters(EMPTY_FILTERS)}
+            className="px-2 text-[11px] font-semibold text-text-muted hover:text-accent"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {showFilter && (
+        <BondFilterModal
+          bonds={bonds}
+          initial={filters}
+          onApply={setFilters}
+          onClose={() => setShowFilter(false)}
+        />
+      )}
 
       {shown.length === 0 ? (
         <Card padding="none">
