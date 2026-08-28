@@ -16,7 +16,7 @@ import SecuritySearch from './SecuritySearch';
 type AcceptanceStatus = 'pending' | 'viewed' | 'accepted' | 'rejected' | 'expired';
 
 
-interface Props { employee: NWEmployee; }
+interface Props { employee: NWEmployee; pageParams?: Record<string, string>; }
 
 // One security line within a deal. A deal is single-direction (Buy or Sell,
 // on the header); each line carries its own security + quantity + rate.
@@ -311,7 +311,7 @@ function AcceptanceBadge({ status }: { status: AcceptanceStatus }) {
 }
 
 // ============================================================
-export default function DealConfirmation({ employee }: Props) {
+export default function DealConfirmation({ employee, pageParams }: Props) {
   const [view, setView] = useState<'list' | 'form' | 'preview' | 'payments'>('list');
   const [deals, setDeals] = useState<DealRecord[]>([]);
   const [clients, setClients] = useState<NWClient[]>([]);
@@ -333,6 +333,10 @@ export default function DealConfirmation({ employee }: Props) {
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
   const clientDropRef = useRef<HTMLDivElement>(null);
+  // When a deal is opened from a bond order, this holds the order id so a
+  // successful create can stamp it (deal_id + status='deal_sent'). Consumed once.
+  const bondOrderIdRef = useRef<string | null>(null);
+  const prefillDoneRef = useRef(false);
 
   // These MUST mirror the generated columns on nw_deal_confirmations, which are
   // the source of truth — this component never sends stamp_duty or
@@ -442,6 +446,41 @@ export default function DealConfirmation({ employee }: Props) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Prefill from a bond order (CRM → Bond Orders → "Prepare Deal Confirmation").
+  // Waits for the client list, then opens the create form pre-populated with the
+  // order's client + a single Secondary Bond line. The RM edits price/qty freely
+  // before saving; a successful create stamps the order (see handleSave).
+  useEffect(() => {
+    if (prefillDoneRef.current) return;
+    if (!pageParams?.bondOrderId) return;
+    const c = clients.find(x => x.id === pageParams.prefillClientId);
+    if (!c) return; // clients still loading, or not visible to this RM
+    prefillDoneRef.current = true;
+    bondOrderIdRef.current = pageParams.bondOrderId;
+    const product = pageParams.prefillProduct || 'Secondary Bond';
+    const rate = pageParams.prefillRate || '';
+    setForm({
+      client_id: c.id,
+      deal_date: new Date().toISOString().split('T')[0],
+      transaction_type: (pageParams.prefillType as 'Buy' | 'Sell') || 'Buy',
+      notes: pageParams.prefillRef ? `From bond order ${pageParams.prefillRef}` : '',
+      lines: [{
+        product_type: product,
+        security_name: pageParams.prefillSecurity || '',
+        isin: pageParams.prefillIsin || '',
+        quantity: pageParams.prefillQty || '',
+        base_rate: rate,
+        rate_per_unit: adjustRate(rate, stampDutyRateFor(product)),
+        manual: true,
+      }],
+    });
+    setSelectedClient(c);
+    setClientSearch(c.full_name);
+    setEditDeal(null);
+    setError('');
+    setView('form');
+  }, [clients, pageParams]);
 
   const filteredClientOptions = clients.filter(c =>
     c.full_name.toLowerCase().includes(clientSearch.toLowerCase()) ||
@@ -659,6 +698,17 @@ export default function DealConfirmation({ employee }: Props) {
         // zero-total deal behind.
         await supabase.from('nw_deal_confirmations').delete().eq('id', created.id);
         setError(insErr.message); return;
+      }
+      // If this deal was raised from a bond order, link them and advance the
+      // order so the client's My Orders shows "Deal sent". Best-effort — a failed
+      // stamp must not undo a successfully created deal.
+      if (bondOrderIdRef.current) {
+        const { error: stampErr } = await supabase
+          .from('nw_bond_orders')
+          .update({ deal_id: created.id, status: 'deal_sent' })
+          .eq('id', bondOrderIdRef.current);
+        if (stampErr) showToast('Deal created, but linking the bond order failed. Update it manually.', false);
+        bondOrderIdRef.current = null;
       }
       showToast(status === 'confirmed' ? 'Deal confirmation created.' : 'Draft saved.');
     }

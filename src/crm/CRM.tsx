@@ -32,6 +32,7 @@ import Settings from './Settings';
 import DealConfirmation from './DealConfirmation';
 import TransferQueue from './TransferQueue';
 import SupportTickets from './SupportTickets';
+import BondOrders from './BondOrders';
 /*
  * HR is lazy on purpose. Statically imported it added ~260 KB (~64 KB gzipped)
  * to the CRM chunk that every employee downloads on every page load, for ten
@@ -87,6 +88,7 @@ export default function CRM() {
     'admin_documents',
     'employees',
     'support_tickets',
+    'bond_orders',
     'my_hr',
     'hr_dashboard',
     'hr_employees',
@@ -228,9 +230,10 @@ export default function CRM() {
       case 'dsa_management': return <DSAManagement employee={employee} />;
       case 'dsa_payout': return <DSAPayout employee={employee} />;
       case 'employees': return isAdmin ? <Employees employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
-      case 'deal_confirmation': return <DealConfirmation employee={employee} />;
+      case 'deal_confirmation': return <DealConfirmation employee={employee} pageParams={pageParams} />;
       case 'transfer_queue': return isAdmin ? <TransferQueue employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
       case 'support_tickets': return <SupportTickets employee={employee} onNavigate={navigate} />;
+      case 'bond_orders': return <BondOrders employee={employee} onNavigate={navigate} />;
       // HR & Payroll. Every one of these pages resolves its own capability
       // through HR.tsx rather than being gated here -- an `isAdmin` check in
       // this switch would be a second source of truth to drift from the RLS
