@@ -14,6 +14,7 @@ import Layout from './Layout';
 import Dashboard from './Dashboard';
 import Leads from './leads/Leads';
 import Bonds from './bonds/Bonds';
+import BondPricing from './pricing/BondPricing';
 import MarketingContent from './marketing/MarketingContent';
 import FundResearch from './marketing/funds/FundResearch';
 import ClientOnboarding from './ClientOnboarding';
@@ -76,6 +77,7 @@ export default function CRM() {
     'transactions',
     'reports',
     'bonds',
+    'bond_pricing',
     'marketing_content',
     'marketing_funds',
     'mis',
@@ -211,6 +213,7 @@ export default function CRM() {
       case 'transactions': return <Transactions employee={employee} onNavigate={navigate} />;
       case 'reports': return <Reports employee={employee} />;
       case 'bonds': return <Bonds employee={employee} onNavigate={navigate} pageParams={pageParams} />;
+      case 'bond_pricing': return <BondPricing employee={employee} />;
       // Content Creation is visible to everyone — admins get the full studio,
       // employees get the read-only approved-content gallery (branched inside).
       case 'marketing_content': return <MarketingContent employee={employee} onNavigate={navigate} />;
