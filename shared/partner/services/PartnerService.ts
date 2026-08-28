@@ -32,6 +32,24 @@ import { getEnv } from '../../platform/env';
 /** Thrown when the RM has disabled the login (or deactivated the DSA) mid-session. */
 export const PARTNER_ACCESS_REVOKED = 'PARTNER_ACCESS_REVOKED';
 
+/** A bond as the partner sees it: their cost (base) + their own spread → partner_price. */
+export interface PartnerBond {
+  id: string;
+  isin: string;
+  bond_name: string | null;
+  issuer_name: string | null;
+  coupon_rate: number | null;
+  coupon_frequency: string | null;
+  maturity_date: string | null;
+  rating: string | null;
+  min_investment: number | null;
+  face_value: number | null;
+  partner_base: number | null;
+  self_markup_percent: number | null;
+  partner_price: number | null;
+  analytics: { ytm?: number | null } | null;
+}
+
 function isAccessRevoked(message?: string) {
   return !!message && message.includes('Partner access required');
 }
@@ -182,5 +200,26 @@ export const PartnerService = {
       .createSignedUrl(path, 120);
     if (error) return null;
     return data?.signedUrl ?? null;
+  },
+
+  /** Bonds the partner may sell, priced at their cost + their own <=5% spread. */
+  async getBonds(): Promise<PartnerBond[]> {
+    if (isDemoSession()) return [];
+    const { data, error } = await supabase.rpc('nw_partner_bonds');
+    if (error) {
+      if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
+      throw error;
+    }
+    return (data ?? []) as PartnerBond[];
+  },
+
+  /** Set the partner's own bond markup (0..5%). Server enforces the cap. */
+  async setBondMarkup(percent: number): Promise<void> {
+    if (isDemoSession()) return;
+    const { error } = await supabase.rpc('nw_partner_set_bond_markup', { p_percent: percent });
+    if (error) {
+      if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
+      throw error;
+    }
   },
 };

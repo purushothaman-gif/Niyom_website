@@ -14,6 +14,7 @@ import { usePartnerSnapshot } from './hooks/usePartnerSnapshot';
 import { isDemoSession } from './demo/demoData';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ClientsPage } from './features/clients/ClientsPage';
+import { BondsPage } from './features/bonds/BondsPage';
 import { PayoutsPage } from './features/payouts/PayoutsPage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { ReferralPage } from './features/referral/ReferralPage';
@@ -71,6 +72,8 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
         return <DashboardPage snapshot={snapshot} onNavigate={navigate} />;
       case 'clients':
         return <ClientsPage clients={snapshot.clients} />;
+      case 'bonds':
+        return <BondsPage />;
       case 'payouts':
         return <PayoutsPage payout={snapshot.payout} notes={snapshot.notes} />;
       case 'referral':
