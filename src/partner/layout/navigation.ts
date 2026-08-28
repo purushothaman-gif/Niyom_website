@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Users,
   Wallet,
+  Landmark,
   Share2,
   UserPlus,
   ClipboardList,
@@ -18,6 +19,7 @@ import {
 export type PartnerView =
   | 'dashboard'
   | 'clients'
+  | 'bonds'
   | 'payouts'
   | 'referral'
   | 'submit-lead'
@@ -47,6 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
     heading: 'Business',
     items: [
       { view: 'clients', key: 'clients', label: 'My Clients', icon: Users },
+      { view: 'bonds', key: 'bonds', label: 'Bonds', icon: Landmark },
       { view: 'leads', key: 'leads', label: 'My Leads', icon: ClipboardList },
     ],
   },
@@ -71,6 +74,7 @@ export const NAV_GROUPS: NavGroup[] = [
 export const VIEW_TITLES: Record<PartnerView, string> = {
   dashboard: 'Partner Dashboard',
   clients: 'My Clients',
+  bonds: 'Bonds',
   payouts: 'Payouts & Statements',
   referral: 'Referral Link',
   'submit-lead': 'Submit a Lead',
