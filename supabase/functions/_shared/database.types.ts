@@ -534,6 +534,32 @@ export type Database = {
         }
         Relationships: []
       }
+      bm_partner_self_markup: {
+        Row: {
+          dsa_id: string
+          markup_percent: number
+          updated_at: string
+        }
+        Insert: {
+          dsa_id: string
+          markup_percent?: number
+          updated_at?: string
+        }
+        Update: {
+          dsa_id?: string
+          markup_percent?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bm_partner_self_markup_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: true
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bm_price_history: {
         Row: {
           as_of: string
@@ -575,6 +601,134 @@ export type Database = {
             columns: ["bond_id"]
             isOneToOne: false
             referencedRelation: "bm_bonds_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bm_price_markup: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          audience: string
+          client_id: string | null
+          created_at: string
+          dsa_id: string | null
+          employee_id: string | null
+          id: string
+          markup_percent: number
+          proposed_by: string | null
+          rejected_at: string | null
+          rejection_reason: string
+          scope: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          audience: string
+          client_id?: string | null
+          created_at?: string
+          dsa_id?: string | null
+          employee_id?: string | null
+          id?: string
+          markup_percent: number
+          proposed_by?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string
+          scope: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          audience?: string
+          client_id?: string | null
+          created_at?: string
+          dsa_id?: string | null
+          employee_id?: string | null
+          id?: string
+          markup_percent?: number
+          proposed_by?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string
+          scope?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bm_price_markup_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bm_price_markup_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bm_price_markup_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bm_price_markup_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bm_price_markup_proposed_by_fkey"
+            columns: ["proposed_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bm_price_markup_events: {
+        Row: {
+          actor: string
+          actor_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          markup_id: string
+          note: string
+        }
+        Insert: {
+          actor: string
+          actor_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          markup_id: string
+          note?: string
+        }
+        Update: {
+          actor?: string
+          actor_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          markup_id?: string
+          note?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bm_price_markup_events_markup_id_fkey"
+            columns: ["markup_id"]
+            isOneToOne: false
+            referencedRelation: "bm_price_markup"
             referencedColumns: ["id"]
           },
         ]
@@ -8665,10 +8819,35 @@ export type Database = {
       }
     }
     Functions: {
+      bm_approve_markup: { Args: { p_id: string }; Returns: undefined }
       bm_import_prices: { Args: { p_rows: Json }; Returns: Json }
       bm_overlay_from_import_raw: {
         Args: { p_bond_id: string }
         Returns: undefined
+      }
+      bm_propose_markup: {
+        Args: {
+          p_audience: string
+          p_client_id: string
+          p_company_wide?: boolean
+          p_dsa_id: string
+          p_markup: number
+          p_scope: string
+        }
+        Returns: string
+      }
+      bm_reject_markup: {
+        Args: { p_id: string; p_reason?: string }
+        Returns: undefined
+      }
+      bm_resolve_markup: {
+        Args: {
+          p_audience: string
+          p_client_id: string
+          p_dsa_id: string
+          p_employee_id: string
+        }
+        Returns: number
       }
       bm_selling_price: {
         Args: {
@@ -9284,7 +9463,25 @@ export type Database = {
           value: string
         }[]
       }
+      nw_client_bonds: {
+        Args: never
+        Returns: {
+          analytics: Json
+          bond_name: string
+          client_price: number
+          coupon_frequency: string
+          coupon_rate: number
+          face_value: number
+          id: string
+          isin: string
+          issuer_name: string
+          maturity_date: string
+          min_investment: number
+          rating: string
+        }[]
+      }
       nw_current_client_code: { Args: never; Returns: string }
+      nw_current_client_id: { Args: never; Returns: string }
       nw_current_dsa_id: { Args: never; Returns: string }
       nw_current_emp_is_admin: { Args: never; Returns: boolean }
       nw_current_employee_id: { Args: never; Returns: string }
@@ -9481,6 +9678,25 @@ export type Database = {
         Returns: undefined
       }
       nw_notify_dropped_signups: { Args: never; Returns: undefined }
+      nw_partner_bonds: {
+        Args: never
+        Returns: {
+          analytics: Json
+          bond_name: string
+          coupon_frequency: string
+          coupon_rate: number
+          face_value: number
+          id: string
+          isin: string
+          issuer_name: string
+          maturity_date: string
+          min_investment: number
+          partner_base: number
+          partner_price: number
+          rating: string
+          self_markup_percent: number
+        }[]
+      }
       nw_partner_client_portfolio: {
         Args: { p_client_id: string }
         Returns: {
@@ -9607,6 +9823,10 @@ export type Database = {
           leads: number
           ref_code: string
         }[]
+      }
+      nw_partner_set_bond_markup: {
+        Args: { p_percent: number }
+        Returns: number
       }
       nw_partner_set_login_enabled: {
         Args: { p_dsa_id: string; p_enabled: boolean }
