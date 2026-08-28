@@ -4,6 +4,24 @@
 
 import type { ClientBond } from '../../../../shared/portal/services/BondOrderService';
 
+/**
+ * The minimal shape the filter + display helpers need, shared by the client
+ * (ClientBond) and partner (PartnerBond) bond projections so one filter/detail
+ * implementation serves both. `analytics` is permissive (index signature) so
+ * either projection's analytics blob is assignable.
+ */
+export interface FilterableBond {
+  coupon_rate: number | null;
+  coupon_frequency: string | null;
+  maturity_date: string | null;
+  rating: string | null;
+  security_type: string | null;
+  tax_status: string | null;
+  min_investment: number | null;
+  face_value: number | null;
+  analytics: { ytm?: number | null; years_to_maturity?: number | null; [k: string]: unknown } | null;
+}
+
 /** Smallest orderable quantity = the min-investment lot, in units of face value. */
 export function minUnits(b: Pick<ClientBond, 'min_investment' | 'face_value'>): number {
   const face = Number(b.face_value) || 100;
@@ -17,7 +35,7 @@ export function stepUnits(b: Pick<ClientBond, 'min_investment' | 'face_value'>):
 }
 
 /** Human tenure from years-to-maturity (preferred) or the maturity date. */
-export function tenureLabel(b: ClientBond): string {
+export function tenureLabel(b: FilterableBond): string {
   const y = b.analytics?.years_to_maturity;
   if (y != null && Number.isFinite(y)) {
     if (y < 1) {

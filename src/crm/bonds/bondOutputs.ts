@@ -14,6 +14,12 @@ export interface OutputOptions {
   contact?: EmployeeContact;
   quantity?: number;                 // whole units
   sellingPricePer100?: number | null; // marked-up client price
+  /** Include the Niyom logo + wordmark in the header. Default true. Partners may
+   *  turn it off to share a de-branded image with their own clients. */
+  logo?: boolean;
+  /** Label above the contact card. Default "Your Relationship Manager"; partners
+   *  pass e.g. "Contact" since the contact is the partner, not an RM. */
+  contactLabel?: string;
 }
 
 function esc(s: unknown): string { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string)); }
@@ -39,10 +45,10 @@ function download(dataUrl: string, name: string) { const a = document.createElem
 function fileBase(b: BondPublic): string { return `NIYOM_${(b.bond_name || b.issuer_name || b.isin).replace(/[^\w]+/g, '_').slice(0, 50)}`; }
 
 function payout(b: BondPublic): string { return (b.coupon_frequency || '').replace('_', '-') || '—'; }
-function contactBlock(contact: EmployeeContact | undefined, white: string, goldSoft: string): string {
+function contactBlock(contact: EmployeeContact | undefined, white: string, goldSoft: string, label = 'Your Relationship Manager'): string {
   if (!contact) return `<div style="text-align:right;font-size:8px;color:${goldSoft};"><div>Generated ${fdate(new Date().toISOString())}</div></div>`;
   return `<div style="text-align:right;font-size:9.5px;color:#e7eefb;line-height:1.5;">
-    <div style="font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:${goldSoft};">Your Relationship Manager</div>
+    <div style="font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:${goldSoft};">${esc(label)}</div>
     <div style="font-weight:800;color:${white};font-size:11.5px;">${esc(contact.name)}</div>
     ${contact.designation ? `<div style="color:${goldSoft};">${esc(contact.designation)}</div>` : ''}
     ${contact.phone ? `<div>${esc(contact.phone)}</div>` : ''}
@@ -115,7 +121,7 @@ export async function generateCashflowPdf(b: BondPublic, a: BondAnalytics | null
     <div style="margin:12px 34px 0;padding:10px 14px;background:#fbfbfd;border:1px solid ${line};border-radius:8px;"><div style="font-size:8px;color:#6b7688;line-height:1.5;text-align:justify;"><strong style="color:${navy};">Indicative:</strong> ${BOND_PDF_DISCLAIMER}</div></div>
     <div style="margin-top:12px;background:linear-gradient(135deg,${darkBlue},${navy});color:${white};padding:14px 34px;display:flex;justify-content:space-between;align-items:flex-end;">
       <div style="font-size:9px;line-height:1.5;color:#cfd8ea;"><div style="font-weight:800;color:${white};font-size:10.5px;">${NIYOM.name}</div><div>${NIYOM.address}</div><div>${NIYOM.email}</div></div>
-      ${contactBlock(opts.contact, white, goldSoft)}
+      ${contactBlock(opts.contact, white, goldSoft, opts.contactLabel)}
     </div>
   </div>`;
 
@@ -130,6 +136,7 @@ export async function generateCashflowPdf(b: BondPublic, a: BondAnalytics | null
 // ---------------------------------------------------------------------------
 export async function generateMarketingImage(b: BondPublic, a: BondAnalytics | null, opts: OutputOptions): Promise<void> {
   const { darkBlue, navy, gold, goldSoft, white } = NIYOM_BRAND;
+  const showLogo = opts.logo !== false;
   const coupon = b.coupon_rate !== null ? pct(b.coupon_rate) : '—';
   const ytm = a?.ytm != null ? pct(a.ytm) : pct(b.coupon_rate);
   const face = b.face_value ?? 100000;
@@ -151,7 +158,7 @@ export async function generateMarketingImage(b: BondPublic, a: BondAnalytics | n
     <div style="padding:30px 42px 22px;position:relative;overflow:hidden;">
       <div style="position:absolute;right:-70px;top:-70px;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(200,162,75,0.20),transparent 70%);"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;position:relative;">
-        <div style="display:flex;align-items:center;gap:12px;"><img src="${LOGO}" style="height:46px;width:auto;object-fit:contain;"/><div><div style="font-size:17px;font-weight:800;color:${white};">NIYOM WEALTH</div><div style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:${goldSoft};">${NIYOM.tagline}</div></div></div>
+        ${showLogo ? `<div style="display:flex;align-items:center;gap:12px;"><img src="${LOGO}" style="height:46px;width:auto;object-fit:contain;"/><div><div style="font-size:17px;font-weight:800;color:${white};">NIYOM WEALTH</div><div style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:${goldSoft};">${NIYOM.tagline}</div></div></div>` : `<div></div>`}
         <div style="text-align:center;background:rgba(200,162,75,0.14);border:1px solid ${gold};border-radius:14px;padding:9px 18px;"><div style="font-size:8.5px;letter-spacing:0.14em;text-transform:uppercase;color:${goldSoft};font-weight:700;">Coupon</div><div style="font-size:27px;font-weight:900;color:${white};line-height:1;">${coupon}</div><div style="font-size:8.5px;color:${goldSoft};margin-top:2px;">${ytm} YTM</div></div>
       </div>
       <div style="margin-top:22px;position:relative;"><div style="width:46px;height:3px;background:${gold};border-radius:2px;"></div><h1 style="font-size:23px;font-weight:800;margin:12px 0 0;line-height:1.25;color:${white};">${safe(b.bond_name) || safe(b.issuer_name)}</h1>
@@ -177,7 +184,7 @@ export async function generateMarketingImage(b: BondPublic, a: BondAnalytics | n
     <div style="margin:14px 42px 0;padding:11px 15px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;"><div style="font-size:8.5px;color:#8fa0bd;line-height:1.55;text-align:justify;"><strong style="color:${goldSoft};">Important:</strong> ${BOND_PDF_DISCLAIMER}</div></div>
     <div style="margin-top:16px;background:rgba(0,0,0,0.28);padding:16px 42px;display:flex;justify-content:space-between;align-items:flex-end;gap:20px;border-top:1px solid rgba(200,162,75,0.22);">
       <div style="font-size:9px;line-height:1.5;color:#9fb0cd;"><div style="font-weight:800;color:${white};font-size:11px;">${NIYOM.name}</div><div>${NIYOM.address}</div><div>${NIYOM.email} • ${NIYOM.web}</div></div>
-      ${contactBlock(opts.contact, white, goldSoft)}
+      ${contactBlock(opts.contact, white, goldSoft, opts.contactLabel)}
     </div>
   </div>`;
 
@@ -192,6 +199,7 @@ export async function generateMarketingImage(b: BondPublic, a: BondAnalytics | n
 // ---------------------------------------------------------------------------
 export async function generatePromoImage(b: BondPublic, opts: OutputOptions): Promise<void> {
   const { darkBlue, navy, gold, goldSoft, white } = NIYOM_BRAND;
+  const showLogo = opts.logo !== false;
   const coupon = b.coupon_rate !== null ? pct(b.coupon_rate) : '—';
   const tenure = b.maturity_date ? (() => { const y = (new Date(b.maturity_date).getTime() - Date.now()) / (365.25 * 864e5); return y >= 1 ? `${y.toFixed(1)} yrs` : `${Math.round(y * 12)} mo`; })() : '—';
   const minInv = b.min_investment ?? b.face_value;
@@ -202,7 +210,7 @@ export async function generatePromoImage(b: BondPublic, opts: OutputOptions): Pr
   const html = `<div style="width:820px;height:1025px;box-sizing:border-box;position:relative;overflow:hidden;font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:radial-gradient(120% 80% at 80% 0%,#183463 0%,${darkBlue} 45%,#050c18 100%);color:${white};padding:44px 46px;display:flex;flex-direction:column;">
     <div style="position:absolute;left:-120px;top:120px;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle,rgba(200,162,75,0.16),transparent 65%);"></div>
     <div style="position:absolute;right:-140px;bottom:120px;width:460px;height:460px;border-radius:50%;background:radial-gradient(circle,rgba(200,162,75,0.10),transparent 65%);"></div>
-    <div style="display:flex;align-items:center;gap:12px;position:relative;"><img src="${LOGO}" style="height:52px;width:auto;object-fit:contain;"/><div><div style="font-size:22px;font-weight:800;">NIYOM WEALTH</div><div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:${goldSoft};">${NIYOM.tagline}</div></div></div>
+    ${showLogo ? `<div style="display:flex;align-items:center;gap:12px;position:relative;"><img src="${LOGO}" style="height:52px;width:auto;object-fit:contain;"/><div><div style="font-size:22px;font-weight:800;">NIYOM WEALTH</div><div style="font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:${goldSoft};">${NIYOM.tagline}</div></div></div>` : ''}
     <div style="height:2px;margin-top:20px;position:relative;background:linear-gradient(90deg,${gold},rgba(200,162,75,0.15) 60%,transparent);border-radius:2px;"></div>
     <div style="flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;position:relative;">
       <div style="font-size:20px;letter-spacing:0.28em;text-transform:uppercase;color:${goldSoft};font-weight:700;">Earn up to</div>
