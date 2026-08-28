@@ -19,13 +19,27 @@
  *
  * ## The file
  *
- *   Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
- *   119551;INF209KA12Z1;INF209KA13Z9;Aditya Birla ...;100.7401;31-Jul-2026
+ *   Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
+ *   135759;INF846K01WJ1;-;Axis Children's Fund;Regular Plan;Growth Option;26.5589;27-Aug-2026
  *
  * Interleaved with blank lines, AMC names and category headings, none of which
- * carry semicolons — so a row is a row precisely when it splits into six parts.
- * Both ISIN columns point at the same NAV (growth/payout and reinvestment are
- * separate ISINs for one scheme), and either may be blank or "-".
+ * carry semicolons. Both ISIN columns point at the same NAV (growth/payout and
+ * reinvestment are separate ISINs for one scheme), and either may be blank or
+ * "-".
+ *
+ * ## Columns are read from the header, not counted
+ *
+ * Until 18-Aug-2026 the file had six columns and the plan was spelled into the
+ * scheme name ("... - Lock in - Direct Growth"). On 19-Aug AMFI split `Plan`
+ * and `Option` out into columns of their own. Read by position, `Net Asset
+ * Value` then landed on `Direct Plan`, every `Number()` returned NaN, and the
+ * nightly refresh logged "no usable rows" for nine consecutive nights — while
+ * every client portfolio kept displaying 18-Aug prices with nothing on screen
+ * to say they were stale.
+ *
+ * So the header row decides the columns now, and both layouts are read. See
+ * ./amfiColumns.ts for why a column COUNT can no longer tell this file from the
+ * historical one.
  *
  * ## The headings are data too
  *
@@ -37,6 +51,7 @@
  * `mf_asset_class`. One regex over a file already being fetched.
  */
 import { classifyCategory, readCategoryHeading } from './assetClass.ts';
+import { COLUMN, columnIndex, composeSchemeName, readHeaderCells } from './amfiColumns.ts';
 import { sbInsert, sbSelect, type SbConfig } from './db.ts';
 
 const AMFI_URL = 'https://portal.amfiindia.com/spages/NAVAll.txt';
@@ -101,6 +116,69 @@ export interface AmfiFile {
   schemeNavs: SchemeNavRow[];
 }
 
+/** Where each field sits on a scheme row. -1 means the file does not carry it. */
+interface DailyLayout {
+  code: number;
+  isinA: number;
+  isinB: number;
+  name: number;
+  plan: number;
+  option: number;
+  nav: number;
+  date: number;
+  /** Columns a scheme row must have before it is worth reading. */
+  width: number;
+}
+
+/** 19-Aug-2026 onwards: `Plan` and `Option` split out of the scheme name. */
+const DAILY_WITH_PLAN: DailyLayout = {
+  code: 0, isinA: 1, isinB: 2, name: 3, plan: 4, option: 5, nav: 6, date: 7, width: 8,
+};
+
+/** Up to 18-Aug-2026, and still the shape of every stored fixture. */
+const DAILY_LEGACY: DailyLayout = {
+  code: 0, isinA: 1, isinB: 2, name: 3, plan: -1, option: -1, nav: 4, date: 5, width: 6,
+};
+
+/**
+ * The daily layout a header row describes, or null if it describes some other
+ * file.
+ *
+ * The historical report's header also begins "Scheme Code", so a header alone
+ * is not proof of the right file. What settles it is the order: this file puts
+ * both ISINs BEFORE the scheme name, and the historical one puts them after.
+ * Refusing a foreign header is the point — reading the historical report here
+ * would pair a real ISIN with a sale price, which looks like a NAV and is not.
+ */
+function dailyLayoutFromHeader(cells: string[]): DailyLayout | null {
+  const code = columnIndex(cells, COLUMN.code);
+  const isinA = columnIndex(cells, COLUMN.isinPayout);
+  const isinB = columnIndex(cells, COLUMN.isinReinvest);
+  const name = columnIndex(cells, COLUMN.name);
+  const nav = columnIndex(cells, COLUMN.nav);
+  const date = columnIndex(cells, COLUMN.date);
+  if (code < 0 || isinA < 0 || name < 0 || nav < 0 || date < 0) return null;
+  // The historical report's ISINs come after its name column. Not our file.
+  if (isinA > name) return null;
+  return {
+    code,
+    isinA,
+    isinB,
+    name,
+    plan: columnIndex(cells, COLUMN.plan),
+    option: columnIndex(cells, COLUMN.option),
+    nav,
+    date,
+    width: Math.max(code, isinA, isinB, name, nav, date) + 1,
+  };
+}
+
+/** The scheme's full name: what AMFI now spreads over three columns. */
+function fullName(parts: string[], layout: DailyLayout): string {
+  const at = (i: number) => (i >= 0 ? (parts[i] ?? '').trim() : '');
+  return composeSchemeName(at(layout.name), at(layout.plan), at(layout.option));
+}
+
 /**
  * AMFI's text file -> NAV rows and scheme classifications.
  *
@@ -132,9 +210,25 @@ export function parseAmfiNav(text: string): AmfiFile {
    */
   let fundHouse = '';
 
+  /*
+   * Set by the header row. Until one is seen, a row is read by its width — the
+   * two layouts differ by two columns, and test fixtures are fragments with no
+   * header at all.
+   */
+  let layout: DailyLayout | null = null;
+
   for (const line of text.split('\n')) {
+    const header = readHeaderCells(line);
+    if (header) {
+      layout = dailyLayoutFromHeader(header);
+      // A header naming some other AMFI file: read nothing rather than guess.
+      if (!layout) return { navs: [], classes: [], schemeNavs: [] };
+      continue;
+    }
+
     const parts = line.split(';');
-    if (parts.length < 6) {
+    const cols = layout ?? (parts.length >= DAILY_WITH_PLAN.width ? DAILY_WITH_PLAN : DAILY_LEGACY);
+    if (parts.length < cols.width) {
       // Not a scheme row — but it may be the heading that names the next batch.
       const heading = readCategoryHeading(line);
       if (heading) {
@@ -152,8 +246,12 @@ export function parseAmfiNav(text: string): AmfiFile {
       continue;
     }
 
-    const [code, isinA, isinB, name, navRaw, dateRaw] = parts;
-    if (code.trim() === 'Scheme Code') continue; // the header row itself
+    const code = parts[cols.code] ?? '';
+    const isinA = parts[cols.isinA] ?? '';
+    const isinB = cols.isinB >= 0 ? (parts[cols.isinB] ?? '') : '';
+    const navRaw = parts[cols.nav] ?? '';
+    const dateRaw = parts[cols.date] ?? '';
+    const name = fullName(parts, cols);
 
     const nav = Number(navRaw.trim());
     // "N.A." for schemes yet to declare — a real absence, not a zero.

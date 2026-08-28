@@ -74,6 +74,53 @@ describe('parsing the historical report', () => {
   });
 });
 
+describe('the report AMFI serves now', () => {
+  /** Verbatim from the report for 27-Aug-2026: plan and option in, prices out. */
+  const HISTORY_WITH_PLAN = [
+    'Scheme Code;NAV Name;Plan;Option;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Net Asset Value;Date',
+    '',
+    'Open Ended Schemes ( Equity Schemes - ELSS- Tax Saver Fund )',
+    '',
+    'Quant Mutual Fund',
+    '',
+    '120847;Quant ELSS Tax Saver Fund;Direct Plan;Growth Option;INF966L01986;-;467.1777;27-Aug-2026',
+    '120846;Quant ELSS Tax Saver Fund;Direct Plan;IDCW Option;INF966L01960;INF966L01127;62.2768;27-Aug-2026',
+  ].join('\n');
+
+  it('reads ISINs from where they moved to, not where they used to be', () => {
+    /*
+     * The ISINs shifted from columns 2 and 3 to 4 and 5. Read by position, the
+     * old reader tested "Direct Plan" against the ISIN pattern, matched
+     * nothing, and every backfill returned zero rows for every date — reported
+     * as "a non-trading day, or the layout changed".
+     */
+    const rows = parseAmfiNavHistory(HISTORY_WITH_PLAN);
+    const quant = rows.find((r) => r.isin === 'INF966L01986');
+    expect(quant?.nav).toBe(467.1777);
+    expect(quant?.nav_date).toBe('2026-08-27');
+    expect(quant?.amfi_code).toBe('120847');
+  });
+
+  it('reads both ISINs of a scheme against the same NAV', () => {
+    const rows = parseAmfiNavHistory(HISTORY_WITH_PLAN);
+    expect(rows.find((r) => r.isin === 'INF966L01960')?.nav).toBe(62.2768);
+    expect(rows.find((r) => r.isin === 'INF966L01127')?.nav).toBe(62.2768);
+  });
+
+  it('keeps plan and option in the name, which no longer carries them', () => {
+    const rows = parseAmfiNavHistory(HISTORY_WITH_PLAN);
+    expect(rows.find((r) => r.isin === 'INF966L01986')?.scheme_name).toBe(
+      'Quant ELSS Tax Saver Fund - Direct Plan - Growth Option',
+    );
+  });
+
+  it('ignores headings, AMC names and the header row', () => {
+    const rows = parseAmfiNavHistory(HISTORY_WITH_PLAN);
+    expect(rows).toHaveLength(3); // 2 schemes, one of which has two ISINs
+    expect(rows.every((r) => /^INF/.test(r.isin))).toBe(true);
+  });
+});
+
 describe('the two AMFI layouts cannot be crossed', () => {
   /*
    * Both files are semicolon-delimited text of mutual fund NAVs from the same
@@ -87,6 +134,17 @@ describe('the two AMFI layouts cannot be crossed', () => {
     '103174;INF209K01BR9;INF209K01EC5;Aditya Birla Sun Life Large Cap Fund-Growth;226.6;05-Aug-2026',
   ].join('\n');
 
+  /**
+   * The current daily file — header included, and eight columns wide like the
+   * historical report. The column COUNT no longer separates the two files, so
+   * the header has to.
+   */
+  const DAILY_NOW = [
+    'Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date',
+    'Open Ended Schemes(Equity Scheme - Large Cap Fund)',
+    '103174;INF209K01BR9;INF209K01EC5;Aditya Birla Sun Life Large Cap Fund;Direct Plan;Growth Option;226.6;27-Aug-2026',
+  ].join('\n');
+
   it('the daily parser reads nothing from the historical file', () => {
     // Historical rows split into 8, and the 6-column reader would take the
     // scheme NAME as an ISIN — which matches no ISIN pattern, so nothing lands.
@@ -96,5 +154,22 @@ describe('the two AMFI layouts cannot be crossed', () => {
 
   it('the historical parser reads nothing from the daily file', () => {
     expect(parseAmfiNavHistory(DAILY)).toHaveLength(0);
+  });
+
+  it('the historical parser reads nothing from the CURRENT daily file', () => {
+    /*
+     * Both files are eight columns now. Positionally, a daily row offers the
+     * historical reader a real ISIN in column 2 — its reinvestment ISIN — and
+     * would pair it with "Direct Plan" as a NAV. The header is what refuses it.
+     */
+    expect(parseAmfiNavHistory(DAILY_NOW)).toHaveLength(0);
+  });
+
+  it('the daily parser reads nothing from the current historical report', () => {
+    const historyNow = [
+      'Scheme Code;NAV Name;Plan;Option;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Net Asset Value;Date',
+      '120847;Quant ELSS Tax Saver Fund;Direct Plan;Growth Option;INF966L01986;-;467.1777;27-Aug-2026',
+    ].join('\n');
+    expect(parseAmfiNav(historyNow).navs).toHaveLength(0);
   });
 });

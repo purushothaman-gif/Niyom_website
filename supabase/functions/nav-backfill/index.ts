@@ -6,9 +6,11 @@
 // twenty years of growth Parliament exempted.
 //
 // Separate from nav-refresh on purpose. AMFI serves history from a different
-// endpoint in a DIFFERENT COLUMN ORDER (name second, plus repurchase and sale
-// prices), so it has its own parser — feeding one file to the other's reader
-// does not fail loudly, it reads the wrong columns.
+// endpoint in a DIFFERENT COLUMN ORDER (name second, ISINs after the plan and
+// option), so it has its own parser — feeding one file to the other's reader
+// does not fail loudly, it reads the wrong columns. Both files are eight
+// columns wide since 19-Aug-2026, so each parser now checks the header names
+// rather than the column count.
 //
 // Not scheduled: a past NAV does not change. One run settles a date permanently
 // for every client, including ones who have not signed up yet.
