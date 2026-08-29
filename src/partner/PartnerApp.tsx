@@ -69,7 +69,7 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
 
     switch (view) {
       case 'dashboard':
-        return <DashboardPage snapshot={snapshot} onNavigate={navigate} />;
+        return <DashboardPage snapshot={snapshot} onNavigate={navigate} onOnboarded={refresh} />;
       case 'clients':
         return <ClientsPage clients={snapshot.clients} onOnboarded={refresh} />;
       case 'bonds':
@@ -87,7 +87,7 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
           <ProfilePage profile={snapshot.profile} onChangePassword={() => setShowChangePw(true)} />
         );
       default:
-        return <DashboardPage snapshot={snapshot} onNavigate={navigate} />;
+        return <DashboardPage snapshot={snapshot} onNavigate={navigate} onOnboarded={refresh} />;
     }
   };
 
