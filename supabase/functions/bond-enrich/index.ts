@@ -249,19 +249,26 @@ Deno.serve(async (req) => {
     //  • the CRM app — presents a logged-in staff user's JWT, verified against nw_employees.
     const authHeader = req.headers.get("Authorization") ?? "";
     const isCron = authHeader === `Bearer ${serviceKey}`;
-    if (!isCron) {
-      const userClient = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: authHeader } } });
-      const { data: { user } } = await userClient.auth.getUser();
-      if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
-      const { data: emp } = await supabase.from("nw_employees").select("id").eq("auth_user_id", user.id).eq("status", "active").maybeSingle();
-      if (!emp) return new Response(JSON.stringify({ error: "Staff only" }), { status: 403, headers: { ...cors, "Content-Type": "application/json" } });
-    }
 
     const body = await req.json().catch(() => ({}));
     const limit = Math.min(Number(body.limit) || 25, 100);
     const recompute = body.recompute === true;   // recompute analytics only, no provider calls
     const remaster = body.remaster === true;      // re-merge the sheet over the stored master, then recompute (no provider calls)
     const stale = body.stale === true;            // only bonds whose price is newer than their analytics
+
+    // The stale-recompute sweep only recomputes ALREADY-STORED analytics — no
+    // external provider calls, no data returned beyond counts, idempotent — so the
+    // scheduled job may invoke it with just the public anon key (which still passes
+    // the JWT gateway). Every other path (price fetch, remaster, single-bond) still
+    // requires the service-role key or a logged-in staff user.
+    const isSafeSweep = recompute && stale && !(Array.isArray(body.bond_ids) && body.bond_ids.length) && !body.isin;
+    if (!isCron && !isSafeSweep) {
+      const userClient = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: authHeader } } });
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
+      const { data: emp } = await supabase.from("nw_employees").select("id").eq("auth_user_id", user.id).eq("status", "active").maybeSingle();
+      if (!emp) return new Response(JSON.stringify({ error: "Staff only" }), { status: 403, headers: { ...cors, "Content-Type": "application/json" } });
+    }
 
     const { data: hol } = await supabase.from("bm_holiday_calendar").select("holiday_date");
     const holidays = new Set<string>((hol ?? []).map((h: Record<string, unknown>) => String(h.holiday_date)));

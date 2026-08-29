@@ -33,6 +33,20 @@ function fmtDate(d: string | null): string {
 function fmtPct(v: number | null): string { return v === null || v === undefined ? '—' : `${Number(v).toFixed(2)}%`; }
 function fmtPrice(v: number | null): string { return v === null || v === undefined ? '—' : `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`; }
 
+// A bond's price is "stale" when it hasn't been refreshed in a few days — it
+// wasn't in a recent price sheet (or the daily refresh skipped it). Surfaced so
+// staff can spot which bonds need a fresh price, since prices are sheet-driven.
+const STALE_DAYS = 4;
+function daysSince(d: string | null | undefined): number | null {
+  if (!d) return null;
+  const dt = new Date(d);
+  return Number.isNaN(dt.getTime()) ? null : Math.floor((Date.now() - dt.getTime()) / 86_400_000);
+}
+function isStalePrice(b: BondPublic): boolean {
+  const n = daysSince(b.price_updated_at || b.updated_at);
+  return n !== null && n > STALE_DAYS;
+}
+
 const VERIF: Record<string, { label: string; rgb: string; icon: typeof ShieldCheck }> = {
   verified:     { label: 'Verified',   rgb: '16,185,129',  icon: ShieldCheck },
   enriching:    { label: 'Enriching',  rgb: '59,130,246',  icon: Loader2 },
@@ -137,6 +151,9 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Bonds</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--text-faint)' }}>
             {filtered.length.toLocaleString('en-IN')}{filtered.length !== bonds.length ? ` of ${bonds.length.toLocaleString('en-IN')}` : ''} in current list
+            {(() => { const n = bonds.filter(isStalePrice).length; return n > 0
+              ? <span style={{ color: 'rgb(245,158,11)' }}> · {n.toLocaleString('en-IN')} price{n === 1 ? '' : 's'} &gt;{STALE_DAYS}d old</span>
+              : null; })()}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -292,7 +309,9 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
                     <td className="px-3 py-2.5 text-right font-semibold" style={{ color: 'var(--text-primary)' }}>{fmtPrice(b.latest_price)}</td>
                     <td className="px-3 py-2.5"><QualityBadge score={b.data_quality_score} /></td>
                     <td className="px-3 py-2.5"><VerifBadge status={b.verification_status} /></td>
-                    <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-faint)' }}>{fmtDate(b.price_updated_at || b.updated_at)}</td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: isStalePrice(b) ? 'rgb(245,158,11)' : 'var(--text-faint)' }}>
+                      {fmtDate(b.price_updated_at || b.updated_at)}{isStalePrice(b) ? ' · stale' : ''}
+                    </td>
                   </tr>
                 ))}
               </tbody>
