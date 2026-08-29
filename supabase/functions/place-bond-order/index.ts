@@ -51,10 +51,10 @@ Deno.serve(async (req: Request) => {
     // Bond must be active and priced.
     const { data: bond } = await db
       .from("bm_bonds")
-      .select("id, isin, bond_name, latest_price, face_value, min_investment, lot_size, active_status, analytics, issuer_id")
+      .select("id, isin, bond_name, latest_price, face_value, min_investment, lot_size, active_status, verification_status, analytics, issuer_id")
       .eq("id", bond_id)
       .maybeSingle();
-    if (!bond || bond.active_status !== "active" || bond.latest_price == null) {
+    if (!bond || bond.active_status !== "active" || bond.verification_status !== "verified" || bond.latest_price == null) {
       return json({ error: "This bond is not available." }, 404);
     }
 
