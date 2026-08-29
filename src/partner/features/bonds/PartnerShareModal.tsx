@@ -5,6 +5,9 @@
 import { useState } from 'react';
 import { X, Link2, Copy, Check, Share2, Percent, Loader2 } from 'lucide-react';
 import { inr, pct } from '../../../lib/money';
+import {
+  clampMargin, isMarginValid, partnerPricePer100, MAX_PARTNER_MARGIN,
+} from '../../../../shared/partner/bonds/partnerBondMath';
 import { PartnerService, type PartnerBond } from '../../services/PartnerService';
 
 export function PartnerShareModal({
@@ -22,10 +25,10 @@ export function PartnerShareModal({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const marginNum = Math.min(5, Math.max(0, parseFloat(margin) || 0));
+  const marginNum = clampMargin(margin);
   const base = Number(bond.partner_base) || 0;
-  const preview = Math.round(base * (1 + marginNum / 100) * 10000) / 10000;
-  const marginValid = !Number.isNaN(parseFloat(margin)) && marginNum >= 0 && marginNum <= 5;
+  const preview = partnerPricePer100(bond, margin);
+  const marginValid = isMarginValid(margin);
 
   const generate = async () => {
     setBusy(true); setError(null);
@@ -63,7 +66,7 @@ export function PartnerShareModal({
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-faint">Your margin for this link</span>
                 <div className="relative">
                   <Percent className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-faint" />
-                  <input type="number" step="0.01" min={0} max={5} value={margin} onChange={(e) => setMargin(e.target.value)}
+                  <input type="number" step="0.01" min={0} max={MAX_PARTNER_MARGIN} value={margin} onChange={(e) => setMargin(e.target.value)}
                     className="w-full rounded-token-md border border-border bg-bg-surface py-2.5 pl-8 pr-2 text-sm text-text-primary outline-none" />
                 </div>
               </label>
