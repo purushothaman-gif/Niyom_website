@@ -71,7 +71,7 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
       case 'dashboard':
         return <DashboardPage snapshot={snapshot} onNavigate={navigate} />;
       case 'clients':
-        return <ClientsPage clients={snapshot.clients} />;
+        return <ClientsPage clients={snapshot.clients} onOnboarded={refresh} />;
       case 'bonds':
         return <BondsModule partner={snapshot.profile} onAccessRevoked={handleAccessRevoked} />;
       case 'payouts':

@@ -202,6 +202,59 @@ export const PartnerService = {
   },
 
   /**
+   * Verify a prospective client's PAN before onboarding them (Cashfree, via the
+   * public PAN gate). Returns the legal name, or flags that the PAN is already a
+   * registered client so the partner is stopped before creating a duplicate.
+   */
+  async verifyPan(pan: string): Promise<{ ok: boolean; alreadyRegistered?: boolean; name?: string; error?: string }> {
+    if (isDemoSession()) {
+      await new Promise((r) => setTimeout(r, 300));
+      return { ok: true, name: 'DEMO CLIENT NAME' };
+    }
+    const anon = getEnv().supabaseAnonKey;
+    const res = await fetch(`${getEnv().supabaseUrl}/functions/v1/public-onboard-pan-verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon}`, Apikey: anon },
+      body: JSON.stringify({ pan }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (body?.already_registered) return { ok: false, alreadyRegistered: true, error: 'This PAN is already registered as a client.' };
+    if (!res.ok || !body?.valid) return { ok: false, error: body?.error || 'PAN could not be verified.' };
+    return { ok: true, name: body?.name_as_per_pan };
+  },
+
+  /**
+   * Onboard one of the partner's own clients. Creates the client mapped under the
+   * partner + their RM with an auto-generated client code (record only — the RM
+   * completes KYC and enables the login). See partner-onboard-client edge fn.
+   */
+  async onboardClient(payload: {
+    full_name: string;
+    pan: string;
+    phone: string;
+    email: string;
+    investment_preferences?: string[];
+  }): Promise<{ ok: boolean; client_code?: string; error?: string }> {
+    if (isDemoSession()) {
+      await new Promise((r) => setTimeout(r, 400));
+      return { ok: true, client_code: 'NW-DEMO-0001' };
+    }
+    const { data: sess } = await supabase.auth.getSession();
+    const res = await fetch(`${getEnv().supabaseUrl}/functions/v1/partner-onboard-client`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sess.session?.access_token ?? ''}`,
+        Apikey: getEnv().supabaseAnonKey,
+      },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body?.success) return { ok: false, error: body?.error || 'Could not onboard the client.' };
+    return { ok: true, client_code: body?.client_code };
+  },
+
+  /**
    * Short-lived signed URL for a statement PDF in the private dsa-debit-notes
    * bucket. The storage policy independently restricts objects to those
    * referenced by one of this partner's own notes, so a guessed path fails even

@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Users, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { Users, ChevronDown, ChevronRight, Loader2, UserPlus } from 'lucide-react';
 import { Card } from '../../../portal/components/Card';
 import { EmptyState } from '../../../portal/components/EmptyState';
 import { StatusPill } from '../../../portal/components/StatusPill';
 import { fmt, PRODUCT_LABELS } from '../../../crm/utils';
 import { PartnerService } from '../../services/PartnerService';
+import { OnboardClientModal } from './OnboardClientModal';
 import type { PartnerClientRow, PartnerHoldingRow, PartnerTransactionRow } from '../../types';
 import type { ProductType } from '../../../crm/types';
 
 interface Props {
   clients: PartnerClientRow[];
+  /** Refresh the portal snapshot after a new client is onboarded. */
+  onOnboarded: () => void;
 }
 
 const productLabel = (t: string) => PRODUCT_LABELS[t as ProductType] ?? t;
@@ -22,18 +25,41 @@ const productLabel = (t: string) => PRODUCT_LABELS[t as ProductType] ?? t;
  * independently re-check that the client belongs to this partner — so a guessed
  * client id returns nothing even with a valid partner session.
  */
-export function ClientsPage({ clients }: Props) {
+export function ClientsPage({ clients, onOnboarded }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [showOnboard, setShowOnboard] = useState(false);
+
+  const onboardBtn = (
+    <button
+      type="button"
+      onClick={() => setShowOnboard(true)}
+      className="inline-flex items-center gap-2 rounded-token-md px-4 py-2.5 text-sm font-bold text-on-accent"
+      style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+    >
+      <UserPlus className="h-4 w-4" /> Onboard a client
+    </button>
+  );
+
+  const modal = showOnboard && (
+    <OnboardClientModal
+      onClose={() => setShowOnboard(false)}
+      onOnboarded={() => { setShowOnboard(false); onOnboarded(); }}
+    />
+  );
 
   if (clients.length === 0) {
     return (
-      <Card>
-        <EmptyState
-          icon={Users}
-          title="No clients sourced yet"
-          hint="Clients you introduce to Niyom Wealth will appear here once they complete onboarding."
-        />
-      </Card>
+      <>
+        <Card>
+          <EmptyState
+            icon={Users}
+            title="No clients sourced yet"
+            hint="Onboard a client to map them under you, or they'll appear here once they complete onboarding."
+          />
+          <div className="flex justify-center pb-6">{onboardBtn}</div>
+        </Card>
+        {modal}
+      </>
     );
   }
 
@@ -42,6 +68,11 @@ export function ClientsPage({ clients }: Props) {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-display text-lg font-bold text-text-primary">My Clients</h1>
+        {onboardBtn}
+      </div>
+
       <Card padding="md">
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-sm">
           <span className="text-text-muted">
@@ -72,6 +103,8 @@ export function ClientsPage({ clients }: Props) {
           />
         ))}
       </div>
+
+      {modal}
     </div>
   );
 }
