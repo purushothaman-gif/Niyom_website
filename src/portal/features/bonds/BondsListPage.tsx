@@ -11,10 +11,11 @@ import { StatusPill } from '../../components/StatusPill';
 import { MiniStat, Pill, Blank } from '../../ui/kit';
 import type { ClientBond } from '../../../../shared/portal/services/BondOrderService';
 import { tenureLabel } from './bondMath';
+import { BondFilterModal } from './BondFilterModal';
 import {
-  BondFilterModal, EMPTY_FILTERS, countFilters, matchesFilters, filterChips, removeFilter,
+  EMPTY_FILTERS, countFilters, matchesFilters, filterChips, removeFilter,
   type BondFilters,
-} from './BondFilterModal';
+} from '../../../../shared/portal/bonds/bondFilters';
 
 /** A short marketing tag derived from the bond's own numbers. */
 function derivedTag(b: ClientBond): { label: string; tone: 'accent' | 'success' } | null {

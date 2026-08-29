@@ -55,7 +55,7 @@ const GROUPS: { heading: string; items: Item[] }[] = [
   {
     heading: 'Invest',
     items: [
-      { label: 'Bonds', description: 'Fixed income', icon: Landmark, comingSoon: true },
+      { label: 'Bonds', description: 'Fixed income, at your approved pricing', icon: Landmark, href: '/bonds' },
       { label: 'Fixed Deposits', description: 'Assured returns', icon: PiggyBank, comingSoon: true },
       { label: 'Insurance', description: 'Protection for your family', icon: ShieldCheck, comingSoon: true },
       { label: 'Alternate Investments', description: 'Unlisted shares and more', icon: Gem, comingSoon: true },
