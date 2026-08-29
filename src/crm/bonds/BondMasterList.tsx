@@ -91,9 +91,9 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
   const activeCount = Object.values(filters).filter(v => v !== '').length;
 
   const numOr = (v: string): number | null => (v === '' || Number.isNaN(parseFloat(v)) ? null : parseFloat(v));
-  const inRange = (val: number | null, min: number | null, max: number | null): boolean => {
-    if (min !== null && (val === null || val < min)) return false;
-    if (max !== null && (val === null || val > max)) return false;
+  const inRange = (val: number | null | undefined, min: number | null, max: number | null): boolean => {
+    if (min !== null && (val == null || val < min)) return false;
+    if (max !== null && (val == null || val > max)) return false;
     return true;
   };
   const filtered = bonds.filter((b: BondPublic) => {
