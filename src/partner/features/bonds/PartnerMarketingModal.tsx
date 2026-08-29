@@ -6,6 +6,7 @@
 
 import { useState } from 'react';
 import { X, ImageDown, Megaphone, Loader2 } from 'lucide-react';
+import { minUnits } from '../../../portal/features/bonds/bondMath';
 import type { PartnerBond } from '../../services/PartnerService';
 import type { PartnerIdentity } from '../../types';
 
@@ -48,7 +49,10 @@ export function PartnerMarketingModal({
       const mod = await import('../../../crm/bonds/bondOutputs');
       const b = toBondPublic(bond);
       const analytics = bond.analytics ? { ...bond.analytics } as any : null;
-      const opts = { contact, logo, contactLabel: 'Contact', sellingPricePer100: bond.partner_price };
+      // Default the quantity to the minimum-investment lot so the brochure's
+      // "Total Investment" reflects the real minimum (e.g. 300 units for a ₹3L min),
+      // not a single unit.
+      const opts = { contact, logo, contactLabel: 'Contact', sellingPricePer100: bond.partner_price, quantity: minUnits(bond) };
       if (kind === 'brochure') await mod.generateMarketingImage(b, analytics, opts);
       else await mod.generatePromoImage(b, opts);
     } catch (e) {
