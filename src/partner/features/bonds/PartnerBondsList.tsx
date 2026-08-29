@@ -4,13 +4,14 @@
 // global markup control. Card click → detail.
 
 import { useMemo, useState } from 'react';
-import { Landmark, ArrowRight, SlidersHorizontal, X, Percent, Check, Loader2 } from 'lucide-react';
+import { Landmark, ArrowRight, SlidersHorizontal, X, Percent, Check, Loader2, Search } from 'lucide-react';
 import { inr, inrCompact, pct, shortDate } from '../../../lib/money';
 import { BondFilterModal } from '../../../portal/features/bonds/BondFilterModal';
 import {
   EMPTY_FILTERS, countFilters, matchesFilters, filterChips, removeFilter,
   type BondFilters,
 } from '../../../../shared/portal/bonds/bondFilters';
+import { bondMatchesQuery } from '../../../../shared/portal/bonds/bondSearch';
 import { tenureLabel } from '../../../portal/features/bonds/bondMath';
 import type { PartnerBond } from '../../services/PartnerService';
 
@@ -32,11 +33,15 @@ export function PartnerBondsList({
 }) {
   const [filters, setFilters] = useState<BondFilters>(EMPTY_FILTERS);
   const [showFilter, setShowFilter] = useState(false);
+  const [query, setQuery] = useState('');
   const [markup, setMarkup] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
-  const shown = useMemo(() => bonds.filter((b) => matchesFilters(b, filters)), [bonds, filters]);
+  const shown = useMemo(
+    () => bonds.filter((b) => bondMatchesQuery(b, query) && matchesFilters(b, filters)),
+    [bonds, filters, query],
+  );
   const activeCount = countFilters(filters);
   const chips = filterChips(filters);
 
@@ -79,22 +84,38 @@ export function PartnerBondsList({
       </div>
       {saveErr && <p className="text-sm text-danger-soft">{saveErr}</p>}
 
-      {/* Header + filter */}
+      {/* Search + filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-faint" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by ISIN, name, issuer or rating"
+            className="w-full rounded-token-md border border-border bg-bg-raised py-2 pl-9 pr-8 text-sm text-text-primary outline-none focus:border-accent/50"
+          />
+          {query && (
+            <button type="button" onClick={() => setQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-faint hover:text-text-primary">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowFilter(true)}
+          className="inline-flex shrink-0 items-center gap-2 rounded-token-md border border-border bg-bg-raised px-3.5 py-2 text-xs font-semibold text-text-primary hover:border-accent/40"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Filter
+          {activeCount > 0 && <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] leading-none text-on-accent">{activeCount}</span>}
+        </button>
+      </div>
+
+      {/* Count */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-text-secondary">
-          {activeCount > 0 ? `${shown.length} of ${bonds.length}` : bonds.length} bond{bonds.length === 1 ? '' : 's'}
+          {activeCount > 0 || query ? `${shown.length} of ${bonds.length}` : bonds.length} bond{bonds.length === 1 ? '' : 's'}
         </p>
-        <div className="flex items-center gap-2">
-          <p className="hidden text-xs text-text-faint sm:block">Prices per ₹100 face; “Your price” includes your {pct(currentMarkup)} markup.</p>
-          <button
-            type="button"
-            onClick={() => setShowFilter(true)}
-            className="inline-flex items-center gap-2 rounded-token-md border border-border bg-bg-raised px-3.5 py-2 text-xs font-semibold text-text-primary hover:border-accent/40"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" /> Filter
-            {activeCount > 0 && <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] leading-none text-on-accent">{activeCount}</span>}
-          </button>
-        </div>
+        <p className="hidden text-xs text-text-faint sm:block">Prices per ₹100 face; “Your price” includes your {pct(currentMarkup)} markup.</p>
       </div>
 
       {chips.length > 0 && (
