@@ -6,10 +6,11 @@
 import { useMemo, useState } from 'react';
 import { Landmark, ArrowRight, SlidersHorizontal, X, Percent, Check, Loader2 } from 'lucide-react';
 import { inr, inrCompact, pct, shortDate } from '../../../lib/money';
+import { BondFilterModal } from '../../../portal/features/bonds/BondFilterModal';
 import {
-  BondFilterModal, EMPTY_FILTERS, countFilters, matchesFilters, filterChips, removeFilter,
+  EMPTY_FILTERS, countFilters, matchesFilters, filterChips, removeFilter,
   type BondFilters,
-} from '../../../portal/features/bonds/BondFilterModal';
+} from '../../../../shared/portal/bonds/bondFilters';
 import { tenureLabel } from '../../../portal/features/bonds/bondMath';
 import type { PartnerBond } from '../../services/PartnerService';
 
