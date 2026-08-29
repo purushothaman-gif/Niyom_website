@@ -39,10 +39,10 @@ Deno.serve(async (req: Request) => {
 
     const { data: bond } = await db
       .from("bm_bonds")
-      .select("id, isin, bond_name, coupon_rate, coupon_type, coupon_frequency, maturity_date, next_coupon_date, issue_date, rating, rating_agency, security_type, seniority, tax_status, trustee, day_count_convention, principal_repayment_structure, min_investment, face_value, latest_price, active_status, analytics, issuer_id")
+      .select("id, isin, bond_name, coupon_rate, coupon_type, coupon_frequency, maturity_date, next_coupon_date, issue_date, rating, rating_agency, security_type, seniority, tax_status, trustee, day_count_convention, principal_repayment_structure, min_investment, face_value, latest_price, active_status, verification_status, analytics, issuer_id")
       .eq("id", share.bond_id)
       .maybeSingle();
-    if (!bond || bond.active_status !== "active" || bond.latest_price == null) {
+    if (!bond || bond.active_status !== "active" || bond.verification_status !== "verified" || bond.latest_price == null) {
       return json({ error: "This bond is no longer available." }, 410);
     }
 

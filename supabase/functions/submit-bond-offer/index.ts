@@ -47,9 +47,9 @@ Deno.serve(async (req: Request) => {
 
     const { data: bond } = await db
       .from("bm_bonds")
-      .select("id, isin, bond_name, latest_price, face_value, min_investment, lot_size, active_status, analytics")
+      .select("id, isin, bond_name, latest_price, face_value, min_investment, lot_size, active_status, verification_status, analytics")
       .eq("id", share.bond_id).maybeSingle();
-    if (!bond || bond.active_status !== "active" || bond.latest_price == null) return json({ error: "This bond is no longer available." }, 410);
+    if (!bond || bond.active_status !== "active" || bond.verification_status !== "verified" || bond.latest_price == null) return json({ error: "This bond is no longer available." }, 410);
 
     const { data: rate } = await db.rpc("bm_resolve_markup", {
       p_audience: "partner", p_client_id: null as unknown as string,
