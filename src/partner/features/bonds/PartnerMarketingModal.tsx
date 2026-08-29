@@ -69,12 +69,12 @@ export function PartnerMarketingModal({
         <div className="space-y-4 p-5">
           <p className="text-sm text-text-secondary">A shareable image for <strong className="text-text-primary">{bond.bond_name || bond.isin}</strong> at your price, with your contact details.</p>
 
-          {/* Logo preference */}
+          {/* Branding preference */}
           <label className="flex cursor-pointer items-center justify-between gap-3 rounded-token-md border border-border bg-bg-surface px-3.5 py-3">
-            <span className="text-sm text-text-primary">Include the Niyom logo</span>
+            <span className="text-sm text-text-primary">Include Niyom branding</span>
             <input type="checkbox" checked={logo} onChange={(e) => setLogo(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
           </label>
-          <p className="-mt-2 text-[11px] text-text-faint">Turn this off to share a de-branded image under your own name.</p>
+          <p className="-mt-2 text-[11px] text-text-faint">Turn this off to remove the Niyom logo and name entirely — the image goes out under your own name and contact only.</p>
 
           {error && <div className="rounded-token-md border border-danger-soft/20 bg-danger-soft/10 p-3 text-xs text-danger-soft">{error}</div>}
 

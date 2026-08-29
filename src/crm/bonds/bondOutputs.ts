@@ -23,6 +23,13 @@ export interface OutputOptions {
 }
 
 function esc(s: unknown): string { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string)); }
+// Replace the Niyom name with a neutral term for the partner's de-branded image.
+function debrand(s: string): string {
+  return s
+    .replace(/Niyom Wealth Distribution LLP/g, 'The distributor')
+    .replace(/Niyom Wealth/g, 'The distributor')
+    .replace(/\bNiyom\b/g, 'The distributor');
+}
 function safe(v: unknown): string { const s = String(v ?? '').trim(); return s && s.toUpperCase() !== 'NA' ? esc(s) : ''; }
 function inr(v: number | null | undefined): string { return v === null || v === undefined ? '—' : `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`; }
 function inrShort(v: number | null | undefined): string { if (v === null || v === undefined) return '—'; const a = Math.abs(v); if (a >= 1e7) return `₹${(a / 1e7).toFixed(2)} Cr`; if (a >= 1e5) return `₹${(a / 1e5).toFixed(2)} L`; return `₹${a.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`; }
@@ -181,16 +188,16 @@ export async function generateMarketingImage(b: BondPublic, a: BondAnalytics | n
       <div style="flex:1;"><div style="font-size:11px;font-weight:800;color:${goldSoft};text-transform:uppercase;letter-spacing:0.1em;border-bottom:2px solid rgba(200,162,75,0.4);padding-bottom:6px;margin-bottom:4px;">Terms</div>
         ${drow('Seniority', safe(b.seniority))}${drow('Payout', payout(b))}${drow('Min. Investment', minInv ? inrShort(minInv) : '—')}${drow('Price / ₹100', price !== null ? inr(price) : '—')}</div>
     </div>
-    <div style="margin:14px 42px 0;padding:11px 15px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;"><div style="font-size:8.5px;color:#8fa0bd;line-height:1.55;text-align:justify;"><strong style="color:${goldSoft};">Important:</strong> ${BOND_PDF_DISCLAIMER}</div></div>
+    <div style="margin:14px 42px 0;padding:11px 15px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;"><div style="font-size:8.5px;color:#8fa0bd;line-height:1.55;text-align:justify;"><strong style="color:${goldSoft};">Important:</strong> ${showLogo ? BOND_PDF_DISCLAIMER : debrand(BOND_PDF_DISCLAIMER)}</div></div>
     <div style="margin-top:16px;background:rgba(0,0,0,0.28);padding:16px 42px;display:flex;justify-content:space-between;align-items:flex-end;gap:20px;border-top:1px solid rgba(200,162,75,0.22);">
-      <div style="font-size:9px;line-height:1.5;color:#9fb0cd;"><div style="font-weight:800;color:${white};font-size:11px;">${NIYOM.name}</div><div>${NIYOM.address}</div><div>${NIYOM.email} • ${NIYOM.web}</div></div>
+      ${showLogo ? `<div style="font-size:9px;line-height:1.5;color:#9fb0cd;"><div style="font-weight:800;color:${white};font-size:11px;">${NIYOM.name}</div><div>${NIYOM.address}</div><div>${NIYOM.email} • ${NIYOM.web}</div></div>` : `<div></div>`}
       ${contactBlock(opts.contact, white, goldSoft, opts.contactLabel)}
     </div>
   </div>`;
 
   await offscreen(html, async node => {
     const canvas = await html2canvas(node, { scale: 2, useCORS: true, backgroundColor: darkBlue, logging: false, windowWidth: 794 });
-    download(canvas.toDataURL('image/png'), `${fileBase(b)}.png`);
+    download(canvas.toDataURL('image/png'), `${showLogo ? fileBase(b) : fileBase(b).replace(/^NIYOM_/, '')}.png`);
   });
 }
 
@@ -222,13 +229,13 @@ export async function generatePromoImage(b: BondPublic, opts: OutputOptions): Pr
     <div style="position:relative;display:flex;gap:14px;background:rgba(255,255,255,0.05);border:1px solid rgba(200,162,75,0.35);border-radius:18px;padding:24px 18px;">
       ${stat('Tenure', tenure)}<div style="width:1px;background:rgba(200,162,75,0.3);"></div>${stat('Payout', payout(b))}<div style="width:1px;background:rgba(200,162,75,0.3);"></div>${stat('Rating', safe(b.rating) || '—')}<div style="width:1px;background:rgba(200,162,75,0.3);"></div>${stat('Min. Invest', minInv ? inrShort(minInv) : '—')}</div>
     ${b.maturity_date ? `<div style="text-align:center;margin-top:16px;font-size:14px;color:#cfd8ea;position:relative;">Maturity: <strong style="color:${white};">${fdate(b.maturity_date)}</strong></div>` : ''}
-    <div style="margin-top:26px;position:relative;"><div style="background:linear-gradient(135deg,${gold},#E9D8A0);border-radius:16px;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:${navy};font-weight:800;opacity:0.8;">To invest, contact</div><div style="font-size:20px;font-weight:900;color:${navy};margin-top:2px;">${contact ? esc(contact.name) : 'Niyom Wealth'}</div>${contact?.designation ? `<div style="font-size:12px;color:${navy};opacity:0.85;">${esc(contact.designation)}</div>` : ''}</div>
-      <div style="text-align:right;color:${navy};font-weight:700;font-size:14px;line-height:1.5;">${contact?.phone ? `<div>Call ${esc(contact.phone)}</div>` : ''}<div style="font-size:12px;">${contact?.email ? esc(contact.email) : NIYOM.email}</div></div></div>
-      <div style="text-align:center;font-size:10px;color:#8592a8;margin-top:12px;line-height:1.4;">Investments in bonds are subject to market, credit and interest-rate risks, including loss of principal. Rates indicative. Niyom Wealth Distribution LLP acts as a distributor.</div></div>
+    <div style="margin-top:26px;position:relative;"><div style="background:linear-gradient(135deg,${gold},#E9D8A0);border-radius:16px;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:${navy};font-weight:800;opacity:0.8;">To invest, contact</div><div style="font-size:20px;font-weight:900;color:${navy};margin-top:2px;">${contact ? esc(contact.name) : (showLogo ? 'Niyom Wealth' : 'Your advisor')}</div>${contact?.designation ? `<div style="font-size:12px;color:${navy};opacity:0.85;">${esc(contact.designation)}</div>` : ''}</div>
+      <div style="text-align:right;color:${navy};font-weight:700;font-size:14px;line-height:1.5;">${contact?.phone ? `<div>Call ${esc(contact.phone)}</div>` : ''}<div style="font-size:12px;">${contact?.email ? esc(contact.email) : (showLogo ? NIYOM.email : '')}</div></div></div>
+      <div style="text-align:center;font-size:10px;color:#8592a8;margin-top:12px;line-height:1.4;">Investments in bonds are subject to market, credit and interest-rate risks, including loss of principal. Rates indicative.${showLogo ? ' Niyom Wealth Distribution LLP acts as a distributor.' : ' The distributor facilitates this transaction.'}</div></div>
   </div>`;
 
   await offscreen(html, async node => {
     const canvas = await html2canvas(node, { scale: 2, useCORS: true, backgroundColor: '#050c18', logging: false, windowWidth: 820, windowHeight: 1025 });
-    download(canvas.toDataURL('image/png'), `${fileBase(b)}_promo.png`);
+    download(canvas.toDataURL('image/png'), `${showLogo ? fileBase(b) : fileBase(b).replace(/^NIYOM_/, '')}_promo.png`);
   });
 }
