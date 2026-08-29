@@ -7,11 +7,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { X, CheckCircle2, Percent, Minus, Plus } from 'lucide-react';
 import { inr } from '../../../lib/money';
 import { minUnits, stepUnits } from '../../../portal/features/bonds/bondMath';
+import {
+  clampMargin, isMarginValid, partnerBreakdown, MAX_PARTNER_MARGIN,
+} from '../../../../shared/partner/bonds/partnerBondMath';
 import { PartnerService, type PartnerBond } from '../../services/PartnerService';
 import type { PartnerClientRow } from '../../types';
-
-const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
-const r4 = (n: number) => Math.round((n + Number.EPSILON) * 10000) / 10000;
 
 export function PartnerOrderModal({
   bond,
@@ -45,19 +45,10 @@ export function PartnerOrderModal({
     return () => { alive = false; };
   }, []);
 
-  const marginNum = Math.min(5, Math.max(0, parseFloat(margin) || 0));
-  const face = Number(bond.face_value) || 100;
-  const base = Number(bond.partner_base) || 0;
-  const pricePer100 = r4(base * (1 + marginNum / 100));
-  const accruedPer100 = Number(bond.analytics?.accrued_per_100) || 0;
-
-  const bd = useMemo(() => {
-    const investment = r2(units * face * (pricePer100 / 100));
-    const accrued = r2(units * face * (accruedPer100 / 100));
-    return { investment, accrued, amount: r2(investment + accrued) };
-  }, [units, face, pricePer100, accruedPer100]);
-
-  const marginValid = !Number.isNaN(parseFloat(margin)) && marginNum >= 0 && marginNum <= 5;
+  const marginNum = clampMargin(margin);
+  const bd = useMemo(() => partnerBreakdown(bond, units, margin), [bond, units, margin]);
+  const pricePer100 = bd.pricePer100;
+  const marginValid = isMarginValid(margin);
   const canPlace = !!clientId && marginValid && units >= min && !placing;
 
   const place = async () => {
@@ -118,7 +109,7 @@ export function PartnerOrderModal({
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-faint">Your margin</span>
                 <div className="relative">
                   <Percent className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-faint" />
-                  <input type="number" step="0.01" min={0} max={5} value={margin} onChange={(e) => setMargin(e.target.value)}
+                  <input type="number" step="0.01" min={0} max={MAX_PARTNER_MARGIN} value={margin} onChange={(e) => setMargin(e.target.value)}
                     className="w-full rounded-token-md border border-border bg-bg-surface py-2.5 pl-8 pr-2 text-sm text-text-primary outline-none" />
                 </div>
               </label>

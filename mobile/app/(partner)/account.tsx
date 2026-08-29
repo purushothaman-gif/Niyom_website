@@ -16,6 +16,7 @@ import {
   Copy,
   CreditCard,
   KeyRound,
+  Landmark,
   LogOut,
   Mail,
   MapPin,
@@ -208,6 +209,13 @@ export default function PartnerAccount() {
               Business
             </Text>
             <Card padding={4}>
+              <ListRow
+                icon={Landmark}
+                title="Bonds"
+                subtitle="Offer fixed income at your own spread"
+                showChevron
+                onPress={() => router.push('/partner-bonds')}
+              />
               <ListRow
                 icon={UserPlus}
                 title="Submit a lead"
