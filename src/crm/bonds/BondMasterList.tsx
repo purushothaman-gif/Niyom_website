@@ -83,7 +83,7 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
   const review = bonds.filter(b => b.verification_status === 'needs_review').length;
 
   // Column filters (client-side — the whole active list is already loaded).
-  const EMPTY = { freq: '', status: '', cat: '', rating: '', couponMin: '', couponMax: '', priceMin: '', priceMax: '', qualityMin: '', matFrom: '', matTo: '', updFrom: '' };
+  const EMPTY = { freq: '', status: '', cat: '', rating: '', couponMin: '', couponMax: '', priceMin: '', priceMax: '', minInvMin: '', minInvMax: '', qualityMin: '', matFrom: '', matTo: '', updFrom: '' };
   const categories = Array.from(new Set(bonds.map(b => b.security_type).filter(Boolean))).sort() as string[];
   const [filters, setFilters] = useState<Record<string, string>>(EMPTY);
   const [showFilters, setShowFilters] = useState(false);
@@ -103,6 +103,7 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
     if (filters.rating && !(b.rating || '').toLowerCase().includes(filters.rating.toLowerCase())) return false;
     if (!inRange(b.coupon_rate, numOr(filters.couponMin), numOr(filters.couponMax))) return false;
     if (!inRange(b.latest_price, numOr(filters.priceMin), numOr(filters.priceMax))) return false;
+    if (!inRange(b.min_investment, numOr(filters.minInvMin), numOr(filters.minInvMax))) return false;
     const qMin = numOr(filters.qualityMin);
     if (qMin !== null && (b.data_quality_score ?? 0) < qMin) return false;
     if (filters.matFrom && (!b.maturity_date || b.maturity_date < filters.matFrom)) return false;
@@ -235,6 +236,14 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
                 <input type="number" step="0.01" value={filters.priceMin} onChange={e => setF('priceMin', e.target.value)} placeholder="min" className="w-full px-2 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
                 <span style={{ color: 'var(--text-faint)' }}>–</span>
                 <input type="number" step="0.01" value={filters.priceMax} onChange={e => setF('priceMax', e.target.value)} placeholder="max" className="w-full px-2 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--text-faint)' }}>Min. Investment (₹)</label>
+              <div className="flex items-center gap-1.5">
+                <input type="number" step="1000" min={0} value={filters.minInvMin} onChange={e => setF('minInvMin', e.target.value)} placeholder="min" className="w-full px-2 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
+                <span style={{ color: 'var(--text-faint)' }}>–</span>
+                <input type="number" step="1000" min={0} value={filters.minInvMax} onChange={e => setF('minInvMax', e.target.value)} placeholder="max" className="w-full px-2 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
               </div>
             </div>
             <div>
