@@ -1,16 +1,20 @@
-import { Users, Wallet, FileSignature, TrendingUp, Phone, Mail, ArrowRight, BadgeCheck } from 'lucide-react';
+import { useState } from 'react';
+import { Users, Wallet, FileSignature, TrendingUp, Phone, Mail, ArrowRight, BadgeCheck, UserPlus } from 'lucide-react';
 import { Card } from '../../../portal/components/Card';
 import { KpiStat } from '../../../portal/components/KpiStat';
 import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { StatusPill } from '../../../portal/components/StatusPill';
 import { EmptyState } from '../../../portal/components/EmptyState';
 import { fmt } from '../../../crm/utils';
+import { OnboardClientModal } from '../clients/OnboardClientModal';
 import type { PartnerSnapshot } from '../../hooks/usePartnerSnapshot';
 import type { PartnerView } from '../../layout/navigation';
 
 interface Props {
   snapshot: PartnerSnapshot;
   onNavigate: (view: PartnerView) => void;
+  /** Refresh the portal snapshot after a new client is onboarded. */
+  onOnboarded: () => void;
 }
 
 /**
@@ -22,8 +26,9 @@ interface Props {
  * raised; a tile implying otherwise would be wrong the day a partner looks at it
  * mid-month.
  */
-export function DashboardPage({ snapshot, onNavigate }: Props) {
+export function DashboardPage({ snapshot, onNavigate, onOnboarded }: Props) {
   const { profile, clients, payout, notes } = snapshot;
+  const [showOnboard, setShowOnboard] = useState(false);
 
   const totalInvested = clients.reduce((s, c) => s + Number(c.invested_amount || 0), 0);
   const totalValue = clients.reduce((s, c) => s + Number(c.current_value || 0), 0);
@@ -36,17 +41,27 @@ export function DashboardPage({ snapshot, onNavigate }: Props) {
   return (
     <div className="space-y-6">
       {/* Greeting */}
-      <div>
-        <h2 className="font-display text-2xl font-bold text-text-primary">
-          {/* Full name, not a first-name split: many partners are firms or HUFs
-              ("KATHARE WEALTH ADVISORS", "SHIVAM GUPTA (HUF)") and initialled
-              names like "B K M GANESH BABU" would greet the partner as "B". */}
-          Welcome, {profile?.full_name ?? 'Partner'}
-        </h2>
-        <p className="mt-1 text-sm text-text-muted">
-          Partner code <span className="font-mono text-text-secondary">{profile?.dsa_code}</span>
-          {profile?.partner_since && <> · with Niyom Wealth since {profile.partner_since}</>}
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="font-display text-2xl font-bold text-text-primary">
+            {/* Full name, not a first-name split: many partners are firms or HUFs
+                ("KATHARE WEALTH ADVISORS", "SHIVAM GUPTA (HUF)") and initialled
+                names like "B K M GANESH BABU" would greet the partner as "B". */}
+            Welcome, {profile?.full_name ?? 'Partner'}
+          </h2>
+          <p className="mt-1 text-sm text-text-muted">
+            Partner code <span className="font-mono text-text-secondary">{profile?.dsa_code}</span>
+            {profile?.partner_since && <> · with Niyom Wealth since {profile.partner_since}</>}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowOnboard(true)}
+          className="inline-flex shrink-0 items-center gap-2 rounded-token-md px-4 py-2.5 text-sm font-bold text-on-accent"
+          style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+        >
+          <UserPlus className="h-4 w-4" /> Onboard a client
+        </button>
       </div>
 
       {/* Action required — only rendered when there is something to act on. */}
@@ -228,6 +243,13 @@ export function DashboardPage({ snapshot, onNavigate }: Props) {
           </div>
         </Card>
       </div>
+
+      {showOnboard && (
+        <OnboardClientModal
+          onClose={() => setShowOnboard(false)}
+          onOnboarded={() => { setShowOnboard(false); onOnboarded(); }}
+        />
+      )}
     </div>
   );
 }
