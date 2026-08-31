@@ -6,7 +6,7 @@ import {
   MessageCircle, PhoneCall, CalendarClock, Inbox, MapPin, ArrowUpDown,
 } from 'lucide-react';
 import { NWLead, LeadStatus } from './leadTypes';
-import { QUEUE_OUTCOMES, QUEUE_STATUS_OPTIONS } from './leadConstants';
+import { QUEUE_OUTCOMES, QUEUE_STATUS_OPTIONS, INDIAN_STATES } from './leadConstants';
 import { StatusBadge, Select, Input } from './leadUi';
 import { isAdminRole, formatMoney, relativeTime, initials } from './leadUtils';
 
@@ -57,6 +57,8 @@ export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Prop
   const isAdmin = isAdminRole(employee);
   const [scope, setScope] = useState<Scope>('work');
   const [sort, setSort] = useState<SortKey>('smart');
+  const [stateFilter, setStateFilter] = useState('');
+  const [cityFilter, setCityFilter] = useState('');
   const [leads, setLeads] = useState<NWLead[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -74,8 +76,10 @@ export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Prop
     if (scope === 'work') q = q.not('status', 'in', '("Closed - Rejected","Lost","Not Interested","Wrong Number")');
     else if (scope === 'uncontacted') q = q.is('first_call_at', null);
     else if (STATUS_SCOPES[scope]) q = q.eq('status', STATUS_SCOPES[scope]!);
+    if (stateFilter) q = q.ilike('state', `%${stateFilter}%`);
+    if (cityFilter.trim()) q = q.ilike('city', `%${cityFilter.trim()}%`);
     return q;
-  }, [employee.id, scope]);
+  }, [employee.id, scope, stateFilter, cityFilter]);
 
   const applySort = useCallback((q: any) => {
     if (sort === 'location') return q.order('state', { ascending: true }).order('city', { ascending: true }).order('lead_name', { ascending: true });
@@ -100,7 +104,14 @@ export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Prop
   }, [buildQuery, page, applySort]);
 
   useEffect(() => { load(); }, [load, refreshKey]);
-  useEffect(() => { setPage(0); }, [scope, sort]);
+  useEffect(() => { setPage(0); }, [scope, sort, stateFilter, cityFilter]);
+
+  // Debounce the free-text city box into the applied filter.
+  const [cityInput, setCityInput] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setCityFilter(cityInput.trim()), 400);
+    return () => clearTimeout(t);
+  }, [cityInput]);
 
   // "Worked today" = calls I logged since midnight.
   useEffect(() => {
@@ -195,6 +206,25 @@ export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Prop
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
+      </div>
+
+      {/* Location filter */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg" style={{ background: 'var(--bg-elevated)', border: `1px solid ${stateFilter ? 'var(--accent)' : 'var(--border)'}` }}>
+          <MapPin className="w-3.5 h-3.5" style={{ color: stateFilter ? 'var(--accent)' : 'var(--text-faint)' }} />
+          <select value={stateFilter} onChange={e => setStateFilter(e.target.value)}
+            className="text-xs font-semibold bg-transparent outline-none cursor-pointer" style={{ color: stateFilter ? 'var(--accent)' : 'var(--text-secondary)' }}>
+            <option value="">All States</option>
+            {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <input value={cityInput} onChange={e => setCityInput(e.target.value)} placeholder="Filter by city…"
+          className="px-3 py-1.5 rounded-lg text-xs outline-none w-40"
+          style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: `1px solid ${cityFilter ? 'var(--accent)' : 'var(--border)'}` }} />
+        {(stateFilter || cityInput) && (
+          <button onClick={() => { setStateFilter(''); setCityInput(''); setCityFilter(''); }}
+            className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>Clear location</button>
+        )}
       </div>
 
       <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
