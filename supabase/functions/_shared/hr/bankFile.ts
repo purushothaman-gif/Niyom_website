@@ -102,7 +102,14 @@ export function formatDate(iso: string, pattern: string): string {
   }
 }
 
-/** The four-letter bank code that opens every IFSC. */
+/**
+ * The four-letter bank code that opens every IFSC.
+ *
+ * Takes a bare code as happily as a full IFSC, because the paying side often
+ * has no IFSC to give: IDFC's bulk-payment portal asks only for the debit
+ * ACCOUNT number, and its template requires that account to be an IDFC one.
+ * There is nothing to look up, so 'IDFB' is a complete answer.
+ */
 const bankCode = (ifsc: string) => (ifsc || '').trim().toUpperCase().slice(0, 4);
 
 /**
@@ -113,9 +120,9 @@ const bankCode = (ifsc: string) => (ifsc || '').trim().toUpperCase().slice(0, 4)
  * reaches any bank, so an unknown answer errs towards the payment arriving.
  * The caller raises an issue in that case rather than letting it pass quietly.
  */
-export function transactionType(beneficiaryIfsc: string, debitIfsc: string): 'IFT' | 'NEFT' {
+export function transactionType(beneficiaryIfsc: string, debitBank: string): 'IFT' | 'NEFT' {
   const bene = bankCode(beneficiaryIfsc);
-  const debit = bankCode(debitIfsc);
+  const debit = bankCode(debitBank);
   if (!bene || !debit) return 'NEFT';
   return bene === debit ? 'IFT' : 'NEFT';
 }
@@ -162,7 +169,7 @@ export function buildBankFile(
   if (routed && !bankCode(template.debit_ifsc)) {
     issues.push({
       row: 0, employee_code: '', column: 'Transaction Type',
-      message: 'The company account\'s IFSC is not set on this template, so a transfer within the bank cannot be told from one leaving it. Every row falls back to NEFT. Set the debit IFSC in HR Settings.',
+      message: 'The salary account\'s bank code is not set on this template, so a transfer within the bank cannot be told from one leaving it. Every row falls back to NEFT. Set it in HR Settings (IDFB for IDFC FIRST).',
     });
   }
 
