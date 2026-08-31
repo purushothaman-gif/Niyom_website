@@ -73,15 +73,9 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
     return () => window.removeEventListener('resize', measure);
   }, [isMobileMenuOpen]);
 
-  // Single source for the three employee consoles — the desktop dropdown and
+  // Single source for the two employee consoles — the desktop dropdown and
   // the mobile sheet render the same set, so they can't drift apart.
   const employeeLinks = [
-    {
-      label: 'HRM',
-      hint: 'People & attendance',
-      icon: Users,
-      open: () => window.open('https://www.zoho.com/people/login.html', '_blank', 'noopener,noreferrer'),
-    },
     {
       label: 'CRM',
       hint: 'Clients & deal flow',
