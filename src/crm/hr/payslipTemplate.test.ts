@@ -213,3 +213,104 @@ describe('the header carries what people open the payslip to see', () => {
     expect(body(d)).toMatch(/No deductions this month/i);
   });
 });
+
+/*
+ * When an administrator waives the loss of pay, the payslip must read as an
+ * ordinary month. The employee is being told "you are paid in full"; a
+ * document that also says "you were absent four days" or "LOP: 4" contradicts
+ * that and reopens the conversation the waiver was meant to close.
+ */
+describe('a month whose loss of pay was waived', () => {
+  // 31 days: 21 present, 4 absent (all waived), 1 holiday, 5 weekly offs.
+  const html = buildPayslipHtml(data({
+    record: {
+      ...data().record,
+      present_days: 21, absent_days: 4, lop_days: 0, payable_days: 31,
+      lop_waived_days: 4, holiday_days: 1, weekly_off_days: 5,
+    } as PayrollRecord,
+  }));
+
+  it('shows no loss of pay', () => {
+    expect(html).toContain('LOP Days: <b>0</b>');
+  });
+
+  it('pays for the whole month', () => {
+    expect(html).toContain('Paid Days: <b>31</b>');
+  });
+
+  it('counts the waived days as present, so the figures add up', () => {
+    // 21 present + 4 waived = 25; 25 + 1 holiday + 5 weekly offs = 31 paid.
+    expect(html).toContain('Present Days</span><span class="v">25</span>');
+  });
+
+  it('never mentions the waiver, the absence or who granted it', () => {
+    for (const word of ['waive', 'Waive', 'waived', 'absent', 'Absent', 'forgiv']) {
+      expect(html).not.toContain(word);
+    }
+  });
+
+  it('is indistinguishable from a month with no absence at all', () => {
+    const clean = buildPayslipHtml(data({
+      record: {
+        ...data().record,
+        present_days: 25, absent_days: 0, lop_days: 0, payable_days: 31,
+        lop_waived_days: 0, holiday_days: 1, weekly_off_days: 5,
+      } as PayrollRecord,
+    }));
+    expect(html).toBe(clean);
+  });
+});
+
+describe('a month with loss of pay that was NOT waived', () => {
+  const html = buildPayslipHtml(data({
+    record: {
+      ...data().record,
+      present_days: 21, absent_days: 4, lop_days: 4, payable_days: 27,
+      lop_waived_days: 0, holiday_days: 1, weekly_off_days: 5,
+    } as PayrollRecord,
+  }));
+
+  it('still states the loss of pay plainly', () => {
+    expect(html).toContain('LOP Days: <b>4</b>');
+    expect(html).toContain('Paid Days: <b>27</b>');
+  });
+
+  it('does not inflate present days', () => {
+    expect(html).toContain('Present Days</span><span class="v">21</span>');
+  });
+});
+
+/*
+ * Payroll run before the month has finished -- the case that showed up on
+ * 31 August. The last day is payable but not yet marked present, so the four
+ * day figures fell one short of Paid Days for EVERY employee, waiver or not.
+ */
+describe('a payslip printed before the month has finished', () => {
+  const html = buildPayslipHtml(data({
+    record: {
+      ...data().record,
+      present_days: 24, absent_days: 0, lop_days: 0, payable_days: 31,
+      lop_waived_days: 0, paid_leave_days: 0, holiday_days: 1, weekly_off_days: 5,
+    } as PayrollRecord,
+  }));
+
+  it('closes the gap so the day figures add up to paid days', () => {
+    // 24 present + 1 unfinished day = 25; 25 + 1 + 5 = 31 paid.
+    expect(html).toContain('Present Days</span><span class="v">25</span>');
+    expect(html).toContain('Paid Days: <b>31</b>');
+  });
+});
+
+describe('the derivation never understates attendance', () => {
+  it('keeps the real figure when it is higher than the balance', () => {
+    // An excluded employee: nothing payable, but they were present 12 days.
+    const html = buildPayslipHtml(data({
+      record: {
+        ...data().record,
+        present_days: 12, lop_days: 0, payable_days: 0, lop_waived_days: 0,
+        paid_leave_days: 0, holiday_days: 1, weekly_off_days: 5,
+      } as PayrollRecord,
+    }));
+    expect(html).toContain('Present Days</span><span class="v">12</span>');
+  });
+});

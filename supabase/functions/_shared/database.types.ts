@@ -3263,6 +3263,7 @@ export type Database = {
           lop_amount: number
           lop_days: number
           lop_divisor: number
+          lop_waived_days: number
           net_pay: number
           overtime_minutes: number
           paid_leave_days: number
@@ -3304,6 +3305,7 @@ export type Database = {
           lop_amount?: number
           lop_days?: number
           lop_divisor?: number
+          lop_waived_days?: number
           net_pay?: number
           overtime_minutes?: number
           paid_leave_days?: number
@@ -3345,6 +3347,7 @@ export type Database = {
           lop_amount?: number
           lop_days?: number
           lop_divisor?: number
+          lop_waived_days?: number
           net_pay?: number
           overtime_minutes?: number
           paid_leave_days?: number

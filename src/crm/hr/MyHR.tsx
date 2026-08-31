@@ -115,7 +115,7 @@ function MyAttendance({ employee, onToast }: { employee: NWEmployee; onToast: (m
 
       <SectionCard
         title="Monthly summary"
-        subtitle={`${fmtDay(from)} to ${fmtDay(to)}`}
+        subtitle={`${fmtDay(from)} to ${fmtDay(to)} · attendance only — your payslip is what decides pay`}
         actions={
           <div className="flex items-center gap-2">
             <Input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ width: 150 }} />
@@ -129,7 +129,14 @@ function MyAttendance({ employee, onToast }: { employee: NWEmployee; onToast: (m
             <Mini label="Working"    value={summary.working_days} />
             <Mini label="Present"    value={summary.present_days} />
             <Mini label="Paid Leave" value={summary.paid_leave_days} />
-            <Mini label="LOP"        value={summary.lop_days} tone={summary.lop_days > 0 ? 'bad' : undefined} />
+            {/*
+              * "Unpaid", not "LOP". This tile is computed from the attendance
+              * register, which knows nothing about waivers -- so after an
+              * administrator forgives the absence it would still read "LOP 4"
+              * beside a payslip showing none. Loss of pay is a payroll outcome,
+              * not an attendance fact, and the payslip is what decides it.
+              */}
+            <Mini label="Unpaid"     value={summary.lop_days} tone={summary.lop_days > 0 ? 'bad' : undefined} />
             <Mini label="Holidays"   value={summary.holiday_days} />
             <Mini label="Weekly Off" value={summary.weekly_off_days} />
           </div>
