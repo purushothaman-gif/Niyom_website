@@ -6,10 +6,11 @@
 // its copy as props rather than existing twice.
 
 import { useMemo, useState } from 'react';
-import { Loader2, Percent, Check, X, ShieldAlert, Search, Users, Handshake, type LucideIcon } from 'lucide-react';
+import { Loader2, Percent, Check, X, ShieldAlert, Search, Users, Handshake, EyeOff, Eye, Lock, type LucideIcon } from 'lucide-react';
 import { NWEmployee } from '../types';
 import {
   useMarkups, useMyClients, useMyPartners, usePropose, useApprove, useReject,
+  usePriceBlocks, useSetPriceBlock,
   MarkupRow, NamedRow, Audience, Product,
 } from './pricingClient';
 
@@ -22,6 +23,11 @@ export interface MarkupPricingProps {
   baseLabel: string;
   /** Icon for the empty state of the individual-override list. */
   emptyIcon: LucideIcon;
+  /**
+   * Show the per-target price-access toggle. Only unlisted shares have a deny
+   * list today; bonds render without the column rather than with a dead one.
+   */
+  allowBlocking?: boolean;
 }
 
 const fmtPct = (v: number | null | undefined) => v === null || v === undefined ? '—' : `${Number(v).toFixed(2)}%`;
@@ -50,7 +56,7 @@ function ProposeCell({ current, pending, onPropose, busy }: { current: number | 
   );
 }
 
-export function MarkupPricing({ employee, product, eyebrow, baseLabel, emptyIcon: EmptyIcon }: MarkupPricingProps) {
+export function MarkupPricing({ employee, product, eyebrow, baseLabel, emptyIcon: EmptyIcon, allowBlocking = false }: MarkupPricingProps) {
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
   const { data: markups = [], isLoading } = useMarkups(product);
   const { data: clients = [] } = useMyClients();
@@ -58,6 +64,8 @@ export function MarkupPricing({ employee, product, eyebrow, baseLabel, emptyIcon
   const propose = usePropose(product);
   const approve = useApprove(product);
   const reject = useReject(product);
+  const { data: blocks = [] } = usePriceBlocks(allowBlocking);
+  const setBlock = useSetPriceBlock();
   const [tab, setTab] = useState<Audience>('client');
   const [search, setSearch] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -79,6 +87,17 @@ export function MarkupPricing({ employee, product, eyebrow, baseLabel, emptyIcon
     return { ind, grp };
   }, [markups]);
 
+  // Blocked targets, by client/dsa id. A block beats every approved rate, so the
+  // row shows it instead of the resolved percentage.
+  const blockedBy = useMemo(() => {
+    const m: Record<string, { reason: string; adminLock: boolean }> = {};
+    for (const b of blocks) {
+      const id = b.client_id || b.dsa_id;
+      if (id) m[id] = { reason: b.reason, adminLock: b.admin_lock };
+    }
+    return m;
+  }, [blocks]);
+
   const grpRate = (audience: Audience, empId: string | null) => idx.grp[`${audience}:${empId ?? 'company'}`] || { approved: null, pending: null };
   const pending = markups.filter(m => m.status === 'pending');
 
@@ -98,6 +117,12 @@ export function MarkupPricing({ employee, product, eyebrow, baseLabel, emptyIcon
         <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--accent)' }}>{eyebrow}</p>
         <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Client &amp; Partner Markups</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--text-faint)' }}>Set an added-revenue % on the base {baseLabel}. Rates go live only after admin approval.</p>
+        {allowBlocking && (
+          <p className="text-xs mt-1.5" style={{ color: 'var(--text-faint)' }}>
+            Use <strong style={{ color: 'var(--text-secondary)' }}>Price access</strong> below to hide prices from one client or partner
+            even when a company-wide rate is approved. Hiding applies immediately — no approval needed — and they simply see an empty list.
+          </p>
+        )}
       </div>
 
       {err && <div className="p-3 rounded-xl text-sm flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'rgb(239,68,68)' }}><ShieldAlert className="w-4 h-4" />{err}</div>}
@@ -186,19 +211,72 @@ export function MarkupPricing({ employee, product, eyebrow, baseLabel, emptyIcon
           <div className="max-h-[520px] overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0" style={{ background: 'var(--bg-surface)' }}><tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {[tab === 'client' ? 'Client' : 'Partner', 'Approved', 'Override', ''].map(h => <th key={h} className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>)}
+                {[tab === 'client' ? 'Client' : 'Partner', 'Approved', 'Override', ...(allowBlocking ? ['Price access'] : []), ''].map(h => <th key={h} className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {list.slice(0, 500).map(r => {
                   const rate = idx.ind[r.id] || { approved: null, pending: null };
+                  const block = blockedBy[r.id];
+                  const blocked = !!block;
+                  // An admin-placed block cannot be lifted by a non-admin — the
+                  // server enforces this too; the disabled button just says so early.
+                  const lockedToMe = blocked && block.adminLock && !isAdmin;
                   return (
                     <tr key={r.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                       <td className="px-4 py-2.5"><p className="font-semibold" style={{ color: 'var(--text-primary)' }}>{r.full_name}</p><p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{r.code}</p></td>
-                      <td className="px-4 py-2.5">{rate.approved !== null ? <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{fmtPct(rate.approved)}</span> : <span style={{ color: 'var(--text-faint)' }}>—</span>}{rate.pending !== null && <StatusBadge status="pending" />}</td>
-                      <td className="px-4 py-2.5" colSpan={2}>
+                      <td className="px-4 py-2.5">
+                        {blocked
+                          ? <span className="text-xs font-bold" style={{ color: 'rgb(239,68,68)' }}>Hidden</span>
+                          : rate.approved !== null
+                            ? <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{fmtPct(rate.approved)}</span>
+                            : <span style={{ color: 'var(--text-faint)' }}>—</span>}
+                        {rate.pending !== null && <StatusBadge status="pending" />}
+                      </td>
+                      <td className="px-4 py-2.5" colSpan={allowBlocking ? 1 : 2}>
                         <ProposeCell current={rate.approved} pending={rate.pending} busy={propose.isPending}
                           onPropose={v => run(() => propose.mutateAsync({ audience: tab, scope: 'individual', client_id: tab === 'client' ? r.id : null, dsa_id: tab === 'partner' ? r.id : null, markup: v }))} />
                       </td>
+                      {allowBlocking && (
+                        <td className="px-4 py-2.5" colSpan={2}>
+                          <div className="flex items-center gap-2">
+                            <button
+                              disabled={setBlock.isPending || lockedToMe}
+                              title={lockedToMe
+                                ? 'An administrator hid prices for this ' + tab + '. Only an administrator can restore access.'
+                                : blocked ? 'Let them see prices again' : 'Hide all share prices from this ' + tab}
+                              onClick={() => {
+                                if (blocked) {
+                                  run(() => setBlock.mutateAsync({
+                                    audience: tab, blocked: false,
+                                    client_id: tab === 'client' ? r.id : null,
+                                    dsa_id: tab === 'partner' ? r.id : null,
+                                  }));
+                                  return;
+                                }
+                                const why = window.prompt(`Hide all share prices from ${r.full_name}?\n\nThey will see an empty list even though a company-wide rate is approved.\n\nReason (optional):`);
+                                if (why === null) return;   // cancelled
+                                run(() => setBlock.mutateAsync({
+                                  audience: tab, blocked: true, reason: why,
+                                  client_id: tab === 'client' ? r.id : null,
+                                  dsa_id: tab === 'partner' ? r.id : null,
+                                }));
+                              }}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-40"
+                              style={blocked
+                                ? { background: 'rgba(239,68,68,0.1)', color: 'rgb(239,68,68)', border: '1px solid rgba(239,68,68,0.3)' }
+                                : { background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+                            >
+                              {lockedToMe ? <Lock className="w-3.5 h-3.5" /> : blocked ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                              {blocked ? 'Hidden' : 'Visible'}
+                            </button>
+                            {blocked && block.reason && (
+                              <span className="text-[11px] truncate max-w-[160px]" style={{ color: 'var(--text-faint)' }} title={block.reason}>
+                                {block.reason}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
