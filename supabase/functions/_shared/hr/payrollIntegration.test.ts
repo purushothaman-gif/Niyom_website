@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculatePayroll, payableRatio } from './payrollEngine.ts';
-import { summariseAttendance, type DailyRow } from './attendanceSummary.ts';
+import { summariseAttendance, applyLopWaiver, type DailyRow } from './attendanceSummary.ts';
 import type { PayrollInput, SalaryComponent, SalaryStructure } from './types.ts';
 
 /*
@@ -218,5 +218,63 @@ describe('rounding is applied as each component settles, not at the end', () => 
     expect(line(r, 'BASIC')!.amount).toBe(Math.round(13829 * 28 / 31));
     expect(line(r, 'HRA')!.amount).toBe(Math.round(6915 * 28 / 31));
     expect(line(r, 'SPECIAL')!.amount).toBe(Math.round(6913 * 28 / 31));
+  });
+});
+
+/*
+ * A waiver is only meaningful if it reaches the money. These assert the whole
+ * chain -- daily rows -> summary -> waiver -> ratio -> net pay -- rather than
+ * trusting that payableRatio reads the field the waiver writes.
+ */
+describe('waiving LOP restores the pay it cost', () => {
+  const GROSS = 30_000;
+  // 31-day May: 27 present, 4 absent -> 4 days LOP.
+  const rows = [...rep(27, 'present', 1), ...rep(4, 'absent', 0)];
+
+  const withWaiver = (days: number) => {
+    const att = applyLopWaiver(summariseAttendance(rows), days);
+    return calculatePayroll({
+      employee: {
+        employee_id: 'e', employee_code: 'X-1', full_name: 'Test', designation: '', department: '',
+        joining_date: null, exit_date: null, pan: null, uan: null,
+        bank_name: 'B', bank_account: '1', bank_ifsc: 'ABCD0123456', account_holder: 'Test',
+      },
+      structure: structureFor(GROSS), components: COMPONENTS, attendance: att, adjustments: [],
+      period: { year: 2026, month: 5, start_date: '2026-05-01', end_date: '2026-05-31' },
+      rules: { lop_divisor_mode: 'calendar_days', round_net_to_rupee: true },
+    });
+  };
+
+  const none = withWaiver(0);
+  const all  = withWaiver(4);
+
+  it('docks four days when nothing is waived', () => {
+    expect(none.lop_days).toBe(4);
+    expect(none.gross_earnings).toBeLessThan(GROSS);
+  });
+
+  it('pays the full month once every LOP day is waived', () => {
+    expect(all.lop_days).toBe(0);
+    expect(all.lop_waived_days).toBe(4);
+    expect(all.gross_earnings).toBe(GROSS);
+    expect(all.lop_amount).toBe(0);
+  });
+
+  it('waiving some of it lands between the two', () => {
+    const half = withWaiver(2);
+    expect(half.lop_days).toBe(2);
+    expect(half.gross_earnings).toBeGreaterThan(none.gross_earnings);
+    expect(half.gross_earnings).toBeLessThan(all.gross_earnings);
+  });
+
+  it('says on the run that money was moved by hand', () => {
+    expect(all.exceptions.some(e => e.code === 'lop_waived')).toBe(true);
+    expect(none.exceptions.some(e => e.code === 'lop_waived')).toBe(false);
+  });
+
+  it('removing the waiver puts the deduction back exactly', () => {
+    // What "recalculate after removing a waiver" has to produce: the original
+    // figures to the rupee, not merely something close.
+    expect(withWaiver(0)).toEqual(none);
   });
 });

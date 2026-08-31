@@ -3508,6 +3508,61 @@ export type Database = {
           },
         ]
       }
+      hr_payroll_lop_waivers: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          days: number
+          employee_id: string
+          id: string
+          reason: string
+          run_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          days: number
+          employee_id: string
+          id?: string
+          reason: string
+          run_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          days?: number
+          employee_id?: string
+          id?: string
+          reason?: string
+          run_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hr_payroll_lop_waivers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hr_payroll_lop_waivers_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hr_payroll_lop_waivers_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "hr_payroll_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hr_payroll_payment_files: {
         Row: {
           file_name: string
@@ -9025,6 +9080,7 @@ export type Database = {
         }
         Returns: string
       }
+      bm_public_analytics: { Args: { a: Json }; Returns: Json }
       bm_reject_markup: {
         Args: { p_id: string; p_reason?: string }
         Returns: undefined
@@ -9224,6 +9280,10 @@ export type Database = {
         Args: { p_note?: string; p_run_id: string }
         Returns: Json
       }
+      hr_payroll_clear_lop_waiver: {
+        Args: { p_employee_id?: string; p_run_id: string }
+        Returns: number
+      }
       hr_payroll_lock: { Args: { p_run_id: string }; Returns: Json }
       hr_payroll_mark_paid: {
         Args: { p_payment_date?: string; p_run_id: string }
@@ -9236,6 +9296,55 @@ export type Database = {
       hr_payroll_reopen: {
         Args: { p_reason: string; p_run_id: string }
         Returns: Json
+      }
+      hr_payroll_waive_lop: {
+        Args: {
+          p_days: number
+          p_employee_id: string
+          p_reason: string
+          p_run_id: string
+        }
+        Returns: string
+      }
+      hr_payroll_waiver_guard: {
+        Args: { p_run_id: string }
+        Returns: {
+          approved_at: string | null
+          approved_by: string | null
+          calculated_at: string | null
+          calendar_days: number
+          created_at: string
+          employee_count: number
+          id: string
+          locked_at: string | null
+          locked_by: string | null
+          lop_divisor_mode: string
+          notes: string
+          paid_at: string | null
+          paid_by: string | null
+          pay_schedule_id: string | null
+          payment_date: string | null
+          period_end: string
+          period_month: number
+          period_start: string
+          period_year: number
+          prepared_at: string | null
+          prepared_by: string | null
+          reopen_count: number
+          status: string
+          total_deductions: number
+          total_employer: number
+          total_gross: number
+          total_lop_days: number
+          total_net: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "hr_payroll_runs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       hr_payroll_write_records: {
         Args: { p_payload: Json; p_run_id: string }

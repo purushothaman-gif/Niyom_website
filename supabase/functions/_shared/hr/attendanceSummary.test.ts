@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { summariseAttendance, formatDuration, type DailyRow } from './attendanceSummary.ts';
+import { summariseAttendance, applyLopWaiver, formatDuration, type DailyRow } from './attendanceSummary.ts';
 
 const day = (over: Partial<DailyRow> & Pick<DailyRow, 'status' | 'payable_fraction'>): DailyRow => ({
   work_date: '2026-08-01', worked_minutes: 0, is_late: false, is_early_out: false,
@@ -203,5 +203,71 @@ describe('a month still in progress', () => {
     const t = summariseAttendance(month(repeat(20, present), repeat(2, absent)));
     expect(t.absent_days).toBe(2);
     expect(t.lop_days).toBe(2);
+  });
+});
+
+describe('waiving loss of pay', () => {
+  // 31 days: 26 present, 4 weekly offs, 1 absent -> 1 day LOP.
+  const base = summariseAttendance(month(repeat(26, present), repeat(4, weekOff), repeat(1, absent)));
+
+  it('starts with the LOP it earned', () => {
+    expect(base.lop_days).toBe(1);
+    expect(base.payable_days).toBe(30);
+  });
+
+  it('moves the forgiven days from LOP into payable', () => {
+    const w = applyLopWaiver(base, 1);
+    expect(w.lop_days).toBe(0);
+    expect(w.payable_days).toBe(31);
+    expect(w.lop_waived_days).toBe(1);
+  });
+
+  it('handles half days', () => {
+    const half = summariseAttendance(month(repeat(26, present), repeat(4, weekOff), repeat(1, halfDay)));
+    const w = applyLopWaiver(half, 0.5);
+    expect(w.lop_days).toBe(0);
+    expect(w.lop_waived_days).toBe(0.5);
+  });
+
+  /*
+   * The cap matters most when attendance moves AFTER the waiver is granted:
+   * an admin waives 5 days, someone then approves a pending punch, and only
+   * 1 day of LOP is left. Without the cap the extra 4 days would inflate
+   * payable_days past the month and pay for days that never happened.
+   */
+  it('never forgives more LOP than was actually incurred', () => {
+    const w = applyLopWaiver(base, 5);
+    expect(w.lop_days).toBe(0);
+    expect(w.payable_days).toBe(31);      // not 35
+    expect(w.lop_waived_days).toBe(1);    // not 5
+  });
+
+  it('cannot pay a mid-month joiner for days before they joined', () => {
+    // Joined on the 20th: 19 not_joined days, then 11 present, and one absence.
+    const joiner = summariseAttendance(month(
+      repeat(19, () => day({ status: 'not_joined', payable_fraction: 0 })),
+      repeat(11, present), repeat(1, absent)));
+    const w = applyLopWaiver(joiner, 30);
+    // Only the single real absence is forgiven; the pre-joining days are not
+    // LOP and stay unpayable, so the pro-rata survives.
+    expect(w.lop_waived_days).toBe(1);
+    expect(w.payable_days).toBe(12);
+  });
+
+  it('is a no-op for zero, negative and nonsense input', () => {
+    for (const n of [0, -3, NaN, Infinity]) {
+      expect(applyLopWaiver(base, n)).toBe(base);
+    }
+  });
+
+  it('does not mutate the summary it was given', () => {
+    const before = { ...base };
+    applyLopWaiver(base, 1);
+    expect(base).toEqual(before);
+  });
+
+  it('a waiver on a month with no LOP changes nothing', () => {
+    const clean = summariseAttendance(month(repeat(27, present), repeat(4, weekOff)));
+    expect(applyLopWaiver(clean, 3)).toBe(clean);
   });
 });

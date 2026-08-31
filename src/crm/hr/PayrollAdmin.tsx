@@ -29,12 +29,12 @@ import {
 } from './hrUi';
 import { useToast } from './useToast';
 import type {
-  BankTemplateColumn, BankTemplateRow, HRAccess, HREmployee, PaySchedule,
+  BankTemplateColumn, BankTemplateRow, HRAccess, HREmployee, LopWaiver, PaySchedule,
   PayrollAdjustmentRow, PayrollEvent, PayrollLineRow, PayrollRecord, PayrollRun,
   SalaryComponentRow, SalaryStructureRow, StructureLineRow,
 } from './hrTypes';
 import { calculatePayroll, summariseRun } from '../../lib/hr/payrollEngine';
-import { summariseAttendance, type DailyRow } from '../../lib/hr/attendanceSummary';
+import { summariseAttendance, applyLopWaiver, type DailyRow } from '../../lib/hr/attendanceSummary';
 import { buildBankFile, type BankTemplate } from '../../lib/hr/bankFile';
 import type { PayrollResult } from '../../lib/hr/types';
 import { toEngineComponent, toEngineStructure } from './engineMappers';
@@ -239,6 +239,7 @@ interface Loaded {
   structures: SalaryStructureRow[];
   structureLines: StructureLineRow[];
   schedule: PaySchedule | null;
+  waivers: LopWaiver[];
 }
 
 function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
@@ -256,6 +257,11 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
   const [busy, setBusy] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
   const [adjOpen, setAdjOpen] = useState(false);
+  // Waiving LOP: the employee being edited, and whether "clear all" is pending.
+  const [waiveFor, setWaiveFor] = useState<{ id: string; name: string; lop: number } | null>(null);
+  const [waiveDays, setWaiveDays] = useState('');
+  const [waiveReason, setWaiveReason] = useState('');
+  const [clearAll, setClearAll] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -263,15 +269,16 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
       const run = await api.getRun(runId);
       if (!run) { onToast('That payroll run no longer exists.', false); onBack(); return; }
 
-      const [records, lines, events, adjustments, staff, components, structures, schedules] = await Promise.all([
-        api.listRunRecords(runId), api.listRunLines(runId), api.listRunEvents(runId),
-        api.listRunAdjustments(runId), api.listHREmployees(true, true), api.listComponents(true),
-        api.listStructures(), api.listPaySchedules(),
-      ]);
+      const [records, lines, events, adjustments, staff, components, structures, schedules, waivers] =
+        await Promise.all([
+          api.listRunRecords(runId), api.listRunLines(runId), api.listRunEvents(runId),
+          api.listRunAdjustments(runId), api.listHREmployees(true, true), api.listComponents(true),
+          api.listStructures(), api.listPaySchedules(), api.listLopWaivers(runId),
+        ]);
       const structureLines = await api.listStructureLines(structures.map(s => s.id));
 
       setData({
-        run, records, lines, events, adjustments, staff, components, structures, structureLines,
+        run, records, lines, events, adjustments, staff, components, structures, structureLines, waivers,
         schedule: schedules.find(s => s.id === run.pay_schedule_id) ?? schedules.find(s => s.is_default) ?? null,
       });
       setResults(null);
@@ -284,13 +291,68 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
 
   useEffect(() => { load(); }, [load]);
 
+  /* ---- Waive loss of pay ------------------------------------------------- */
+
+  /*
+   * A waiver only changes stored figures once payroll is recalculated -- it is
+   * an input, not an edit to the result. Rather than leave the run showing
+   * numbers that no longer follow from its inputs, saving a waiver recalculates
+   * immediately. Same on removal, which is what makes "remove and recalculate"
+   * a single action instead of two the user has to remember to pair.
+   */
+  const saveWaiver = async () => {
+    if (!waiveFor) return;
+    const days = Number(waiveDays);
+    if (!Number.isFinite(days) || days <= 0) { onToast('Enter how many days to waive.', false); return; }
+    if (days > waiveFor.lop) {
+      onToast(`${waiveFor.name} has ${waiveFor.lop} day(s) of loss of pay. You cannot waive more than that.`, false);
+      return;
+    }
+    if (waiveReason.trim().length < 3) { onToast('Give a reason for the waiver.', false); return; }
+    setBusy(true);
+    try {
+      await api.waiveLop(runId, waiveFor.id, days, waiveReason.trim());
+      setWaiveFor(null); setWaiveDays(''); setWaiveReason('');
+      await load();
+      onToast('Loss of pay waived. Recalculating…');
+      await compute();
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeWaiver = async (employeeId?: string) => {
+    setBusy(true);
+    try {
+      const n = await api.clearLopWaiver(runId, employeeId);
+      setClearAll(false);
+      await load();
+      onToast(n === 0 ? 'There was nothing to remove.'
+        : `${n} waiver${n === 1 ? '' : 's'} removed. Recalculating…`);
+      if (n > 0) await compute();
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /* ---- Compute ---------------------------------------------------------- */
 
   const compute = async () => {
     if (!data) return;
     setComputing(true);
     try {
-      const { run, staff, components, structures, structureLines, adjustments, schedule } = data;
+      const { run, staff, components, structures, structureLines, adjustments, schedule, waivers } = data;
+      /*
+       * The waiver is applied to the attendance summary before anything reads
+       * it, so the engine, the exceptions and the written record all see the
+       * same month. applyLopWaiver caps at the LOP actually incurred, so a
+       * waiver granted before attendance changed cannot overpay.
+       */
+      const waivedFor = (id: string) => Number(waivers.find(w => w.employee_id === id)?.days ?? 0);
       const engineComponents = components.map(c => toEngineComponent(c));
       const daily = await api.listDailyForRange(run.period_start, run.period_end);
 
@@ -302,7 +364,8 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
         if (s.joining_date && s.joining_date > run.period_end) continue;
 
         const mine = daily.filter(d => d.employee_id === s.id);
-        const attendance = summariseAttendance(mine as unknown as DailyRow[]);
+        const attendance = applyLopWaiver(
+          summariseAttendance(mine as unknown as DailyRow[]), waivedFor(s.id));
 
         // The structure IN FORCE for this period -- not the newest one. This is
         // the whole reason a September raise leaves August alone.
@@ -352,7 +415,8 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
         records: computed.map(r => {
           const s = staff.find(x => x.id === r.employee_id)!;
           const mine = daily.filter(d => d.employee_id === s.id);
-          const att = summariseAttendance(mine as unknown as DailyRow[]);
+          const att = applyLopWaiver(
+            summariseAttendance(mine as unknown as DailyRow[]), waivedFor(s.id));
           return {
             employee_id: r.employee_id,
             structure_id: r.structure_id,
@@ -569,11 +633,34 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
               </PrimaryButton> : undefined}
             />
           ) : (
+            <>
+            {data.waivers.length > 0 && (
+              <div className="mb-4 px-4 py-3 rounded-xl flex items-start justify-between gap-3 flex-wrap"
+                style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)' }}>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold" style={{ color: 'rgb(59,130,246)' }}>
+                    {data.waivers.length} employee{data.waivers.length === 1 ? ' has' : 's have'} loss of pay waived
+                    {' '}({data.waivers.reduce((t, w) => t + Number(w.days), 0)} day
+                    {data.waivers.reduce((t, w) => t + Number(w.days), 0) === 1 ? '' : 's'} in total)
+                  </p>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    These are decisions someone made by hand, not something the attendance produced. Every one is in
+                    the audit trail below with its reason.
+                  </p>
+                </div>
+                {editable && canEdit && (
+                  <GhostButton onClick={() => setClearAll(true)} disabled={busy}>
+                    Remove all &amp; recalculate
+                  </GhostButton>
+                )}
+              </div>
+            )}
             <TableWrap>
               <thead>
                 <tr>
                   <th className="text-left">Employee</th><th className="text-right">Payable</th>
-                  <th className="text-right">LOP</th><th className="text-right">Gross</th>
+                  <th className="text-right">LOP</th><th className="text-right">Waived</th>
+                  <th className="text-right">Gross</th>
                   <th className="text-right">Deductions</th><th className="text-right">Net Pay</th>
                   <th className="text-left">Flags</th><th className="text-right"></th>
                 </tr>
@@ -582,6 +669,11 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
                 {records.map(r => {
                   const excs = (r.exceptions ?? []) as { severity: string }[];
                   const blockers = excs.filter(e => e.severity === 'blocker').length;
+                  const waiver = data.waivers.find(w => w.employee_id === r.employee_id);
+                  const waived = Number(waiver?.days ?? 0);
+                  // What could still be waived. lop_days on the record is already
+                  // net of any waiver, so the two add back to the original LOP.
+                  const remaining = Number(r.lop_days);
                   return (
                     <tr key={r.id} style={{ opacity: r.status === 'included' ? 1 : 0.6 }}>
                       <td>
@@ -592,6 +684,11 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
                       <td className="text-right tabular-nums"
                         style={{ color: Number(r.lop_days) > 0 ? 'rgb(239,68,68)' : 'inherit' }}>
                         {Number(r.lop_days)}
+                      </td>
+                      <td className="text-right tabular-nums">
+                        {waived > 0 ? (
+                          <span title={waiver?.reason} style={{ color: 'rgb(59,130,246)' }}>{waived}</span>
+                        ) : <span style={{ color: 'var(--text-faint)' }}>—</span>}
                       </td>
                       <td className="text-right tabular-nums">{inr(Number(r.gross_earnings), true)}</td>
                       <td className="text-right tabular-nums">{inr(Number(r.total_deductions), true)}</td>
@@ -604,7 +701,26 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
                           <AlertTriangle className="w-3.5 h-3.5 inline" style={{ color: 'rgb(239,68,68)' }} />
                         )}
                       </td>
-                      <td className="text-right">
+                      <td className="text-right whitespace-nowrap">
+                        {editable && canEdit && (waived > 0 || remaining > 0) && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setWaiveFor({ id: r.employee_id, name: r.full_name, lop: remaining + waived });
+                                setWaiveDays(waived > 0 ? String(waived) : String(remaining));
+                                setWaiveReason(waiver?.reason ?? '');
+                              }}
+                              className="text-xs font-semibold mr-3" style={{ color: 'rgb(59,130,246)' }}>
+                              {waived > 0 ? 'Edit waiver' : 'Waive LOP'}
+                            </button>
+                            {waived > 0 && (
+                              <button onClick={() => removeWaiver(r.employee_id)} disabled={busy}
+                                className="text-xs font-semibold mr-3" style={{ color: 'rgb(239,68,68)' }}>
+                                Remove
+                              </button>
+                            )}
+                          </>
+                        )}
                         <button onClick={() => openDetail(r)} className="text-xs font-semibold"
                           style={{ color: 'var(--accent-soft)' }}>Detail</button>
                       </td>
@@ -613,9 +729,60 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
                 })}
               </tbody>
             </TableWrap>
+            </>
           )}
         </div>
       </SectionCard>
+
+      {waiveFor && (
+        <Modal open onClose={() => setWaiveFor(null)} title={`Waive loss of pay — ${waiveFor.name}`}>
+          <div className="p-5 space-y-4">
+            <Notice tone="info">
+              {waiveFor.name} has <strong>{waiveFor.lop} day(s)</strong> of loss of pay this period. Waiving days pays
+              them as though those days were worked. It does not change the attendance record — the absence stays on
+              the register, it simply stops costing money.
+            </Notice>
+
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Days to waive" required hint={`Up to ${waiveFor.lop}`}>
+                <Input type="number" min={0.5} max={waiveFor.lop} step={0.5} value={waiveDays}
+                  onChange={e => setWaiveDays(e.target.value)} />
+              </Field>
+              <div className="col-span-2">
+                <Field label="Reason" required hint="Shown in the audit trail. Say why the absence is being forgiven.">
+                  <Input value={waiveReason} onChange={e => setWaiveReason(e.target.value)}
+                    placeholder="Approved emergency leave — no balance left" />
+                </Field>
+              </div>
+            </div>
+
+            <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
+              Payroll is recalculated as soon as this is saved, so the figures in the table always follow from the
+              inputs above them.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setWaiveFor(null)} className="px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                Cancel
+              </button>
+              <PrimaryButton onClick={saveWaiver} disabled={busy}>
+                {busy ? 'Saving…' : 'Waive & Recalculate'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      <ConfirmDialog
+        open={clearAll}
+        title="Remove every loss-of-pay waiver on this run?"
+        message="Each employee goes back to the loss of pay their attendance actually produced, and payroll is recalculated. The waivers and this removal both stay in the audit trail."
+        confirmLabel="Remove all & recalculate"
+        busy={busy}
+        onCancel={() => setClearAll(false)}
+        onConfirm={() => removeWaiver()}
+      />
 
       {data.events.length > 0 && (
         <SectionCard title="Audit trail" subtitle="Every state change, with who did it and why.">

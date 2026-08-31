@@ -194,6 +194,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
       lines: [], gross_earnings: 0, total_deductions: 0, employer_contrib: 0,
       lop_amount: 0, net_pay: 0, ctc_annual: structure?.ctc_annual ?? 0,
       lop_days: attendance.lop_days, payable_days: attendance.payable_days,
+      lop_waived_days: attendance.lop_waived_days ?? 0,
       lop_divisor: divisor, exceptions, payable: false,
     };
   }
@@ -406,6 +407,15 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
                `They are not counted, so this pay may be understated.`,
     });
   }
+  if ((attendance.lop_waived_days ?? 0) > 0) {
+    // Deliberately an exception rather than a silent adjustment. Money moved
+    // because a person decided it should, and the run should say so on its
+    // face -- otherwise the only trace is in the audit log.
+    exceptions.push({
+      code: 'lop_waived', severity: 'info',
+      message: `${attendance.lop_waived_days} day(s) of loss of pay waived by an administrator.`,
+    });
+  }
   if (attendance.lop_days > 0) {
     exceptions.push({
       code: attendance.payable_days <= 0 ? 'full_month_lop' : 'has_lop',
@@ -454,6 +464,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     ctc_annual: structure.ctc_annual,
     lop_days: attendance.lop_days,
     payable_days: attendance.payable_days,
+    lop_waived_days: attendance.lop_waived_days ?? 0,
     lop_divisor: divisor,
     exceptions,
     payable: !exceptions.some(e => e.severity === 'blocker'),

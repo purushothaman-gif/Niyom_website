@@ -13,7 +13,7 @@
 
 import { supabase } from '../../lib/supabase';
 import type {
-  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch, HRNavContext, OfficeLocation,
+  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch, HRNavContext, OfficeLocation, LopWaiver,
   AttendanceSettings, AuditLog, BankAccount, BankTemplateColumn, BankTemplateRow,
   ComponentSlabRow, EmployeeProfile, HRAccess, HREmployee, HRModule, HRSettings,
   Holiday, LeaveBalance, LeaveRequest, LeaveType, PaySchedule, PayrollAdjustmentRow,
@@ -163,6 +163,22 @@ export const deleteNetwork = async (id: string) => {
   const { error } = await supabase.from('hr_allowed_networks').delete().eq('id', id);
   if (error) throw error;
 };
+
+// ---- LOP waivers (payroll-permission only; an INPUT to the calculation) ----
+
+export const listLopWaivers = async (run_id: string): Promise<LopWaiver[]> =>
+  (await supabase.from('hr_payroll_lop_waivers').select('*').eq('run_id', run_id)).data ?? [];
+
+export const waiveLop = async (run_id: string, employee_id: string, days: number, reason: string) =>
+  unwrap(await supabase.rpc('hr_payroll_waive_lop', {
+    p_run_id: run_id, p_employee_id: employee_id, p_days: days, p_reason: reason,
+  }));
+
+/** Omit employee_id to clear every waiver on the run. */
+export const clearLopWaiver = async (run_id: string, employee_id?: string) =>
+  unwrap(await supabase.rpc('hr_payroll_clear_lop_waiver', {
+    p_run_id: run_id, p_employee_id: employee_id ?? undefined,
+  }));
 
 // ===========================================================================
 // Attendance

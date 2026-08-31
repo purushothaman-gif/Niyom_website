@@ -114,3 +114,35 @@ export function formatDuration(minutes: number): string {
   const m = Math.round(minutes % 60);
   return `${h}h ${m}m`;
 }
+
+/**
+ * Forgive up to `days` of loss of pay, returning a NEW summary.
+ *
+ * A waiver is an administrator deciding that absence which did happen should
+ * not cost the employee money -- an approved emergency, a system outage, a
+ * goodwill call. It moves days out of `lop_days` and into `payable_days`, which
+ * is what payableRatio actually reads.
+ *
+ * CAPPED AT THE LOP ACTUALLY INCURRED, and capped here rather than only at
+ * entry, because attendance can change after a waiver is granted: an admin
+ * waives 3 days, someone then approves a pending punch, and the LOP that
+ * justified the waiver is now 1 day. Without this cap the leftover 2 days would
+ * inflate payable_days past the days actually worked and pay the employee for
+ * a month that did not happen.
+ *
+ * lop_days deliberately excludes days before joining and after exit, so a
+ * waiver can never reach them -- "waive everything" for a mid-month joiner
+ * forgives their real absence and still prorates their start date.
+ */
+export function applyLopWaiver(att: AttendanceSummary, days: number): AttendanceSummary {
+  const requested = Number.isFinite(days) ? Math.max(0, days) : 0;
+  const waived = round2(Math.min(requested, att.lop_days));
+  if (waived <= 0) return att;
+
+  return {
+    ...att,
+    lop_days: round2(att.lop_days - waived),
+    payable_days: round2(att.payable_days + waived),
+    lop_waived_days: round2((att.lop_waived_days ?? 0) + waived),
+  };
+}

@@ -85,6 +85,13 @@ export interface AttendanceSummary {
   overtime_minutes: number;
   /** Off-network punches in the period that nobody has approved yet. */
   pending_punch_days: number;
+  /**
+   * Loss-of-pay days an administrator forgave for this period. Already moved
+   * out of lop_days and into payable_days -- carried separately so the payslip
+   * and the register can say the waiver happened rather than quietly showing
+   * an absence that costs nothing.
+   */
+  lop_waived_days?: number;
 }
 
 export interface PayrollAdjustment {
@@ -156,6 +163,7 @@ export type PayrollExceptionCode =
   | 'unapproved_attendance'
   | 'full_month_lop'
   | 'has_lop'
+  | 'lop_waived'
   | 'negative_net'
   | 'gross_mismatch'
   | 'joined_mid_month'
@@ -180,6 +188,8 @@ export interface PayrollResult {
   ctc_annual: number;
   lop_days: number;
   payable_days: number;
+  /** LOP days an administrator forgave, already reflected in the two above. */
+  lop_waived_days: number;
   lop_divisor: number;
   exceptions: PayrollException[];
   /** true when nothing blocks this employee from being paid. */

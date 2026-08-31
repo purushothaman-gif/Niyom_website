@@ -36,6 +36,7 @@ export type PayrollRecord       = T['hr_payroll_employee_records']['Row'];
 export type PayrollLineRow      = T['hr_payroll_lines']['Row'];
 export type PayrollAdjustmentRow= T['hr_payroll_adjustments']['Row'];
 export type PayrollEvent        = T['hr_payroll_events']['Row'];
+export type LopWaiver           = T['hr_payroll_lop_waivers']['Row'];
 export type BankTemplateRow     = T['hr_bank_payment_templates']['Row'];
 export type BankTemplateColumn  = T['hr_bank_payment_template_columns']['Row'];
 export type PaymentFile         = T['hr_payroll_payment_files']['Row'];
