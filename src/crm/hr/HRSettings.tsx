@@ -37,6 +37,7 @@ const SOURCES: { value: string; label: string }[] = [
   { value: 'remarks',         label: 'Remarks' },
   { value: 'debit_account',   label: 'Company debit account' },
   { value: 'debit_ifsc',      label: 'Company debit IFSC' },
+  { value: 'transaction_type', label: 'Transaction type (IFT / NEFT, per payee)' },
   { value: 'sequence',        label: 'Row number' },
   { value: 'constant',        label: 'Fixed text' },
 ];
@@ -380,12 +381,18 @@ function BankTemplates({ onToast, canEdit }: { onToast: (m: string, ok?: boolean
         sheet_name: selected.sheet_name, include_header: selected.include_header,
         date_format: selected.date_format, amount_format: selected.amount_format,
         debit_account: selected.debit_account, debit_ifsc: selected.debit_ifsc,
+        include_instructions: selected.include_instructions ?? false,
         bank_name: selected.bank_name, notes: selected.notes,
       });
       await api.replaceTemplateColumns(selected.id, columns.map(c => ({
         header_label: c.header_label, source: c.source, constant_value: c.constant_value ?? '',
         required: c.required ?? false, transform: c.transform ?? 'none',
         max_length: c.max_length ?? null,
+        // Carried through even though nothing here edits it. replaceTemplateColumns
+        // deletes and reinserts, so a field left out of this map is a field
+        // silently destroyed by any unrelated edit -- and the bank's
+        // instruction row is not something you would notice losing.
+        instruction_text: c.instruction_text ?? '',
       })));
       onToast('Bank template saved.');
     } catch (err) {
@@ -470,20 +477,40 @@ function BankTemplates({ onToast, canEdit }: { onToast: (m: string, ok?: boolean
                   <option value="integer">Whole rupees (48000)</option>
                 </Select>
               </Field>
-              <Field label="Company debit account" hint="Only used if a column sources it.">
+              <Field label="Company debit account" required
+                hint="The account salaries are paid FROM. Mandatory on every row of an IDFC bulk file.">
                 <Input value={selected.debit_account} disabled={!canEdit}
+                  placeholder="Your IDFC current account number"
                   onChange={e => setSelected({ ...selected, debit_account: e.target.value })} />
               </Field>
-              <Field label="Company debit IFSC">
+              <Field label="Company debit IFSC"
+                hint="Decides which payees are within-bank (IFT) and which leave it (NEFT).">
                 <Input value={selected.debit_ifsc} disabled={!canEdit}
                   onChange={e => setSelected({ ...selected, debit_ifsc: e.target.value.toUpperCase() })} />
               </Field>
             </div>
 
+            {!selected.debit_account?.trim() && (
+              <Notice tone="bad" title="No company debit account set">
+                Every row of a bulk-payment file names the account the money leaves. Until this is filled in, the
+                salary file cannot be generated — it would be refused at upload. Nobody can supply this but you.
+              </Notice>
+            )}
+
             <label className="flex items-center gap-2.5 cursor-pointer text-xs" style={{ color: 'var(--text-secondary)' }}>
               <input type="checkbox" checked={selected.include_header} disabled={!canEdit}
                 onChange={e => setSelected({ ...selected, include_header: e.target.checked })} />
               Include a header row (some banks reject one)
+            </label>
+
+            <label className="flex items-start gap-2.5 cursor-pointer text-xs" style={{ color: 'var(--text-secondary)' }}>
+              <input type="checkbox" checked={selected.include_instructions ?? false} disabled={!canEdit} className="mt-0.5"
+                onChange={e => setSelected({ ...selected, include_instructions: e.target.checked })} />
+              <span>
+                <strong>Include the bank's instruction row.</strong> IDFC's BLKPAY sheet carries its guidance in
+                row 2 and its parser skips it, so the file is generated with that row and the payees from row 3.
+                Leave this off for a bank that expects data immediately under the headers.
+              </span>
             </label>
 
             <div>

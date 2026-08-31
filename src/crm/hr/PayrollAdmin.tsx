@@ -1105,7 +1105,9 @@ function BankFileDialog({ runId, run, records, employeeId, onClose, onToast }: {
     if (!template || columns.length === 0) return null;
     const t: BankTemplate = {
       name: template.name, sheet_name: template.sheet_name,
-      include_header: template.include_header, date_format: template.date_format,
+      include_header: template.include_header,
+      include_instructions: template.include_instructions ?? false,
+      date_format: template.date_format,
       amount_format: template.amount_format as '2dp' | 'integer',
       debit_account: template.debit_account, debit_ifsc: template.debit_ifsc,
       columns: columns.map(c => ({
@@ -1113,7 +1115,7 @@ function BankFileDialog({ runId, run, records, employeeId, onClose, onToast }: {
         source: c.source as BankTemplate['columns'][number]['source'],
         constant_value: c.constant_value, required: c.required,
         transform: c.transform as BankTemplate['columns'][number]['transform'],
-        max_length: c.max_length,
+        max_length: c.max_length, instruction_text: c.instruction_text ?? '',
       })),
     };
     return buildBankFile(t, payees, paymentDate);
@@ -1123,9 +1125,21 @@ function BankFileDialog({ runId, run, records, employeeId, onClose, onToast }: {
     if (!built || !template) return;
     setBusy(true);
     try {
-      const fileName = `niyom_salary_transfer_${periodStamp(run.period_year, run.period_month)}.xlsx`;
+      /*
+       * The bank issues this template as BLKPAY_YYYYMMDD.xlsx and its upload
+       * screen is matched to that name, so the generated file uses it rather
+       * than a Niyom-flavoured one. Dated by the PAYMENT date, which is the
+       * date inside the file, not by the payroll period.
+       */
+      const stamp = paymentDate.slice(0, 10).replace(/-/g, '');
+      const fileName = template.include_instructions
+        ? `BLKPAY_${stamp}.xlsx`
+        : `niyom_salary_transfer_${periodStamp(run.period_year, run.period_month)}.xlsx`;
       await exportWorkbook(fileName, [{
         name: built.sheet_name, rows: built.grid, noHeader: !template.include_header,
+        // The bank's own column widths are irrelevant to its parser, but a
+        // human checks this file before uploading it.
+        widths: undefined,
       }]);
       await api.recordPaymentFile({
         run_id: runId, template_id: template.id, template_name: template.name,
