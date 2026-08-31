@@ -14,6 +14,8 @@
  */
 import { clientSupabase as supabase } from '../../lib/supabase';
 import { getEnv } from '../../platform/env';
+import { isDemoClientSession } from '../demo/demoClient';
+import { demoClientShares, demoShareOrders } from '../demo/demoClientMarket';
 
 /** One unlisted share as the client may see it. */
 export interface ClientShare {
@@ -57,6 +59,7 @@ export interface PlaceShareOrderInput {
 export const ShareOrderService = {
   /** The shares visible to this client (approved rate only; empty otherwise). */
   async getShares(): Promise<ClientShare[]> {
+    if (isDemoClientSession()) return demoClientShares;
     const { data, error } = await supabase.rpc('nw_client_unlisted_shares');
     if (error) throw new Error(error.message);
     return (data as unknown as ClientShare[]) ?? [];
@@ -64,6 +67,7 @@ export const ShareOrderService = {
 
   /** A single share for the detail page. null if it isn't available to this client. */
   async getShare(id: string): Promise<ClientShare | null> {
+    if (isDemoClientSession()) return demoClientShares.find((s) => s.id === id) ?? null;
     const { data, error } = await supabase.rpc('nw_client_unlisted_share', {
       p_id: id as unknown as string,
     });
@@ -74,6 +78,7 @@ export const ShareOrderService = {
 
   /** This client's own share orders, newest first. */
   async getMyOrders(clientId: string): Promise<ShareOrder[]> {
+    if (isDemoClientSession()) return demoShareOrders();
     const { data, error } = await supabase
       .from('nw_share_orders')
       .select('id, ref, share_id, isin, company_name, qty, price_per_share, amount, status, notes, created_at')
@@ -89,6 +94,7 @@ export const ShareOrderService = {
    * created order with the authoritative server-side price/amount.
    */
   async placeOrder(input: PlaceShareOrderInput): Promise<ShareOrder> {
+    if (isDemoClientSession()) throw new Error('Not available in the sample portal.');
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     const anon = getEnv().supabaseAnonKey;

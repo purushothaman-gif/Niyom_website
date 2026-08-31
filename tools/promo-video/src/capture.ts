@@ -10,11 +10,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
-import { ASPECTS, BRAND, DEMO_PAN, DEMO_PASSWORD, OUT_DIR, type AspectSpec } from './brand.js';
-import { scenesFor, type Scene } from './narration.js';
+import { ASPECTS, BRAND, OUT_DIR, type AspectSpec } from './brand.js';
+import { scenesFor, type CutKey, type Film, type Scene } from './film.js';
+import { getFilm } from './films/index.js';
 import { loadVoice, sceneSeconds } from './voice.js';
 import { CURSOR_INIT, Pointer } from './cursor.js';
-import { ACTS } from './acts.js';
 import { Recorder } from './recorder.js';
 import { encodeScene, ffprobeDuration, sceneMp4 } from './ffmpeg.js';
 import { startMotionServer, type MotionServer } from './motion.js';
@@ -44,7 +44,7 @@ async function newContext(browser: Browser, spec: AspectSpec): Promise<BrowserCo
     // Kill the caret blink: at 30 fps it strobes.
     const s = document.createElement('style');
     s.textContent = '*, *::before, *::after { caret-color: transparent !important; }';
-    (document.head ?? document.documentElement).appendChild(s);
+    (document.head ?? document.documentElement)?.appendChild(s);
   });
   await ctx.addInitScript(CURSOR_INIT(BRAND.accent, BRAND.accentSoft));
   return ctx;
@@ -54,21 +54,33 @@ async function newContext(browser: Browser, spec: AspectSpec): Promise<BrowserCo
  * Idempotent: the demo session lives in the context, so after the opening title
  * card /partner-login already renders the portal rather than the form.
  */
-async function signIn(page: Page): Promise<void> {
-  await page.goto(`${BASE}/partner-login`, { waitUntil: 'networkidle' });
-  if (await page.getByRole('button', { name: 'Sign Out' }).count()) {
-    await page.waitForTimeout(500);
+async function signIn(page: Page, film: Film): Promise<void> {
+  await page.goto(`${BASE}${film.loginPath}`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(600);
+  // Check with the film's own signed-in marker, not a Sign Out button: on the
+  // phone layout Sign Out lives inside a sheet that has not been opened, so a
+  // session already in place reads as "signed out" and the sign-in then hunts
+  // for a PAN field on a page that is showing the portal.
+  if (await page.locator(film.signedInMarker.replace(/^text=/, 'text=')).count()) {
+    await page.waitForTimeout(400);
     return;
   }
-  await page.getByPlaceholder('ABCDE1234F').fill(DEMO_PAN);
-  await page.getByPlaceholder('Your password').fill(DEMO_PASSWORD);
-  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
-  await page.waitForSelector('text=Welcome,', { timeout: 20000 });
+  try {
+    await film.signIn(page);
+    await page.waitForSelector(film.signedInMarker, { timeout: 20000 });
+  } catch (err) {
+    // A sign-in that fails mid-shoot is otherwise a bare selector timeout with
+    // no clue what was actually on screen.
+    const shot = path.join(OUT_DIR, `_signin-failure-${film.key}.png`);
+    await page.screenshot({ path: shot, fullPage: false }).catch(() => {});
+    console.error(`  sign-in failed at ${page.url()} — wrote ${shot}`);
+    throw err;
+  }
   await page.waitForTimeout(1200);
 }
 
 async function shootMotion(
-  page: Page, scene: Scene, spec: AspectSpec, motion: MotionServer,
+  page: Page, film: Film, scene: Scene, spec: AspectSpec, motion: MotionServer,
   recDir: string, outFile: string, hold: number,
 ): Promise<void> {
   // Lay the card out in CSS pixels and let the context's device scale factor do
@@ -77,7 +89,7 @@ async function shootMotion(
   const cssW = Math.round(spec.width / spec.uiScale);
   const cssH = Math.round(spec.height / spec.uiScale);
   await page.setViewportSize({ width: cssW, height: cssH });
-  await page.goto(motion.cardUrl(scene.id, cssW, cssH), { waitUntil: 'load' });
+  await page.goto(motion.cardUrl(film.key, scene.id, cssW, cssH), { waitUntil: 'load' });
   await page.evaluate(() => document.fonts.ready);
   // Park the page one frame before the animations are meant to be seen.
   await page.waitForTimeout(120);
@@ -99,7 +111,7 @@ async function shootMotion(
 }
 
 async function shootUi(
-  page: Page, scene: Scene, spec: AspectSpec,
+  page: Page, film: Film, scene: Scene, spec: AspectSpec,
   recDir: string, outFile: string, hold: number, mobile: boolean,
 ): Promise<number> {
   const pointer = new Pointer(page);
@@ -111,7 +123,7 @@ async function shootUi(
   await rec.start();
   const began = Date.now();
 
-  const act = ACTS[scene.id];
+  const act = film.acts[scene.id];
   if (!act) throw new Error(`scene "${scene.id}" has no act`);
   await act({ page, p: pointer, mobile });
 
@@ -123,16 +135,16 @@ async function shootUi(
   return seconds;
 }
 
-export async function captureCut(cut: AspectSpec['key']): Promise<ShotScene[]> {
+export async function captureCut(film: Film, cut: CutKey): Promise<ShotScene[]> {
   const spec = ASPECTS[cut];
   // PROMO_ONLY=bonds,payouts re-shoots just those scenes, leaving the rest of
   // the cut's mp4s in place for the assembly step.
   const only = (process.env.PROMO_ONLY ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  const scenes = scenesFor(cut).filter((s) => !only.length || only.includes(s.id));
-  const clips = await loadVoice();
+  const scenes = scenesFor(film, cut).filter((s) => !only.length || only.includes(s.id));
+  const clips = await loadVoice(film);
 
-  const cutDir = path.join(OUT_DIR, cut);
-  const framesRoot = path.join(OUT_DIR, '.frames', cut);
+  const cutDir = path.join(OUT_DIR, film.key, cut);
+  const framesRoot = path.join(OUT_DIR, '.frames', film.key, cut);
   await fs.mkdir(cutDir, { recursive: true });
   await fs.mkdir(framesRoot, { recursive: true });
 
@@ -146,10 +158,10 @@ export async function captureCut(cut: AspectSpec['key']): Promise<ShotScene[]> {
   const opensOnLogin = scenes.some((s) => s.id === 'login');
 
   if (opensOnLogin) {
-    await page.goto(`${BASE}/partner-login`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}${film.loginPath}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(900);
   } else {
-    await signIn(page);
+    await signIn(page, film);
   }
 
   for (const scene of scenes) {
@@ -159,16 +171,17 @@ export async function captureCut(cut: AspectSpec['key']): Promise<ShotScene[]> {
     const t0 = Date.now();
 
     if (scene.kind === 'motion') {
-      await shootMotion(page, scene, spec, motion, recDir, outFile, hold);
-      // Motion scenes resize the viewport; put the portal back afterwards.
+      await shootMotion(page, film, scene, spec, motion, recDir, outFile, hold);
+      // Motion scenes resize the viewport; put the product back afterwards.
       await page.setViewportSize({ width: spec.uiWidth, height: spec.uiHeight });
       if (scene.id !== 'cta') {
-        if (opensOnLogin) await page.goto(`${BASE}/partner-login`, { waitUntil: 'networkidle' });
-        else await signIn(page);
+        if (opensOnLogin) await page.goto(`${BASE}${film.loginPath}`, { waitUntil: 'networkidle' });
+        else await signIn(page, film);
         await page.waitForTimeout(700);
       }
     } else {
-      await shootUi(page, scene, spec, recDir, outFile, hold, mobile);
+      if (scene.setup) await scene.setup(page);
+      await shootUi(page, film, scene, spec, recDir, outFile, hold, mobile);
     }
 
     const seconds = await ffprobeDuration(outFile);
@@ -189,10 +202,10 @@ export async function captureCut(cut: AspectSpec['key']): Promise<ShotScene[]> {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const only = process.argv[2] as AspectSpec['key'] | undefined;
-  const cuts: AspectSpec['key'][] = only ? [only] : ['landscape', 'vertical'];
-  for (const cut of cuts) {
-    console.log(`\nFilming ${cut}:`);
-    await captureCut(cut);
+  const film = getFilm(process.argv[2]);
+  const one = process.argv[3] as CutKey | undefined;
+  for (const cut of (one ? [one] : ['landscape', 'vertical']) as CutKey[]) {
+    console.log(`\nFilming ${film.key} ${cut}:`);
+    await captureCut(film, cut);
   }
 }

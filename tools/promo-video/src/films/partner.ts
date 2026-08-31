@@ -1,22 +1,16 @@
 /**
- * What happens on screen in each UI scene.
+ * The partner film — recruiting distribution partners to the DSA portal.
  *
- * Every act drives the real portal — nothing here is a mockup. Acts are written
- * to run close to the length of their narration; a scene that finishes early
- * simply holds, and one that overruns extends the cut with silence, so the
- * pacing here is the pacing of the film.
+ * Scenes and acts live together because they are one document: the narration
+ * describes what the act does, and changing either without the other puts the
+ * voice out of step with the picture.
  */
-import type { Page } from 'playwright';
-import type { Pointer } from './cursor.js';
+import type * as pw from 'playwright';
+import { BOTH, LONG, type Film, type Scene } from '../film.js';
+import { closeModal, glide, type Act, type Stage } from '../stage.js';
 
-export interface Stage {
-  page: Page;
-  p: Pointer;
-  /** The vertical cut drives the phone layout, where nav lives in a drawer. */
-  mobile: boolean;
-}
-
-export type Act = (s: Stage) => Promise<void>;
+const DEMO_PAN = 'NIYOM1234D';
+const DEMO_PASSWORD = 'NiyomDemo@2026';
 
 /** Sidebar on desktop, drawer on the phone. */
 async function goToView({ page, p, mobile }: Stage, label: string): Promise<void> {
@@ -28,33 +22,97 @@ async function goToView({ page, p, mobile }: Stage, label: string): Promise<void
   await page.waitForTimeout(mobile ? 900 : 650);
 }
 
-/**
- * Close whatever modal is open.
- *
- * The partner modals close on their X or on a backdrop click — Escape is not
- * wired up, and silently doing nothing is exactly the failure that leaves the
- * next scene shooting through a dimmed overlay.
- */
-async function closeModal({ page, p }: Stage): Promise<void> {
-  const x = page.locator('button:has(svg.lucide-x)').last();
-  if (await x.isVisible().catch(() => false)) {
-    await p.click(x);
-  } else {
-    await page.mouse.click(60, 90);
-  }
-  await page.waitForTimeout(450);
-}
+const scenes: Scene[] = [
+  {
+    id: 'title',
+    kind: 'motion',
+    title: 'Partner Portal',
+    subtitle: 'Your clients, your products, your payouts',
+    vo: 'This is the Niyom Wealth Partner Portal. Your clients, your products, and your payouts, in one place.',
+    caption: 'Niyom Wealth — Partner Portal',
+    tail: 0.6,
+    cuts: BOTH,
+  },
+  {
+    id: 'login',
+    kind: 'ui',
+    vo: 'Sign in with your PAN number. Set a four digit PIN once, and you are straight in every time after that.',
+    caption: 'Sign in with your PAN',
+    tail: 0.5,
+    cuts: LONG,
+  },
+  {
+    id: 'dashboard',
+    kind: 'ui',
+    vo: 'Your dashboard opens on the numbers that matter. What you have raised this financial year, what has been paid, what is still due, and the clients you have brought in.',
+    caption: 'Everything you have earned, at a glance',
+    illustrative: true,
+    tail: 0.8,
+    cuts: BOTH,
+  },
+  {
+    id: 'onboard',
+    kind: 'ui',
+    vo: 'Onboard a client yourself. Verify their PAN, add their details, and they are mapped under you and your relationship manager in seconds. The PAN check runs live, and your relationship manager completes the K Y C from there.',
+    caption: 'Onboard your own clients',
+    tail: 0.8,
+    cuts: LONG,
+  },
+  {
+    id: 'clients',
+    kind: 'ui',
+    vo: 'Open any client to see the portfolio you built. Every holding, every transaction, valued as of today.',
+    caption: 'See every client portfolio you built',
+    illustrative: true,
+    tail: 0.6,
+    cuts: LONG,
+  },
+  {
+    id: 'bonds',
+    kind: 'ui',
+    vo: 'The bond desk is priced for you. Set your own markup, up to five percent. Your cost is never shown to your client.',
+    caption: 'Set your own markup — up to 5%',
+    tail: 0.6,
+    cuts: BOTH,
+  },
+  {
+    id: 'bond-actions',
+    kind: 'ui',
+    vo: 'Order for a client, share a private link, or download a marketing image, with your name and number on it, and Niyom branding switched off if you prefer, so it goes out entirely under your own brand.',
+    caption: 'Order · Share · Market — under your own name',
+    tail: 0.8,
+    cuts: BOTH,
+  },
+  {
+    id: 'payouts',
+    kind: 'ui',
+    vo: 'Every payout statement, with gross, T D S and net payable, ready to download. Nothing to chase, nothing to reconcile.',
+    caption: 'Payout statements, always available',
+    illustrative: true,
+    tail: 0.7,
+    cuts: BOTH,
+  },
+  {
+    id: 'referral',
+    kind: 'ui',
+    vo: 'Share your referral link, and anyone who opens an account through it is recorded against you automatically.',
+    caption: 'Your referral link, tracked automatically',
+    tail: 0.6,
+    cuts: LONG,
+  },
+  {
+    id: 'cta',
+    kind: 'motion',
+    title: 'Become a partner',
+    subtitle: 'niyomwealth.com/partner-onboarding',
+    vo: 'Become a Niyom Wealth partner. Register today at niyom wealth dot com, slash partner onboarding.',
+    caption: 'Register in a few minutes',
+    tail: 1.2,
+    cuts: BOTH,
+  },
+];
 
-/** A readable scroll — several small wheel steps rather than one jump. */
-async function glide(page: Page, total: number, steps = 8, pause = 130): Promise<void> {
-  const per = Math.round(total / steps);
-  for (let i = 0; i < steps; i += 1) {
-    await page.mouse.wheel(0, per);
-    await page.waitForTimeout(pause);
-  }
-}
-
-export const ACTS: Record<string, Act> = {
+const acts: Record<string, Act> = {
   /**
    * Doubles as the sign-in for the whole session, so the landscape cut opens on
    * the real login rather than a reconstruction of it.
@@ -188,4 +246,21 @@ export const ACTS: Record<string, Act> = {
     await glide(page, mobile ? 700 : 420, 7, 140);
     await page.waitForTimeout(1200);
   },
+};
+
+export const partnerFilm: Film = {
+  key: 'partner',
+  slug: 'partner-portal',
+  eyebrow: 'For distribution partners',
+  loginPath: '/partner-login',
+  pan: DEMO_PAN,
+  password: DEMO_PASSWORD,
+  signedInMarker: 'text=Welcome,',
+  async signIn(page: pw.Page) {
+    await page.getByPlaceholder('ABCDE1234F').fill(DEMO_PAN);
+    await page.getByPlaceholder('Your password').fill(DEMO_PASSWORD);
+    await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+  },
+  scenes,
+  acts,
 };

@@ -12,15 +12,16 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { OUT_DIR } from './brand.js';
-import { SCENES } from './narration.js';
+import { type Film } from './film.js';
+import { getFilm } from './films/index.js';
 
 const run = promisify(execFile);
 
 export const VOICE = process.env.PROMO_VOICE ?? 'Rishi';
 export const RATE = Number(process.env.PROMO_RATE ?? 168);
 
-export const VO_DIR = path.join(OUT_DIR, 'vo');
-export const VO_MANIFEST = path.join(VO_DIR, 'manifest.json');
+export const voDir = (film: Film) => path.join(OUT_DIR, film.key, 'vo');
+export const voManifest = (film: Film) => path.join(voDir(film), 'manifest.json');
 
 export interface VoClip {
   id: string;
@@ -40,13 +41,14 @@ export async function probeDuration(file: string): Promise<number> {
   return n;
 }
 
-export async function generateVoice(): Promise<VoClip[]> {
-  await fs.mkdir(VO_DIR, { recursive: true });
+export async function generateVoice(film: Film): Promise<VoClip[]> {
+  const dir = voDir(film);
+  await fs.mkdir(dir, { recursive: true });
   const clips: VoClip[] = [];
 
-  for (const scene of SCENES) {
-    const aiff = path.join(VO_DIR, `${scene.id}.aiff`);
-    const m4a = path.join(VO_DIR, `${scene.id}.m4a`);
+  for (const scene of film.scenes) {
+    const aiff = path.join(dir, `${scene.id}.aiff`);
+    const m4a = path.join(dir, `${scene.id}.m4a`);
 
     await run('say', ['-v', VOICE, '-r', String(RATE), '-o', aiff, scene.vo]);
     await run('ffmpeg', [
@@ -63,12 +65,12 @@ export async function generateVoice(): Promise<VoClip[]> {
     console.log(`  ${scene.id.padEnd(14)} ${seconds.toFixed(2)}s`);
   }
 
-  await fs.writeFile(VO_MANIFEST, JSON.stringify({ voice: VOICE, rate: RATE, clips }, null, 2));
+  await fs.writeFile(voManifest(film), JSON.stringify({ voice: VOICE, rate: RATE, clips }, null, 2));
   return clips;
 }
 
-export async function loadVoice(): Promise<VoClip[]> {
-  const raw = JSON.parse(await fs.readFile(VO_MANIFEST, 'utf8')) as { clips: VoClip[] };
+export async function loadVoice(film: Film): Promise<VoClip[]> {
+  const raw = JSON.parse(await fs.readFile(voManifest(film), 'utf8')) as { clips: VoClip[] };
   return raw.clips;
 }
 
@@ -80,8 +82,9 @@ export function sceneSeconds(id: string, clips: VoClip[], tail = 0.6): number {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  console.log(`Narrating with "${VOICE}" at ${RATE} wpm:`);
-  const clips = await generateVoice();
+  const film = getFilm(process.argv[2]);
+  console.log(`Narrating "${film.key}" with "${VOICE}" at ${RATE} wpm:`);
+  const clips = await generateVoice(film);
   const total = clips.reduce((a, c) => a + c.seconds, 0);
   console.log(`\nTotal narration ${total.toFixed(1)}s across ${clips.length} scenes.`);
 }

@@ -31,6 +31,8 @@ import type {
   FundRecommendation,
 } from '../types/funds';
 import { getEnv } from '../../platform/env';
+import { isDemoClientSession } from '../demo/demoClient';
+import { demoCatalogFunds, demoRecommendations, demoFundDetail } from '../demo/demoClientMarket';
 
 function fnUrl(name: string): string {
   return `${getEnv().supabaseUrl}/functions/v1/${name}`;
@@ -45,6 +47,7 @@ export const MfCatalogService = {
    * houses shelf and compare working off a single read.
    */
   list(): Promise<CatalogFund[]> {
+    if (isDemoClientSession()) return Promise.resolve(demoCatalogFunds);
     return listUniverseFunds(supabase);
   },
 
@@ -54,6 +57,7 @@ export const MfCatalogService = {
    * hides itself rather than inventing a recommendation.
    */
   async recommendations(): Promise<FundRecommendation[]> {
+    if (isDemoClientSession()) return demoRecommendations;
     const { data, error } = await supabase
       .from('nw_mf_recommendations')
       .select('amfi_code, fund_name, headline, rationale')
@@ -74,6 +78,7 @@ export const MfCatalogService = {
    * own cache (verify_jwt=false, so the anon key is the credential).
    */
   async detail(amfiCode: string): Promise<CatalogFundDetail> {
+    if (isDemoClientSession()) return demoFundDetail(amfiCode);
     const anon = getEnv().supabaseAnonKey;
     const res = await fetch(fnUrl('mf-detail'), {
       method: 'POST',

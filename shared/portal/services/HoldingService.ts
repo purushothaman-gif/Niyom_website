@@ -39,6 +39,7 @@ import {
   type CasCashFlow,
   type NavRow,
 } from './cas/model';
+import { isDemoClientSession, demoSnapshot } from '../demo/demoClient';
 
 /**
  * How far back to look for a quote.
@@ -106,6 +107,7 @@ export interface ClientWealthSnapshot {
 export const HoldingService = {
   /** Fetch the client, all holdings, and recent transactions in one round-trip. */
   async getSnapshot(clientId: string): Promise<ClientWealthSnapshot> {
+    if (isDemoClientSession()) return demoSnapshot();
     const [clientRes, holdingsRes, txnRes, latestMfRes, cas] = await Promise.all([
       supabase.from('nw_clients').select('*').eq('id', clientId).maybeSingle(),
       supabase

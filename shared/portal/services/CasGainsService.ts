@@ -41,6 +41,8 @@ import {
   type GainsTxn,
   type SchemeGains,
 } from './cas/gains';
+import { isDemoClientSession } from '../demo/demoClient';
+import { demoGainsStatement } from '../demo/demoClientMarket';
 
 /** The date equity grandfathering is measured on. */
 const GRANDFATHER_DATE = '2018-01-31';
@@ -89,6 +91,7 @@ export const CasGainsService = {
    * screen shows as "import a statement", not as "no gains".
    */
   async getStatement(clientId: string): Promise<GainsStatement | null> {
+    if (isDemoClientSession()) return demoGainsStatement();
     const { data } = await supabase
       .from('cas_imports')
       .select('id,statement_from,statement_to,created_at')

@@ -8,6 +8,8 @@
  */
 import { clientSupabase as supabase } from '../../lib/supabase';
 import { getEnv } from '../../platform/env';
+import { isDemoClientSession } from '../demo/demoClient';
+import { demoTickets, addDemoClientTicket } from '../demo/demoClientMarket';
 
 export type TicketCategory =
   | 'general'
@@ -46,6 +48,12 @@ export const SupportService = {
    * alert). Returns the created row.
    */
   async createTicket(clientId: string, input: NewTicketInput): Promise<SupportTicket> {
+    // Acknowledged, never created: these credentials are handed out, and a
+    // prospect trying the form must not page a relationship manager.
+    if (isDemoClientSession()) {
+      await new Promise((r) => setTimeout(r, 550));
+      return addDemoClientTicket(input, new Date().toISOString());
+    }
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     const anon = getEnv().supabaseAnonKey;
@@ -72,6 +80,7 @@ export const SupportService = {
 
   /** List the client's own tickets, newest first. */
   async listTickets(clientId: string): Promise<SupportTicket[]> {
+    if (isDemoClientSession()) return demoTickets();
     const { data, error } = await supabase
       .from('nw_support_tickets')
       .select('*')

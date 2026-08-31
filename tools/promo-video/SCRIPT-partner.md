@@ -7,8 +7,8 @@ the rendered clips, not estimated.
 voice, use the narration column below — each line is timed to its own scene, so
 a replacement take should be cut to the same in/out points.
 
-**Footage** is the real Partner Portal, driven live in Chromium against the demo
-partner account (`NIYOM1234D`). Every client, security, statement and figure on
+**Footage** is the real Partner Portal, driven live in Chromium against the
+sample account (`NIYOM1234D`). Every name, security, statement and figure on
 screen is invented; the portal's own "Sample portal" banner is visible
 throughout, and scenes showing money additionally carry:
 
@@ -46,12 +46,12 @@ at the portal's own phone layout, not a scaled-down desktop.
 |---|---|---|---|---|
 | 0:00.0 | 0:08.3 | `title` | Niyom Wealth — Partner Portal | This is the Niyom Wealth Partner Portal. Your clients, your products, and your payouts, in one place. |
 | 0:08.3 | 0:19.7 | `dashboard` | Everything you have earned, at a glance *(+ illustrative-figures notice)* | Your dashboard opens on the numbers that matter. What you have raised this financial year, what has been paid, what is still due, and the clients you have brought in. |
-| 0:19.7 | 0:28.7 | `bonds` | Set your own markup — up to 5% | The bond desk is priced for you. Set your own markup, up to five percent. Your cost is never shown to your client. |
-| 0:28.7 | 0:42.7 | `bond-actions` | Order · Share · Market — under your own name | Order for a client, share a private link, or download a marketing image, with your name and number on it, and Niyom branding switched off if you prefer, so it goes out entirely under your own brand. |
-| 0:42.7 | 0:51.8 | `payouts` | Payout statements, always available *(+ illustrative-figures notice)* | Every payout statement, with gross, T D S and net payable, ready to download. Nothing to chase, nothing to reconcile. |
-| 0:51.8 | 0:59.9 | `cta` | Register in a few minutes | Become a Niyom Wealth partner. Register today at niyom wealth dot com, slash partner onboarding. |
+| 0:19.7 | 0:28.8 | `bonds` | Set your own markup — up to 5% | The bond desk is priced for you. Set your own markup, up to five percent. Your cost is never shown to your client. |
+| 0:28.8 | 0:42.8 | `bond-actions` | Order · Share · Market — under your own name | Order for a client, share a private link, or download a marketing image, with your name and number on it, and Niyom branding switched off if you prefer, so it goes out entirely under your own brand. |
+| 0:42.8 | 0:51.9 | `payouts` | Payout statements, always available *(+ illustrative-figures notice)* | Every payout statement, with gross, T D S and net payable, ready to download. Nothing to chase, nothing to reconcile. |
+| 0:51.9 | 1:00.0 | `cta` | Register in a few minutes | Become a Niyom Wealth partner. Register today at niyom wealth dot com, slash partner onboarding. |
 
-**Total 0:59.9.** Narration 54.8s.
+**Total 1:00.0.** Narration 54.8s.
 
 ---
 
@@ -59,8 +59,8 @@ at the portal's own phone layout, not a scaled-down desktop.
 
 | Want to | Do |
 |---|---|
-| Change a line | Edit `src/narration.ts`, then `npm run all` |
-| Re-shoot one scene | `PROMO_ONLY=bonds npm run capture -- landscape`, then `npm run build` |
-| Use a better voice | Download an Enhanced voice in System Settings → Accessibility → Spoken Content → Manage Voices, then `PROMO_VOICE="Ava (Premium)" npm run all` |
-| Add the ident to the vertical cut | `PROMO_IDENT=landscape,vertical npm run build` |
+| Change a line | Edit `src/films/partner.ts`, then `npm run all -- partner` |
+| Re-shoot one scene | `PROMO_ONLY=bonds npm run capture -- partner landscape`, then `npm run build -- partner` |
+| Use a better voice | Download an Enhanced voice in System Settings → Accessibility → Spoken Content → Manage Voices, then `PROMO_VOICE="Ava (Premium)" npm run all -- partner` |
+| Add the ident to the vertical cut | `PROMO_IDENT=landscape,vertical npm run build -- partner` |
 | Add music | Drop an mp3 in `audio/` — currently unmixed; no licensed track ships with the repo |

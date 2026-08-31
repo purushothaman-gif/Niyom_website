@@ -7,6 +7,7 @@
  */
 import { clientSupabase as supabase } from '../../lib/supabase';
 import type { ClientDocument } from '../types/activity';
+import { isDemoClientSession, demoDocuments } from '../demo/demoClient';
 
 const BUCKET = 'crm-documents';
 
@@ -28,6 +29,7 @@ const label = (key: string): string =>
 
 export const DocumentService = {
   async getDocuments(clientId: string): Promise<ClientDocument[]> {
+    if (isDemoClientSession()) return demoDocuments;
     const { data, error } = await supabase
       .from('nw_documents')
       .select('id, document_type, file_name, file_path, file_size, mime_type, uploaded_at')
@@ -49,6 +51,9 @@ export const DocumentService = {
 
   /** Mint a short-lived signed URL to view/download a document. */
   async getSignedUrl(filePath: string): Promise<string> {
+    // No real object behind a sample document; the caller shows a failure
+    // notice rather than opening a broken tab.
+    if (isDemoClientSession()) return '';
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(filePath, 120);
     if (error || !data) throw new Error(error?.message ?? 'Could not generate download link.');
     return data.signedUrl;

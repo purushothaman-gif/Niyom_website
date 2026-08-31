@@ -6,6 +6,11 @@ import { HeroBackground } from '../components/HeroBackground';
 import { PinInput } from '../components/PinInput';
 import { getDeviceId, listProfiles, removeProfile, type PinProfile } from '../lib/pinDevice';
 import { passwordChecks, passwordError } from '../lib/passwordPolicy';
+import {
+  DEMO_CLIENT_ID,
+  isDemoClientCredentials,
+  startDemoClientSession,
+} from '../../shared/portal/demo/demoClient';
 
 interface Props {
   onLogin: (clientId: string, passwordChanged: boolean) => void;
@@ -148,6 +153,17 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
       return;
     }
     if (!password) { setError('Password is required.'); return; }
+
+    // Demo mode. Recognised locally and never sent to client-pan-login, so the
+    // published sample credentials unlock nothing real — there is no account
+    // behind them and nothing to brute-force. Every portal service then serves
+    // fixtures and refuses its write paths.
+    if (isDemoClientCredentials(panClean, password)) {
+      startDemoClientSession();
+      clearRateLimit();
+      onLogin(DEMO_CLIENT_ID, true);
+      return;
+    }
 
     setLoading(true);
 

@@ -3,15 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Records the Partner Portal promo video: drives the real portal in Chromium, narrates it, and cuts it together with ffmpeg.",
+  "description": "Records the Niyom promo films: drives the real portals in Chromium, narrates them, and cuts them together with ffmpeg.",
   "scripts": {
     "smoke": "tsx src/smoke.ts",
+    "smoke:client": "tsx src/smoke-client.ts",
     "voice": "tsx src/voice.ts",
     "capture": "tsx src/capture.ts",
     "build": "tsx src/build.ts",
+    "docs": "tsx src/docs.ts",
     "all": "tsx src/all.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "docs": "tsx src/docs.ts"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "playwright": "1.62.1"
