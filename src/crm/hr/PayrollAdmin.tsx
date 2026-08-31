@@ -429,7 +429,8 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
             present_days: att.present_days, paid_leave_days: att.paid_leave_days,
             unpaid_leave_days: att.unpaid_leave_days, holiday_days: att.holiday_days,
             weekly_off_days: att.weekly_off_days, absent_days: att.absent_days,
-            lop_days: att.lop_days, payable_days: att.payable_days, lop_divisor: r.lop_divisor,
+            lop_days: att.lop_days, payable_days: att.payable_days,
+            lop_waived_days: att.lop_waived_days ?? 0, lop_divisor: r.lop_divisor,
             late_days: att.late_days, early_out_days: att.early_out_days,
             overtime_minutes: att.overtime_minutes,
             ctc_annual: r.ctc_annual, gross_earnings: r.gross_earnings,
@@ -883,6 +884,10 @@ function RecordDetail({ record, lines }: { record: PayrollRecord; lines: Payroll
           ['Calendar', record.calendar_days], ['Working', record.working_days],
           ['Present', record.present_days], ['Paid Leave', record.paid_leave_days],
           ['LOP', record.lop_days], ['Payable', record.payable_days],
+          // Admin-facing, so the waiver is shown here. It is deliberately NOT
+          // on the payslip: waiving means the day is paid as though worked.
+          ...(Number(record.lop_waived_days ?? 0) > 0
+            ? [['LOP Waived', record.lop_waived_days] as [string, number]] : []),
         ].map(([l, v]) => (
           <div key={String(l)} className="px-2.5 py-2 rounded-xl text-center"
             style={{ background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>

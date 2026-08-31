@@ -75,6 +75,38 @@ export function buildPayslipHtml({ payslip, record, lines, settings, ytd }: Pays
   const emprTotal  = employer.reduce((s, l) => s + n(l.amount), 0);
   const net        = n(record.net_pay);
 
+  /*
+   * A waived loss-of-pay day is presented as a day worked, because that is
+   * exactly what waiving it means: the employee is paid as though they were
+   * there. Paid Days and LOP Days already reflect the waiver -- the summary is
+   * adjusted before payroll is written -- but present days deliberately does
+   * not, so the attendance reports keep showing what really happened.
+   *
+   * Without this the payslip contradicts itself: "Present 26, Paid 31, LOP 0"
+   * invites precisely the question the waiver was granted to settle. Adding
+   * the waived days back makes present + leave + holidays + weekly offs equal
+   * paid days again, and the month reads as an ordinary one.
+   */
+  const waived     = n((record as { lop_waived_days?: number }).lop_waived_days ?? 0);
+
+  /*
+   * The payslip shows Present / Paid Leave / Holidays / Weekly Off beside Paid
+   * Days, so those four have to add up to Paid Days or the document argues
+   * with itself. Two things break that, and both mean "paid as though worked":
+   *
+   *   - a waived LOP day, which is the whole point of waiving it;
+   *   - a day of the month that has not finished yet, if payroll is run before
+   *     month end -- it is payable but not yet marked present.
+   *
+   * Deriving the balance covers both without needing to know which. Floored at
+   * the real figure so it can never UNDERSTATE someone's attendance: for every
+   * settled month the two are identical, and the derivation only ever fills a
+   * gap that is already being paid for.
+   */
+  const balance    = n(record.payable_days) - n(record.paid_leave_days)
+                   - n(record.holiday_days) - n(record.weekly_off_days);
+  const presentDays = Math.max(n(record.present_days) + waived, balance);
+
   const period = `${MONTHS[payslip.period_month - 1]} ${payslip.period_year}`;
   const hasYtd = !!ytd && Object.keys(ytd).length > 0;
   const ytdOf  = (code: string) => (ytd && ytd[code] !== undefined ? money(ytd[code]) : '');
@@ -206,7 +238,7 @@ export function buildPayslipHtml({ payslip, record, lines, settings, ytd }: Pays
     </div>
     <div>
       <div class="kv"><span class="k">Bank Account No</span><span class="v">${record.bank_account ? esc(record.bank_account) : '—'}</span></div>
-      <div class="kv"><span class="k">Present Days</span><span class="v">${n(record.present_days)}</span></div>
+      <div class="kv"><span class="k">Present Days</span><span class="v">${n(presentDays)}</span></div>
       <div class="kv"><span class="k">Paid Leave</span><span class="v">${n(record.paid_leave_days)}</span></div>
       <div class="kv"><span class="k">Holidays / Weekly Off</span><span class="v">${n(record.holiday_days)} / ${n(record.weekly_off_days)}</span></div>
     </div>
