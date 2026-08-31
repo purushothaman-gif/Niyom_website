@@ -3,7 +3,7 @@ import { LogoLoader } from '../../components/LogoLoader';
 import { supabase } from '../../lib/supabase';
 import { NWEmployee } from '../types';
 import { GripVertical } from 'lucide-react';
-import { NWLead, LeadStatus } from './leadTypes';
+import { NWLead, LeadStatus, LeadCategory } from './leadTypes';
 import { LEAD_STATUSES, statusRgb } from './leadConstants';
 import { ScoreBadge, PriorityBadge } from './leadUi';
 import { isAdminRole, formatMoney, initials, relativeTime } from './leadUtils';
@@ -18,11 +18,12 @@ const BOARD_CAP = 300;
 
 interface Props {
   employee: NWEmployee;
+  category: LeadCategory;
   refreshKey: number;
   onOpen: (lead: NWLead) => void;
 }
 
-export default function LeadPipeline({ employee, refreshKey, onOpen }: Props) {
+export default function LeadPipeline({ employee, category, refreshKey, onOpen }: Props) {
   const isAdmin = isAdminRole(employee);
   const [leads, setLeads] = useState<NWLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,10 +35,11 @@ export default function LeadPipeline({ employee, refreshKey, onOpen }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase.from('nw_leads').select(LEAD_SELECT)
+      .eq('lead_category', category)
       .eq('is_archived', false).order('updated_at', { ascending: false }).limit(BOARD_CAP);
     setLeads((data as unknown as NWLead[]) || []);
     setLoading(false);
-  }, []);
+  }, [category]);
 
   useEffect(() => { load(); }, [load, refreshKey]);
 

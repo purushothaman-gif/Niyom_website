@@ -5,6 +5,8 @@ export type LeadPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export type LeadOrigin = 'admin_upload' | 'admin_manual' | 'employee_manual' | 'website_signup';
 
+export type LeadCategory = 'partner' | 'client';
+
 export type LeadScoreBand = 'Hot' | 'Warm' | 'Cold';
 
 export type LeadStatus =
@@ -60,6 +62,7 @@ export interface NWLead {
 
   status: LeadStatus;
   lead_origin: LeadOrigin;
+  lead_category: LeadCategory;
   owner_employee_id: string | null;
   created_by_employee_id: string | null;
   is_locked: boolean;
@@ -194,6 +197,7 @@ export interface LeadFormData {
   campaign: string;
   priority: LeadPriority;
   remarks: string;
+  lead_category: LeadCategory | '';
 }
 
 export interface LeadListFilters {

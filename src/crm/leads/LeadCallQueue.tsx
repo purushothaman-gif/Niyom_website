@@ -5,7 +5,7 @@ import {
   Copy, Check, ChevronLeft, ChevronRight, RefreshCw, ExternalLink,
   MessageCircle, PhoneCall, CalendarClock, Inbox, MapPin, ArrowUpDown,
 } from 'lucide-react';
-import { NWLead, LeadStatus } from './leadTypes';
+import { NWLead, LeadStatus, LeadCategory } from './leadTypes';
 import { QUEUE_OUTCOMES, QUEUE_STATUS_OPTIONS, INDIAN_STATES } from './leadConstants';
 import { StatusBadge, Select, Input } from './leadUi';
 import { isAdminRole, formatMoney, relativeTime, initials } from './leadUtils';
@@ -49,11 +49,12 @@ interface Draft { status: LeadStatus; outcome: string; remarks: string; next: st
 
 interface Props {
   employee: NWEmployee;
+  category: LeadCategory;
   refreshKey: number;
   onOpenLead: (leadId: string) => void;
 }
 
-export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Props) {
+export default function LeadCallQueue({ employee, category, refreshKey, onOpenLead }: Props) {
   const isAdmin = isAdminRole(employee);
   const [scope, setScope] = useState<Scope>('work');
   const [sort, setSort] = useState<SortKey>('smart');
@@ -71,6 +72,7 @@ export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Prop
   const buildQuery = useCallback((forCount: boolean) => {
     let q = supabase.from('nw_leads').select(forCount ? 'id' : LEAD_SELECT, forCount ? { count: 'exact', head: true } : { count: 'exact' })
       .eq('owner_employee_id', employee.id)
+      .eq('lead_category', category)
       .eq('is_archived', false)
       .neq('status', 'Closed - Converted');
     if (scope === 'work') q = q.not('status', 'in', '("Closed - Rejected","Lost","Not Interested","Wrong Number")');
@@ -79,7 +81,7 @@ export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Prop
     if (stateFilter) q = q.ilike('state', `%${stateFilter}%`);
     if (cityFilter.trim()) q = q.ilike('city', `%${cityFilter.trim()}%`);
     return q;
-  }, [employee.id, scope, stateFilter, cityFilter]);
+  }, [employee.id, category, scope, stateFilter, cityFilter]);
 
   const applySort = useCallback((q: any) => {
     if (sort === 'location') return q.order('state', { ascending: true }).order('city', { ascending: true }).order('lead_name', { ascending: true });

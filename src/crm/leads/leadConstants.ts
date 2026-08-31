@@ -2,7 +2,13 @@
 // Colors are plain RGB strings so badges can be tinted (bg = 12% alpha,
 // text/border = full) and render consistently in both light and dark themes.
 
-import { LeadStatus, LeadPriority, LeadOrigin, CommType, FollowupMode } from './leadTypes';
+import { LeadStatus, LeadPriority, LeadOrigin, LeadCategory, CommType, FollowupMode } from './leadTypes';
+
+// The two datasets employees maintain separately.
+export const LEAD_CATEGORIES: { value: LeadCategory; label: string }[] = [
+  { value: 'partner', label: 'Partner Leads' },
+  { value: 'client', label: 'Client Leads' },
+];
 
 export interface StatusMeta { label: LeadStatus; rgb: string; group: StatusGroup; }
 export type StatusGroup = 'open' | 'active' | 'progress' | 'won' | 'lost' | 'idle';

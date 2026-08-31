@@ -4,8 +4,8 @@ import { NWEmployee } from '../types';
 import {
   UserPlus, Archive, Lock, Unlock, CalendarClock, Download, ChevronDown, Loader2, X, GitMerge, Trash2, AlertCircle,
 } from 'lucide-react';
-import { NWLead, LeadStatus, LeadPriority, FollowupMode } from './leadTypes';
-import { LEAD_STATUSES, PRIORITIES, FOLLOWUP_MODES } from './leadConstants';
+import { NWLead, LeadStatus, LeadPriority, LeadCategory, FollowupMode } from './leadTypes';
+import { LEAD_STATUSES, PRIORITIES, FOLLOWUP_MODES, LEAD_CATEGORIES } from './leadConstants';
 import { Modal, Field, Input, Select, PrimaryButton, GhostButton } from './leadUi';
 import { leadsToCsv, downloadCsv } from './leadImportUtils';
 import LeadMergeModal from './LeadMergeModal';
@@ -19,7 +19,7 @@ interface Props {
 }
 
 export default function LeadBulkToolbar({ employee, leads, onAssign, onDone, onClear }: Props) {
-  const [menu, setMenu] = useState<'status' | 'priority' | null>(null);
+  const [menu, setMenu] = useState<'status' | 'priority' | 'category' | null>(null);
   const [busy, setBusy] = useState(false);
   const [followupOpen, setFollowupOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -52,6 +52,7 @@ export default function LeadBulkToolbar({ employee, leads, onAssign, onDone, onC
 
   const setStatus = (s: LeadStatus) => patch({ status: s }, 'Status Changed', `Bulk set status → ${s}`);
   const setPriority = (p: LeadPriority) => patch({ priority: p }, 'Edited', `Bulk set priority → ${p}`);
+  const setDataset = (c: LeadCategory) => patch({ lead_category: c }, 'Edited', `Bulk moved to ${c === 'client' ? 'Client Leads' : 'Partner Leads'}`);
   const archive = () => patch({ is_archived: true }, 'Archived', 'Bulk archived');
   const anyLocked = leads.some(l => l.is_locked);
   const toggleLock = () => patch({ is_locked: !anyLocked }, anyLocked ? 'Unlocked' : 'Locked', anyLocked ? 'Bulk unlocked' : 'Bulk locked');
@@ -108,6 +109,19 @@ export default function LeadBulkToolbar({ employee, leads, onAssign, onDone, onC
               {PRIORITIES.map(p => (
                 <button key={p.value} onClick={() => setPriority(p.value)} className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--hover-bg)]" style={{ color: 'var(--text-secondary)' }}>
                   <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ background: `rgb(${p.rgb})` }} />{p.label}
+                </button>
+              ))}
+            </Dropdown>
+          )}
+        </div>
+
+        <div className="relative">
+          <BulkBtn icon={ChevronDown} label="Dataset" onClick={() => setMenu(m => m === 'category' ? null : 'category')} />
+          {menu === 'category' && (
+            <Dropdown onClose={() => setMenu(null)}>
+              {LEAD_CATEGORIES.map(c => (
+                <button key={c.value} onClick={() => setDataset(c.value)} className="w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--hover-bg)]" style={{ color: 'var(--text-secondary)' }}>
+                  Move to {c.label}
                 </button>
               ))}
             </Dropdown>
