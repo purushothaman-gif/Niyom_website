@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CalendarRange, CheckCircle2, ClipboardCheck, Download, MapPin, Network, RefreshCw, ShieldCheck, XCircle,
+  CalendarRange, CheckCircle2, ClipboardCheck, Download, MapPin, Network, PauseCircle, RefreshCw, ShieldCheck, XCircle,
 } from 'lucide-react';
 import type { NWEmployee } from '../types';
 import * as api from './hrApi';
@@ -24,7 +24,7 @@ import {
 import { useToast } from './useToast';
 import type {
   AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch,
-  AttendanceSettings, HRAccess, HREmployee, OfficeLocation, WorkArrangement,
+  AttendanceSettings, EmployeeBreak, HRAccess, HREmployee, OfficeLocation, WorkArrangement,
 } from './hrTypes';
 import { formatDuration } from '../../lib/hr/attendanceSummary';
 import { exportSheet, exportWorkbook, periodStamp } from './hrExcel';
@@ -65,7 +65,7 @@ export default function AttendanceAdmin({ employee, access }: { employee: NWEmpl
           { key: 'today',     label: 'Today' },
           { key: 'register',  label: 'Monthly Register' },
           { key: 'approvals', label: 'Approvals', count: pendingCount },
-          { key: 'arrangements', label: 'Work Arrangements' },
+          { key: 'arrangements', label: 'Arrangements & Breaks' },
           { key: 'offices',   label: 'Office Locations' },
           { key: 'networks',  label: 'Networks (audit)' },
           { key: 'rules',     label: 'Rules' },
@@ -825,7 +825,7 @@ function Arrangements({ onToast, canEdit, employee }: {
 
       <SectionCard
         title="Work arrangements"
-        subtitle="Periods when an employee works without punching."
+        subtitle="Periods when an employee works without punching, and is paid for it."
         actions={canEdit && <PrimaryButton onClick={() => setEditing({
           kind: 'remote', from_date: today(), status: 'active',
         })}>
@@ -932,6 +932,8 @@ function Arrangements({ onToast, canEdit, employee }: {
         </Modal>
       )}
 
+      <Breaks onToast={onToast} canEdit={canEdit} employee={employee} staff={staff} />
+
       {endingId && (
         <Modal open onClose={() => setEndingId(null)} title="End this arrangement">
           <div className="p-5 space-y-4">
@@ -953,6 +955,214 @@ function Arrangements({ onToast, canEdit, employee }: {
         </Modal>
       )}
     </div>
+  );
+}
+
+const BREAK_KINDS: { value: string; label: string }[] = [
+  { value: 'maternity',    label: 'Maternity' },
+  { value: 'medical',      label: 'Medical' },
+  { value: 'sabbatical',   label: 'Sabbatical' },
+  { value: 'unpaid_leave', label: 'Extended unpaid leave' },
+  { value: 'other',        label: 'Other' },
+];
+
+function Breaks({ onToast, canEdit, employee, staff }: {
+  onToast: (m: string, ok?: boolean) => void; canEdit: boolean;
+  employee: NWEmployee; staff: HREmployee[];
+}) {
+  const [rows, setRows] = useState<EmployeeBreak[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<Partial<EmployeeBreak> | null>(null);
+  const [endingId, setEndingId] = useState<string | null>(null);
+  const [endDate, setEndDate] = useState(today());
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setRows(await api.listBreaks()); }
+    catch (err) { onToast(hrError(err), false); }
+    finally { setLoading(false); }
+  }, [onToast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const nameOf = (id: string) => staff.find(s => s.id === id)?.full_name ?? '—';
+
+  const save = async () => {
+    if (!editing) return;
+    if (!editing.employee_id) { onToast('Choose the employee.', false); return; }
+    if (!editing.from_date)   { onToast('Enter the first day of the break.', false); return; }
+    if ((editing.label ?? '').trim().length < 3) {
+      onToast('Give a short reason — it is shown against every day it settles.', false); return;
+    }
+    if (editing.to_date && editing.to_date < editing.from_date) {
+      onToast('The last day cannot be before the first.', false); return;
+    }
+    setBusy(true);
+    try {
+      const payload = {
+        employee_id: editing.employee_id, kind: editing.kind ?? 'maternity',
+        from_date: editing.from_date, to_date: editing.to_date || null,
+        label: (editing.label ?? '').trim(), status: editing.status ?? 'active',
+        created_by: employee.id,
+      };
+      if (editing.id) await api.updateBreak(editing.id, payload);
+      else await api.createBreak(payload);
+      onToast('Break saved. Recalculate the register for that period to apply it.');
+      setEditing(null);
+      load();
+    } catch (err) { onToast(hrError(err), false); }
+    finally { setBusy(false); }
+  };
+
+  const end = async () => {
+    if (!endingId) return;
+    setBusy(true);
+    try {
+      await api.endBreak(endingId, endDate);
+      onToast('Break ended. Recalculate from the next day to put them back on payroll.');
+      setEndingId(null);
+      load();
+    } catch (err) { onToast(hrError(err), false); }
+    finally { setBusy(false); }
+  };
+
+  if (loading) return <Skeleton rows={3} />;
+
+  return (
+    <>
+      <SectionCard
+        title="Breaks from payroll"
+        subtitle="Maternity, sabbatical, extended unpaid leave — salary stops entirely and restarts when the break ends."
+        actions={canEdit && <PrimaryButton onClick={() => setEditing({
+          kind: 'maternity', from_date: today(), status: 'active',
+        })}>
+          <PauseCircle className="w-3.5 h-3.5 inline mr-1" />Start a Break
+        </PrimaryButton>}
+        padded={false}
+      >
+        <div className="p-5">
+          {rows.length === 0 ? (
+            <EmptyState icon={PauseCircle} title="Nobody is on a break"
+              message="Start one for anyone stepping away for a while. Their days stop being payable and never become loss of pay." />
+          ) : (
+            <TableWrap>
+              <thead>
+                <tr>
+                  <th className="text-left">Employee</th><th className="text-left">Kind</th>
+                  <th className="text-left">Reason shown on the register</th>
+                  <th className="text-left">From</th><th className="text-left">To</th>
+                  <th className="text-left">Status</th><th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(b => (
+                  <tr key={b.id} style={{ opacity: b.status === 'active' ? 1 : 0.6 }}>
+                    <td className="font-semibold" style={{ color: 'var(--text-primary)' }}>{nameOf(b.employee_id)}</td>
+                    <td>{BREAK_KINDS.find(k => k.value === b.kind)?.label ?? b.kind}</td>
+                    <td className="text-xs">{b.label}</td>
+                    <td className="text-xs whitespace-nowrap">{dayLabel(b.from_date)}</td>
+                    <td className="text-xs whitespace-nowrap">
+                      {b.to_date ? dayLabel(b.to_date)
+                        : <span style={{ color: 'rgb(245,158,11)' }}>until you end it</span>}
+                    </td>
+                    <td><Pill value={b.status} small /></td>
+                    <td className="text-right whitespace-nowrap">
+                      {canEdit && (
+                        <>
+                          <button onClick={() => setEditing(b)} className="text-xs font-semibold mr-3"
+                            style={{ color: 'var(--accent-soft)' }}>Edit</button>
+                          {b.status === 'active' && (
+                            <button onClick={() => { setEndingId(b.id); setEndDate(today()); }}
+                              className="text-xs font-semibold" style={{ color: 'rgb(16,185,129)' }}>
+                              Return to work
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableWrap>
+          )}
+        </div>
+      </SectionCard>
+
+      {editing && (
+        <Modal open onClose={() => setEditing(null)} title={editing.id ? 'Edit break' : 'Start a break'}>
+          <div className="p-5 space-y-4">
+            <Notice tone="warn" title="Salary stops for the whole break">
+              Every day inside the break — including weekends and public holidays — becomes unpaid. It is never
+              recorded as absence, so it produces no loss of pay and nothing to waive. If the employee is being paid
+              through this period, use <strong>Maternity Leave</strong> on the Leave screen instead.
+            </Notice>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Employee" required>
+                <Select value={editing.employee_id ?? ''} disabled={!!editing.id}
+                  onChange={e => setEditing({ ...editing, employee_id: e.target.value })}>
+                  <option value="">Choose…</option>
+                  {staff.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Kind">
+                <Select value={editing.kind ?? 'maternity'}
+                  onChange={e => setEditing({ ...editing, kind: e.target.value })}>
+                  {BREAK_KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
+                </Select>
+              </Field>
+            </div>
+
+            <Field label="Reason" required hint="Shown against every day it settles.">
+              <Input value={editing.label ?? ''} onChange={e => setEditing({ ...editing, label: e.target.value })}
+                placeholder="Maternity break — resumes on notice" />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="First day" required>
+                <Input type="date" value={editing.from_date ?? today()}
+                  onChange={e => setEditing({ ...editing, from_date: e.target.value })} />
+              </Field>
+              <Field label="Last day"
+                hint="Leave blank if you do not know yet — that is the usual case.">
+                <Input type="date" value={editing.to_date ?? ''}
+                  onChange={e => setEditing({ ...editing, to_date: e.target.value || null })} />
+              </Field>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setEditing(null)} className="px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                Cancel
+              </button>
+              <PrimaryButton onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save Break'}</PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {endingId && (
+        <Modal open onClose={() => setEndingId(null)} title="Bring them back onto payroll">
+          <div className="p-5 space-y-4">
+            <Notice tone="info">
+              Days up to and including the last day stay unpaid. From the day after, they are back on payroll and
+              expected to punch — or covered by a work arrangement, if one applies.
+            </Notice>
+            <Field label="Last day of the break" required>
+              <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            </Field>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setEndingId(null)} className="px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                Cancel
+              </button>
+              <PrimaryButton onClick={end} disabled={busy}>{busy ? 'Saving…' : 'End Break'}</PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 

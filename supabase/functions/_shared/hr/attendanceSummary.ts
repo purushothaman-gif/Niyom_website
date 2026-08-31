@@ -22,7 +22,10 @@ export interface DailyRow {
     | 'paid_leave' | 'unpaid_leave' | 'on_duty' | 'not_joined' | 'exited'
     // Days whose outcome is not settled yet: today while it is still running,
     // and future working days. Provisionally payable in full.
-    | 'working' | 'upcoming';
+    | 'working' | 'upcoming'
+    // An agreed break -- maternity, sabbatical, extended unpaid leave. Outside
+    // the paid window entirely, like not_joined and exited.
+    | 'on_break';
   payable_fraction: number;
   worked_minutes: number;
   is_late: boolean;
@@ -65,8 +68,8 @@ export function summariseAttendance(rows: DailyRow[]): AttendanceSummary {
       /*
        * Deliberately counted nowhere else.
        *
-       * not_joined / exited are outside the employment window: neither worked
-       * nor payable, and they must not read as absence.
+       * not_joined / exited / on_break are outside the paid window: neither
+       * worked nor payable, and they must not read as absence.
        *
        * working / upcoming are inside it but undecided. They are payable (the
        * loop above already added their fraction, so they do not become LOP)
@@ -89,7 +92,16 @@ export function summariseAttendance(rows: DailyRow[]): AttendanceSummary {
    * as LOP would dock a joiner for the days before they existed and then dock
    * them again through the pro-rata, paying them roughly nothing.
    */
-  const employedDays = rows.filter(r => r.status !== 'not_joined' && r.status !== 'exited').length;
+  /*
+   * The days the employee was actually being paid for.
+   *
+   * on_break joins not_joined and exited here for the same reason: a six-month
+   * maternity break is not six months of absence. Counting it as LOP would
+   * generate an enormous deduction against a salary nobody is paying, and
+   * would follow the employee back into the month they return.
+   */
+  const OUTSIDE_PAID_WINDOW = new Set(['not_joined', 'exited', 'on_break']);
+  const employedDays = rows.filter(r => !OUTSIDE_PAID_WINDOW.has(r.status)).length;
   s.lop_days = round2(Math.max(0, employedDays - s.payable_days));
 
   s.payable_days   = round2(s.payable_days);

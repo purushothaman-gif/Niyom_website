@@ -364,6 +364,19 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
         if (s.joining_date && s.joining_date > run.period_end) continue;
 
         const mine = daily.filter(d => d.employee_id === s.id);
+
+        /*
+         * Away for the WHOLE period on an agreed break -- maternity,
+         * sabbatical -- so there is nothing to pay and no payslip to issue.
+         * Left out of the run entirely rather than carried through it as a
+         * zero: a zero row still prints a payslip, still lands in the bank
+         * file, and still has to be explained to whoever reads the register.
+         *
+         * A break covering only PART of the month is not skipped: those days
+         * sit outside the paid window and the rest is paid pro-rata.
+         */
+        if (mine.length > 0 && mine.every(d => d.status === 'on_break')) continue;
+
         const attendance = applyLopWaiver(
           summariseAttendance(mine as unknown as DailyRow[]), waivedFor(s.id));
 

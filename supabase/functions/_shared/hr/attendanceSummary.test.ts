@@ -271,3 +271,36 @@ describe('waiving loss of pay', () => {
     expect(applyLopWaiver(clean, 3)).toBe(clean);
   });
 });
+
+/*
+ * A break is not absence. Somebody on maternity leave is away with the
+ * company's agreement; treating those days as loss of pay would invent a
+ * deduction against a salary nobody is paying.
+ */
+describe('an employee on an agreed break', () => {
+  const onBreak = () => day({ status: 'on_break', payable_fraction: 0 });
+
+  it('a whole month of break produces no absence and no LOP', () => {
+    const s = summariseAttendance(repeat(31, onBreak));
+    expect(s.absent_days).toBe(0);
+    expect(s.lop_days).toBe(0);
+    expect(s.payable_days).toBe(0);
+    expect(s.working_days).toBe(0);
+  });
+
+  it('a month half worked, half on break, pays only the worked half', () => {
+    // Break starts on the 16th: 15 worked days, then 16 on break.
+    const s = summariseAttendance(month(repeat(15, present), repeat(16, onBreak)));
+    expect(s.present_days).toBe(15);
+    expect(s.payable_days).toBe(15);
+    // LOP is measured against the 15 days she was actually being paid for,
+    // and she worked all of them.
+    expect(s.lop_days).toBe(0);
+  });
+
+  it('real absence during the paid part is still absence', () => {
+    const s = summariseAttendance(month(repeat(13, present), repeat(2, absent), repeat(16, onBreak)));
+    expect(s.absent_days).toBe(2);
+    expect(s.lop_days).toBe(2);
+  });
+});

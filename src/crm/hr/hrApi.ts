@@ -13,7 +13,7 @@
 
 import { supabase } from '../../lib/supabase';
 import type {
-  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch, HRNavContext, OfficeLocation, LopWaiver, WorkArrangement,
+  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch, HRNavContext, OfficeLocation, LopWaiver, WorkArrangement, EmployeeBreak,
   AttendanceSettings, AuditLog, BankAccount, BankTemplateColumn, BankTemplateRow,
   ComponentSlabRow, EmployeeProfile, HRAccess, HREmployee, HRModule, HRSettings,
   Holiday, LeaveBalance, LeaveRequest, LeaveType, PaySchedule, PayrollAdjustmentRow,
@@ -147,6 +147,22 @@ export const updateArrangement = async (id: string, patch: Partial<WorkArrangeme
  */
 export const endArrangement = async (id: string, to_date: string) =>
   unwrap(await supabase.from('hr_work_arrangements')
+    .update({ to_date, status: 'ended' }).eq('id', id).select().single());
+
+// ---- Breaks (away from payroll entirely: maternity, sabbatical, unpaid)
+
+export const listBreaks = async (): Promise<EmployeeBreak[]> =>
+  (await supabase.from('hr_employee_breaks').select('*').order('from_date', { ascending: false })).data ?? [];
+
+export const createBreak = async (row: Partial<EmployeeBreak>) =>
+  unwrap(await supabase.from('hr_employee_breaks').insert(row as never).select().single());
+
+export const updateBreak = async (id: string, patch: Partial<EmployeeBreak>) =>
+  unwrap(await supabase.from('hr_employee_breaks').update(patch).eq('id', id).select().single());
+
+/** Ending a break closes its range; the days it settled keep citing it. */
+export const endBreak = async (id: string, to_date: string) =>
+  unwrap(await supabase.from('hr_employee_breaks')
     .update({ to_date, status: 'ended' }).eq('id', id).select().single());
 
 // ---- Office geofences (HR-readable only; employees never see the coordinates)
