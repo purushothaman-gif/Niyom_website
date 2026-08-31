@@ -2417,6 +2417,7 @@ export type Database = {
           created_at: string
           header_label: string
           id: string
+          instruction_text: string
           max_length: number | null
           position: number
           required: boolean
@@ -2429,6 +2430,7 @@ export type Database = {
           created_at?: string
           header_label: string
           id?: string
+          instruction_text?: string
           max_length?: number | null
           position: number
           required?: boolean
@@ -2441,6 +2443,7 @@ export type Database = {
           created_at?: string
           header_label?: string
           id?: string
+          instruction_text?: string
           max_length?: number | null
           position?: number
           required?: boolean
@@ -2470,6 +2473,7 @@ export type Database = {
           file_format: string
           id: string
           include_header: boolean
+          include_instructions: boolean
           is_default: boolean
           name: string
           notes: string
@@ -2487,6 +2491,7 @@ export type Database = {
           file_format?: string
           id?: string
           include_header?: boolean
+          include_instructions?: boolean
           is_default?: boolean
           name: string
           notes?: string
@@ -2504,6 +2509,7 @@ export type Database = {
           file_format?: string
           id?: string
           include_header?: boolean
+          include_instructions?: boolean
           is_default?: boolean
           name?: string
           notes?: string
