@@ -58,27 +58,48 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
 
   const load = useCallback(async () => {
     setLocating(true);
-    // Ask the browser first, then let the server judge the fix. Sending the
-    // position with the state request means the card can say "you are 450
-    // metres away" before anyone presses anything.
-    const fix = await getPosition();
-    if (!mounted.current) return;
-    setGeo(fix);
-    setLocating(false);
-
     try {
-      const s = await getPunchState(
+      /*
+       * STATE FIRST, with no position attached.
+       *
+       * Asking the browser for GPS before knowing whether anything wants it
+       * raises a permission prompt on a system that is not using location, and
+       * the punch button sits disabled behind it for as long as the prompt
+       * goes unanswered. That is what stopped five people punching out on
+       * 31 August 2026: their punches did go through, but only after a wait
+       * long enough to read as a broken button, so they filed corrections for
+       * attendance they had already recorded.
+       *
+       * Nothing is asked of the browser until the server says location is
+       * actually being checked.
+       */
+      const first = await getPunchState();
+      if (!mounted.current) return;
+      if ((first as { error?: string }).error) {
+        setMessage({ text: (first as { error?: string }).error!, ok: false });
+        return;
+      }
+      setState(first);
+
+      if (first.location_mode === 'off') {
+        setGeo(null);
+        return;
+      }
+
+      // Location is being checked, so now the prompt is worth raising. The
+      // card is already usable at this point; this only refines the verdict.
+      const fix = await getPosition();
+      if (!mounted.current) return;
+      setGeo(fix);
+
+      const refined = await getPunchState(
         fix.ok ? { latitude: fix.latitude, longitude: fix.longitude, accuracy: fix.accuracy } : undefined);
       if (!mounted.current) return;
-      if ((s as { error?: string }).error) {
-        setMessage({ text: (s as { error?: string }).error!, ok: false });
-      } else {
-        setState(s);
-      }
+      if (!(refined as { error?: string }).error) setState(refined);
     } catch (err) {
       if (mounted.current) setMessage({ text: hrError(err, 'Could not load your attendance.'), ok: false });
     } finally {
-      if (mounted.current) setLoading(false);
+      if (mounted.current) { setLoading(false); setLocating(false); }
     }
   }, []);
 
@@ -105,23 +126,30 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
     setMessage(null);
     try {
       /*
-       * A FRESH fix, not the one from page load. Someone could otherwise open
-       * the page at the office and press the button an hour later from
-       * elsewhere, and the stale coordinates would still say "inside".
+       * A FRESH fix when location is being checked -- not the one from page
+       * load. Someone could otherwise open the page at the office and press
+       * the button an hour later from elsewhere, and the stale coordinates
+       * would still say "inside".
+       *
+       * When location is off, nothing is asked of the browser at all. Waiting
+       * on a GPS fix nobody is going to look at is how a working punch button
+       * comes to feel broken.
        */
-      const fix = await getPosition();
-      if (!mounted.current) return;
-      setGeo(fix);
+      let fix: GeoResult | null = null;
+      if (state.location_mode !== 'off') {
+        fix = await getPosition();
+        if (!mounted.current) return;
+        setGeo(fix);
 
-      if (!fix.ok && state.location_mode === 'enforce' && !state.location_exempt) {
-        setMessage({ text: fix.message, ok: false });
-        setBusy(false);
-        return;
+        if (!fix.ok && state.location_mode === 'enforce' && !state.location_exempt) {
+          setMessage({ text: fix.message, ok: false });
+          return;
+        }
       }
 
       const res = await punch(
         state.next_action,
-        fix.ok ? { latitude: fix.latitude, longitude: fix.longitude, accuracy: fix.accuracy } : undefined);
+        fix?.ok ? { latitude: fix.latitude, longitude: fix.longitude, accuracy: fix.accuracy } : undefined);
       if (res.ok) {
         setMessage({ text: res.message ?? 'Recorded.', ok: res.approval_status !== 'pending' });
       } else {
@@ -288,7 +316,7 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
       <div className="px-5 pb-5">
         <button
           onClick={doPunch}
-          disabled={busy || outsideHours || locating}
+          disabled={busy || outsideHours || (locating && state.location_mode !== 'off')}
           title={outsideHours ? 'Attendance cannot be punched at this time' : undefined}
           className="w-full py-4 rounded-2xl text-sm font-bold flex items-center justify-center gap-2.5 transition-all disabled:opacity-60 active:scale-[0.99]"
           style={{
@@ -297,9 +325,9 @@ export default function PunchCard({ employeeName, compact, onPunched }: Props) {
             border: `1px solid ${isIn ? 'rgba(239,68,68,0.35)' : 'rgba(16,185,129,0.4)'}`,
           }}>
           {busy ? <Clock className="w-4 h-4 animate-spin" /> : isIn ? <LogOut className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-          {busy ? 'Checking your location…'
+          {busy ? (state.location_mode === 'off' ? 'Recording…' : 'Checking your location…')
             : outsideHours ? 'OUTSIDE PERMITTED HOURS'
-            : locating ? 'CHECKING LOCATION…'
+            : locating && state.location_mode !== 'off' ? 'CHECKING LOCATION…'
             : isIn ? 'PUNCH OUT' : 'PUNCH IN'}
         </button>
       </div>
