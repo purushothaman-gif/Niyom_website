@@ -7969,6 +7969,7 @@ export type Database = {
           is_locked: boolean
           last_activity_at: string | null
           last_followup_at: string | null
+          lead_category: string
           lead_code: string
           lead_name: string
           lead_origin: string
@@ -8009,6 +8010,7 @@ export type Database = {
           is_locked?: boolean
           last_activity_at?: string | null
           last_followup_at?: string | null
+          lead_category?: string
           lead_code?: string
           lead_name: string
           lead_origin: string
@@ -8049,6 +8051,7 @@ export type Database = {
           is_locked?: boolean
           last_activity_at?: string | null
           last_followup_at?: string | null
+          lead_category?: string
           lead_code?: string
           lead_name?: string
           lead_origin?: string
@@ -10465,9 +10468,9 @@ export type Database = {
         }
       }
       nw_is_active_employee: { Args: { uid: string }; Returns: boolean }
-      nw_lead_dashboard: { Args: never; Returns: Json }
+      nw_lead_dashboard: { Args: { p_category?: string }; Returns: Json }
       nw_lead_kpi_counts: {
-        Args: { p_today_start: string }
+        Args: { p_category?: string; p_today_start: string }
         Returns: {
           converted: number
           pool: number

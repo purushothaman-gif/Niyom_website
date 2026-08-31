@@ -10,15 +10,18 @@ import {
   ParsedRow, parseLeadFile, downloadTemplate, roundRobinBuckets,
 } from './leadImportUtils';
 import { formatMoney } from './leadUtils';
+import { LeadCategory } from './leadTypes';
+import { LEAD_CATEGORIES } from './leadConstants';
 
-interface Props { employee: NWEmployee; onBack: () => void; onDone: () => void; }
+interface Props { employee: NWEmployee; category: LeadCategory; onBack: () => void; onDone: () => void; }
 type Step = 'upload' | 'preview' | 'result';
 type Dist = 'pool' | 'round_robin';
 
 interface Result { imported: number; skippedDup: number; skippedError: number; assigned: number; }
 
-export default function LeadImport({ employee, onBack, onDone }: Props) {
+export default function LeadImport({ employee, category, onBack, onDone }: Props) {
   const [step, setStep] = useState<Step>('upload');
+  const [importCategory, setImportCategory] = useState<LeadCategory>(category);
   const [fileName, setFileName] = useState('');
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parsing, setParsing] = useState(false);
@@ -92,6 +95,7 @@ export default function LeadImport({ employee, onBack, onDone }: Props) {
       const payload = importable.map(r => ({
         ...r.data,
         lead_origin: 'admin_upload' as const,
+        lead_category: importCategory,
         created_by_employee_id: employee.id,
         owner_employee_id: null,          // land in Admin Pool; round-robin assigns below
         status: 'New' as const,
@@ -207,6 +211,20 @@ export default function LeadImport({ employee, onBack, onDone }: Props) {
             <StatCard label="Will import" value={stats.valid} tone="success" />
             <StatCard label="Duplicates (skip)" value={stats.dups} tone="warning" />
             <StatCard label="Errors (skip)" value={stats.errors} tone="danger" />
+          </div>
+
+          {/* Dataset — which list these leads go into */}
+          <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>Import into</p>
+            <div className="grid grid-cols-2 gap-3">
+              {LEAD_CATEGORIES.map(c => (
+                <button key={c.value} onClick={() => setImportCategory(c.value)}
+                  className="px-3 py-2.5 rounded-xl text-sm font-bold transition-all"
+                  style={{ background: importCategory === c.value ? 'linear-gradient(135deg, var(--accent), var(--accent-strong))' : 'var(--bg-base)', color: importCategory === c.value ? 'var(--text-on-accent)' : 'var(--text-secondary)', border: `1px solid ${importCategory === c.value ? 'var(--accent)' : 'var(--border)'}` }}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Distribution */}

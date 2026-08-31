@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { NWEmployee, CRMPage } from '../types';
-import { List, LayoutGrid, Plus, LayoutDashboard, CalendarDays, PhoneCall } from 'lucide-react';
-import { NWLead } from './leadTypes';
+import { List, LayoutGrid, Plus, LayoutDashboard, CalendarDays, PhoneCall, Handshake, UserRound } from 'lucide-react';
+import { NWLead, LeadCategory } from './leadTypes';
 import { isAdminRole } from './leadUtils';
 import LeadList from './LeadList';
 import LeadPipeline from './LeadPipeline';
@@ -32,6 +32,7 @@ type View = 'dashboard' | 'queue' | 'list' | 'board' | 'calendar' | 'import';
 export default function Leads({ employee, onNavigate }: Props) {
   const isAdmin = isAdminRole(employee);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [category, setCategory] = useState<LeadCategory>('partner');
   const [view, setView] = useState<View>('dashboard');
   const [openLead, setOpenLead] = useState<NWLead | null>(null);      // workspace
   const [form, setForm] = useState<FormState>({ open: false, mode: 'create', lead: null });
@@ -52,7 +53,7 @@ export default function Leads({ employee, onNavigate }: Props) {
   if (view === 'import' && isAdmin) {
     return (
       <>
-        <LeadImport employee={employee}
+        <LeadImport employee={employee} category={category}
           onBack={() => setView('list')}
           onDone={() => { setView('list'); bump(); }} />
         <LeadReminderPopup employee={employee} onOpenLead={id => { setView('list'); openWorkspace(id); }} />
@@ -103,6 +104,22 @@ export default function Leads({ employee, onNavigate }: Props) {
     </div>
   );
 
+  // Top-level dataset switcher — scopes every screen below it.
+  const categoryTabs = (
+    <div className="inline-flex items-center rounded-xl p-1 gap-1" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+      {([['partner', 'Partner Leads', Handshake], ['client', 'Client Leads', UserRound]] as const).map(([v, label, Icon]) => {
+        const active = category === v;
+        return (
+          <button key={v} onClick={() => { setCategory(v); bump(); }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all"
+            style={{ background: active ? 'linear-gradient(135deg, var(--accent), var(--accent-strong))' : 'transparent', color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)' }}>
+            <Icon className="w-4 h-4" /> {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   const PageHeader = ({ title }: { title: string }) => (
     <div className="flex items-start justify-between gap-4 flex-wrap">
       <div>
@@ -122,9 +139,11 @@ export default function Leads({ employee, onNavigate }: Props) {
 
   return (
     <div>
+      <div className="mb-4">{categoryTabs}</div>
       {view === 'list' ? (
         <LeadList
           employee={employee}
+          category={category}
           refreshKey={refreshKey}
           viewToggle={viewToggle}
           onNew={() => setForm({ open: true, mode: 'create', lead: null })}
@@ -137,22 +156,22 @@ export default function Leads({ employee, onNavigate }: Props) {
       ) : view === 'dashboard' ? (
         <div className="space-y-5">
           <PageHeader title={isAdmin ? 'Admin Dashboard' : 'My Dashboard'} />
-          <LeadDashboard employee={employee} refreshKey={refreshKey} onOpenLead={openWorkspace} />
+          <LeadDashboard employee={employee} category={category} refreshKey={refreshKey} onOpenLead={openWorkspace} />
         </div>
       ) : view === 'queue' ? (
         <div className="space-y-5">
           <PageHeader title="Call Queue" />
-          <LeadCallQueue employee={employee} refreshKey={refreshKey} onOpenLead={openWorkspace} />
+          <LeadCallQueue employee={employee} category={category} refreshKey={refreshKey} onOpenLead={openWorkspace} />
         </div>
       ) : view === 'calendar' ? (
         <div className="space-y-5">
           <PageHeader title="Follow-up Calendar" />
-          <LeadCalendar employee={employee} refreshKey={refreshKey} onOpenLead={openWorkspace} />
+          <LeadCalendar employee={employee} category={category} refreshKey={refreshKey} onOpenLead={openWorkspace} />
         </div>
       ) : (
         <div className="space-y-5">
           <PageHeader title="Pipeline Board" />
-          <LeadPipeline employee={employee} refreshKey={refreshKey} onOpen={openWorkspace} />
+          <LeadPipeline employee={employee} category={category} refreshKey={refreshKey} onOpen={openWorkspace} />
         </div>
       )}
 

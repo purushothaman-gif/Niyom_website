@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { NWEmployee } from '../types';
 import { AlertCircle, CheckCircle2, ShieldAlert, ExternalLink, UserCog } from 'lucide-react';
 import { LeadFormData, NWLead, LeadPriority } from './leadTypes';
-import { PRIORITIES, INTERESTED_PRODUCTS, LEAD_SOURCES } from './leadConstants';
+import { PRIORITIES, INTERESTED_PRODUCTS, LEAD_SOURCES, LEAD_CATEGORIES } from './leadConstants';
 import { Drawer, Field, Input, Textarea, Select, PrimaryButton, GhostButton } from './leadUi';
 import { isAdminRole, isValidMobile, isValidEmail, isValidPan, formatDate } from './leadUtils';
 
@@ -30,7 +30,7 @@ const EMPTY: LeadFormData = {
   lead_name: '', mobile: '', alternate_number: '', email: '', pan: '', address: '',
   city: '', state: '', occupation: '', company_name: '', age: '', annual_income: '',
   investment_capacity: '', interested_product: '', lead_source: '', campaign: '',
-  priority: 'medium', remarks: '',
+  priority: 'medium', remarks: '', lead_category: '',
 };
 
 function fromLead(l: NWLead): LeadFormData {
@@ -42,6 +42,7 @@ function fromLead(l: NWLead): LeadFormData {
     investment_capacity: l.investment_capacity?.toString() ?? '',
     interested_product: l.interested_product, lead_source: l.lead_source,
     campaign: l.campaign, priority: l.priority, remarks: l.remarks,
+    lead_category: l.lead_category,
   };
 }
 
@@ -100,6 +101,7 @@ export default function LeadForm({ employee, mode, lead, onClose, onSaved, onOpe
   }, [form.mobile, form.email, form.pan, runDupCheck]);
 
   const validate = (): string | null => {
+    if (!form.lead_category) return 'Select Partner Leads or Client Leads.';
     if (!form.lead_name.trim()) return 'Lead name is required.';
     if (!form.mobile.trim()) return 'Mobile number is required.';
     if (!isValidMobile(form.mobile)) return 'Enter a valid 10-digit Indian mobile number.';
@@ -125,6 +127,7 @@ export default function LeadForm({ employee, mode, lead, onClose, onSaved, onOpe
     interested_product: form.interested_product.trim(),
     lead_source: form.lead_source.trim(), campaign: form.campaign.trim(),
     priority: form.priority, remarks: form.remarks.trim(),
+    lead_category: form.lead_category,
   });
 
   // Hard duplicate = an exact match against an existing LEAD (clients are advisory).
@@ -295,6 +298,26 @@ export default function LeadForm({ employee, mode, lead, onClose, onSaved, onOpe
             </div>
           )
         )}
+
+        {/* Dataset (Partner vs Client) — required */}
+        <div className="p-4 rounded-xl" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
+          <Field label="Dataset" required hint="Which list this lead belongs to.">
+            <div className="grid grid-cols-2 gap-2">
+              {LEAD_CATEGORIES.map(c => {
+                const active = form.lead_category === c.value;
+                const canEditCategory = mode === 'create' || isAdmin;
+                return (
+                  <button key={c.value} type="button" disabled={!canEditCategory}
+                    onClick={() => set('lead_category', c.value)}
+                    className="px-3 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-60"
+                    style={{ background: active ? 'linear-gradient(135deg, var(--accent), var(--accent-strong))' : 'var(--bg-elevated)', color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)', border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}` }}>
+                    {c.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+        </div>
 
         {/* Owner (admin only) */}
         {isAdmin && (

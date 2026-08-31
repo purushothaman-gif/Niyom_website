@@ -145,6 +145,7 @@ const EXPORT_COLS: { header: string; get: (l: NWLead) => string }[] = [
   { header: 'Score', get: l => l.lead_score.toString() },
   { header: 'Owner', get: l => l.owner?.full_name ?? '' },
   { header: 'Origin', get: l => l.lead_origin },
+  { header: 'Dataset', get: l => (l.lead_category === 'client' ? 'Client' : 'Partner') },
   { header: 'Created', get: l => l.created_at },
 ];
 

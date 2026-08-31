@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { NWEmployee } from '../types';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { NWLeadFollowup } from './leadTypes';
+import { NWLeadFollowup, LeadCategory } from './leadTypes';
 
 interface FRow extends NWLeadFollowup { lead?: { id: string; lead_name: string; lead_code: string } | null; }
 type View = 'month' | 'week' | 'day';
 
 interface Props {
   employee: NWEmployee;
+  category: LeadCategory;
   refreshKey: number;
   onOpenLead: (leadId: string) => void;
 }
@@ -27,7 +28,7 @@ function eventColor(f: FRow): string {
   return '59,130,246';
 }
 
-export default function LeadCalendar({ refreshKey, onOpenLead }: Props) {
+export default function LeadCalendar({ category, refreshKey, onOpenLead }: Props) {
   const [view, setView] = useState<View>('month');
   const [cursor, setCursor] = useState(startOfDay(new Date()));
   const [rows, setRows] = useState<FRow[]>([]);
@@ -43,12 +44,13 @@ export default function LeadCalendar({ refreshKey, onOpenLead }: Props) {
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('nw_lead_followups')
-      .select('*, lead:nw_leads(id, lead_name, lead_code)')
+      .select('*, lead:nw_leads!inner(id, lead_name, lead_code, lead_category)')
+      .eq('lead.lead_category', category)
       .gte('scheduled_at', range.start.toISOString())
       .lt('scheduled_at', range.end.toISOString())
       .order('scheduled_at', { ascending: true }).limit(500);
     setRows((data as unknown as FRow[]) || []);
-  }, [range.start, range.end]);
+  }, [range.start, range.end, category]);
   useEffect(() => { load(); }, [load, refreshKey]);
 
   const eventsFor = (day: Date) => rows.filter(r => sameDay(new Date(r.scheduled_at), day));

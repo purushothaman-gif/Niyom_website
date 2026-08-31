@@ -7,7 +7,7 @@ import {
   Pencil, Layers, Users2, Sparkles, Inbox, RefreshCw, Upload, Download, Bookmark, Save, ShieldAlert,
   ArrowUp, ArrowDown, ChevronsUpDown,
 } from 'lucide-react';
-import { NWLead, LeadListFilters, LeadStatus, LeadPriority, LeadOrigin, NWLeadSavedView } from './leadTypes';
+import { NWLead, LeadListFilters, LeadStatus, LeadPriority, LeadOrigin, LeadCategory, NWLeadSavedView } from './leadTypes';
 import { LEAD_STATUSES, PRIORITIES, INTERESTED_PRODUCTS, LEAD_SOURCES, LEAD_ORIGIN_LABEL, INDIAN_STATES, PAGE_SIZE } from './leadConstants';
 import { StatusBadge, PriorityBadge, ScoreBadge, Input, Select } from './leadUi';
 import { isAdminRole, formatMoney, formatDate, initials, relativeTime } from './leadUtils';
@@ -42,6 +42,7 @@ const COLUMNS: { label: string; field?: string }[] = [
 
 interface Props {
   employee: NWEmployee;
+  category: LeadCategory;           // 'partner' | 'client' — scopes the whole list
   onNew: () => void;
   onOpen: (lead: NWLead) => void;
   onEdit: (lead: NWLead) => void;
@@ -52,7 +53,7 @@ interface Props {
   onOpenDuplicates?: () => void;    // admin: open the duplicate-review queue
 }
 
-export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, refreshKey, viewToggle, onImport, onOpenDuplicates }: Props) {
+export default function LeadList({ employee, category, onNew, onOpen, onEdit, onAssign, refreshKey, viewToggle, onImport, onOpenDuplicates }: Props) {
   const isAdmin = isAdminRole(employee);
   const [leads, setLeads] = useState<NWLead[]>([]);
   const [total, setTotal] = useState(0);
@@ -137,6 +138,7 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
       forCount ? 'id' : LEAD_SELECT,
       forCount ? { count: 'exact', head: true } : undefined);
 
+    q = q.eq('lead_category', category);   // Partner vs Client dataset
     if (!filters.include_archived) q = q.eq('is_archived', false);
     if (filters.status) q = q.eq('status', filters.status);
     if (filters.priority) q = q.eq('priority', filters.priority);
@@ -164,7 +166,7 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
       if (s) q = q.or(`lead_name.ilike.%${s}%,mobile.ilike.%${s}%,email.ilike.%${s}%,city.ilike.%${s}%,lead_code.ilike.%${s}%`);
     }
     return q;
-  }, [filters, isAdmin, employee.id]);
+  }, [filters, isAdmin, employee.id, category]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -194,7 +196,7 @@ export default function LeadList({ employee, onNew, onOpen, onEdit, onAssign, re
   useEffect(() => {
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     let cancelled = false;
-    supabase.rpc('nw_lead_kpi_counts', { p_today_start: todayStart.toISOString() })
+    supabase.rpc('nw_lead_kpi_counts', { p_today_start: todayStart.toISOString(), p_category: category })
       .then(({ data }) => {
         if (cancelled) return;
         const r = (data as { total: number; today: number; pool: number; converted: number }[] | null)?.[0];

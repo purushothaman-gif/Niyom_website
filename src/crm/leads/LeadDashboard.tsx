@@ -9,9 +9,11 @@ import {
   Card, StatTile, BarList, Columns, Donut, Funnel, TrendLine, Datum, paletteAt,
 } from './LeadCharts';
 import LeadReminders from './LeadReminders';
+import { LeadCategory } from './leadTypes';
 
 interface Props {
   employee: NWEmployee;
+  category: LeadCategory;
   refreshKey: number;
   onOpenLead: (leadId: string) => void;
 }
@@ -31,7 +33,7 @@ interface ActRow { id: string; action: string; description: string; created_at: 
 
 const ORIGIN_LABEL: Record<string, string> = { admin_upload: 'Admin Upload', admin_manual: 'Admin Manual', employee_manual: 'Self-Generated' };
 
-export default function LeadDashboard({ employee, refreshKey, onOpenLead }: Props) {
+export default function LeadDashboard({ employee, category, refreshKey, onOpenLead }: Props) {
   const isAdmin = isAdminRole(employee);
   const [d, setD] = useState<Dash | null>(null);
   const [acts, setActs] = useState<ActRow[]>([]);
@@ -41,15 +43,16 @@ export default function LeadDashboard({ employee, refreshKey, onOpenLead }: Prop
   const load = useCallback(async () => {
     setLoading(true);
     const [dash, act] = await Promise.all([
-      supabase.rpc('nw_lead_dashboard'),
+      supabase.rpc('nw_lead_dashboard', { p_category: category }),
       supabase.from('nw_lead_activities')
-        .select('id, action, description, created_at, lead_id, lead:nw_leads(lead_name), employee:nw_employees(full_name)')
+        .select('id, action, description, created_at, lead_id, lead:nw_leads!inner(lead_name, lead_category), employee:nw_employees(full_name)')
+        .eq('lead.lead_category', category)
         .order('created_at', { ascending: false }).limit(12),
     ]);
     setD(dash.data as unknown as Dash);
     setActs((act.data as unknown as ActRow[]) || []);
     setLoading(false);
-  }, []);
+  }, [category]);
   useEffect(() => { load(); }, [load, refreshKey, localKey]);
 
   if (loading || !d) {
