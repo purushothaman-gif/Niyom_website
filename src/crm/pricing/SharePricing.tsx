@@ -2,6 +2,10 @@
 // daily share price (RM proposes, admin approves). Same workflow as bonds, over
 // us_price_markup; a share with no approved rate is simply not shown to that
 // client or partner.
+//
+// Shares additionally carry a per-target price BLOCK (allowBlocking), for the
+// case a company-wide rate otherwise makes prices universal: it hides prices
+// from one client or partner regardless of what has been approved.
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Gem } from 'lucide-react';
@@ -18,6 +22,7 @@ export default function SharePricing({ employee }: { employee: NWEmployee }) {
         eyebrow="Unlisted Share Pricing"
         baseLabel="share price"
         emptyIcon={Gem}
+        allowBlocking
       />
     </QueryClientProvider>
   );

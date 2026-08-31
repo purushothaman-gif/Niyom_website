@@ -26,6 +26,14 @@ interface ProductBinding {
   reject: 'bm_reject_markup' | 'us_reject_markup';
 }
 
+/**
+ * Price blocks are an unlisted-shares feature today, so the hooks below are
+ * scoped to that product rather than pretending bonds have a deny list they do
+ * not. Giving bonds one means adding the table here and the EXISTS check to
+ * bm_resolve_markup — nothing in this file's shape has to change.
+ */
+const BLOCK_TABLE = 'us_price_block' as const;
+
 const BINDINGS: Record<Product, ProductBinding> = {
   bond: {
     table: 'bm_price_markup',
@@ -138,5 +146,62 @@ export function useReject(product: Product) {
   return useMutation({
     mutationFn: async (v: { id: string; reason: string }) => { const { error } = await supabase.rpc(bind.reject, { p_id: v.id, p_reason: v.reason }); if (error) throw error; },
     onSuccess: () => qc.invalidateQueries({ queryKey: [bind.table] }),
+  });
+}
+
+// --- Price access (deny list) ----------------------------------------------
+// A block is an ACCESS decision, not a revenue one: it takes effect immediately
+// rather than queueing for approval, and it beats every approved rate including
+// the company-wide one. See 20260831123000 for why lifting is not symmetric.
+
+export interface PriceBlockRow {
+  id: string;
+  audience: Audience;
+  client_id: string | null;
+  dsa_id: string | null;
+  reason: string;
+  /** Placed by an admin — only an admin can lift it. */
+  admin_lock: boolean;
+  created_at: string;
+}
+
+export function usePriceBlocks(enabled: boolean) {
+  return useQuery({
+    queryKey: [BLOCK_TABLE],
+    enabled,
+    queryFn: async (): Promise<PriceBlockRow[]> => {
+      const { data, error } = await supabase
+        .from(BLOCK_TABLE)
+        .select('id, audience, client_id, dsa_id, reason, admin_lock, created_at');
+      if (error) throw error;
+      return (data as unknown as PriceBlockRow[]) ?? [];
+    },
+  });
+}
+
+export interface SetBlockArgs {
+  audience: Audience;
+  client_id?: string | null;
+  dsa_id?: string | null;
+  /** true = hide prices from this target, false = restore access. */
+  blocked: boolean;
+  reason?: string;
+}
+
+export function useSetPriceBlock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (v: SetBlockArgs) => {
+      const args = {
+        p_audience: v.audience,
+        p_client_id: (v.client_id ?? null) as unknown as string,
+        p_dsa_id: (v.dsa_id ?? null) as unknown as string,
+      };
+      const { error } = v.blocked
+        ? await supabase.rpc('us_block_price', { ...args, p_reason: v.reason ?? '' })
+        : await supabase.rpc('us_unblock_price', args);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [BLOCK_TABLE] }),
   });
 }

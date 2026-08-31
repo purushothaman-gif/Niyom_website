@@ -9034,6 +9034,61 @@ export type Database = {
           },
         ]
       }
+      us_price_block: {
+        Row: {
+          admin_lock: boolean
+          audience: string
+          blocked_by: string | null
+          client_id: string | null
+          created_at: string
+          dsa_id: string | null
+          id: string
+          reason: string
+        }
+        Insert: {
+          admin_lock?: boolean
+          audience: string
+          blocked_by?: string | null
+          client_id?: string | null
+          created_at?: string
+          dsa_id?: string | null
+          id?: string
+          reason?: string
+        }
+        Update: {
+          admin_lock?: boolean
+          audience?: string
+          blocked_by?: string | null
+          client_id?: string | null
+          created_at?: string
+          dsa_id?: string | null
+          id?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "us_price_block_blocked_by_fkey"
+            columns: ["blocked_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "us_price_block_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "us_price_block_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       us_price_markup: {
         Row: {
           approved_at: string | null
@@ -10804,6 +10859,15 @@ export type Database = {
       trigger_nav_refresh: { Args: never; Returns: undefined }
       trigger_nsdl_refresh: { Args: never; Returns: undefined }
       us_approve_markup: { Args: { p_id: string }; Returns: undefined }
+      us_block_price: {
+        Args: {
+          p_audience: string
+          p_client_id: string
+          p_dsa_id: string
+          p_reason?: string
+        }
+        Returns: string
+      }
       us_propose_markup: {
         Args: {
           p_audience: string
@@ -10836,6 +10900,10 @@ export type Database = {
           p_share_id: string
         }
         Returns: string
+      }
+      us_unblock_price: {
+        Args: { p_audience: string; p_client_id: string; p_dsa_id: string }
+        Returns: undefined
       }
     }
     Enums: {
