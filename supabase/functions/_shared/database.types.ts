@@ -4175,6 +4175,60 @@ export type Database = {
           },
         ]
       }
+      hr_work_arrangements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          employee_id: string
+          from_date: string
+          id: string
+          kind: string
+          label: string
+          status: string
+          to_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          employee_id: string
+          from_date: string
+          id?: string
+          kind?: string
+          label: string
+          status?: string
+          to_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string
+          from_date?: string
+          id?: string
+          kind?: string
+          label?: string
+          status?: string
+          to_date?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hr_work_arrangements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hr_work_arrangements_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hr_work_schedules: {
         Row: {
           active: boolean

@@ -13,7 +13,7 @@
 
 import { supabase } from '../../lib/supabase';
 import type {
-  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch, HRNavContext, OfficeLocation, LopWaiver,
+  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch, HRNavContext, OfficeLocation, LopWaiver, WorkArrangement,
   AttendanceSettings, AuditLog, BankAccount, BankTemplateColumn, BankTemplateRow,
   ComponentSlabRow, EmployeeProfile, HRAccess, HREmployee, HRModule, HRSettings,
   Holiday, LeaveBalance, LeaveRequest, LeaveType, PaySchedule, PayrollAdjustmentRow,
@@ -128,6 +128,26 @@ export const savePaySchedule = async (id: string, patch: Partial<PaySchedule>) =
 
 export const saveWorkSchedule = async (id: string, patch: Partial<WorkSchedule>) =>
   unwrap(await supabase.from('hr_work_schedules').update(patch).eq('id', id).select().single());
+
+// ---- Work arrangements (working without punching: remote, field, deputation)
+
+export const listArrangements = async (): Promise<WorkArrangement[]> =>
+  (await supabase.from('hr_work_arrangements').select('*').order('from_date', { ascending: false })).data ?? [];
+
+export const createArrangement = async (row: Partial<WorkArrangement>) =>
+  unwrap(await supabase.from('hr_work_arrangements').insert(row as never).select().single());
+
+export const updateArrangement = async (id: string, patch: Partial<WorkArrangement>) =>
+  unwrap(await supabase.from('hr_work_arrangements').update(patch).eq('id', id).select().single());
+
+/*
+ * Ending an arrangement means closing its date range, never deleting the row:
+ * the days it settled cite it as their reason, and deleting it would strip the
+ * explanation off months of already-paid attendance.
+ */
+export const endArrangement = async (id: string, to_date: string) =>
+  unwrap(await supabase.from('hr_work_arrangements')
+    .update({ to_date, status: 'ended' }).eq('id', id).select().single());
 
 // ---- Office geofences (HR-readable only; employees never see the coordinates)
 
