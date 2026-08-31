@@ -1,0 +1,27 @@
+{
+  "name": "niyom-promo-video",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Records the Partner Portal promo video: drives the real portal in Chromium, narrates it, and cuts it together with ffmpeg.",
+  "scripts": {
+    "smoke": "tsx src/smoke.ts",
+    "voice": "tsx src/voice.ts",
+    "capture": "tsx src/capture.ts",
+    "build": "tsx src/build.ts",
+    "all": "tsx src/all.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "docs": "tsx src/docs.ts"
+  },
+  "dependencies": {
+    "playwright": "1.62.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.3",
+    "@types/node": "^22.10.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
