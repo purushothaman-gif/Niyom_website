@@ -15,6 +15,8 @@ import Dashboard from './Dashboard';
 import Leads from './leads/Leads';
 import Bonds from './bonds/Bonds';
 import BondPricing from './pricing/BondPricing';
+import SharePricing from './pricing/SharePricing';
+import UnlistedShares from './shares/UnlistedShares';
 import MarketingContent from './marketing/MarketingContent';
 import FundResearch from './marketing/funds/FundResearch';
 import ClientOnboarding from './ClientOnboarding';
@@ -33,6 +35,7 @@ import DealConfirmation from './DealConfirmation';
 import TransferQueue from './TransferQueue';
 import SupportTickets from './SupportTickets';
 import BondOrders from './BondOrders';
+import ShareOrders from './ShareOrders';
 /*
  * HR is lazy on purpose. Statically imported it added ~260 KB (~64 KB gzipped)
  * to the CRM chunk that every employee downloads on every page load, for ten
@@ -79,6 +82,9 @@ export default function CRM() {
     'reports',
     'bonds',
     'bond_pricing',
+    'unlisted_shares',
+    'share_pricing',
+    'share_orders',
     'marketing_content',
     'marketing_funds',
     'mis',
@@ -216,6 +222,8 @@ export default function CRM() {
       case 'reports': return <Reports employee={employee} />;
       case 'bonds': return <Bonds employee={employee} onNavigate={navigate} pageParams={pageParams} />;
       case 'bond_pricing': return <BondPricing employee={employee} />;
+      case 'unlisted_shares': return <UnlistedShares employee={employee} />;
+      case 'share_pricing': return <SharePricing employee={employee} />;
       // Content Creation is visible to everyone — admins get the full studio,
       // employees get the read-only approved-content gallery (branched inside).
       case 'marketing_content': return <MarketingContent employee={employee} onNavigate={navigate} />;
@@ -234,6 +242,7 @@ export default function CRM() {
       case 'transfer_queue': return isAdmin ? <TransferQueue employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
       case 'support_tickets': return <SupportTickets employee={employee} onNavigate={navigate} />;
       case 'bond_orders': return <BondOrders employee={employee} onNavigate={navigate} />;
+      case 'share_orders': return <ShareOrders employee={employee} onNavigate={navigate} />;
       // HR & Payroll. Every one of these pages resolves its own capability
       // through HR.tsx rather than being gated here -- an `isAdmin` check in
       // this switch would be a second source of truth to drift from the RLS

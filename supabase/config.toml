@@ -517,6 +517,26 @@ verify_jwt = false
 [functions.submit-bond-offer]
 verify_jwt = false
 
+# Unlisted shares — the same four surfaces as bonds, priced per share rather than
+# per ₹100 of face. Every one of them re-derives the price server-side from
+# us_shares.latest_price × the approved markup; the base price is never accepted
+# from, nor returned to, a caller.
+[functions.place-share-order]
+verify_jwt = false
+
+[functions.place-partner-share-order]
+verify_jwt = false
+
+# Public share-offer landing (partner shared link). resolve-share-offer maps a
+# token to the share at the partner's price (cost never included); submit-share-offer
+# turns intent into a real order (if the contact matches a client of the DSA) or a
+# lead to the DSA's RM. Both fully public — no session exists on the link.
+[functions.resolve-share-offer]
+verify_jwt = false
+
+[functions.submit-share-offer]
+verify_jwt = false
+
 # Client "Forgot Password" — 6-digit OTP code flow (no magic link, which email
 # scanners pre-consume). Both public because they run before any session exists;
 # PAN-enumeration-safe, rate-limited, and code-hashed with a server pepper.

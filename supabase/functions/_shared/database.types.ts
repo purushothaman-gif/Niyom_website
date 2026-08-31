@@ -8278,6 +8278,51 @@ export type Database = {
           },
         ]
       }
+      nw_partner_share_links: {
+        Row: {
+          created_at: string
+          dsa_id: string
+          expires_at: string
+          id: string
+          margin_percent: number
+          share_id: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          dsa_id: string
+          expires_at?: string
+          id?: string
+          margin_percent?: number
+          share_id: string
+          token: string
+        }
+        Update: {
+          created_at?: string
+          dsa_id?: string
+          expires_at?: string
+          id?: string
+          margin_percent?: number
+          share_id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_partner_share_links_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_partner_share_links_share_id_fkey"
+            columns: ["share_id"]
+            isOneToOne: false
+            referencedRelation: "us_shares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nw_password_reset_logs: {
         Row: {
           created_at: string
@@ -8448,6 +8493,133 @@ export type Database = {
             columns: ["payment_id"]
             isOneToOne: false
             referencedRelation: "nw_deal_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nw_share_orders: {
+        Row: {
+          amount: number | null
+          assigned_employee_id: string | null
+          client_id: string
+          company_name: string
+          created_at: string
+          deal_id: string | null
+          dsa_id: string | null
+          id: string
+          isin: string
+          notes: string
+          partner_markup_percent: number | null
+          price_per_share: number
+          qty: number
+          ref: string
+          share_id: string | null
+          source: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          assigned_employee_id?: string | null
+          client_id: string
+          company_name?: string
+          created_at?: string
+          deal_id?: string | null
+          dsa_id?: string | null
+          id?: string
+          isin?: string
+          notes?: string
+          partner_markup_percent?: number | null
+          price_per_share: number
+          qty: number
+          ref?: string
+          share_id?: string | null
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          assigned_employee_id?: string | null
+          client_id?: string
+          company_name?: string
+          created_at?: string
+          deal_id?: string | null
+          dsa_id?: string | null
+          id?: string
+          isin?: string
+          notes?: string
+          partner_markup_percent?: number | null
+          price_per_share?: number
+          qty?: number
+          ref?: string
+          share_id?: string | null
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_share_orders_assigned_employee_id_fkey"
+            columns: ["assigned_employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_share_orders_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_share_orders_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_confirmations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_share_orders_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_overall_stage"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_share_orders_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_payment_summary"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_share_orders_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_transfer_eligible"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_share_orders_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "nw_deal_transfer_pending_acceptance"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_share_orders_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_share_orders_share_id_fkey"
+            columns: ["share_id"]
+            isOneToOne: false
+            referencedRelation: "us_shares"
             referencedColumns: ["id"]
           },
         ]
@@ -8832,6 +9004,285 @@ export type Database = {
           x_min?: number
         }
         Relationships: []
+      }
+      us_partner_self_markup: {
+        Row: {
+          dsa_id: string
+          markup_percent: number
+          updated_at: string
+        }
+        Insert: {
+          dsa_id: string
+          markup_percent?: number
+          updated_at?: string
+        }
+        Update: {
+          dsa_id?: string
+          markup_percent?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "us_partner_self_markup_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: true
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      us_price_markup: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          audience: string
+          client_id: string | null
+          created_at: string
+          dsa_id: string | null
+          employee_id: string | null
+          id: string
+          markup_percent: number
+          proposed_by: string | null
+          rejected_at: string | null
+          rejection_reason: string
+          scope: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          audience: string
+          client_id?: string | null
+          created_at?: string
+          dsa_id?: string | null
+          employee_id?: string | null
+          id?: string
+          markup_percent: number
+          proposed_by?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string
+          scope: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          audience?: string
+          client_id?: string | null
+          created_at?: string
+          dsa_id?: string | null
+          employee_id?: string | null
+          id?: string
+          markup_percent?: number
+          proposed_by?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string
+          scope?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "us_price_markup_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "us_price_markup_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "us_price_markup_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "us_price_markup_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "us_price_markup_proposed_by_fkey"
+            columns: ["proposed_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      us_price_markup_events: {
+        Row: {
+          actor: string
+          actor_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          markup_id: string
+          note: string
+        }
+        Insert: {
+          actor: string
+          actor_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          markup_id: string
+          note?: string
+        }
+        Update: {
+          actor?: string
+          actor_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          markup_id?: string
+          note?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "us_price_markup_events_markup_id_fkey"
+            columns: ["markup_id"]
+            isOneToOne: false
+            referencedRelation: "us_price_markup"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      us_share_prices: {
+        Row: {
+          created_at: string
+          entered_by: string | null
+          id: string
+          note: string
+          price: number
+          price_date: string
+          share_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          entered_by?: string | null
+          id?: string
+          note?: string
+          price: number
+          price_date?: string
+          share_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          entered_by?: string | null
+          id?: string
+          note?: string
+          price?: number
+          price_date?: string
+          share_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "us_share_prices_entered_by_fkey"
+            columns: ["entered_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "us_share_prices_share_id_fkey"
+            columns: ["share_id"]
+            isOneToOne: false
+            referencedRelation: "us_shares"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      us_shares: {
+        Row: {
+          about: string
+          active_status: string
+          company_name: string
+          created_at: string
+          created_by: string | null
+          currency: string
+          display_order: number
+          face_value: number | null
+          id: string
+          isin: string
+          latest_price: number | null
+          logo_url: string
+          lot_size: number
+          min_qty: number
+          price_date: string | null
+          price_updated_at: string | null
+          sector: string
+          short_name: string
+          updated_at: string
+          website: string
+        }
+        Insert: {
+          about?: string
+          active_status?: string
+          company_name: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          display_order?: number
+          face_value?: number | null
+          id?: string
+          isin: string
+          latest_price?: number | null
+          logo_url?: string
+          lot_size?: number
+          min_qty?: number
+          price_date?: string | null
+          price_updated_at?: string | null
+          sector?: string
+          short_name?: string
+          updated_at?: string
+          website?: string
+        }
+        Update: {
+          about?: string
+          active_status?: string
+          company_name?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          display_order?: number
+          face_value?: number | null
+          id?: string
+          isin?: string
+          latest_price?: number | null
+          logo_url?: string
+          lot_size?: number
+          min_qty?: number
+          price_date?: string | null
+          price_updated_at?: string | null
+          sector?: string
+          short_name?: string
+          updated_at?: string
+          website?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "us_shares_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -9822,6 +10273,40 @@ export type Database = {
           trustee: string
         }[]
       }
+      nw_client_unlisted_share: {
+        Args: { p_id: string }
+        Returns: {
+          about: string
+          client_price: number
+          company_name: string
+          face_value: number
+          id: string
+          isin: string
+          logo_url: string
+          lot_size: number
+          min_qty: number
+          sector: string
+          short_name: string
+          website: string
+        }[]
+      }
+      nw_client_unlisted_shares: {
+        Args: never
+        Returns: {
+          about: string
+          client_price: number
+          company_name: string
+          face_value: number
+          id: string
+          isin: string
+          logo_url: string
+          lot_size: number
+          min_qty: number
+          sector: string
+          short_name: string
+          website: string
+        }[]
+      }
       nw_current_client_code: { Args: never; Returns: string }
       nw_current_client_id: { Args: never; Returns: string }
       nw_current_dsa_id: { Args: never; Returns: string }
@@ -10125,6 +10610,10 @@ export type Database = {
         Args: { p_bond_id: string; p_margin: number }
         Returns: string
       }
+      nw_partner_create_share_link: {
+        Args: { p_margin: number; p_share_id: string }
+        Returns: string
+      }
       nw_partner_debit_notes: {
         Args: never
         Returns: {
@@ -10217,6 +10706,48 @@ export type Database = {
         Args: { p_dsa_id: string; p_enabled: boolean }
         Returns: undefined
       }
+      nw_partner_set_share_markup: {
+        Args: { p_percent: number }
+        Returns: number
+      }
+      nw_partner_unlisted_share: {
+        Args: { p_id: string }
+        Returns: {
+          about: string
+          company_name: string
+          face_value: number
+          id: string
+          isin: string
+          logo_url: string
+          lot_size: number
+          min_qty: number
+          partner_base: number
+          partner_price: number
+          sector: string
+          self_markup_percent: number
+          short_name: string
+          website: string
+        }[]
+      }
+      nw_partner_unlisted_shares: {
+        Args: never
+        Returns: {
+          about: string
+          company_name: string
+          face_value: number
+          id: string
+          isin: string
+          logo_url: string
+          lot_size: number
+          min_qty: number
+          partner_base: number
+          partner_price: number
+          sector: string
+          self_markup_percent: number
+          short_name: string
+          website: string
+        }[]
+      }
       nw_reassign_client: {
         Args: { p_client_id: string; p_reason?: string; p_to_employee: string }
         Returns: undefined
@@ -10269,6 +10800,40 @@ export type Database = {
       trigger_mutual_funds_update: { Args: never; Returns: undefined }
       trigger_nav_refresh: { Args: never; Returns: undefined }
       trigger_nsdl_refresh: { Args: never; Returns: undefined }
+      us_approve_markup: { Args: { p_id: string }; Returns: undefined }
+      us_propose_markup: {
+        Args: {
+          p_audience: string
+          p_client_id: string
+          p_company_wide?: boolean
+          p_dsa_id: string
+          p_markup: number
+          p_scope: string
+        }
+        Returns: string
+      }
+      us_reject_markup: {
+        Args: { p_id: string; p_reason?: string }
+        Returns: undefined
+      }
+      us_resolve_markup: {
+        Args: {
+          p_audience: string
+          p_client_id: string
+          p_dsa_id: string
+          p_employee_id: string
+        }
+        Returns: number
+      }
+      us_set_price: {
+        Args: {
+          p_date?: string
+          p_note?: string
+          p_price: number
+          p_share_id: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

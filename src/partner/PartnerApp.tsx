@@ -15,6 +15,7 @@ import { isDemoSession } from './demo/demoData';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ClientsPage } from './features/clients/ClientsPage';
 import { BondsModule } from './features/bonds/BondsModule';
+import { SharesModule } from './features/shares/SharesModule';
 import { PayoutsPage } from './features/payouts/PayoutsPage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { ReferralPage } from './features/referral/ReferralPage';
@@ -74,6 +75,8 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
         return <ClientsPage clients={snapshot.clients} onOnboarded={refresh} />;
       case 'bonds':
         return <BondsModule partner={snapshot.profile} onAccessRevoked={handleAccessRevoked} />;
+      case 'unlisted-shares':
+        return <SharesModule onAccessRevoked={handleAccessRevoked} />;
       case 'payouts':
         return <PayoutsPage payout={snapshot.payout} notes={snapshot.notes} />;
       case 'referral':

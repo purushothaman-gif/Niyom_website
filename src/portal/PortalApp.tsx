@@ -14,6 +14,7 @@ import { PortfolioPage } from './features/portfolio/PortfolioPage';
 import { AllocationPage } from './features/allocation/AllocationPage';
 import { MutualFundsModule } from './features/mutual-funds/MutualFundsModule';
 import { BondsModule } from './features/bonds/BondsModule';
+import { SharesModule } from './features/shares/SharesModule';
 import { TransactionsPage } from './features/transactions/TransactionsPage';
 import { ReportsPage } from './features/reports/ReportsPage';
 import { CapitalGainsPage } from './features/gains/CapitalGainsPage';
@@ -119,6 +120,13 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
     if (view === 'bonds')
       return (
         <BondsModule
+          clientId={clientId}
+          onboardingComplete={client?.onboarding_status === 'active'}
+        />
+      );
+    if (view === 'unlisted-shares')
+      return (
+        <SharesModule
           clientId={clientId}
           onboardingComplete={client?.onboarding_status === 'active'}
         />
