@@ -15,6 +15,8 @@ export type LeadStatus =
   | 'Interested'
   | 'Meeting Scheduled'
   | 'Follow-up'
+  | 'WhatsApp Sent'
+  | 'Email Sent'
   | 'Documentation Pending'
   | 'KYC Pending'
   | 'Investment Under Process'

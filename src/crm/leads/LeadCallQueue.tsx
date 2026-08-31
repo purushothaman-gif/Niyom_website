@@ -3,10 +3,10 @@ import { supabase } from '../../lib/supabase';
 import { NWEmployee } from '../types';
 import {
   Copy, Check, ChevronLeft, ChevronRight, RefreshCw, ExternalLink,
-  MessageCircle, PhoneCall, CalendarClock, Inbox,
+  MessageCircle, PhoneCall, CalendarClock, Inbox, MapPin, ArrowUpDown,
 } from 'lucide-react';
 import { NWLead, LeadStatus } from './leadTypes';
-import { LEAD_STATUSES, CALL_OUTCOMES } from './leadConstants';
+import { QUEUE_OUTCOMES, QUEUE_STATUS_OPTIONS } from './leadConstants';
 import { StatusBadge, Select, Input } from './leadUi';
 import { isAdminRole, formatMoney, relativeTime, initials } from './leadUtils';
 
@@ -17,14 +17,32 @@ const LEAD_SELECT =
 // Compact queue page: PAGE_SIZE rows worked top-to-bottom.
 const QUEUE_SIZE = 25;
 
-type Scope = 'work' | 'uncontacted' | 'callback' | 'interested' | 'all';
+type Scope = 'work' | 'uncontacted' | 'interested' | 'followup' | 'whatsapp' | 'email' | 'meeting' | 'callback' | 'all';
+
+// Scopes that simply filter by a status.
+const STATUS_SCOPES: Partial<Record<Scope, LeadStatus>> = {
+  interested: 'Interested', followup: 'Follow-up', whatsapp: 'WhatsApp Sent',
+  email: 'Email Sent', meeting: 'Meeting Scheduled', callback: 'Call Back Later',
+};
 
 const SCOPES: { key: Scope; label: string }[] = [
   { key: 'work', label: 'Work List' },
   { key: 'uncontacted', label: 'Not Yet Called' },
-  { key: 'callback', label: 'Call Back Later' },
   { key: 'interested', label: 'Interested' },
+  { key: 'followup', label: 'Follow-up' },
+  { key: 'whatsapp', label: 'WhatsApp Sent' },
+  { key: 'email', label: 'Email Sent' },
+  { key: 'meeting', label: 'Meeting Scheduled' },
+  { key: 'callback', label: 'Call Back Later' },
   { key: 'all', label: 'All My Active' },
+];
+
+type SortKey = 'smart' | 'location' | 'name' | 'score';
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: 'smart', label: 'Not-called first' },
+  { key: 'location', label: 'Location (State, City)' },
+  { key: 'name', label: 'Name (A–Z)' },
+  { key: 'score', label: 'Score (high→low)' },
 ];
 
 interface Draft { status: LeadStatus; outcome: string; remarks: string; next: string; saved: boolean; saving: boolean; }
@@ -38,6 +56,7 @@ interface Props {
 export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Props) {
   const isAdmin = isAdminRole(employee);
   const [scope, setScope] = useState<Scope>('work');
+  const [sort, setSort] = useState<SortKey>('smart');
   const [leads, setLeads] = useState<NWLead[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -54,16 +73,20 @@ export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Prop
       .neq('status', 'Closed - Converted');
     if (scope === 'work') q = q.not('status', 'in', '("Closed - Rejected","Lost","Not Interested","Wrong Number")');
     else if (scope === 'uncontacted') q = q.is('first_call_at', null);
-    else if (scope === 'callback') q = q.eq('status', 'Call Back Later');
-    else if (scope === 'interested') q = q.eq('status', 'Interested');
+    else if (STATUS_SCOPES[scope]) q = q.eq('status', STATUS_SCOPES[scope]!);
     return q;
   }, [employee.id, scope]);
 
+  const applySort = useCallback((q: any) => {
+    if (sort === 'location') return q.order('state', { ascending: true }).order('city', { ascending: true }).order('lead_name', { ascending: true });
+    if (sort === 'name') return q.order('lead_name', { ascending: true });
+    if (sort === 'score') return q.order('lead_score', { ascending: false });
+    return q.order('first_call_at', { ascending: true, nullsFirst: true }).order('lead_score', { ascending: false }); // smart
+  }, [sort]);
+
   const load = useCallback(async () => {
     setLoading(true);
-    const q = buildQuery(false)
-      .order('first_call_at', { ascending: true, nullsFirst: true })  // never-called first
-      .order('lead_score', { ascending: false })
+    const q = applySort(buildQuery(false))
       .range(page * QUEUE_SIZE, (page + 1) * QUEUE_SIZE - 1);
     const { data, count } = await q;
     const rows = (data as unknown as NWLead[]) || [];
@@ -74,10 +97,10 @@ export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Prop
     rows.forEach(l => { seed[l.id] = { status: l.status, outcome: '', remarks: '', next: '', saved: false, saving: false }; });
     setDrafts(seed);
     setLoading(false);
-  }, [buildQuery, page]);
+  }, [buildQuery, page, applySort]);
 
   useEffect(() => { load(); }, [load, refreshKey]);
-  useEffect(() => { setPage(0); }, [scope]);
+  useEffect(() => { setPage(0); }, [scope, sort]);
 
   // "Worked today" = calls I logged since midnight.
   useEffect(() => {
@@ -157,7 +180,14 @@ export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Prop
             );
           })}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+            <ArrowUpDown className="w-3.5 h-3.5" style={{ color: 'var(--text-faint)' }} />
+            <select value={sort} onChange={e => setSort(e.target.value as SortKey)}
+              className="text-xs font-semibold bg-transparent outline-none cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+              {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          </div>
           <div className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--success)', border: '1px solid rgba(16,185,129,0.25)' }}>
             <PhoneCall className="w-3.5 h-3.5 inline mr-1" /> {workedToday} logged today
           </div>
@@ -199,6 +229,9 @@ export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Prop
                         <p className="text-sm font-semibold truncate flex items-center gap-1" style={{ color: 'var(--text-primary)' }}>
                           {l.lead_name} <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-60 flex-shrink-0" />
                         </p>
+                        <p className="text-[11px] flex items-center gap-1 truncate" style={{ color: 'var(--text-faint)' }}>
+                          <MapPin className="w-3 h-3 flex-shrink-0" />{[l.city, l.state].filter(Boolean).join(', ') || 'No location'}
+                        </p>
                         <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>{formatMoney(l.investment_capacity)} · {relativeTime(l.last_activity_at || l.created_at)}</p>
                       </button>
                     </div>
@@ -222,12 +255,14 @@ export default function LeadCallQueue({ employee, refreshKey, onOpenLead }: Prop
 
                     {/* Inline response logging */}
                     <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap sm:flex-nowrap">
-                      <Select value={d.outcome} onChange={e => patchDraft(l.id, { outcome: e.target.value })} style={{ width: '9.5rem', flexShrink: 0 }}>
+                      <Select value={d.outcome} onChange={e => patchDraft(l.id, { outcome: e.target.value })} style={{ width: '9.5rem', flexShrink: 0 }} title="Call outcome">
                         <option value="">— Outcome —</option>
-                        {CALL_OUTCOMES.map(o => <option key={o} value={o}>{o}</option>)}
+                        {QUEUE_OUTCOMES.map(o => <option key={o} value={o}>{o}</option>)}
                       </Select>
-                      <Select value={d.status} onChange={e => patchDraft(l.id, { status: e.target.value as LeadStatus })} style={{ width: '9.5rem', flexShrink: 0 }} title="Status">
-                        {LEAD_STATUSES.map(s => <option key={s.label} value={s.label}>{s.label}</option>)}
+                      <Select value={d.status} onChange={e => patchDraft(l.id, { status: e.target.value as LeadStatus })} style={{ width: '10rem', flexShrink: 0 }} title="Set status">
+                        {/* keep the lead's current status selectable even if it's outside the queue set */}
+                        {!QUEUE_STATUS_OPTIONS.includes(l.status) && <option value={l.status}>{l.status}</option>}
+                        {QUEUE_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                       </Select>
                       <input
                         ref={el => { rowRefs.current[l.id] = el; }}

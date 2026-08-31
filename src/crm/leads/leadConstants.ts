@@ -16,6 +16,8 @@ export const LEAD_STATUSES: StatusMeta[] = [
   { label: 'Interested',               rgb: '16,185,129',  group: 'progress' },  // emerald
   { label: 'Meeting Scheduled',        rgb: '20,184,166',  group: 'progress' },  // teal
   { label: 'Follow-up',                rgb: '234,179,8',   group: 'active' },     // amber
+  { label: 'WhatsApp Sent',            rgb: '37,211,102',  group: 'active' },     // whatsapp green
+  { label: 'Email Sent',               rgb: '96,165,250',  group: 'active' },     // blue-400
   { label: 'Documentation Pending',    rgb: '245,158,11',  group: 'progress' },  // amber-600
   { label: 'KYC Pending',              rgb: '249,115,22',  group: 'progress' },  // orange
   { label: 'Investment Under Process', rgb: '132,204,22',  group: 'progress' },  // lime
@@ -63,6 +65,17 @@ export const CALL_OUTCOMES = [
   'Not Interested', 'Call Back Later', 'Need Information', 'Meeting Fixed',
   'Follow-up Required', 'Converted', 'Lost',
 ] as const;
+
+// Call Queue — focused pick-lists (kept short so callers move fast).
+// Outcome = what happened on the dial attempt (stored on the communication).
+export const QUEUE_OUTCOMES = [
+  'Interested', 'Not Interested', 'Not Connected', 'Switched Off', 'Wrong Number', 'Busy', 'Call Later',
+] as const;
+
+// Status = the resulting pipeline stage the caller sets after the call.
+export const QUEUE_STATUS_OPTIONS: LeadStatus[] = [
+  'Interested', 'Follow-up', 'WhatsApp Sent', 'Email Sent', 'Meeting Scheduled', 'Call Back Later', 'Not Interested',
+];
 
 export const COMM_TYPES: { value: CommType; label: string }[] = [
   { value: 'call',     label: 'Call' },
