@@ -5,7 +5,7 @@ import {
   LayoutDashboard, UserPlus, Users, PieChart, ArrowLeftRight,
   FileText, UserCog, Settings, LogOut, Bell, ChevronRight, X, Home,
   FolderOpen, Shield, BarChart3, Wallet, Handshake, ClipboardList,
-  Send, Target, Landmark, LifeBuoy, Sparkles, LineChart, BadgePercent,
+  Send, Target, Landmark, LifeBuoy, Sparkles, LineChart, BadgePercent, Gem,
   CalendarCheck, CalendarClock, CalendarDays, Coins, Receipt, Fingerprint,
   BadgeIndianRupee, SlidersHorizontal,
 } from 'lucide-react';
@@ -77,6 +77,7 @@ const NAV: NavSection[] = [
       { key: 'admin_documents' as CRMPage,   label: 'Document Vault',    icon: Shield, adminOnly: true },
       { key: 'support_tickets' as CRMPage,   label: 'Support Tickets',   icon: LifeBuoy },
       { key: 'bond_orders' as CRMPage,       label: 'Bond Orders',       icon: Receipt },
+      { key: 'share_orders' as CRMPage,      label: 'Share Orders',      icon: Receipt },
     ],
   },
   {
@@ -91,6 +92,8 @@ const NAV: NavSection[] = [
     items: [
       { key: 'bonds' as CRMPage,             label: 'Bond Creation',     icon: Landmark },
       { key: 'bond_pricing' as CRMPage,      label: 'Bond Pricing',      icon: BadgePercent },
+      { key: 'unlisted_shares' as CRMPage,   label: 'Unlisted Shares',   icon: Gem },
+      { key: 'share_pricing' as CRMPage,     label: 'Share Pricing',     icon: BadgePercent },
       { key: 'marketing_content' as CRMPage, label: 'Content Creation',  icon: Sparkles },
       { key: 'marketing_funds' as CRMPage,   label: 'Mutual Funds',     icon: LineChart },
     ],
@@ -207,6 +210,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
     if (a.action_url && a.action_url.includes('/leads')) onNavigate('leads' as CRMPage);
     else if (a.action_url && a.action_url.includes('/support-tickets')) onNavigate('support_tickets' as CRMPage);
     else if (a.action_url && a.action_url.includes('/bond-orders')) onNavigate('bond_orders' as CRMPage);
+    else if (a.action_url && a.action_url.includes('/share-orders')) onNavigate('share_orders' as CRMPage);
     else if (a.action_url && a.action_url.includes('/clients')) onNavigate('clients' as CRMPage);
     // HR alerts carry a full /crm/<page> path; route to it when it is a page
     // this user can actually reach, and fall back to their own HR page.

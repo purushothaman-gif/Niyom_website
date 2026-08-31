@@ -8,6 +8,7 @@ import {
   Users,
   Wallet,
   Landmark,
+  Gem,
   Share2,
   UserPlus,
   ClipboardList,
@@ -20,6 +21,7 @@ export type PartnerView =
   | 'dashboard'
   | 'clients'
   | 'bonds'
+  | 'unlisted-shares'
   | 'payouts'
   | 'referral'
   | 'submit-lead'
@@ -50,6 +52,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { view: 'clients', key: 'clients', label: 'My Clients', icon: Users },
       { view: 'bonds', key: 'bonds', label: 'Bonds', icon: Landmark },
+      { view: 'unlisted-shares', key: 'unlisted-shares', label: 'Unlisted Shares', icon: Gem },
       { view: 'leads', key: 'leads', label: 'My Leads', icon: ClipboardList },
     ],
   },
@@ -75,6 +78,7 @@ export const VIEW_TITLES: Record<PartnerView, string> = {
   dashboard: 'Partner Dashboard',
   clients: 'My Clients',
   bonds: 'Bonds',
+  'unlisted-shares': 'Unlisted Shares',
   payouts: 'Payouts & Statements',
   referral: 'Referral Link',
   'submit-lead': 'Submit a Lead',

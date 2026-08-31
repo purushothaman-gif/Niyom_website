@@ -333,9 +333,11 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
   const clientDropRef = useRef<HTMLDivElement>(null);
-  // When a deal is opened from a bond order, this holds the order id so a
-  // successful create can stamp it (deal_id + status='deal_sent'). Consumed once.
-  const bondOrderIdRef = useRef<string | null>(null);
+  // When a deal is opened from a portal order — a bond order or an unlisted-share
+  // order — this holds which table and which row, so a successful create can stamp
+  // it (deal_id + status='deal_sent'). Consumed once. Both order tables carry the
+  // same two columns, so one ref serves both rather than a second near-copy.
+  const sourceOrderRef = useRef<{ table: 'nw_bond_orders' | 'nw_share_orders'; id: string } | null>(null);
   const prefillDoneRef = useRef(false);
 
   // These MUST mirror the generated columns on nw_deal_confirmations, which are
@@ -447,24 +449,27 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Prefill from a bond order (CRM → Bond Orders → "Prepare Deal Confirmation").
-  // Waits for the client list, then opens the create form pre-populated with the
-  // order's client + a single Secondary Bond line. The RM edits price/qty freely
-  // before saving; a successful create stamps the order (see handleSave).
+  // Prefill from a portal order — CRM → Bond Orders or Share Orders →
+  // "Prepare Deal Confirmation". Waits for the client list, then opens the create
+  // form pre-populated with the order's client and a single line. The RM edits
+  // price/qty freely before saving; a successful create stamps the order back
+  // (see handleSave).
   useEffect(() => {
     if (prefillDoneRef.current) return;
-    if (!pageParams?.bondOrderId) return;
+    const orderId = pageParams?.bondOrderId || pageParams?.shareOrderId;
+    if (!orderId) return;
     const c = clients.find(x => x.id === pageParams.prefillClientId);
     if (!c) return; // clients still loading, or not visible to this RM
     prefillDoneRef.current = true;
-    bondOrderIdRef.current = pageParams.bondOrderId;
-    const product = pageParams.prefillProduct || 'Secondary Bond';
+    const isShare = !!pageParams.shareOrderId;
+    sourceOrderRef.current = { table: isShare ? 'nw_share_orders' : 'nw_bond_orders', id: orderId };
+    const product = pageParams.prefillProduct || (isShare ? 'Unlisted Share' : 'Secondary Bond');
     const rate = pageParams.prefillRate || '';
     setForm({
       client_id: c.id,
       deal_date: new Date().toISOString().split('T')[0],
       transaction_type: (pageParams.prefillType as 'Buy' | 'Sell') || 'Buy',
-      notes: pageParams.prefillRef ? `From bond order ${pageParams.prefillRef}` : '',
+      notes: pageParams.prefillRef ? `From ${isShare ? 'share' : 'bond'} order ${pageParams.prefillRef}` : '',
       lines: [{
         product_type: product,
         security_name: pageParams.prefillSecurity || '',
@@ -699,16 +704,17 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
         await supabase.from('nw_deal_confirmations').delete().eq('id', created.id);
         setError(insErr.message); return;
       }
-      // If this deal was raised from a bond order, link them and advance the
+      // If this deal was raised from a portal order, link them and advance the
       // order so the client's My Orders shows "Deal sent". Best-effort — a failed
       // stamp must not undo a successfully created deal.
-      if (bondOrderIdRef.current) {
+      if (sourceOrderRef.current) {
+        const { table, id } = sourceOrderRef.current;
         const { error: stampErr } = await supabase
-          .from('nw_bond_orders')
+          .from(table)
           .update({ deal_id: created.id, status: 'deal_sent' })
-          .eq('id', bondOrderIdRef.current);
-        if (stampErr) showToast('Deal created, but linking the bond order failed. Update it manually.', false);
-        bondOrderIdRef.current = null;
+          .eq('id', id);
+        if (stampErr) showToast('Deal created, but linking the order failed. Update it manually.', false);
+        sourceOrderRef.current = null;
       }
       showToast(status === 'confirmed' ? 'Deal confirmation created.' : 'Draft saved.');
     }

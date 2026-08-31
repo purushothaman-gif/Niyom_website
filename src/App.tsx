@@ -27,6 +27,7 @@ const ClientResetPassword = lazy(() => import('./pages/ClientResetPassword'));
 const PublicDealView = lazy(() => import('./pages/PublicDealView'));
 const PublicDebitNoteView = lazy(() => import('./pages/PublicDebitNoteView'));
 const BondOffer = lazy(() => import('./pages/BondOffer'));
+const ShareOffer = lazy(() => import('./pages/ShareOffer'));
 
 function LoadingScreen() {
   // Theme-aware (not white) so lazy sub-app loads don't flash a jarring white
@@ -365,6 +366,7 @@ function AppContent() {
           <Route path="/deal/:token" element={<DealRoute />} />
           <Route path="/debit-note/:token" element={<DebitNoteRoute />} />
           <Route path="/bond-offer" element={<BondOffer />} />
+          <Route path="/share-offer" element={<ShareOffer />} />
 
           {/* Unknown paths → 404 (rendered at HTTP 200 via the SPA host rewrite). */}
           <Route path="*" element={<NotFound />} />

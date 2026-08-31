@@ -22,6 +22,7 @@ const VALID: PortalView[] = [
   'allocation',
   'mutual-funds',
   'bonds',
+  'unlisted-shares',
   'transactions',
   'sip',
   'reports',

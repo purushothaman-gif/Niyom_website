@@ -37,6 +37,7 @@ export type PortalView =
   | 'allocation'
   | 'mutual-funds'
   | 'bonds'
+  | 'unlisted-shares'
   | 'transactions'
   | 'sip'
   | 'reports'
@@ -120,6 +121,13 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { view: 'bonds', key: 'bonds', label: 'Bonds', description: 'Fixed income', icon: Landmark },
       {
+        view: 'unlisted-shares',
+        key: 'unlisted-shares',
+        label: 'Unlisted Shares',
+        description: 'Pre-IPO and unlisted companies',
+        icon: Gem,
+      },
+      {
         key: 'fixed-deposits',
         label: 'Fixed Deposits',
         description: 'Assured returns',
@@ -131,13 +139,6 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Insurance',
         description: 'Protection for your family',
         icon: ShieldCheck,
-        comingSoon: true,
-      },
-      {
-        key: 'alternate',
-        label: 'Alternate Investments',
-        description: 'Unlisted shares and more',
-        icon: Gem,
         comingSoon: true,
       },
     ],
@@ -224,6 +225,7 @@ export const VIEW_TITLES: Record<PortalView, string> = {
   allocation: 'Asset Allocation',
   'mutual-funds': 'Mutual Funds',
   bonds: 'Bonds',
+  'unlisted-shares': 'Unlisted Shares',
   transactions: 'Transactions',
   sip: 'Systematic Plans',
   reports: 'Reports',
@@ -246,6 +248,7 @@ export const VIEW_SUBTITLES: Partial<Record<PortalView, string>> = {
   allocation: 'How your money is spread across asset classes, products and fund houses.',
   'mutual-funds': 'Research funds, start a SIP or invest a lump sum.',
   bonds: 'Fixed-income options curated for you, with your indicative price.',
+  'unlisted-shares': 'Pre-IPO and unlisted companies, with your indicative price per share.',
   transactions: 'Every purchase, redemption, switch and payout on your account.',
   sip: 'Your systematic plans — instalments, dates and amounts.',
   reports: 'Download your transaction and holdings statements.',

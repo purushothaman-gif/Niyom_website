@@ -67,6 +67,24 @@ export interface PartnerBond {
   } | null;
 }
 
+/** An unlisted share as the partner sees it: their cost (base) + their own spread. */
+export interface PartnerShare {
+  id: string;
+  isin: string;
+  company_name: string;
+  short_name: string | null;
+  sector: string | null;
+  about: string | null;
+  logo_url: string | null;
+  website: string | null;
+  face_value: number | null;
+  lot_size: number | null;
+  min_qty: number | null;
+  partner_base: number | null;
+  self_markup_percent: number | null;
+  partner_price: number | null;
+}
+
 function isAccessRevoked(message?: string) {
   return !!message && message.includes('Partner access required');
 }
@@ -354,6 +372,95 @@ export const PartnerService = {
     }
     return (data ?? []) as unknown as PartnerBondOrder[];
   },
+
+  // --- Unlisted shares -------------------------------------------------------
+  // The same four operations as bonds, priced per share. Kept as separate methods
+  // rather than a product parameter because the row shapes genuinely differ (no
+  // coupon, no face-value arithmetic) and a union type would push that branch
+  // into every caller.
+
+  /** Unlisted shares the partner may sell, at their cost + their own <=5% spread. */
+  async getShares(): Promise<PartnerShare[]> {
+    if (isDemoSession()) return [];
+    const { data, error } = await supabase.rpc('nw_partner_unlisted_shares');
+    if (error) {
+      if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
+      throw error;
+    }
+    return (data ?? []) as PartnerShare[];
+  },
+
+  /** A single share for the partner detail page. null if not resolvable for this DSA. */
+  async getShare(id: string): Promise<PartnerShare | null> {
+    if (isDemoSession()) return null;
+    const { data, error } = await supabase.rpc('nw_partner_unlisted_share', { p_id: id as unknown as string });
+    if (error) {
+      if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
+      throw error;
+    }
+    const rows = (data ?? []) as PartnerShare[];
+    return rows[0] ?? null;
+  },
+
+  /** Set the partner's own share markup (0..5%). Server enforces the cap. */
+  async setShareMarkup(percent: number): Promise<void> {
+    if (isDemoSession()) return;
+    const { error } = await supabase.rpc('nw_partner_set_share_markup', { p_percent: percent });
+    if (error) {
+      if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
+      throw error;
+    }
+  },
+
+  /**
+   * Place an unlisted-share order for one of the partner's clients, at the
+   * partner's per-share price. The edge function re-derives the price server-side
+   * and routes the order to the CLIENT'S RM.
+   */
+  async placeShareOrder(input: { clientId: string; shareId: string; qty: number; margin: number; notes?: string }): Promise<PartnerShareOrder> {
+    if (isDemoSession()) throw new Error('Not available in the demo portal.');
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token;
+    const anon = getEnv().supabaseAnonKey;
+    const res = await fetch(`${getEnv().supabaseUrl}/functions/v1/place-partner-share-order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? anon}`, Apikey: anon },
+      body: JSON.stringify({
+        client_id: input.clientId, share_id: input.shareId, qty: input.qty,
+        margin: input.margin, notes: input.notes ?? '',
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body?.order) throw new Error(body?.error || 'Could not place the order. Please try again.');
+    return body.order as PartnerShareOrder;
+  },
+
+  /** Mint a shareable per-share link at a per-share margin (0..5%). Returns the token. */
+  async createShareLink(shareId: string, margin: number): Promise<string> {
+    if (isDemoSession()) throw new Error('Not available in the demo portal.');
+    const { data, error } = await supabase.rpc('nw_partner_create_share_link', {
+      p_share_id: shareId as unknown as string, p_margin: margin,
+    });
+    if (error) {
+      if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
+      throw error;
+    }
+    return String(data);
+  },
+
+  /** Share orders this partner raised (RLS scopes to their own dsa_id), newest first. */
+  async getMyShareOrders(): Promise<PartnerShareOrder[]> {
+    if (isDemoSession()) return [];
+    const { data, error } = await supabase
+      .from('nw_share_orders')
+      .select('id, ref, company_name, isin, qty, price_per_share, amount, status, partner_markup_percent, created_at, client:nw_clients(full_name, client_code)')
+      .order('created_at', { ascending: false });
+    if (error) {
+      if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
+      throw error;
+    }
+    return (data ?? []) as unknown as PartnerShareOrder[];
+  },
 };
 
 export type PartnerBondOrderStatus = 'submitted' | 'deal_sent' | 'accepted' | 'cancelled';
@@ -365,6 +472,20 @@ export interface PartnerBondOrder {
   isin: string;
   units: number;
   price_per_100: number;
+  amount: number | null;
+  status: PartnerBondOrderStatus;
+  partner_markup_percent: number | null;
+  created_at: string;
+  client?: { full_name: string | null; client_code: string | null } | null;
+}
+
+export interface PartnerShareOrder {
+  id: string;
+  ref: string;
+  company_name: string;
+  isin: string;
+  qty: number;
+  price_per_share: number;
   amount: number | null;
   status: PartnerBondOrderStatus;
   partner_markup_percent: number | null;
