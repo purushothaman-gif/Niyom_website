@@ -17,6 +17,11 @@ import {
   demoProfile, demoClients, demoPortfolios, demoTransactions,
   demoPayout, demoNotes, demoReferral, demoLeads,
 } from '../demo/demoData';
+import {
+  demoBonds, demoBond, demoShares, demoShare,
+  setDemoBondMarkup, setDemoShareMarkup,
+  demoBondOrders, demoShareOrders, addDemoBondOrder, addDemoShareOrder,
+} from '../demo/demoMarket';
 import type {
   PartnerIdentity,
   PartnerClientRow,
@@ -227,7 +232,7 @@ export const PartnerService = {
   async verifyPan(pan: string): Promise<{ ok: boolean; alreadyRegistered?: boolean; name?: string; error?: string }> {
     if (isDemoSession()) {
       await new Promise((r) => setTimeout(r, 300));
-      return { ok: true, name: 'DEMO CLIENT NAME' };
+      return { ok: true, name: 'PRIYA VENKATARAMAN' };
     }
     const anon = getEnv().supabaseAnonKey;
     const res = await fetch(`${getEnv().supabaseUrl}/functions/v1/public-onboard-pan-verify`, {
@@ -292,7 +297,7 @@ export const PartnerService = {
 
   /** Bonds the partner may sell, priced at their cost + their own <=5% spread. */
   async getBonds(): Promise<PartnerBond[]> {
-    if (isDemoSession()) return [];
+    if (isDemoSession()) return demoBonds();
     const { data, error } = await supabase.rpc('nw_partner_bonds');
     if (error) {
       if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
@@ -303,7 +308,7 @@ export const PartnerService = {
 
   /** A single bond for the partner detail page. null if not resolvable for this DSA. */
   async getBond(id: string): Promise<PartnerBond | null> {
-    if (isDemoSession()) return null;
+    if (isDemoSession()) return demoBond(id);
     const { data, error } = await supabase.rpc('nw_partner_bond', { p_id: id as unknown as string });
     if (error) {
       if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
@@ -315,7 +320,9 @@ export const PartnerService = {
 
   /** Set the partner's own bond markup (0..5%). Server enforces the cap. */
   async setBondMarkup(percent: number): Promise<void> {
-    if (isDemoSession()) return;
+    // Held for the session rather than dropped, so that saving a markup in the
+    // sample portal visibly reprices the shelf — which is what the control is for.
+    if (isDemoSession()) { setDemoBondMarkup(percent); return; }
     const { error } = await supabase.rpc('nw_partner_set_bond_markup', { p_percent: percent });
     if (error) {
       if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
@@ -329,7 +336,20 @@ export const PartnerService = {
    * re-derives the price server-side and routes the order to the client's RM.
    */
   async placeBondOrder(input: { clientId: string; bondId: string; units: number; margin: number; notes?: string }): Promise<PartnerBondOrder> {
-    if (isDemoSession()) throw new Error('Not available in the demo portal.');
+    if (isDemoSession()) {
+      const bond = demoBond(input.bondId);
+      if (!bond) throw new Error('Not available in the demo portal.');
+      const client = demoClients.find((c) => c.client_id === input.clientId);
+      await new Promise((r) => setTimeout(r, 500));
+      return addDemoBondOrder(
+        bond,
+        client?.full_name ?? 'SAMPLE CLIENT',
+        client?.client_code ?? 'NW-DEMO-0000',
+        input.units,
+        input.margin,
+        new Date().toISOString(),
+      );
+    }
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     const anon = getEnv().supabaseAnonKey;
@@ -348,7 +368,13 @@ export const PartnerService = {
 
   /** Mint a shareable per-bond link at a per-bond margin (0..5%). Returns the token. */
   async createBondShare(bondId: string, margin: number): Promise<string> {
-    if (isDemoSession()) throw new Error('Not available in the demo portal.');
+    // A token shaped like the real thing so the share sheet and its WhatsApp
+    // message can be demonstrated. It resolves to nothing: resolve-bond-share
+    // has no demo path, so opening the link shows "This offer is unavailable".
+    if (isDemoSession()) {
+      await new Promise((r) => setTimeout(r, 400));
+      return `demo-${bondId}-${Math.round(margin * 100)}`;
+    }
     const { data, error } = await supabase.rpc('nw_partner_create_bond_share', {
       p_bond_id: bondId as unknown as string, p_margin: margin,
     });
@@ -361,7 +387,7 @@ export const PartnerService = {
 
   /** Bond orders this partner raised (RLS scopes to their own dsa_id), newest first. */
   async getMyBondOrders(): Promise<PartnerBondOrder[]> {
-    if (isDemoSession()) return [];
+    if (isDemoSession()) return demoBondOrders();
     const { data, error } = await supabase
       .from('nw_bond_orders')
       .select('id, ref, bond_name, isin, units, price_per_100, amount, status, partner_markup_percent, created_at, client:nw_clients(full_name, client_code)')
@@ -381,7 +407,7 @@ export const PartnerService = {
 
   /** Unlisted shares the partner may sell, at their cost + their own <=5% spread. */
   async getShares(): Promise<PartnerShare[]> {
-    if (isDemoSession()) return [];
+    if (isDemoSession()) return demoShares();
     const { data, error } = await supabase.rpc('nw_partner_unlisted_shares');
     if (error) {
       if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
@@ -392,7 +418,7 @@ export const PartnerService = {
 
   /** A single share for the partner detail page. null if not resolvable for this DSA. */
   async getShare(id: string): Promise<PartnerShare | null> {
-    if (isDemoSession()) return null;
+    if (isDemoSession()) return demoShare(id);
     const { data, error } = await supabase.rpc('nw_partner_unlisted_share', { p_id: id as unknown as string });
     if (error) {
       if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
@@ -404,7 +430,7 @@ export const PartnerService = {
 
   /** Set the partner's own share markup (0..5%). Server enforces the cap. */
   async setShareMarkup(percent: number): Promise<void> {
-    if (isDemoSession()) return;
+    if (isDemoSession()) { setDemoShareMarkup(percent); return; }
     const { error } = await supabase.rpc('nw_partner_set_share_markup', { p_percent: percent });
     if (error) {
       if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
@@ -418,7 +444,20 @@ export const PartnerService = {
    * and routes the order to the CLIENT'S RM.
    */
   async placeShareOrder(input: { clientId: string; shareId: string; qty: number; margin: number; notes?: string }): Promise<PartnerShareOrder> {
-    if (isDemoSession()) throw new Error('Not available in the demo portal.');
+    if (isDemoSession()) {
+      const share = demoShare(input.shareId);
+      if (!share) throw new Error('Not available in the demo portal.');
+      const client = demoClients.find((c) => c.client_id === input.clientId);
+      await new Promise((r) => setTimeout(r, 500));
+      return addDemoShareOrder(
+        share,
+        client?.full_name ?? 'SAMPLE CLIENT',
+        client?.client_code ?? 'NW-DEMO-0000',
+        input.qty,
+        input.margin,
+        new Date().toISOString(),
+      );
+    }
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     const anon = getEnv().supabaseAnonKey;
@@ -437,7 +476,10 @@ export const PartnerService = {
 
   /** Mint a shareable per-share link at a per-share margin (0..5%). Returns the token. */
   async createShareLink(shareId: string, margin: number): Promise<string> {
-    if (isDemoSession()) throw new Error('Not available in the demo portal.');
+    if (isDemoSession()) {
+      await new Promise((r) => setTimeout(r, 400));
+      return `demo-${shareId}-${Math.round(margin * 100)}`;
+    }
     const { data, error } = await supabase.rpc('nw_partner_create_share_link', {
       p_share_id: shareId as unknown as string, p_margin: margin,
     });
@@ -450,7 +492,7 @@ export const PartnerService = {
 
   /** Share orders this partner raised (RLS scopes to their own dsa_id), newest first. */
   async getMyShareOrders(): Promise<PartnerShareOrder[]> {
-    if (isDemoSession()) return [];
+    if (isDemoSession()) return demoShareOrders();
     const { data, error } = await supabase
       .from('nw_share_orders')
       .select('id, ref, company_name, isin, qty, price_per_share, amount, status, partner_markup_percent, created_at, client:nw_clients(full_name, client_code)')

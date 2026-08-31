@@ -9,6 +9,10 @@
  *     MIS revenue, all of which read nw_clients / nw_transactions unfiltered.
  *   - Every name, PAN, amount and statement below is invented. No real client's
  *     name, city, portfolio value or payout is ever shown to a prospect.
+ *   - The securities are invented too, and must stay that way. A sample book
+ *     holding a REAL fund or bond at an invented gain is a performance claim
+ *     about that product the moment this portal is screen-shared or filmed.
+ *     Product names here mirror the invented shelf in demoMarket.ts.
  *   - Read-only: PartnerService short-circuits its two write paths (submitLead,
  *     getStatementUrl) so a prospect clicking around cannot create a lead or
  *     reach a real statement PDF.
@@ -29,6 +33,7 @@ import type {
   PartnerLead,
 } from '../types';
 import { ephemeralGet, ephemeralRemove, ephemeralSet } from '../../platform/ephemeralStore';
+import { resetDemoMarket } from './demoMarket';
 
 /** Shown on the login screen and handed to prospects. */
 export const DEMO_PAN = 'NIYOM1234D';
@@ -44,6 +49,9 @@ export function startDemoSession() {
 }
 export function endDemoSession() {
   ephemeralRemove(KEY);
+  // The shelf keeps orders placed during the demo in memory, so the next
+  // prospect on this machine must not inherit the last one's clicks.
+  resetDemoMarket();
 }
 export function isDemoSession(): boolean {
   return ephemeralGet(KEY) === '1';
@@ -109,23 +117,23 @@ export const demoClients: PartnerClientRow[] = [
 
 export const demoPortfolios: Record<string, PartnerHoldingRow[]> = {
   'demo-c1': [
-    { holding_id: 'demo-h1', product_type: 'unlisted_share', product_name: 'National Stock Exchange Ltd',
+    { holding_id: 'demo-h1', product_type: 'unlisted_share', product_name: 'Velan Aerospace Private Limited',
       quantity: 300, avg_price: 2085, invested_amount: 625500, current_value: 735000, gain_loss: 109500 },
-    { holding_id: 'demo-h2', product_type: 'secondary_bond', product_name: 'Utkarsh Small Finance Bank Ltd',
+    { holding_id: 'demo-h2', product_type: 'secondary_bond', product_name: '9.75% Meridian Infra Finance Ltd 2029',
       quantity: 4, avg_price: 101250, invested_amount: 405000, current_value: 421000, gain_loss: 16000 },
-    { holding_id: 'demo-h3', product_type: 'mutual_fund', product_name: 'Parag Parikh Flexi Cap — Growth',
+    { holding_id: 'demo-h3', product_type: 'mutual_fund', product_name: 'Sample Flexi Cap Fund — Growth',
       quantity: 4210.55, avg_price: 52.6, invested_amount: 219500, current_value: 262500, gain_loss: 43000 },
   ],
   'demo-c2': [
-    { holding_id: 'demo-h4', product_type: 'unlisted_share', product_name: 'Tata Capital Ltd',
+    { holding_id: 'demo-h4', product_type: 'unlisted_share', product_name: 'Thamarai Foods Limited',
       quantity: 500, avg_price: 880, invested_amount: 440000, current_value: 476000, gain_loss: 36000 },
-    { holding_id: 'demo-h5', product_type: 'mutual_fund', product_name: 'HDFC Balanced Advantage — Growth',
+    { holding_id: 'demo-h5', product_type: 'mutual_fund', product_name: 'Sample Balanced Advantage Fund — Growth',
       quantity: 4132.0, avg_price: 48.4, invested_amount: 200000, current_value: 213200, gain_loss: 13200 },
   ],
   'demo-c3': [
-    { holding_id: 'demo-h6', product_type: 'secondary_bond', product_name: 'ESAF Small Finance Bank Ltd',
+    { holding_id: 'demo-h6', product_type: 'secondary_bond', product_name: '10.25% Coromandel Housing Finance Ltd 2028',
       quantity: 12, avg_price: 100500, invested_amount: 1206000, current_value: 1188000, gain_loss: -18000 },
-    { holding_id: 'demo-h7', product_type: 'unlisted_share', product_name: 'HDB Financial Services Ltd',
+    { holding_id: 'demo-h7', product_type: 'unlisted_share', product_name: 'Poornam Logistics Limited',
       quantity: 1200, avg_price: 745, invested_amount: 894000, current_value: 849000, gain_loss: -45000 },
   ],
   'demo-c4': [],
@@ -134,19 +142,19 @@ export const demoPortfolios: Record<string, PartnerHoldingRow[]> = {
 export const demoTransactions: Record<string, PartnerTransactionRow[]> = {
   'demo-c1': [
     { txn_id: 'demo-t1', txn_date: '2026-05-14', txn_type: 'buy', product_type: 'unlisted_share',
-      product_name: 'National Stock Exchange Ltd', quantity: 300, amount: 625500, dsa_price: 2072, client_price: 2085 },
+      product_name: 'Velan Aerospace Private Limited', quantity: 300, amount: 625500, dsa_price: 2072, client_price: 2085 },
     { txn_id: 'demo-t2', txn_date: '2026-02-27', txn_type: 'buy', product_type: 'secondary_bond',
-      product_name: 'Utkarsh Small Finance Bank Ltd', quantity: 4, amount: 405000, dsa_price: 100600, client_price: 101250 },
+      product_name: '9.75% Meridian Infra Finance Ltd 2029', quantity: 4, amount: 405000, dsa_price: 100600, client_price: 101250 },
   ],
   'demo-c2': [
     { txn_id: 'demo-t3', txn_date: '2026-06-05', txn_type: 'buy', product_type: 'unlisted_share',
-      product_name: 'Tata Capital Ltd', quantity: 500, amount: 440000, dsa_price: 872, client_price: 880 },
+      product_name: 'Thamarai Foods Limited', quantity: 500, amount: 440000, dsa_price: 872, client_price: 880 },
   ],
   'demo-c3': [
     { txn_id: 'demo-t4', txn_date: '2026-04-18', txn_type: 'buy', product_type: 'secondary_bond',
-      product_name: 'ESAF Small Finance Bank Ltd', quantity: 12, amount: 1206000, dsa_price: 99900, client_price: 100500 },
+      product_name: '10.25% Coromandel Housing Finance Ltd 2028', quantity: 12, amount: 1206000, dsa_price: 99900, client_price: 100500 },
     { txn_id: 'demo-t5', txn_date: '2026-03-02', txn_type: 'buy', product_type: 'unlisted_share',
-      product_name: 'HDB Financial Services Ltd', quantity: 1200, amount: 894000, dsa_price: 738, client_price: 745 },
+      product_name: 'Poornam Logistics Limited', quantity: 1200, amount: 894000, dsa_price: 738, client_price: 745 },
   ],
   'demo-c4': [],
 };

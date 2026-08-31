@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Users, ChevronDown, ChevronRight, Loader2, UserPlus } from 'lucide-react';
 import { Card } from '../../../portal/components/Card';
 import { EmptyState } from '../../../portal/components/EmptyState';
@@ -122,8 +122,16 @@ function ClientRow({
   const [txns, setTxns] = useState<PartnerTransactionRow[] | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // The fetch is guarded by a ref, not by `holdings`, and `holdings` is NOT a
+  // dependency. It used to be both: setHoldings then re-ran this effect, whose
+  // cleanup set cancelled = true before the .finally() microtask got there, so
+  // setLoading(false) was skipped and the row span the spinner forever with the
+  // portfolio already in state behind it.
+  const fetched = useRef(false);
+
   useEffect(() => {
-    if (!open || holdings !== null) return;
+    if (!open || fetched.current) return;
+    fetched.current = true;
     let cancelled = false;
     setLoading(true);
     Promise.all([
@@ -144,7 +152,7 @@ function ClientRow({
     return () => {
       cancelled = true;
     };
-  }, [open, holdings, client.client_id]);
+  }, [open, client.client_id]);
 
   const gain = Number(client.current_value || 0) - Number(client.invested_amount || 0);
 
