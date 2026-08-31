@@ -24,14 +24,14 @@ import {
 import { useToast } from './useToast';
 import type {
   AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch,
-  AttendanceSettings, HRAccess, HREmployee, OfficeLocation,
+  AttendanceSettings, HRAccess, HREmployee, OfficeLocation, WorkArrangement,
 } from './hrTypes';
 import { formatDuration } from '../../lib/hr/attendanceSummary';
 import { exportSheet, exportWorkbook, periodStamp } from './hrExcel';
 import { looksLikeInfrastructure } from './infrastructureIp';
 import { getPosition, type GeoResult } from './geolocation';
 
-type Tab = 'today' | 'register' | 'approvals' | 'offices' | 'networks' | 'rules';
+type Tab = 'today' | 'register' | 'approvals' | 'arrangements' | 'offices' | 'networks' | 'rules';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const today = () => iso(new Date());
@@ -65,6 +65,7 @@ export default function AttendanceAdmin({ employee, access }: { employee: NWEmpl
           { key: 'today',     label: 'Today' },
           { key: 'register',  label: 'Monthly Register' },
           { key: 'approvals', label: 'Approvals', count: pendingCount },
+          { key: 'arrangements', label: 'Work Arrangements' },
           { key: 'offices',   label: 'Office Locations' },
           { key: 'networks',  label: 'Networks (audit)' },
           { key: 'rules',     label: 'Rules' },
@@ -74,6 +75,7 @@ export default function AttendanceAdmin({ employee, access }: { employee: NWEmpl
       {tab === 'today'     && <TodayBoard onToast={show} />}
       {tab === 'register'  && <Register onToast={show} canEdit={access.canEdit.attendance} />}
       {tab === 'approvals' && <Approvals onToast={show} canEdit={access.canEdit.attendance} onChanged={refreshCounts} />}
+      {tab === 'arrangements' && <Arrangements onToast={show} canEdit={access.canEdit.attendance} employee={employee} />}
       {tab === 'offices'   && <Offices onToast={show} canEdit={access.canEdit.attendance} employee={employee} />}
       {tab === 'networks'  && <Networks onToast={show} canEdit={access.canEdit.attendance} employee={employee} />}
       {tab === 'rules'     && <Rules onToast={show} canEdit={access.canEdit.attendance} />}
@@ -721,6 +723,236 @@ function TrustNetworkDialog({ ip, pendingFromIp, employeesFromIp, onClose, onDon
         </div>
       </div>
     </Modal>
+  );
+}
+
+/* ======================================================================== */
+/* Work arrangements                                                         */
+/* ======================================================================== */
+
+const ARRANGEMENT_KINDS: { value: string; label: string }[] = [
+  { value: 'remote',     label: 'Working from home' },
+  { value: 'field',      label: 'Field work' },
+  { value: 'deputation', label: 'Deputation / client site' },
+  { value: 'other',      label: 'Other' },
+];
+
+function Arrangements({ onToast, canEdit, employee }: {
+  onToast: (m: string, ok?: boolean) => void; canEdit: boolean; employee: NWEmployee;
+}) {
+  const [rows, setRows] = useState<WorkArrangement[]>([]);
+  const [staff, setStaff] = useState<HREmployee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<Partial<WorkArrangement> | null>(null);
+  const [endingId, setEndingId] = useState<string | null>(null);
+  const [endDate, setEndDate] = useState(today());
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [a, s] = await Promise.all([api.listArrangements(), api.listHREmployees(true, false)]);
+      setRows(a); setStaff(s);
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setLoading(false);
+    }
+  }, [onToast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const nameOf = (id: string) => staff.find(s => s.id === id)?.full_name ?? '—';
+
+  const save = async () => {
+    if (!editing) return;
+    if (!editing.employee_id) { onToast('Choose the employee.', false); return; }
+    if (!editing.from_date)   { onToast('Enter the date this starts.', false); return; }
+    if ((editing.label ?? '').trim().length < 3) {
+      onToast('Give a short reason — it is shown against every day it settles.', false); return;
+    }
+    if (editing.to_date && editing.to_date < editing.from_date) {
+      onToast('The end date cannot be before the start date.', false); return;
+    }
+    setBusy(true);
+    try {
+      const payload = {
+        employee_id: editing.employee_id,
+        kind: editing.kind ?? 'remote',
+        from_date: editing.from_date,
+        to_date: editing.to_date || null,
+        label: (editing.label ?? '').trim(),
+        status: editing.status ?? 'active',
+        created_by: employee.id,
+      };
+      if (editing.id) await api.updateArrangement(editing.id, payload);
+      else await api.createArrangement(payload);
+      onToast('Saved. Recalculate attendance for the period to apply it.');
+      setEditing(null);
+      load();
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const end = async () => {
+    if (!endingId) return;
+    setBusy(true);
+    try {
+      await api.endArrangement(endingId, endDate);
+      onToast('Arrangement ended. Recalculate attendance from the day after to apply it.');
+      setEndingId(null);
+      load();
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) return <Skeleton rows={4} />;
+
+  return (
+    <div className="space-y-5">
+      <Notice tone="info" title="For someone who is working, but has no office to punch in at">
+        Maternity working from home, a medical restriction, a posting to a client site. Days inside an arrangement
+        settle as <strong>on duty</strong> and pay in full, so nobody has to waive loss of pay by hand every month.
+        It never overrides a holiday, a weekly off, approved leave or an admin correction — and if they do come in
+        and punch, the punch decides the day as usual.
+      </Notice>
+
+      <SectionCard
+        title="Work arrangements"
+        subtitle="Periods when an employee works without punching."
+        actions={canEdit && <PrimaryButton onClick={() => setEditing({
+          kind: 'remote', from_date: today(), status: 'active',
+        })}>
+          <CalendarRange className="w-3.5 h-3.5 inline mr-1" />Add Arrangement
+        </PrimaryButton>}
+        padded={false}
+      >
+        <div className="p-5">
+          {rows.length === 0 ? (
+            <EmptyState icon={CalendarRange} title="No arrangements"
+              message="Everyone is expected to punch. Add one for anyone who is working but cannot." />
+          ) : (
+            <TableWrap>
+              <thead>
+                <tr>
+                  <th className="text-left">Employee</th><th className="text-left">Kind</th>
+                  <th className="text-left">Reason shown on the register</th>
+                  <th className="text-left">From</th><th className="text-left">To</th>
+                  <th className="text-left">Status</th><th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(a => (
+                  <tr key={a.id} style={{ opacity: a.status === 'active' ? 1 : 0.6 }}>
+                    <td className="font-semibold" style={{ color: 'var(--text-primary)' }}>{nameOf(a.employee_id)}</td>
+                    <td>{ARRANGEMENT_KINDS.find(k => k.value === a.kind)?.label ?? a.kind}</td>
+                    <td className="text-xs">{a.label}</td>
+                    <td className="text-xs whitespace-nowrap">{dayLabel(a.from_date)}</td>
+                    <td className="text-xs whitespace-nowrap">
+                      {a.to_date ? dayLabel(a.to_date)
+                        : <span style={{ color: 'var(--text-faint)' }}>still running</span>}
+                    </td>
+                    <td><Pill value={a.status} small /></td>
+                    <td className="text-right whitespace-nowrap">
+                      {canEdit && (
+                        <>
+                          <button onClick={() => setEditing(a)} className="text-xs font-semibold mr-3"
+                            style={{ color: 'var(--accent-soft)' }}>Edit</button>
+                          {a.status === 'active' && (
+                            <button onClick={() => { setEndingId(a.id); setEndDate(today()); }}
+                              className="text-xs font-semibold" style={{ color: 'rgb(239,68,68)' }}>End</button>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableWrap>
+          )}
+        </div>
+      </SectionCard>
+
+      {editing && (
+        <Modal open onClose={() => setEditing(null)}
+          title={editing.id ? 'Edit work arrangement' : 'Add work arrangement'}>
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Employee" required>
+                <Select value={editing.employee_id ?? ''} disabled={!!editing.id}
+                  onChange={e => setEditing({ ...editing, employee_id: e.target.value })}>
+                  <option value="">Choose…</option>
+                  {staff.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Kind">
+                <Select value={editing.kind ?? 'remote'}
+                  onChange={e => setEditing({ ...editing, kind: e.target.value })}>
+                  {ARRANGEMENT_KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
+                </Select>
+              </Field>
+            </div>
+
+            <Field label="Reason" required
+              hint="Shown against every day it settles, so the register explains itself later.">
+              <Input value={editing.label ?? ''} onChange={e => setEditing({ ...editing, label: e.target.value })}
+                placeholder="Maternity — working from home" />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="From" required>
+                <Input type="date" value={editing.from_date ?? today()}
+                  onChange={e => setEditing({ ...editing, from_date: e.target.value })} />
+              </Field>
+              <Field label="To" hint="Leave blank while it is still running.">
+                <Input type="date" value={editing.to_date ?? ''}
+                  onChange={e => setEditing({ ...editing, to_date: e.target.value || null })} />
+              </Field>
+            </div>
+
+            <Notice tone="info">
+              Saving records the arrangement. To apply it to days already computed, use
+              <strong> Recalculate</strong> on the Monthly Register for the period.
+            </Notice>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setEditing(null)} className="px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                Cancel
+              </button>
+              <PrimaryButton onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {endingId && (
+        <Modal open onClose={() => setEndingId(null)} title="End this arrangement">
+          <div className="p-5 space-y-4">
+            <Notice tone="warn">
+              Days up to and including the last day keep the on-duty settlement they already have. From the day
+              after, this person is expected to punch again like everyone else.
+            </Notice>
+            <Field label="Last day of the arrangement" required>
+              <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            </Field>
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setEndingId(null)} className="px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                Cancel
+              </button>
+              <PrimaryButton onClick={end} disabled={busy}>{busy ? 'Ending…' : 'End Arrangement'}</PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
   );
 }
 

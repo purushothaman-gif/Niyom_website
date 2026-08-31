@@ -15,6 +15,7 @@ export type HRSettings          = T['hr_settings']['Row'];
 export type AttendanceSettings  = T['hr_attendance_settings']['Row'];
 export type AllowedNetwork      = T['hr_allowed_networks']['Row'];
 export type OfficeLocation      = T['hr_office_locations']['Row'];
+export type WorkArrangement     = T['hr_work_arrangements']['Row'];
 export type AttendancePunch     = T['hr_attendance_punches']['Row'];
 export type AttendanceAdjustment= T['hr_attendance_adjustments']['Row'];
 export type AttendanceDaily     = T['hr_attendance_daily']['Row'];
