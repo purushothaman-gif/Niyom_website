@@ -277,6 +277,22 @@ describe('routing each payee', () => {
     expect(built.grid[3][2]).toBe('SBIN0001234');
   });
 
+  it('accepts a bare bank code, because that is all the paying side has', () => {
+    /*
+     * IDFC's portal asks only for the debit ACCOUNT number and its template
+     * requires that account to be an IDFC one, so there is no debit IFSC to
+     * look up anywhere -- 'IDFB' is the whole answer. Asking for a full IFSC
+     * sent someone hunting for a field that does not exist.
+     */
+    expect(transactionType('IDFB0080131', 'IDFB')).toBe('IFT');
+    expect(transactionType('SBIN0000258', 'IDFB')).toBe('NEFT');
+
+    const built = buildBankFile({ ...template, debit_ifsc: 'IDFB' }, [inHouse, outside], '2026-08-31');
+    expect(built.issues).toEqual([]);
+    expect(built.grid[2][3]).toBe('IFT');
+    expect(built.grid[3][3]).toBe('NEFT');
+  });
+
   it('decides on the bank code alone, not the branch', () => {
     expect(transactionType('IDFB0080133', 'IDFB0080131')).toBe('IFT');
     expect(transactionType('idfb0080133', 'IDFB0080131')).toBe('IFT');

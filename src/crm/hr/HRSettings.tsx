@@ -36,7 +36,7 @@ const SOURCES: { value: string; label: string }[] = [
   { value: 'payment_date',    label: 'Payment date' },
   { value: 'remarks',         label: 'Remarks' },
   { value: 'debit_account',   label: 'Company debit account' },
-  { value: 'debit_ifsc',      label: 'Company debit IFSC' },
+  { value: 'debit_ifsc',      label: 'Company debit IFSC' },  // rarely a column; kept for other banks
   { value: 'transaction_type', label: 'Transaction type (IFT / NEFT, per payee)' },
   { value: 'sequence',        label: 'Row number' },
   { value: 'constant',        label: 'Fixed text' },
@@ -483,9 +483,15 @@ function BankTemplates({ onToast, canEdit }: { onToast: (m: string, ok?: boolean
                   placeholder="Your IDFC current account number"
                   onChange={e => setSelected({ ...selected, debit_account: e.target.value })} />
               </Field>
-              <Field label="Company debit IFSC"
-                hint="Decides which payees are within-bank (IFT) and which leave it (NEFT).">
-                <Input value={selected.debit_ifsc} disabled={!canEdit}
+              {/*
+                * NOT a field from the bank's file -- IDFC's sheet has no such
+                * column and its portal never asks for one. It is how Niyom
+                * tells a transfer that stays inside the bank from one that
+                * leaves it, so the first four letters are all that is used.
+                */}
+              <Field label="Salary account's bank code"
+                hint="First 4 letters of your bank's IFSC — IDFB for IDFC FIRST. Not part of the bank's file; it is how each payee is marked IFT or NEFT.">
+                <Input value={selected.debit_ifsc} disabled={!canEdit} maxLength={11} placeholder="IDFB"
                   onChange={e => setSelected({ ...selected, debit_ifsc: e.target.value.toUpperCase() })} />
               </Field>
             </div>
