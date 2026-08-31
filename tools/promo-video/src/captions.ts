@@ -10,7 +10,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { BRAND, FONT_BODY, FONT_DISPLAY, GOOGLE_FONTS, ILLUSTRATIVE_NOTICE, type AspectSpec } from './brand.js';
-import type { Scene } from './narration.js';
+import type { Scene } from './film.js';
 
 function captionHtml(scene: Scene, spec: AspectSpec, cssW: number): string {
   const vertical = spec.key === 'vertical';

@@ -7,6 +7,7 @@
  */
 import { clientSupabase as supabase } from '../../lib/supabase';
 import type { NWClientBankAccount } from '../../crm/types';
+import { isDemoClientSession, demoBankAccounts } from '../demo/demoClient';
 
 const AVATAR_BUCKET = 'client-avatars';
 /** Anything larger is a camera original; resizing belongs on the client. */
@@ -15,6 +16,7 @@ const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 export const ProfileService = {
   async getBankAccounts(clientId: string): Promise<NWClientBankAccount[]> {
+    if (isDemoClientSession()) return demoBankAccounts;
     const { data, error } = await supabase
       .from('nw_client_bank_accounts')
       .select('*')

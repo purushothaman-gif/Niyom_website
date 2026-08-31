@@ -9,6 +9,7 @@ import { NotFound } from './components/NotFound';
 import { LogoLoader } from './components/LogoLoader';
 import { PUBLIC_ROUTES, type PublicRoute } from './routes/publicRoutes';
 import { isDemoSession, endDemoSession } from './partner/demo/demoData';
+import { endDemoClientSession, isDemoClientSession } from '../shared/portal/demo/demoClient';
 
 // Authenticated / utility surfaces are code-split so the public marketing bundle
 // stays lean. They keep their own internal navigation (CRM = state, Portal & MF
@@ -91,6 +92,10 @@ function ClientLoginRoute() {
   // login form shows instead of a portal that can't load data.
   useEffect(() => {
     if (!clientPortalId) return;
+    // The sample portal has no Supabase session by design, so this check would
+    // evict it on every refresh. Demo sessions end via Sign Out (or closing the
+    // tab, since the flag lives in sessionStorage).
+    if (isDemoClientSession()) return;
     let cancelled = false;
     import('./lib/supabase').then(({ clientSupabase }) =>
       clientSupabase.auth.getSession().then(({ data }) => {
@@ -130,6 +135,7 @@ function ClientLoginRoute() {
       sessionStorage.removeItem('nw_portal_client');
       sessionStorage.removeItem('nw_portal_pw_ok');
     } catch {}
+    endDemoClientSession();
     // End the client Supabase auth session too, so logout is complete (not just UI state).
     import('./lib/supabase').then(({ clientSupabase }) => clientSupabase.auth.signOut());
     setClientPortalId(null);

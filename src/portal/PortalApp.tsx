@@ -35,6 +35,7 @@ import {
   recordPinPromptSkip,
   silencePinPrompt,
 } from '../lib/pinDevice';
+import { isDemoClientSession } from '../../shared/portal/demo/demoClient';
 
 interface PortalAppProps {
   clientId: string;
@@ -89,6 +90,10 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
   useEffect(() => {
     if (pinPromptDecided.current || !client) return;
     pinPromptDecided.current = true;
+    // Never in the sample portal: the credentials are handed to prospects, and
+    // enrolling a device PIN against a client that does not exist would call
+    // client-pin-set and fail in their face. Matches PartnerApp.
+    if (isDemoClientSession()) return;
     const already = hasProfile(clientId);
     const refused = pinPromptSkips(clientId) >= PIN_PROMPT_LIMIT;
     if (!already && !refused) setPinPromptOpen(true);

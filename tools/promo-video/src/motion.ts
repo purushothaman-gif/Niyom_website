@@ -10,11 +10,12 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { BRAND, FONT_BODY, FONT_DISPLAY, GOOGLE_FONTS, LOGO_PATH } from './brand.js';
-import { SCENES, type Scene } from './narration.js';
+import { type Film, type Scene } from './film.js';
+import { getFilm } from './films/index.js';
 
 export interface MotionServer {
   origin: string;
-  cardUrl: (sceneId: string, width: number, height: number) => string;
+  cardUrl: (filmKey: string, sceneId: string, width: number, height: number) => string;
   close: () => Promise<void>;
 }
 
@@ -32,7 +33,8 @@ export async function startMotionServer(): Promise<MotionServer> {
     }
 
     if (url.pathname === '/card') {
-      const scene = SCENES.find((sc) => sc.id === url.searchParams.get('scene'));
+      const film = getFilm(url.searchParams.get('film') ?? undefined);
+      const scene = film.scenes.find((sc) => sc.id === url.searchParams.get('scene'));
       const width = Number(url.searchParams.get('w'));
       const height = Number(url.searchParams.get('h'));
       if (!scene || !width || !height) {
@@ -40,7 +42,7 @@ export async function startMotionServer(): Promise<MotionServer> {
         return;
       }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(motionHtml(scene, { width, height }, origin));
+      res.end(motionHtml(film, scene, { width, height }, origin));
       return;
     }
 
@@ -53,8 +55,8 @@ export async function startMotionServer(): Promise<MotionServer> {
 
   return {
     origin,
-    cardUrl: (sceneId, width, height) =>
-      `${origin}/card?scene=${encodeURIComponent(sceneId)}&w=${width}&h=${height}`,
+    cardUrl: (filmKey, sceneId, width, height) =>
+      `${origin}/card?film=${encodeURIComponent(filmKey)}&scene=${encodeURIComponent(sceneId)}&w=${width}&h=${height}`,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
@@ -64,6 +66,7 @@ export async function startMotionServer(): Promise<MotionServer> {
  * repaints; nothing here is timed in JS.
  */
 export function motionHtml(
+  film: Film,
   scene: Scene,
   spec: { width: number; height: number },
   origin: string,
@@ -142,7 +145,7 @@ export function motionHtml(
       <img src="${origin}/logo.png" alt="">
       <div class="brand">Niyom Wealth<span>DISTRIBUTION LLP</span></div>
     </div>
-    <div class="eyebrow rise d2">${isCta ? 'Join us' : 'For distribution partners'}</div>
+    <div class="eyebrow rise d2">${isCta ? 'Join us' : film.eyebrow}</div>
     <h1 class="rise d2">${scene.title ?? ''}</h1>
     <div class="rule"></div>
     <p class="sub ${isCta ? 'url' : ''} rise d3">${scene.subtitle ?? ''}</p>

@@ -12,7 +12,8 @@ import path from 'node:path';
 import {
   ASPECTS, END_CARD_PATH, FPS, OUT_DIR, type AspectSpec,
 } from './brand.js';
-import { scenesFor } from './narration.js';
+import { scenesFor, type CutKey, type Film } from './film.js';
+import { getFilm } from './films/index.js';
 import { loadVoice, type VoClip } from './voice.js';
 import { ffmpeg, ffprobeDuration, ffprobeStreams } from './ffmpeg.js';
 import { renderCaptions } from './captions.js';
@@ -89,12 +90,12 @@ async function identClip(spec: AspectSpec, out: string): Promise<number> {
   return ffprobeDuration(out);
 }
 
-export async function buildCut(cut: AspectSpec['key']): Promise<string> {
+export async function buildCut(film: Film, cut: CutKey): Promise<string> {
   const spec = ASPECTS[cut];
-  const scenes = scenesFor(cut);
-  const vo = await loadVoice();
+  const scenes = scenesFor(film, cut);
+  const vo = await loadVoice(film);
 
-  const cutDir = path.join(OUT_DIR, cut);
+  const cutDir = path.join(OUT_DIR, film.key, cut);
   const workDir = path.join(cutDir, 'work');
   await fs.mkdir(workDir, { recursive: true });
 
@@ -140,7 +141,7 @@ export async function buildCut(cut: AspectSpec['key']): Promise<string> {
   await ffmpeg(['-f', 'concat', '-safe', '0', '-i', aList, '-c', 'copy', aCat]);
 
   const total = await ffprobeDuration(vCat);
-  const out = path.join(OUT_DIR, `niyom-partner-portal-${cut === 'landscape' ? '16x9-1080p' : '9x16-1080p'}.mp4`);
+  const out = path.join(OUT_DIR, `niyom-${film.slug}-${cut === 'landscape' ? '16x9-1080p' : '9x16-1080p'}.mp4`);
 
   await ffmpeg([
     '-i', vCat, '-i', aCat,
@@ -160,11 +161,11 @@ export async function buildCut(cut: AspectSpec['key']): Promise<string> {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const only = process.argv[2] as AspectSpec['key'] | undefined;
-  const cuts: AspectSpec['key'][] = only ? [only] : ['landscape', 'vertical'];
-  for (const cut of cuts) {
-    console.log(`\nAssembling ${cut}:`);
-    const file = await buildCut(cut);
+  const film = getFilm(process.argv[2]);
+  const one = process.argv[3] as CutKey | undefined;
+  for (const cut of (one ? [one] : ['landscape', 'vertical']) as CutKey[]) {
+    console.log(`\nAssembling ${film.key} ${cut}:`);
+    const file = await buildCut(film, cut);
     console.log(`\n  → ${file}`);
     console.log(`    ${(await ffprobeDuration(file)).toFixed(2)}s`);
     console.log(await ffprobeStreams(file).then((s) => s.split('\n').map((l) => `    ${l}`).join('\n')));

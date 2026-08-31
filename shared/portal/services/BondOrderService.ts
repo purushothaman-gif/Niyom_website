@@ -10,6 +10,8 @@
  */
 import { clientSupabase as supabase } from '../../lib/supabase';
 import { getEnv } from '../../platform/env';
+import { isDemoClientSession } from '../demo/demoClient';
+import { demoClientBonds, demoBondOrders, addDemoClientBondOrder } from '../demo/demoClientMarket';
 
 /** The analytics blob the enrich pipeline stores on each bond (subset we read). */
 export interface BondAnalytics {
@@ -78,6 +80,7 @@ export interface PlaceOrderInput {
 export const BondOrderService = {
   /** The bonds visible to this client (approved rate only; empty otherwise). */
   async getBonds(): Promise<ClientBond[]> {
+    if (isDemoClientSession()) return demoClientBonds;
     const { data, error } = await supabase.rpc('nw_client_bonds');
     if (error) throw new Error(error.message);
     return (data as unknown as ClientBond[]) ?? [];
@@ -85,6 +88,7 @@ export const BondOrderService = {
 
   /** A single bond for the detail page. null if it isn't available to this client. */
   async getBond(id: string): Promise<ClientBond | null> {
+    if (isDemoClientSession()) return demoClientBonds.find((b) => b.id === id) ?? null;
     const { data, error } = await supabase.rpc('nw_client_bond', {
       p_id: id as unknown as string,
     });
@@ -95,6 +99,7 @@ export const BondOrderService = {
 
   /** This client's own orders, newest first. */
   async getMyOrders(clientId: string): Promise<BondOrder[]> {
+    if (isDemoClientSession()) return demoBondOrders();
     const { data, error } = await supabase
       .from('nw_bond_orders')
       .select('id, ref, bond_id, isin, bond_name, units, price_per_100, face_value, amount, status, notes, created_at')
@@ -110,6 +115,14 @@ export const BondOrderService = {
    * created order (with the authoritative server-side price/amount).
    */
   async placeOrder(input: PlaceOrderInput): Promise<BondOrder> {
+    // Demo mode is read-only: acknowledge the order so the flow can be walked
+    // end to end, but never route anything to a relationship manager.
+    if (isDemoClientSession()) {
+      const bond = demoClientBonds.find((b) => b.id === input.bondId);
+      if (!bond) throw new Error('Not available in the sample portal.');
+      await new Promise((r) => setTimeout(r, 500));
+      return addDemoClientBondOrder(bond, input.units, new Date().toISOString());
+    }
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
     const anon = getEnv().supabaseAnonKey;

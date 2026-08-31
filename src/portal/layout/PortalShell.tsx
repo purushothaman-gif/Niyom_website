@@ -13,7 +13,8 @@
  * with content and no name.
  */
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { ChevronDown, KeyRound, LogOut, MoreHorizontal, RefreshCw, X } from 'lucide-react';
+import { ChevronDown, KeyRound, LogOut, MoreHorizontal, RefreshCw, Sparkles, X } from 'lucide-react';
+import { isDemoClientSession } from '../../../shared/portal/demo/demoClient';
 import type { NWClient } from '../../crm/types';
 import { ThemeToggle } from '../../theme/ThemeToggle';
 import { ClientAvatar } from '../components/ClientAvatar';
@@ -245,6 +246,27 @@ export function PortalShell({
           </div>
         </div>
       </header>
+
+      {/* Sample-data banner. Deliberately persistent and above the content
+          rather than a dismissible toast: these credentials are handed to
+          prospects, and nobody should mistake the portfolio below for a real
+          client's money. */}
+      {isDemoClientSession() && (
+        <div
+          className="flex items-center justify-center gap-2 px-4 py-2 text-center text-xs font-semibold"
+          style={{
+            background: 'rgba(245,158,11,0.12)',
+            color: 'var(--warning)',
+            borderBottom: '1px solid rgba(245,158,11,0.25)',
+          }}
+        >
+          <Sparkles className="h-3.5 w-3.5 shrink-0" />
+          <span>
+            Sample portal — every holding, transaction and figure shown here is made up,
+            for demonstration only.
+          </span>
+        </div>
+      )}
 
       {/* ---- Content. Bottom padding clears the mobile tab bar. ---- */}
       <main className="mx-auto w-full max-w-[1280px] px-4 py-6 pb-28 sm:px-6 lg:pb-10">

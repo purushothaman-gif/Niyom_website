@@ -8,10 +8,12 @@ import { clientSupabase as supabase } from '../../lib/supabase';
 import type { NWTransaction, ProductType } from '../../crm/types';
 import { PRODUCT_LABELS, PRODUCT_CHART_COLORS } from '../../crm/utils';
 import type { TransactionRow, TxnFilter, TxnSummary } from '../types/activity';
+import { isDemoClientSession, demoClientTransactions } from '../demo/demoClient';
 
 export const TransactionService = {
   /** All transactions for a client, newest first. Sole Supabase boundary here. */
   async getAll(clientId: string): Promise<NWTransaction[]> {
+    if (isDemoClientSession()) return demoClientTransactions;
     const { data, error } = await supabase
       .from('nw_transactions')
       .select('*')
