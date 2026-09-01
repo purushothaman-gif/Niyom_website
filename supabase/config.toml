@@ -672,6 +672,18 @@ verify_jwt = false
 [functions.cashfree-payment-webhook]
 verify_jwt = false
 
+# --- Campaign unsubscribe ---------------------------------------------------
+# Public verify_jwt: the caller is a client's mail app clicking Unsubscribe, or
+# Gmail's own one-click button. Neither has a Supabase session, and an opt-out
+# that required a login would not be an opt-out. Authorisation is the recipient's
+# own 256-bit random token, checked inside mail_unsubscribe_by_token — an RPC
+# granted to service_role ONLY, never to anon or authenticated. The function
+# returns the identical page for a valid and an invalid token, so an open JWT
+# setting gives an unauthenticated caller no way to test whether an address is
+# on file.
+[functions.mail-unsubscribe]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

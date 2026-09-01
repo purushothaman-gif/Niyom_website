@@ -326,6 +326,7 @@ export type CRMPage =
   | 'share_orders'
   | 'marketing_content'
   | 'marketing_funds'
+  | 'mail_campaigns'
   | 'mis'
   | 'dsa_payout'
   | 'dsa_management'

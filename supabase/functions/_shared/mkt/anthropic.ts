@@ -61,9 +61,25 @@ export function resolveApiKey(raw: string | undefined): { key: string } | { erro
   return { key: apiKey };
 }
 
+/**
+ * Optional overrides, for callers generating something other than a social post.
+ *
+ * The email composer reuses this transport — the key handling, the error
+ * mapping and the two hard-won request settings below are worth exactly one
+ * implementation — but needs its own system prompt and output schema. Both
+ * default to the social-post pair, so every existing caller is unchanged and
+ * prompt.ts (whose SHA-256 is pinned by prompt.test.ts as a prompt-cache
+ * contract) stays untouched.
+ */
+export interface AnthropicOverrides {
+  system?: string;
+  schema?: Record<string, unknown>;
+}
+
 export async function callAnthropic(
   apiKey: string,
   messages: AnthropicMessage[],
+  overrides: AnthropicOverrides = {},
 ): Promise<{ draft: Record<string, unknown>; usage?: Usage }> {
   const res = await fetch(ANTHROPIC_URL, {
     method: 'POST',
@@ -81,7 +97,7 @@ export async function callAnthropic(
       // draft with 10 slides plus a video script is the worst case; 16000
       // leaves comfortable room for it alongside the reasoning.
       max_tokens: 16000,
-      system: SYSTEM_PROMPT,
+      system: overrides.system ?? SYSTEM_PROMPT,
       messages,
       // Thinking is stated explicitly rather than relied on as a default, and
       // its content is left omitted — nothing here surfaces reasoning to a UI.
@@ -90,7 +106,7 @@ export async function callAnthropic(
       // temperature / top_p / top_k with a 400, so none of them are sent.
       output_config: {
         effort: 'medium',
-        format: { type: 'json_schema', schema: DRAFT_SCHEMA },
+        format: { type: 'json_schema', schema: overrides.schema ?? DRAFT_SCHEMA },
       },
     }),
   });

@@ -4343,6 +4343,318 @@ export type Database = {
         }
         Relationships: []
       }
+      mail_assets: {
+        Row: {
+          byte_size: number
+          created_at: string
+          file_name: string
+          id: string
+          public_url: string
+          storage_path: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          byte_size?: number
+          created_at?: string
+          file_name?: string
+          id?: string
+          public_url: string
+          storage_path: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          byte_size?: number
+          created_at?: string
+          file_name?: string
+          id?: string
+          public_url?: string
+          storage_path?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mail_assets_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mail_campaign_recipients: {
+        Row: {
+          attempts: number
+          audience: string
+          campaign_id: string
+          claimed_at: string | null
+          client_id: string | null
+          created_at: string
+          dsa_id: string | null
+          email: string
+          error: string
+          full_name: string
+          id: string
+          merge: Json
+          provider_message_id: string | null
+          sent_at: string | null
+          status: string
+          unsub_token: string
+        }
+        Insert: {
+          attempts?: number
+          audience: string
+          campaign_id: string
+          claimed_at?: string | null
+          client_id?: string | null
+          created_at?: string
+          dsa_id?: string | null
+          email: string
+          error?: string
+          full_name?: string
+          id?: string
+          merge?: Json
+          provider_message_id?: string | null
+          sent_at?: string | null
+          status?: string
+          unsub_token: string
+        }
+        Update: {
+          attempts?: number
+          audience?: string
+          campaign_id?: string
+          claimed_at?: string | null
+          client_id?: string | null
+          created_at?: string
+          dsa_id?: string | null
+          email?: string
+          error?: string
+          full_name?: string
+          id?: string
+          merge?: Json
+          provider_message_id?: string | null
+          sent_at?: string | null
+          status?: string
+          unsub_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mail_campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "mail_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_campaign_recipients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_campaign_recipients_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mail_campaigns: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          audience: string
+          blocks: Json
+          campaign_no: string
+          compliance_ack_at: string | null
+          compliance_ack_by: string | null
+          compliance_flags: Json
+          content_hash: string
+          created_at: string
+          created_by: string | null
+          cta_portal_enabled: boolean
+          cta_portal_label: string
+          failed_count: number
+          filters: Json
+          generation_meta: Json
+          id: string
+          preheader: string
+          recipient_count: number
+          send_completed_at: string | null
+          send_started_at: string | null
+          sent_count: number
+          status: string
+          subject: string
+          test_sent_at: string | null
+          test_sent_hash: string | null
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          audience: string
+          blocks?: Json
+          campaign_no?: string
+          compliance_ack_at?: string | null
+          compliance_ack_by?: string | null
+          compliance_flags?: Json
+          content_hash?: string
+          created_at?: string
+          created_by?: string | null
+          cta_portal_enabled?: boolean
+          cta_portal_label?: string
+          failed_count?: number
+          filters?: Json
+          generation_meta?: Json
+          id?: string
+          preheader?: string
+          recipient_count?: number
+          send_completed_at?: string | null
+          send_started_at?: string | null
+          sent_count?: number
+          status?: string
+          subject?: string
+          test_sent_at?: string | null
+          test_sent_hash?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          audience?: string
+          blocks?: Json
+          campaign_no?: string
+          compliance_ack_at?: string | null
+          compliance_ack_by?: string | null
+          compliance_flags?: Json
+          content_hash?: string
+          created_at?: string
+          created_by?: string | null
+          cta_portal_enabled?: boolean
+          cta_portal_label?: string
+          failed_count?: number
+          filters?: Json
+          generation_meta?: Json
+          id?: string
+          preheader?: string
+          recipient_count?: number
+          send_completed_at?: string | null
+          send_started_at?: string | null
+          sent_count?: number
+          status?: string
+          subject?: string
+          test_sent_at?: string | null
+          test_sent_hash?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mail_campaigns_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_campaigns_compliance_ack_by_fkey"
+            columns: ["compliance_ack_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mail_events: {
+        Row: {
+          actor_employee_id: string | null
+          campaign_id: string | null
+          campaign_no: string
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json
+          note: string
+        }
+        Insert: {
+          actor_employee_id?: string | null
+          campaign_id?: string | null
+          campaign_no?: string
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json
+          note?: string
+        }
+        Update: {
+          actor_employee_id?: string | null
+          campaign_id?: string | null
+          campaign_no?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json
+          note?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mail_events_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_events_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "mail_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mail_suppressions: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          note: string
+          reason: string
+          source_campaign_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          note?: string
+          reason?: string
+          source_campaign_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          note?: string
+          reason?: string
+          source_campaign_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mail_suppressions_source_campaign_id_fkey"
+            columns: ["source_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "mail_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mf_asset_class: {
         Row: {
           ambiguous: boolean
@@ -10036,6 +10348,104 @@ export type Database = {
       }
       hr_today: { Args: never; Returns: string }
       hr_within_punch_window: { Args: { p_at: string }; Returns: boolean }
+      mail_audience_rows: {
+        Args: { p_audience: string; p_filters?: Json }
+        Returns: {
+          client_id: string
+          code: string
+          dsa_id: string
+          email: string
+          full_name: string
+          suppressed: boolean
+        }[]
+      }
+      mail_begin_send: { Args: { p_campaign_id: string }; Returns: Json }
+      mail_claim_recipients: {
+        Args: { p_campaign_id: string; p_limit?: number }
+        Returns: {
+          email: string
+          full_name: string
+          id: string
+          merge: Json
+          unsub_token: string
+        }[]
+      }
+      mail_finish_send: { Args: { p_campaign_id: string }; Returns: Json }
+      mail_log_event: {
+        Args: {
+          p_campaign_id: string
+          p_event_type: string
+          p_metadata?: Json
+          p_note?: string
+        }
+        Returns: undefined
+      }
+      mail_mark_recipient: {
+        Args: {
+          p_error?: string
+          p_id: string
+          p_message_id?: string
+          p_status: string
+        }
+        Returns: undefined
+      }
+      mail_materialise_recipients: {
+        Args: { p_campaign_id: string }
+        Returns: number
+      }
+      mail_next_campaign_no: { Args: never; Returns: string }
+      mail_preview_audience: {
+        Args: { p_audience: string; p_filters?: Json }
+        Returns: Json
+      }
+      mail_record_test_send: {
+        Args: { p_campaign_id: string; p_hash: string }
+        Returns: undefined
+      }
+      mail_set_campaign_status: {
+        Args: {
+          p_ack_compliance?: boolean
+          p_action: string
+          p_campaign_id: string
+          p_note?: string
+        }
+        Returns: {
+          approved_at: string | null
+          approved_by: string | null
+          audience: string
+          blocks: Json
+          campaign_no: string
+          compliance_ack_at: string | null
+          compliance_ack_by: string | null
+          compliance_flags: Json
+          content_hash: string
+          created_at: string
+          created_by: string | null
+          cta_portal_enabled: boolean
+          cta_portal_label: string
+          failed_count: number
+          filters: Json
+          generation_meta: Json
+          id: string
+          preheader: string
+          recipient_count: number
+          send_completed_at: string | null
+          send_started_at: string | null
+          sent_count: number
+          status: string
+          subject: string
+          test_sent_at: string | null
+          test_sent_hash: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "mail_campaigns"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      mail_unsubscribe_by_token: { Args: { p_token: string }; Returns: boolean }
       mkt_auto_alert_admins: {
         Args: { p_message: string; p_title: string }
         Returns: number

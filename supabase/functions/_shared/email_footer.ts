@@ -59,11 +59,18 @@ export interface EmailFooterOptions {
    *  RM-sent ones say "named recipient only" — so each keeps its own wording
    *  rather than being flattened to one. */
   notice?: string;
+  /** One-click opt-out link. Set ONLY by bulk campaign mail — a client cannot
+   *  unsubscribe from their own deal confirmation or OTP, so every
+   *  transactional template leaves this undefined and renders as before. */
+  unsubscribeUrl?: string;
 }
 
 /** Corporate footer, HTML. Include immediately before </div></body>. */
-export function emailFooterHtml({ year, ref, notice = NOTICE_RECIPIENT }: EmailFooterOptions): string {
+export function emailFooterHtml({ year, ref, notice = NOTICE_RECIPIENT, unsubscribeUrl }: EmailFooterOptions): string {
   const refBit = ref ? ` &nbsp; Ref: ${ref}` : "";
+  const unsubBit = unsubscribeUrl
+    ? `<br/><a href="${unsubscribeUrl}" target="_blank" rel="noopener" style="color:#999;text-decoration:underline;">Unsubscribe from these updates</a>`
+    : "";
   return `
   <table role="presentation" class="nw-f" width="100%" cellpadding="0" cellspacing="0" border="0"
          style="margin-top:32px;border-top:1px solid #eaeaea;border-collapse:collapse;">
@@ -101,15 +108,16 @@ export function emailFooterHtml({ year, ref, notice = NOTICE_RECIPIENT }: EmailF
     <tr>
       <td style="padding-top:20px;text-align:left;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.7;color:#999;">
         ${notice}<br/>
-        &copy; ${year} ${COMPANY}. All Rights Reserved.${refBit}
+        &copy; ${year} ${COMPANY}. All Rights Reserved.${refBit}${unsubBit}
       </td>
     </tr>
   </table>`;
 }
 
 /** Corporate footer, plain-text counterpart. */
-export function emailFooterText({ year, ref, notice = NOTICE_RECIPIENT }: EmailFooterOptions): string {
+export function emailFooterText({ year, ref, notice = NOTICE_RECIPIENT, unsubscribeUrl }: EmailFooterOptions): string {
   const refBit = ref ? `   Ref: ${ref}` : "";
+  const unsubBit = unsubscribeUrl ? `\n\nUnsubscribe from these updates: ${unsubscribeUrl}` : "";
   return `--
 
 ${COMPANY}
@@ -121,5 +129,5 @@ LinkedIn:  ${LINKEDIN_URL}
 Instagram: ${INSTAGRAM_URL}
 
 ${notice}
-© ${year} ${COMPANY}. All Rights Reserved.${refBit}`;
+© ${year} ${COMPANY}. All Rights Reserved.${refBit}${unsubBit}`;
 }
