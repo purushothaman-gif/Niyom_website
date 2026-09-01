@@ -184,7 +184,10 @@ function blockText(b: MailBlock, merge: Record<string, string>): string {
 
 /** The portal button appended automatically, resolved from the audience. */
 export function portalCta(audience: MailAudience, appUrl: string, label: string): { label: string; url: string } {
-  const base = String(appUrl || 'https://niyomwealth.com').replace(/\/$/, '');
+  // www, not the apex: the apex 301s to www, and email_footer.ts already links
+  // www. A redirect inside a marketing email is a needless hop that some
+  // clients and link scanners treat as a smell.
+  const base = String(appUrl || 'https://www.niyomwealth.com').replace(/\/$/, '');
   return audience === 'partner'
     ? { label: label.trim() || 'Open Partner Portal', url: `${base}/partner-login` }
     : { label: label.trim() || 'Open Client Portal', url: `${base}/client-login` };

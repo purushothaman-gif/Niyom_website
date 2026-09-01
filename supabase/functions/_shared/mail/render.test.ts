@@ -138,6 +138,14 @@ describe('portal CTA', () => {
     });
   });
 
+  it('falls back to the canonical www host, never a bare apex or a preview URL', () => {
+    // Regression: PUBLIC_APP_URL was set to a Vercel preview host, so the
+    // portal button in a live test email pointed at niyom-inky.vercel.app.
+    // The fallback must at least be the real, canonical domain.
+    expect(portalCta('client', '', '').url).toBe('https://www.niyomwealth.com/client-login');
+    expect(portalCta('partner', '', '').url).toBe('https://www.niyomwealth.com/partner-login');
+  });
+
   it('honours a custom label', () => {
     expect(portalCta('client', 'https://niyomwealth.com', 'View your portfolio').label)
       .toBe('View your portfolio');
