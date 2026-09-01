@@ -7,7 +7,7 @@ import {
   FolderOpen, Shield, BarChart3, Wallet, Handshake, ClipboardList,
   Send, Target, Landmark, LifeBuoy, Sparkles, LineChart, BadgePercent, Gem,
   CalendarCheck, CalendarClock, CalendarDays, Coins, Receipt, Fingerprint,
-  BadgeIndianRupee, SlidersHorizontal,
+  BadgeIndianRupee, SlidersHorizontal, Mail,
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
@@ -96,6 +96,7 @@ const NAV: NavSection[] = [
       { key: 'share_pricing' as CRMPage,     label: 'Share Pricing',     icon: BadgePercent },
       { key: 'marketing_content' as CRMPage, label: 'Content Creation',  icon: Sparkles },
       { key: 'marketing_funds' as CRMPage,   label: 'Mutual Funds',     icon: LineChart },
+      { key: 'mail_campaigns' as CRMPage,    label: 'Email Campaigns',  icon: Mail, adminOnly: true },
     ],
   },
   {

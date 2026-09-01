@@ -36,6 +36,7 @@ import TransferQueue from './TransferQueue';
 import SupportTickets from './SupportTickets';
 import BondOrders from './BondOrders';
 import ShareOrders from './ShareOrders';
+import Mail from './mail/Mail';
 /*
  * HR is lazy on purpose. Statically imported it added ~260 KB (~64 KB gzipped)
  * to the CRM chunk that every employee downloads on every page load, for ten
@@ -87,6 +88,7 @@ export default function CRM() {
     'share_orders',
     'marketing_content',
     'marketing_funds',
+    'mail_campaigns',
     'mis',
     'dsa_management',
     'dsa_payout',
@@ -228,6 +230,7 @@ export default function CRM() {
       // employees get the read-only approved-content gallery (branched inside).
       case 'marketing_content': return <MarketingContent employee={employee} onNavigate={navigate} />;
       case 'marketing_funds': return <FundResearch />;
+      case 'mail_campaigns': return isAdmin ? <Mail employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
       case 'documents': return <Documents employee={employee} initialClientId={pageParams.clientId} onBack={pageParams.clientId ? () => navigate('clients') : undefined} />;
       case 'admin_documents': return isAdmin ? <AdminDocuments employee={employee} /> : <Documents employee={employee} />;
       case 'mis': return <MIS employee={employee} />;
