@@ -65,7 +65,7 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const appUrl = (Deno.env.get("PUBLIC_APP_URL") ?? "https://niyomwealth.com").replace(/\/$/, "");
+    const appUrl = (Deno.env.get("PUBLIC_APP_URL") ?? "https://www.niyomwealth.com").replace(/\/$/, "");
     const functionsUrl = `${supabaseUrl}/functions/v1`;
 
     // Identify under the caller's own JWT, authorise with the service role.
