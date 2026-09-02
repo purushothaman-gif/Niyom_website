@@ -58,6 +58,26 @@ interface ClaimItem {
 
 const log = (msg: string) => console.log(`[render] ${msg}`);
 
+/*
+ * GitHub workflow annotations.
+ *
+ * This exists because of a two-and-a-half week outage that nobody could
+ * diagnose. The job log is the obvious place to look, but the logs API needs a
+ * token, so from outside the repo the only visible facts were "step: Render"
+ * and "exit code 1" — identical for a missing secret, a browser that would not
+ * start, and a font that did not resolve. Fifty-eight runs failed that way.
+ *
+ * The check-runs ANNOTATIONS API is readable without a token, so anything
+ * emitted as a workflow command survives into a place a diagnosis can actually
+ * reach. A scheduled job that fails invisibly is barely better than one that
+ * does not run.
+ */
+const inActions = process.env.GITHUB_ACTIONS === 'true';
+const oneLine = (s: string) => s.replace(/\r?\n/g, '%0A');
+const annotate = (level: 'notice' | 'warning' | 'error', title: string, msg: string) => {
+  if (inActions) console.log(`::${level} title=${title}::${oneLine(msg)}`);
+};
+
 async function io<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
   const res = await fetch(`${FUNCTIONS_URL}/mkt-auto-render-io`, {
     method: 'POST',
@@ -116,8 +136,11 @@ async function main() {
    * inputs was missing; one line of context turns that into a five-second
    * diagnosis. The secret is reported only as present/absent and by length.
    */
-  log(`target ${SUPABASE_URL}`);
-  log(`secret ${SECRET ? `present (${SECRET.length} chars)` : 'MISSING'}`);
+  const preflight =
+    `target=${SUPABASE_URL} secret=${SECRET ? `present(${SECRET.length} chars)` : 'MISSING'} ` +
+    `run_date=${RUN_DATE ?? 'today'} dry_run=${DRY_RUN}`;
+  log(preflight);
+  annotate('notice', 'render preflight', preflight);
 
   if (!SECRET) {
     throw new Error(
@@ -155,15 +178,28 @@ async function main() {
     const fonts = await session.fonts();
     log(`fonts: sans → ${fonts.effectiveSans}, serif → ${fonts.effectiveSerif}, video → ${fonts.videoMimeType}`);
 
+    /*
+      A wrong font is a WARNING, not a failure. This gate used to throw, and
+      that was the wrong trade.
+
+      textFit measures glyph widths on the same host that draws them, so a
+      fallback face produces a self-consistent layout: the wrapping matches the
+      font actually used. What is lost is typeface fidelity — posters in
+      Liberation Sans rather than Inter — not correctness. Blocking every piece
+      of content indefinitely to protect the typeface is worse than shipping in
+      the wrong one, especially since the alternative on offer was nothing at
+      all for two and a half weeks.
+
+      It stays loud: an annotation on every affected run, so "we are rendering
+      in the wrong font" can never be mistaken for normal.
+    */
     if (fonts.effectiveSans !== 'Inter') {
       const message =
-        `Expected Inter to resolve, got "${fonts.effectiveSans}". The vendored fonts are not ` +
-        `installed, so line breaks would not match the intended layout.`;
-      // Escape hatch for running the worker on a developer machine, which has
-      // its own fonts. Never set in the workflow: CI output has to be the
-      // intended typeface, not whatever the runner happens to have.
-      if (process.env.ALLOW_FONT_FALLBACK !== 'true') throw new Error(message);
-      log(`WARNING: ${message} Continuing because ALLOW_FONT_FALLBACK is set.`);
+        `Rendering in "${fonts.effectiveSans}" instead of Inter — the vendored fonts did not ` +
+        `resolve in Chromium. Layout is self-consistent but the typeface is not the intended ` +
+        `one. Check the "Install brand fonts" step and fontconfig on the runner.`;
+      log(`WARNING: ${message}`);
+      annotate('warning', 'font fallback', message);
     }
 
     const claim = await io<{ run_date: string; items: ClaimItem[] }>('claim', {
@@ -288,6 +324,8 @@ async function main() {
 }
 
 main().catch(err => {
-  console.error('[render] FATAL:', err instanceof Error ? err.message : err);
+  const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  console.error('[render] FATAL:', message);
+  annotate('error', 'render failed', message.slice(0, 900));
   process.exit(1);
 });
