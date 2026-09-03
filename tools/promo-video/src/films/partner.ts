@@ -28,7 +28,7 @@ const scenes: Scene[] = [
     kind: 'motion',
     title: 'Partner Portal',
     subtitle: 'Your clients, your products, your payouts',
-    vo: 'This is the Niyom Wealth Partner Portal. Your clients, your products, and your payouts, in one place.',
+    vo: 'So this is the Niyom Wealth partner portal. Everything you do with us — your clients, the products, your payouts — it\'s all sitting in one place.',
     caption: 'Niyom Wealth — Partner Portal',
     tail: 0.6,
     cuts: BOTH,
@@ -36,7 +36,7 @@ const scenes: Scene[] = [
   {
     id: 'login',
     kind: 'ui',
-    vo: 'Sign in with your PAN number. Set a four digit PIN once, and you are straight in every time after that.',
+    vo: 'You sign in with your PAN. And if you set a four digit PIN once, that\'s it, you\'re straight in every time after that.',
     caption: 'Sign in with your PAN',
     tail: 0.5,
     cuts: LONG,
@@ -44,7 +44,7 @@ const scenes: Scene[] = [
   {
     id: 'dashboard',
     kind: 'ui',
-    vo: 'Your dashboard opens on the numbers that matter. What you have raised this financial year, what has been paid, what is still due, and the clients you have brought in.',
+    vo: 'First thing you see is where you stand. What you\'ve raised this financial year, what\'s already been paid out, what\'s still pending, and the clients you\'ve brought in.',
     caption: 'Everything you have earned, at a glance',
     illustrative: true,
     tail: 0.8,
@@ -53,7 +53,8 @@ const scenes: Scene[] = [
   {
     id: 'onboard',
     kind: 'ui',
-    vo: 'Onboard a client yourself. Verify their PAN, add their details, and they are mapped under you and your relationship manager in seconds. The PAN check runs live, and your relationship manager completes the K Y C from there.',
+    vo: 'You can onboard a client yourself. Put in their PAN, it comes back verified, add their details — and they\'re mapped under you and your relationship manager. That\'s it. Your RM picks up the KYC from there.',
+    sayText: 'You can onboard a client yourself. Put in their PAN, it comes back verified, add their details, and they\'re mapped under you and your relationship manager. That\'s it. Your R M picks up the K Y C from there.',
     caption: 'Onboard your own clients',
     tail: 0.8,
     cuts: LONG,
@@ -61,7 +62,7 @@ const scenes: Scene[] = [
   {
     id: 'clients',
     kind: 'ui',
-    vo: 'Open any client to see the portfolio you built. Every holding, every transaction, valued as of today.',
+    vo: 'Open any client and you\'ll see the whole portfolio you\'ve built for them. Every holding, every transaction, valued as of today.',
     caption: 'See every client portfolio you built',
     illustrative: true,
     tail: 0.6,
@@ -70,7 +71,7 @@ const scenes: Scene[] = [
   {
     id: 'bonds',
     kind: 'ui',
-    vo: 'The bond desk is priced for you. Set your own markup, up to five percent. Your cost is never shown to your client.',
+    vo: 'Now, the bonds. These are priced at your cost, and you decide your own markup on top — up to five percent. Your cost never shows to the client.',
     caption: 'Set your own markup — up to 5%',
     tail: 0.6,
     cuts: BOTH,
@@ -78,7 +79,7 @@ const scenes: Scene[] = [
   {
     id: 'bond-actions',
     kind: 'ui',
-    vo: 'Order for a client, share a private link, or download a marketing image, with your name and number on it, and Niyom branding switched off if you prefer, so it goes out entirely under your own brand.',
+    vo: 'From here you can place an order for a client, send them a private link, or pull a marketing image with your own name and number on it. And if you\'d rather it didn\'t carry our branding at all, you just switch that off.',
     caption: 'Order · Share · Market — under your own name',
     tail: 0.8,
     cuts: BOTH,
@@ -86,7 +87,8 @@ const scenes: Scene[] = [
   {
     id: 'payouts',
     kind: 'ui',
-    vo: 'Every payout statement, with gross, T D S and net payable, ready to download. Nothing to chase, nothing to reconcile.',
+    vo: 'Every payout statement is right here. Gross, TDS, net payable, ready to download. You\'re not chasing anybody for it.',
+    sayText: 'Every payout statement is right here. Gross, T D S, net payable, ready to download. You\'re not chasing anybody for it.',
     caption: 'Payout statements, always available',
     illustrative: true,
     tail: 0.7,
@@ -95,7 +97,7 @@ const scenes: Scene[] = [
   {
     id: 'referral',
     kind: 'ui',
-    vo: 'Share your referral link, and anyone who opens an account through it is recorded against you automatically.',
+    vo: 'And this is your referral link. Anyone who opens an account through it gets recorded against you automatically — nothing for you to claim afterwards.',
     caption: 'Your referral link, tracked automatically',
     tail: 0.6,
     cuts: LONG,
@@ -105,7 +107,7 @@ const scenes: Scene[] = [
     kind: 'motion',
     title: 'Become a partner',
     subtitle: 'niyomwealth.com/partner-onboarding',
-    vo: 'Become a Niyom Wealth partner. Register today at niyom wealth dot com, slash partner onboarding.',
+    vo: 'If that sounds like something you want to be part of, come and register. It\'s niyomwealth dot com, slash partner onboarding.',
     caption: 'Register in a few minutes',
     tail: 1.2,
     cuts: BOTH,

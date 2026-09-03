@@ -122,6 +122,13 @@ Deno.serve(async (req: Request) => {
     // acceptance. Payment is still enforced by the RPC. Admin role already
     // checked above, so this flag only reaches the RPC from an authorised admin.
     const overrideAcceptance = body?.override === true;
+    // Optional transfer date (the admin may back-date a late review). Accept only
+    // a parseable date; anything else falls back to now() inside the RPC (NULL).
+    let transferredAt: string | null = null;
+    if (typeof body?.transferredAt === "string" && body.transferredAt.trim()) {
+      const t = new Date(body.transferredAt);
+      if (!Number.isNaN(t.getTime())) transferredAt = t.toISOString();
+    }
 
     if (!dealId) return json({ success: false, error: "dealId is required." }, 400);
 
@@ -140,6 +147,8 @@ Deno.serve(async (req: Request) => {
       p_remarks:             remarks as string,
       p_app_version:         APPLICATION_VERSION,
       p_override_acceptance: overrideAcceptance,
+      // Optional; NULL/undefined → the RPC defaults to now().
+      p_transferred_at:      transferredAt ?? undefined,
     });
 
     if (rpcErr || !rpcResult) {

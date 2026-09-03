@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { edgeFunctionErrorMessage } from '../lib/edgeFunctionError';
@@ -149,20 +149,12 @@ function parseDemat(
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// Confirmation checklist — the six-item verification checklist
-// ---------------------------------------------------------------------------
-
-const CHECKLIST_ITEMS = [
-  { key: 'kyc',        label: 'Client KYC verified' },
-  { key: 'payment',    label: 'Payment received (settled within ₹50 tolerance)' },
-  { key: 'ledger',     label: 'Ledger verified' },
-  { key: 'docs',       label: 'Documents verified' },
-  { key: 'investment', label: 'Investment details verified' },
-  { key: 'attest',     label: 'I confirm this deal is ready for official transfer and closure.' },
-] as const;
-
-type ChecklistKey = typeof CHECKLIST_ITEMS[number]['key'];
+// Local date (YYYY-MM-DD) for the transfer-date input, in the browser's timezone.
+const todayLocalISO = () => {
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+};
 
 const PAGE_SIZE = 10;
 
@@ -195,9 +187,9 @@ export default function TransferQueue({ employee }: Props) {
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [remarks, setRemarks] = useState('');
-  const [checks, setChecks] = useState<Record<ChecklistKey, boolean>>({
-    kyc: false, payment: false, ledger: false, docs: false, investment: false, attest: false,
-  });
+  // Editable transfer date — defaults to today, but can be back-dated when a
+  // deal is reviewed a day or two late so the recorded date stays correct.
+  const [transferDate, setTransferDate] = useState<string>(todayLocalISO());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -283,7 +275,7 @@ export default function TransferQueue({ employee }: Props) {
   const openPreview = async (d: EligibleDeal) => {
     setPreview(d);
     setView('preview');
-    setChecks({ kyc: false, payment: false, ledger: false, docs: false, investment: false, attest: false });
+    setTransferDate(todayLocalISO());
     setRemarks('');
     setError('');
     setLedger([]);
@@ -315,20 +307,18 @@ export default function TransferQueue({ employee }: Props) {
   // Approve Transfer
   // -------------------------------------------------------------------------
 
-  const allChecked = useMemo(
-    () => CHECKLIST_ITEMS.every(i => checks[i.key]),
-    [checks]
-  );
-
   const submit = async () => {
-    if (!preview || !allChecked || submitting) return;
+    if (!preview || submitting) return;
     setSubmitting(true);
     setError('');
     try {
+      // Send the chosen transfer date as a timestamp at local noon, so the stored
+      // date can't slip a day across timezones.
+      const transferredAt = transferDate ? new Date(`${transferDate}T12:00:00`).toISOString() : null;
       const { data, error: fnErr } = await supabase.functions.invoke('transfer-deal', {
         // Digital acceptance is not part of this flow; always transfer a
         // confirmed, paid deal. The view + RPC enforce eligibility.
-        body: { dealId: preview.deal_id, remarks: remarks.trim() || null, override: true },
+        body: { dealId: preview.deal_id, remarks: remarks.trim() || null, override: true, transferredAt },
       });
       if (fnErr || !data?.success) {
         throw new Error(await edgeFunctionErrorMessage(fnErr, data, 'Could not complete transfer.'));
@@ -718,13 +708,12 @@ export default function TransferQueue({ employee }: Props) {
         {showConfirm && (
           <ConfirmDialog
             deal={preview}
-            checks={checks}
-            setChecks={setChecks}
+            transferDate={transferDate}
+            setTransferDate={setTransferDate}
             remarks={remarks}
             setRemarks={setRemarks}
             error={error}
             submitting={submitting}
-            allChecked={allChecked}
             onCancel={() => { if (!submitting) { setShowConfirm(false); setError(''); } }}
             onConfirm={submit}
           />
@@ -841,7 +830,7 @@ export default function TransferQueue({ employee }: Props) {
                       <button onClick={() => openPreview(d)}
                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-on-accent"
                         style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
-                        Review <ChevronRight className="w-3 h-3" />
+                        Transfer <ChevronRight className="w-3 h-3" />
                       </button>
                     </td>
                   </tr>
@@ -959,17 +948,16 @@ function FieldRow({
 }
 
 function ConfirmDialog({
-  deal, checks, setChecks, remarks, setRemarks,
-  error, submitting, allChecked, onCancel, onConfirm,
+  deal, transferDate, setTransferDate, remarks, setRemarks,
+  error, submitting, onCancel, onConfirm,
 }: {
   deal: EligibleDeal;
-  checks: Record<ChecklistKey, boolean>;
-  setChecks: React.Dispatch<React.SetStateAction<Record<ChecklistKey, boolean>>>;
+  transferDate: string;
+  setTransferDate: (v: string) => void;
   remarks: string;
   setRemarks: (v: string) => void;
   error: string;
   submitting: boolean;
-  allChecked: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -1027,25 +1015,21 @@ function ConfirmDialog({
             </p>
           </div>
 
-          <div className="rounded-xl p-4 space-y-2"
-            style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}>
-            <p className="text-xs font-bold uppercase tracking-wider mb-1"
-              style={{ color: 'var(--text-secondary)' }}>Transfer Checklist</p>
-            {CHECKLIST_ITEMS.map(item => (
-              <label key={item.key} className="flex items-start gap-2 cursor-pointer text-sm">
-                <input
-                  type="checkbox"
-                  checked={checks[item.key]}
-                  onChange={e => setChecks(prev => ({ ...prev, [item.key]: e.target.checked }))}
-                  disabled={submitting}
-                  className="mt-0.5"
-                  style={{ accentColor: 'var(--accent)' }}
-                />
-                <span style={{ color: 'var(--text-primary)' }}>
-                  {item.label}
-                </span>
-              </label>
-            ))}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5"
+              style={{ color: 'var(--text-secondary)' }}>Transfer Date</label>
+            <input
+              type="date"
+              value={transferDate}
+              max={todayLocalISO()}
+              onChange={e => setTransferDate(e.target.value)}
+              disabled={submitting}
+              className="w-full px-3.5 py-2.5 rounded-xl text-sm text-text-primary outline-none"
+              style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}
+            />
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              Defaults to today — change it if you're recording a transfer done on an earlier date.
+            </p>
           </div>
 
           <div>
@@ -1074,19 +1058,19 @@ function ConfirmDialog({
             style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
             Cancel
           </button>
-          <button onClick={onConfirm} disabled={!allChecked || submitting}
+          <button onClick={onConfirm} disabled={submitting}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent disabled:cursor-not-allowed"
             style={{
-              background: allChecked && !submitting
+              background: !submitting
                 ? 'linear-gradient(135deg, var(--accent), var(--accent-strong))'
                 : 'var(--bg-base)',
-              color: allChecked && !submitting ? undefined : 'var(--text-muted)',
-              opacity: allChecked && !submitting ? 1 : 0.6,
-              border: allChecked && !submitting ? 'none' : '1px solid var(--border)',
+              color: !submitting ? undefined : 'var(--text-muted)',
+              opacity: !submitting ? 1 : 0.6,
+              border: !submitting ? 'none' : '1px solid var(--border)',
             }}>
             {submitting
-              ? <><Loader2 className="w-4 h-4 animate-spin" /> Approving…</>
-              : <><Send className="w-4 h-4" /> Approve Transfer</>}
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Transferring…</>
+              : <><Send className="w-4 h-4" /> Mark as Transferred</>}
           </button>
         </div>
       </div>

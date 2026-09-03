@@ -12,8 +12,17 @@ export type SceneKind = 'motion' | 'ui';
 export interface Scene {
   id: string;
   kind: SceneKind;
-  /** Spoken. Punctuation matters — `say` honours commas and full stops. */
+  /**
+   * Spoken, written the way a person would actually say it — this is what a
+   * human reading the script sees, and what SCRIPT-<film>.md prints.
+   */
   vo: string;
+  /**
+   * What a text-to-speech engine is fed instead, where the two differ. Only
+   * needed for acronyms: a human reads "KYC" correctly, most engines say
+   * "kick". Keep the words identical — this is spelling, not a rewrite.
+   */
+  sayText?: string;
   /** Burned into the picture. Kept short; it is read, not studied. */
   caption: string;
   /** Motion scenes only: the big type on the card. */

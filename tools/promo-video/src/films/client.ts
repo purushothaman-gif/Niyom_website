@@ -66,7 +66,7 @@ const scenes: Scene[] = [
     kind: 'motion',
     title: 'Your wealth, in one place',
     subtitle: 'Mutual funds, bonds and unlisted shares — valued every day',
-    vo: 'Niyom Wealth gives you one place for everything you own. Mutual funds, bonds and unlisted shares, valued every single day.',
+    vo: 'Here\'s the idea. Everything you own, in one place. Your mutual funds, your bonds, your unlisted shares — all of it valued every single day.',
     caption: 'Niyom Wealth — Client Portal',
     tail: 0.6,
     cuts: BOTH,
@@ -74,7 +74,8 @@ const scenes: Scene[] = [
   {
     id: 'onboarding',
     kind: 'ui',
-    vo: 'Opening an account starts with your PAN and takes about thirty seconds. Your K Y C is completed inside the portal, not on paper.',
+    vo: 'Opening an account starts with your PAN, and honestly, it takes about half a minute. Your KYC happens inside the portal, so there\'s no paperwork to post anywhere.',
+    sayText: 'Opening an account starts with your PAN, and honestly, it takes about half a minute. Your K Y C happens inside the portal, so there\'s no paperwork to post anywhere.',
     caption: 'Open an account in minutes',
     tail: 0.6,
     cuts: LONG,
@@ -86,7 +87,7 @@ const scenes: Scene[] = [
   {
     id: 'login',
     kind: 'ui',
-    vo: 'After that, signing in is just your PAN number and your password. Or a four digit PIN, on a device you trust.',
+    vo: 'After that it\'s just your PAN and your password to get in. Or a four digit PIN, on a phone you trust.',
     caption: 'Your PAN is your login',
     tail: 0.5,
     cuts: LONG,
@@ -100,7 +101,7 @@ const scenes: Scene[] = [
   {
     id: 'dashboard',
     kind: 'ui',
-    vo: 'Your dashboard opens on what you are worth today, how it moved, and the return you have actually earned on the money you put in.',
+    vo: 'This is your dashboard. What you\'re worth today, how it moved, and the return you\'ve actually earned on the money you put in. Not an estimate — the real number.',
     caption: 'What you are worth, today',
     illustrative: true,
     tail: 0.8,
@@ -109,7 +110,7 @@ const scenes: Scene[] = [
   {
     id: 'portfolio',
     kind: 'ui',
-    vo: 'Every holding sits in one list. Mutual funds, bonds and unlisted shares side by side, with what you paid and what it is worth now.',
+    vo: 'Everything sits in one list. Mutual funds, bonds, unlisted shares, side by side. What you paid, and what it\'s worth now.',
     caption: 'Every holding, in one list',
     illustrative: true,
     tail: 0.8,
@@ -118,7 +119,7 @@ const scenes: Scene[] = [
   {
     id: 'allocation',
     kind: 'ui',
-    vo: 'Asset allocation shows how your money is spread, so you can see a concentration before it becomes a problem.',
+    vo: 'And this shows you how it\'s all spread out. Useful for spotting when you\'re getting a bit too concentrated in one place.',
     caption: 'See how your money is spread',
     illustrative: true,
     tail: 0.7,
@@ -127,7 +128,7 @@ const scenes: Scene[] = [
   {
     id: 'gains',
     kind: 'ui',
-    vo: 'Capital gains are worked out for you, year by year. Long term and short term, with the tax treatment already applied, so there is no spreadsheet waiting for you in March.',
+    vo: 'Capital gains get worked out for you, year by year. Long term, short term, the tax treatment already applied. So you\'re not sitting there in March with a spreadsheet trying to figure it out.',
     caption: 'Capital gains, already worked out',
     illustrative: true,
     tail: 0.8,
@@ -136,7 +137,8 @@ const scenes: Scene[] = [
   {
     id: 'funds',
     kind: 'ui',
-    vo: 'Explore mutual funds with their returns, their risk and their N A V history, and invest straight from the portal.',
+    vo: 'You can go through the funds here. Returns, risk, how the NAV has moved — and you invest straight from the portal.',
+    sayText: 'You can go through the funds here. Returns, risk, how the N A V has moved, and you invest straight from the portal.',
     caption: 'Explore and invest in minutes',
     tail: 0.7,
     cuts: BOTH,
@@ -144,7 +146,7 @@ const scenes: Scene[] = [
   {
     id: 'bonds',
     kind: 'ui',
-    vo: 'And not just funds. Bonds and unlisted shares too, the kind of fixed income and pre I P O access most apps will never offer you.',
+    vo: 'And it\'s not only funds. Bonds and unlisted shares as well, which is the sort of access most apps simply won\'t give you.',
     caption: 'Bonds and unlisted shares, not just funds',
     tail: 0.8,
     cuts: BOTH,
@@ -152,7 +154,7 @@ const scenes: Scene[] = [
   {
     id: 'reports',
     kind: 'ui',
-    vo: 'Every statement and document is there to download whenever you need it.',
+    vo: 'Statements, documents — they\'re all there whenever you need them.',
     caption: 'Statements, ready when you are',
     tail: 0.6,
     cuts: LONG,
@@ -160,7 +162,7 @@ const scenes: Scene[] = [
   {
     id: 'support',
     kind: 'ui',
-    vo: 'And your relationship manager is one tap away. Raise a ticket and it reaches them directly.',
+    vo: 'And there\'s a real person behind all this. Raise a ticket and it goes straight to your relationship manager.',
     caption: 'A real person, one tap away',
     tail: 0.7,
     cuts: LONG,
@@ -170,7 +172,7 @@ const scenes: Scene[] = [
     kind: 'motion',
     title: 'Open a free account',
     subtitle: 'niyomwealth.com',
-    vo: 'Open a free account today at niyom wealth dot com.',
+    vo: 'So, go ahead and open a free account. It\'s niyomwealth dot com.',
     caption: 'It takes about thirty seconds',
     tail: 1.2,
     cuts: BOTH,
