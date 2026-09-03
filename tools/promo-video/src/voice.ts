@@ -50,7 +50,7 @@ export async function generateVoice(film: Film): Promise<VoClip[]> {
     const aiff = path.join(dir, `${scene.id}.aiff`);
     const m4a = path.join(dir, `${scene.id}.m4a`);
 
-    await run('say', ['-v', VOICE, '-r', String(RATE), '-o', aiff, scene.vo]);
+    await run('say', ['-v', VOICE, '-r', String(RATE), '-o', aiff, scene.sayText ?? scene.vo]);
     await run('ffmpeg', [
       '-y', '-loglevel', 'error',
       '-i', aiff,
