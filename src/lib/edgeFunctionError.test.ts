@@ -3,7 +3,7 @@
  * `data` is null and the real reason is sitting unread on `error.context`.
  */
 import { describe, it, expect } from 'vitest';
-import { edgeFunctionErrorMessage } from './edgeFunctionError.ts';
+import { edgeFunctionErrorMessage, edgeErrorStatus } from './edgeFunctionError.ts';
 
 /** What supabase-js hands back on a non-2xx: null data, generic message. */
 function httpError(status: number, body: unknown, asText = false): unknown {
@@ -100,5 +100,17 @@ describe('edgeFunctionErrorMessage', () => {
     // error and bury the first.
     const err = { message: 'weird', context: { not: 'a response' } };
     await expect(edgeFunctionErrorMessage(err, null, FALLBACK)).resolves.toBe('weird');
+  });
+});
+
+describe('edgeErrorStatus', () => {
+  it('reports the status so a 401 can be told from a business refusal', () => {
+    expect(edgeErrorStatus(httpError(401, { error: 'Unauthorized' }))).toBe(401);
+    expect(edgeErrorStatus(httpError(409, { error: 'Deal is locked.' }))).toBe(409);
+  });
+
+  it('returns null when there is no Response to read (network failure)', () => {
+    expect(edgeErrorStatus({ name: 'FunctionsFetchError', message: 'Failed to fetch' })).toBeNull();
+    expect(edgeErrorStatus(null)).toBeNull();
   });
 });

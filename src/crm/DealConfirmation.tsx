@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { edgeFunctionErrorMessage } from '../lib/edgeFunctionError';
+import { sessionExpiredMessage } from '../lib/sessionExpiry';
 import type { Insertable } from '../lib/dbJson';
 import { NWEmployee, NWClient } from './types';
 import {
@@ -752,7 +753,10 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
         { body: { dealId: deal.id } }
       );
       if (fnError || !fnData?.success) {
-        throw new Error(await edgeFunctionErrorMessage(fnError, fnData, 'Failed to send secure link'));
+        // A revoked session reaches here as a bare 401 "Unauthorized" while the
+        // rest of the screen still works, so say what actually needs doing.
+        const expired = await sessionExpiredMessage(fnError);
+        throw new Error(expired ?? await edgeFunctionErrorMessage(fnError, fnData, 'Failed to send secure link'));
       }
       setPreviewDeal(prev =>
         prev && prev.id === deal.id
