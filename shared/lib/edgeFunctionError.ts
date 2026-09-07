@@ -92,3 +92,16 @@ export async function edgeFunctionErrorMessage(
 
   return fallback;
 }
+
+/**
+ * HTTP status of a failed `functions.invoke`, or null when the library did not
+ * hand us the Response (a network failure, or an error we did not raise).
+ *
+ * Callers use this to tell an authentication failure (401) apart from a
+ * business refusal, because the two need very different advice: "sign in
+ * again" versus "this deal is locked".
+ */
+export function edgeErrorStatus(fnErr: unknown): number | null {
+  const context = (fnErr as { context?: unknown } | null | undefined)?.context;
+  return context instanceof Response ? context.status : null;
+}
