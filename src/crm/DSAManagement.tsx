@@ -8,7 +8,7 @@ import {
   Handshake, Plus, X, Upload, CheckCircle2, AlertCircle,
   Search, Phone, Mail, CreditCard, Building2, User, Eye,
   ToggleLeft, ToggleRight, Trash2, ChevronDown, Pencil,
-  KeyRound, ShieldOff, ShieldCheck, Copy, RefreshCw, MailCheck,
+  KeyRound, ShieldOff, ShieldCheck, Copy, RefreshCw, MailCheck, UserCog,
 } from 'lucide-react';
 
 /** Policy-compliant temp password (8+, upper, lower, digit, symbol). */
@@ -118,6 +118,14 @@ export default function DSAManagement({ employee }: Props) {
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [loginDone, setLoginDone] = useState(false);
+  // Reassign a DSA — and its whole client book — to another employee/admin.
+  const [reassignDSA, setReassignDSA] = useState<NWDSA | null>(null);
+  const [reassignToId, setReassignToId] = useState('');
+  const [reassignReason, setReassignReason] = useState('');
+  const [reassignBusy, setReassignBusy] = useState(false);
+  const [reassignError, setReassignError] = useState('');
+  const [reassignCounts, setReassignCounts] =
+    useState<{ clients: number; deals: number; txns: number } | null>(null);
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
 
@@ -141,6 +149,52 @@ export default function DSAManagement({ employee }: Props) {
     supabase.from('nw_employees').select('id, full_name, employee_code').eq('status', 'active').order('full_name')
       .then(({ data }) => setEmpList((data as any[]) || []));
   }, [isAdmin]);
+
+  // --- Reassign DSA (admin only) -------------------------------------------
+  // Ownership of a partner is nw_dsa.employee_id alone, and every client the
+  // partner sources is filed under that same employee. Moving one without the
+  // other would split the book, so the nw_reassign_dsa RPC moves the partner,
+  // their clients, and those clients' deals / transactions / leads together.
+  const openReassign = async (dsa: NWDSA) => {
+    setReassignDSA(dsa);
+    setReassignToId('');
+    setReassignReason('');
+    setReassignError('');
+    setReassignCounts(null);
+    // Impact preview: what actually travels with the partner.
+    const { data: clients } = await supabase.from('nw_clients').select('id').eq('dsa_id', dsa.id);
+    const ids = ((clients ?? []) as { id: string }[]).map(c => c.id);
+    if (!ids.length) { setReassignCounts({ clients: 0, deals: 0, txns: 0 }); return; }
+    const [dcRes, txRes] = await Promise.all([
+      supabase.from('nw_deal_confirmations').select('id', { count: 'exact', head: true }).in('client_id', ids),
+      supabase.from('nw_transactions').select('id', { count: 'exact', head: true }).in('client_id', ids),
+    ]);
+    setReassignCounts({ clients: ids.length, deals: dcRes.count ?? 0, txns: txRes.count ?? 0 });
+  };
+
+  const confirmReassign = async () => {
+    if (!reassignDSA || !reassignToId) return;
+    setReassignBusy(true);
+    setReassignError('');
+    const { data, error: rpcErr } = await supabase.rpc('nw_reassign_dsa', {
+      p_dsa_id: reassignDSA.id,
+      p_to_employee: reassignToId,
+      p_reason: reassignReason.trim(),
+    });
+    setReassignBusy(false);
+    if (rpcErr) { setReassignError(rpcErr.message); return; }
+    const r = (data ?? {}) as {
+      unchanged?: boolean; clients?: number; deals?: number; transactions?: number; leads?: number;
+    };
+    const toName = empList.find(e => e.id === reassignToId)?.full_name ?? 'the selected employee';
+    const movedName = reassignDSA.full_name;
+    setReassignDSA(null);
+    setSuccess(r.unchanged
+      ? `${movedName} is already mapped to ${toName}.`
+      : `${movedName} mapped to ${toName} — ${r.clients ?? 0} client(s), ${r.deals ?? 0} deal(s) and ` +
+        `${r.transactions ?? 0} transaction(s) moved across.`);
+    fetchDSAs();
+  };
 
   const set = (k: keyof DSAFormData, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -728,6 +782,103 @@ export default function DSAManagement({ employee }: Props) {
       )}
 
       {/* Delete confirmation modal */}
+      {/* Reassign DSA Modal — admin only */}
+      {reassignDSA && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
+          <div className="w-full max-w-lg rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <h2 className="text-sm font-bold text-text-primary">Reassign DSA</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  {reassignDSA.full_name}{' '}
+                  <span className="font-mono" style={{ color: 'var(--accent)' }}>({reassignDSA.dsa_code})</span>
+                </p>
+              </div>
+              <button onClick={() => setReassignDSA(null)} style={{ color: 'var(--text-faint)' }}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div className="p-4 rounded-xl" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center gap-2 text-xs flex-wrap" style={{ color: 'var(--text-secondary)' }}>
+                  <span className="font-semibold text-text-primary">Currently mapped to:</span>
+                  <span className="px-2 py-0.5 rounded-lg" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                    {reassignDSA.employee?.full_name || 'Unassigned'}
+                  </span>
+                </div>
+                <p className="text-xs mt-2" style={{ color: 'var(--text-faint)' }}>
+                  Every client sourced through this partner moves to the new employee too,
+                  along with their deals and transactions, so the partner and their book stay
+                  with one owner. DSA payouts are unaffected.
+                </p>
+              </div>
+
+              {/* Impact preview */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'Clients', value: reassignCounts?.clients },
+                  { label: 'Deals', value: reassignCounts?.deals },
+                  { label: 'Transactions', value: reassignCounts?.txns },
+                ].map(c => (
+                  <div key={c.label} className="px-3 py-2 rounded-xl text-center" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}>
+                    <p className="text-sm font-bold" style={{ color: 'var(--accent)' }}>
+                      {reassignCounts ? c.value : '—'}
+                    </p>
+                    <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{c.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  Map To
+                </label>
+                <select value={reassignToId} onChange={e => setReassignToId(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl text-sm text-text-primary outline-none"
+                  style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
+                  <option value="">— Select an employee —</option>
+                  {empList
+                    .filter(e => e.id !== reassignDSA.employee_id)
+                    .map(e => <option key={e.id} value={e.id}>{e.full_name} ({e.employee_code})</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  Reason (optional)
+                </label>
+                <textarea value={reassignReason} onChange={e => setReassignReason(e.target.value)} rows={2}
+                  placeholder="Why this reassignment?"
+                  className="w-full px-3 py-2.5 rounded-xl text-sm text-text-primary outline-none resize-none"
+                  style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }} />
+              </div>
+
+              {reassignError && (
+                <div className="p-3 rounded-xl flex items-start gap-2 text-sm"
+                  style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: 'var(--danger)' }}>
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /> {reassignError}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 pb-5 flex justify-end gap-3">
+              <button onClick={() => setReassignDSA(null)} disabled={reassignBusy}
+                className="px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                Cancel
+              </button>
+              <button onClick={confirmReassign} disabled={reassignBusy || !reassignToId}
+                className="px-5 py-2 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50 flex items-center gap-2"
+                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                <UserCog className="w-3.5 h-3.5" />
+                {reassignBusy ? 'Reassigning...' : 'Reassign DSA'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {deleteDSA && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
           <div className="w-full max-w-md rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
@@ -884,6 +1035,17 @@ export default function DSAManagement({ employee }: Props) {
                       onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
                       onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
                       <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
+                  {/* Reassign — admin only. Hands the partner and their whole
+                      client book to another employee in one step. */}
+                  {isAdmin && (
+                    <button onClick={() => openReassign(dsa)} title="Reassign DSA to another employee"
+                      className="p-2 rounded-lg transition-colors"
+                      style={{ background: 'var(--bg-raised)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'rgb(var(--info-soft-rgb))')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+                      <UserCog className="w-4 h-4" />
                     </button>
                   )}
                   {/* Partner Portal login — stewardship: assigned employee or

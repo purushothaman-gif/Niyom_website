@@ -11328,6 +11328,10 @@ export type Database = {
         Args: { p_client_id: string; p_reason?: string; p_to_employee: string }
         Returns: undefined
       }
+      nw_reassign_dsa: {
+        Args: { p_dsa_id: string; p_reason?: string; p_to_employee: string }
+        Returns: Json
+      }
       nw_recompute_portfolio_value: {
         Args: { p_client_id: string }
         Returns: undefined
