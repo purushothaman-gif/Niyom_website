@@ -81,6 +81,21 @@ interface LedgerRow {
   cheque_number: string | null;
 }
 
+// One security line of a deal (nw_deal_confirmation_items). A deal can carry
+// several securities; the deal header only mirrors the FIRST line, so the queue
+// must read the lines to show the whole deal.
+interface DealItem {
+  id: string;
+  deal_id: string;
+  sort_order: number;
+  product_type: string | null;
+  security_name: string | null;
+  isin: string | null;
+  quantity: number;
+  rate_per_unit: number | null;
+  line_settlement: number | null;
+}
+
 // Short-label map for payment_mode (used only in the ledger table).
 const MODE_LABEL: Record<string, string> = {
   imps: 'IMPS', neft: 'NEFT', rtgs: 'RTGS', upi: 'UPI',
@@ -156,6 +171,10 @@ const todayLocalISO = () => {
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
 };
 
+// PostgREST parses `or=(...)` as a comma-separated list, so a raw comma or
+// bracket typed into the search box would corrupt the filter. Strip them.
+const sanitizeTerm = (raw: string) => raw.replace(/[(),]/g, ' ').trim();
+
 const PAGE_SIZE = 10;
 
 // A deal is settled for transfer when |outstanding| <= this (INR). Must stay in
@@ -180,6 +199,12 @@ export default function TransferQueue({ employee }: Props) {
   const [search, setSearch] = useState('');
   const [filterMonth, setFilterMonth] = useState<string>(''); // '' = all, else '0'..'11'
   const [filterYear, setFilterYear] = useState<string>('');   // '' = all, else e.g. '2026'
+
+  // Security lines of the deals on the current page, plus the ids of the lines
+  // that already have a transferred transaction (a partially transferred deal
+  // stays in the queue until every line is done).
+  const [itemsByDeal, setItemsByDeal] = useState<Record<string, DealItem[]>>({});
+  const [transferredItemIds, setTransferredItemIds] = useState<Set<string>>(new Set());
 
   const [preview, setPreview] = useState<EligibleDeal | null>(null);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
@@ -229,20 +254,38 @@ export default function TransferQueue({ employee }: Props) {
     const from = page * PAGE_SIZE;
     const to   = from + PAGE_SIZE - 1;
 
+    // Search runs over the line items first: the view exposes only the deal
+    // header (= first line), so a deal whose second security matches would
+    // otherwise be unfindable.
+    const term = sanitizeTerm(search);
+    let itemDealIds: string[] = [];
+    if (term) {
+      const { data: hits } = await supabase
+        .from('nw_deal_confirmation_items')
+        .select('deal_id')
+        .or(`security_name.ilike.%${term}%,isin.ilike.%${term}%`)
+        .limit(500);
+      itemDealIds = [...new Set(((hits ?? []) as { deal_id: string }[]).map(h => h.deal_id))];
+    }
+
     let q = supabase
       .from('nw_deal_transfer_eligible')
       .select('*', { count: 'exact' })
       .order('deal_date', { ascending: false })
       .range(from, to);
 
-    if (search.trim()) {
-      const s = `%${search.trim()}%`;
-      q = q.or([
+    if (term) {
+      const s = `%${term}%`;
+      const ors = [
         `confirmation_number.ilike.${s}`,
         `snap_client_name.ilike.${s}`,
         `security_name.ilike.${s}`,
         `isin.ilike.${s}`,
-      ].join(','));
+      ];
+      // The header carries only the first line's security, so a search for a
+      // security on line 2+ has to come in through the matched line items.
+      if (itemDealIds.length) ors.push(`deal_id.in.(${itemDealIds.join(',')})`);
+      q = q.or(ors.join(','));
     }
     // Month + Year filter on deal date. Year alone = whole year; Year+Month = that month.
     if (filterYear) {
@@ -259,12 +302,56 @@ export default function TransferQueue({ employee }: Props) {
     }
 
     const { data, count: c } = await q;
-    setDeals((data as EligibleDeal[]) ?? []);
+    const rows = (data as EligibleDeal[]) ?? [];
+    setDeals(rows);
     setCount(c ?? 0);
+
+    // Pull every security line of the listed deals, plus the lines already
+    // transferred, so the queue shows the full deal and not just line 1.
+    if (rows.length) {
+      const dealIds = rows.map(r => r.deal_id);
+      const [itemsRes, txnRes] = await Promise.all([
+        supabase.from('nw_deal_confirmation_items')
+          .select('id, deal_id, sort_order, product_type, security_name, isin, quantity, rate_per_unit, line_settlement')
+          .in('deal_id', dealIds)
+          .order('sort_order', { ascending: true }),
+        supabase.from('nw_transactions')
+          .select('deal_item_id')
+          .in('deal_confirmation_id', dealIds)
+          .eq('transfer_stage', 'transferred'),
+      ]);
+      const byDeal: Record<string, DealItem[]> = {};
+      ((itemsRes.data ?? []) as DealItem[]).forEach(it => {
+        (byDeal[it.deal_id] ||= []).push(it);
+      });
+      setItemsByDeal(byDeal);
+      setTransferredItemIds(new Set(
+        ((txnRes.data ?? []) as { deal_item_id: string | null }[])
+          .map(t => t.deal_item_id).filter((x): x is string => !!x),
+      ));
+    } else {
+      setItemsByDeal({});
+      setTransferredItemIds(new Set());
+    }
     setLoading(false);
   }, [page, search, filterMonth, filterYear]);
 
   useEffect(() => { loadList(); }, [loadList]);
+
+  // Security lines of a deal. Falls back to a single synthetic line built from
+  // the deal header, which covers deals booked before line items existed (and
+  // the brief window before the items query resolves).
+  // Plain function, not a hook: it sits after the admin guard's early return.
+  const linesFor = (d: EligibleDeal): DealItem[] => {
+    const items = itemsByDeal[d.deal_id];
+    if (items?.length) return items;
+    return [{
+      id: d.deal_id, deal_id: d.deal_id, sort_order: 0,
+      product_type: d.product_type, security_name: d.security_name, isin: d.isin,
+      quantity: d.quantity, rate_per_unit: d.rate_per_unit,
+      line_settlement: d.settlement_amount,
+    }];
+  };
 
   // -------------------------------------------------------------------------
   // Open preview — fetch:
@@ -455,6 +542,8 @@ export default function TransferQueue({ employee }: Props) {
   // Operations Verification Screen. Shows the fields the employee needs while
   // entering the transfer into the external Transfer / Registrar portal.
   if (view === 'preview' && preview) {
+    const previewLines = linesFor(preview);
+    const pendingLines = previewLines.filter(l => !transferredItemIds.has(l.id));
     const demat        = parseDemat(preview.snap_demat_account, depository);
     const outstanding  = Number(preview.outstanding_amount);
     // SELL: the client is selling to us, so money flows Niyom → client — there is
@@ -491,16 +580,60 @@ export default function TransferQueue({ employee }: Props) {
           <FieldRow label="PAN Number"  value={preview.snap_pan || '—'} mono />
         </Section>
 
-        {/* --- Section 2: Product Details --- */}
-        <Section title="Product Details">
-          <FieldRow label="Product Name" value={preview.security_name || '—'} />
-          <FieldRow label="Quantity"     value={preview.quantity ?? '—'} mono />
-          <FieldRow label="ISIN Number"  value={preview.isin || '—'} mono />
-          <FieldRow
-            label="Total Settlement Amount"
-            value={inr(preview.settlement_amount)}
-            emphasis
-          />
+        {/* --- Section 2: Product Details — one row per security on the deal --- */}
+        <Section title={previewLines.length > 1 ? `Product Details (${previewLines.length} securities)` : 'Product Details'}>
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm nw-table">
+                <thead>
+                  <tr style={{ background: 'var(--bg-base)', borderBottom: '1px solid var(--border)' }}>
+                    {['#', 'Security / ISIN', 'Quantity', 'Rate', 'Amount', 'Status'].map(h => (
+                      <th key={h} className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider"
+                        style={{ color: 'var(--text-secondary)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewLines.map((it, i) => {
+                    const done = transferredItemIds.has(it.id);
+                    return (
+                      <tr key={it.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-text-primary">{it.security_name || '—'}</p>
+                          <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{it.isin || '—'}</p>
+                        </td>
+                        <td className="px-4 py-3 font-mono font-bold text-text-primary">
+                          {it.quantity != null ? Number(it.quantity).toLocaleString('en-IN') : '—'}
+                        </td>
+                        <td className="px-4 py-3 font-mono" style={{ color: 'var(--text-secondary)' }}>
+                          {inr(it.rate_per_unit)}
+                        </td>
+                        <td className="px-4 py-3 font-mono font-semibold text-text-primary">
+                          {inr(it.line_settlement)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs font-semibold px-2 py-1 rounded-lg"
+                            style={done
+                              ? { background: 'rgba(16,185,129,0.12)', color: 'var(--success)' }
+                              : { background: 'var(--bg-raised)', color: 'var(--text-secondary)' }}>
+                            {done ? 'Transferred' : 'To transfer'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="mt-3">
+            <FieldRow
+              label="Total Settlement Amount"
+              value={inr(preview.settlement_amount)}
+              emphasis
+            />
+          </div>
         </Section>
 
         {/* --- Section 3: Demat Details --- */}
@@ -708,6 +841,7 @@ export default function TransferQueue({ employee }: Props) {
         {showConfirm && (
           <ConfirmDialog
             deal={preview}
+            lines={pendingLines}
             transferDate={transferDate}
             setTransferDate={setTransferDate}
             remarks={remarks}
@@ -807,8 +941,30 @@ export default function TransferQueue({ employee }: Props) {
                       <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{d.snap_pan}</p>
                     </td>
                     <td className="px-5 py-3.5">
-                      <p className="text-sm text-text-primary">{d.security_name}</p>
-                      <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{d.isin || '—'}</p>
+                      {/* Every security on the deal — a multi-line deal used to
+                          show only its first line here. */}
+                      <div className="space-y-1.5">
+                        {linesFor(d).map(it => {
+                          const done = transferredItemIds.has(it.id);
+                          return (
+                            <div key={it.id} className={done ? 'opacity-50' : undefined}>
+                              <p className="text-sm text-text-primary">
+                                {it.security_name || '—'}
+                                <span className="font-mono text-xs ml-2" style={{ color: 'var(--text-secondary)' }}>
+                                  {it.quantity != null ? Number(it.quantity).toLocaleString('en-IN') : '—'} qty
+                                </span>
+                                {done && (
+                                  <span className="text-[10px] font-semibold ml-2 px-1.5 py-0.5 rounded"
+                                    style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--success)' }}>
+                                    transferred
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{it.isin || '—'}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </td>
                     <td className="px-5 py-3.5">
                       <span className="text-xs font-semibold px-2 py-1 rounded-lg"
@@ -948,10 +1104,11 @@ function FieldRow({
 }
 
 function ConfirmDialog({
-  deal, transferDate, setTransferDate, remarks, setRemarks,
+  deal, lines, transferDate, setTransferDate, remarks, setRemarks,
   error, submitting, onCancel, onConfirm,
 }: {
   deal: EligibleDeal;
+  lines: DealItem[];
   transferDate: string;
   setTransferDate: (v: string) => void;
   remarks: string;
@@ -988,10 +1145,29 @@ function ConfirmDialog({
               You are about to close deal <strong className="font-mono" style={{ color: 'var(--accent)' }}>{deal.confirmation_number}</strong>{' '}
               for <strong>{deal.snap_client_name}</strong>. Approving this Transfer will:
             </p>
+            {lines.length > 0 && (
+              <div className="mt-3 rounded-xl px-4 py-3 text-sm"
+                style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2"
+                  style={{ color: 'var(--text-muted)' }}>
+                  {lines.length === 1 ? 'Security being transferred' : `${lines.length} securities being transferred`}
+                </p>
+                <ul className="space-y-1">
+                  {lines.map(l => (
+                    <li key={l.id} className="flex items-baseline justify-between gap-3">
+                      <span className="text-text-primary">{l.security_name || '—'}</span>
+                      <span className="font-mono text-xs shrink-0" style={{ color: 'var(--text-secondary)' }}>
+                        {l.quantity != null ? Number(l.quantity).toLocaleString('en-IN') : '—'} qty · {inr(l.line_settlement)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <ul className="mt-3 space-y-1.5 text-sm" style={{ color: 'var(--text-secondary)' }}>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'var(--success)' }} />
-                Create the official transaction (with a new Transfer Reference).
+                Create the official transaction for {lines.length === 1 ? 'this security' : `all ${lines.length} securities`} (with a new Transfer Reference).
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'var(--success)' }} />
