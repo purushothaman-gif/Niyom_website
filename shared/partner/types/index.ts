@@ -36,6 +36,18 @@ export interface PartnerIdentity {
   rm_avatar_url: string | null;
 }
 
+/** nw_partner_bank_accounts() — the partner's registered accounts, masked. */
+export interface PartnerBankAccount {
+  id: string;
+  bank_name: string;
+  /** Masked server-side (XXXXXX + last 4), same rule as the profile RPC. */
+  account_number_masked: string;
+  ifsc: string;
+  holder_name: string;
+  label: string;
+  is_primary: boolean;
+}
+
 /** nw_partner_clients() — one row per client this partner sourced. */
 export interface PartnerClientRow {
   client_id: string;

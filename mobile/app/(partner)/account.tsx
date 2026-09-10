@@ -45,11 +45,15 @@ export default function PartnerAccount() {
   const { theme: p, preference, setPreference } = useTheme();
 
   const load = useCallback(
-    () => Promise.all([PartnerService.getProfile(), PartnerService.getReferral()]),
+    () => Promise.all([
+      PartnerService.getProfile(),
+      PartnerService.getReferral(),
+      PartnerService.getBankAccounts(),
+    ]),
     [],
   );
   const { data, loading, error, refresh } = usePartnerQuery(load);
-  const [profile, referral] = data ?? [null, null];
+  const [profile, referral, bankAccounts] = data ?? [null, null, []];
 
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -191,12 +195,28 @@ export default function PartnerAccount() {
               <ListRow icon={Phone} title="Mobile" subtitle={profile.mobile || '—'} />
               <ListRow icon={CreditCard} title="PAN" subtitle={profile.pan_masked || '—'} />
               <ListRow icon={MapPin} title="Address" subtitle={profile.address || '—'} />
-              <ListRow
-                icon={Building2}
-                title={profile.bank_name || 'Bank account'}
-                subtitle={[profile.bank_account_masked, profile.bank_ifsc].filter(Boolean).join(' · ') || '—'}
-                last
-              />
+              {/* All registered accounts, Primary first. Falls back to the
+                  nw_dsa.bank_* mirror on the profile when no rows exist yet. */}
+              {(bankAccounts.length > 0
+                ? bankAccounts
+                : [{
+                    id: 'mirror',
+                    bank_name: profile.bank_name,
+                    account_number_masked: profile.bank_account_masked,
+                    ifsc: profile.bank_ifsc,
+                    holder_name: profile.full_name,
+                    label: '',
+                    is_primary: true,
+                  }]
+              ).map((a, i, all) => (
+                <ListRow
+                  key={a.id}
+                  icon={Building2}
+                  title={`${a.bank_name || 'Bank account'}${a.is_primary ? ' · Primary' : ''}`}
+                  subtitle={[a.account_number_masked, a.ifsc].filter(Boolean).join(' · ') || '—'}
+                  last={i === all.length - 1}
+                />
+              ))}
             </Card>
             <Text variant="caption" tone="faint" style={{ marginTop: space[2] }}>
               Contact your relationship manager to change any of these.

@@ -2,10 +2,11 @@ import { UserRound, Landmark, ShieldCheck, KeyRound, Info } from 'lucide-react';
 import { Card } from '../../../portal/components/Card';
 import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { StatusPill } from '../../../portal/components/StatusPill';
-import type { PartnerIdentity } from '../../types';
+import type { PartnerBankAccount, PartnerIdentity } from '../../types';
 
 interface Props {
   profile: PartnerIdentity | null;
+  bankAccounts: PartnerBankAccount[];
   onChangePassword: () => void;
 }
 
@@ -30,7 +31,7 @@ function Field({ label, value }: { label: string; value: string | null | undefin
  * PAN and bank account arrive already masked from nw_partner_profile(); the raw
  * values are never sent to the browser.
  */
-export function ProfilePage({ profile, onChangePassword }: Props) {
+export function ProfilePage({ profile, bankAccounts, onChangePassword }: Props) {
   if (!profile) return null;
 
   return (
@@ -56,18 +57,45 @@ export function ProfilePage({ profile, onChangePassword }: Props) {
       </Card>
 
       <Card>
-        <SectionHeader title="Payout Bank Account" icon={Landmark} />
-        <div className="mt-5 grid gap-5 sm:grid-cols-3">
-          <Field label="Bank" value={profile.bank_name} />
-          <Field label="Account number" value={profile.bank_account_masked} />
-          <Field label="IFSC" value={profile.bank_ifsc} />
+        <SectionHeader title="Bank Accounts" icon={Landmark} />
+        {/* Falls back to the nw_dsa.bank_* mirror carried on the profile when no
+            account rows exist yet, so a partner onboarded before the accounts
+            table still sees their payout account. */}
+        <div className="mt-5 space-y-3">
+          {(bankAccounts.length > 0
+            ? bankAccounts
+            : [{
+                id: 'mirror',
+                bank_name: profile.bank_name,
+                account_number_masked: profile.bank_account_masked,
+                ifsc: profile.bank_ifsc,
+                holder_name: profile.full_name,
+                label: '',
+                is_primary: true,
+              }]
+          ).map(a => (
+            <div key={a.id} className="rounded-token-md border border-border bg-bg-surface p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-text-primary">{a.bank_name || 'Bank'}</p>
+                <StatusPill tone={a.is_primary ? 'success' : 'muted'}>
+                  {a.is_primary ? 'Primary — payouts' : 'Secondary'}
+                </StatusPill>
+                {a.label && <span className="text-[11px] text-text-muted">{a.label}</span>}
+              </div>
+              <div className="mt-4 grid gap-5 sm:grid-cols-3">
+                <Field label="Account number" value={a.account_number_masked} />
+                <Field label="IFSC" value={a.ifsc} />
+                <Field label="Account holder" value={a.holder_name} />
+              </div>
+            </div>
+          ))}
         </div>
         <div className="mt-5 flex items-start gap-2.5 rounded-token-md border border-border bg-bg-surface p-3.5">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" />
           <p className="text-xs text-text-muted">
-            Your payouts are credited to this account. To change any of these details,
-            please contact your relationship manager — bank details cannot be edited
-            from the portal.
+            Your payouts are credited to the Primary account. To add an account or
+            change any of these details, please contact your relationship manager —
+            bank details cannot be edited from the portal.
           </p>
         </div>
       </Card>

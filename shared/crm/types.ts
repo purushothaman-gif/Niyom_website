@@ -168,6 +168,21 @@ export interface NWClientBankAccount {
   updated_at: string;
 }
 
+/** Partner (DSA) bank accounts — 1 primary + up to 4 secondary. nw_dsa.bank_*
+ *  remains the primary mirror, maintained in application code. */
+export interface NWDSABankAccount {
+  id: string;
+  dsa_id: string;
+  account_number: string;
+  ifsc: string;
+  bank_name: string;
+  holder_name: string;
+  label: string;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export type PayoutFrequency = 'annual' | 'halfyearly' | 'quarterly' | 'monthly';
 export type SchemeType = 'equity' | 'debt' | 'hybrid' | 'index' | 'elss' | 'liquid' | 'others';
 export type InsuranceType = 'term' | 'ulip' | 'traditional' | 'medical' | 'vehicle';
