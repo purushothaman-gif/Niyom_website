@@ -14,7 +14,7 @@
 import { partnerSupabase as supabase } from '../../lib/supabase';
 import {
   isDemoSession,
-  demoProfile, demoClients, demoPortfolios, demoTransactions,
+  demoProfile, demoBankAccounts, demoClients, demoPortfolios, demoTransactions,
   demoPayout, demoNotes, demoReferral, demoLeads,
 } from '../demo/demoData';
 import {
@@ -24,6 +24,7 @@ import {
 } from '../demo/demoMarket';
 import type {
   PartnerIdentity,
+  PartnerBankAccount,
   PartnerClientRow,
   PartnerHoldingRow,
   PartnerTransactionRow,
@@ -114,6 +115,23 @@ export const PartnerService = {
     }
     const rows = (data ?? []) as PartnerIdentity[];
     return rows[0] ?? null;
+  },
+
+  /**
+   * The partner's registered bank accounts, masked (1 Primary + up to 4
+   * Secondary). Read-only here for the same reason the profile is: the party
+   * receiving a payout must not be able to edit the payout instructions, so
+   * partners have no table policy on nw_dsa_bank_accounts at all — changes go
+   * through the RM in the CRM.
+   */
+  async getBankAccounts(): Promise<PartnerBankAccount[]> {
+    if (isDemoSession()) return demoBankAccounts;
+    const { data, error } = await supabase.rpc('nw_partner_bank_accounts');
+    if (error) {
+      if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
+      throw error;
+    }
+    return (data ?? []) as PartnerBankAccount[];
   },
 
   async getClients(): Promise<PartnerClientRow[]> {

@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PartnerService, PARTNER_ACCESS_REVOKED } from '../services/PartnerService';
 import type {
   PartnerIdentity,
+  PartnerBankAccount,
   PartnerClientRow,
   PartnerPayoutSummary,
   PartnerDebitNote,
@@ -21,6 +22,7 @@ import type {
 
 export interface PartnerSnapshot {
   profile: PartnerIdentity | null;
+  bankAccounts: PartnerBankAccount[];
   clients: PartnerClientRow[];
   payout: PartnerPayoutSummary | null;
   notes: PartnerDebitNote[];
@@ -29,7 +31,7 @@ export interface PartnerSnapshot {
 }
 
 const EMPTY: PartnerSnapshot = {
-  profile: null, clients: [], payout: null, notes: [], referral: null, leads: [],
+  profile: null, bankAccounts: [], clients: [], payout: null, notes: [], referral: null, leads: [],
 };
 
 export function usePartnerSnapshot(onAccessRevoked: () => void) {
@@ -42,8 +44,9 @@ export function usePartnerSnapshot(onAccessRevoked: () => void) {
     setLoading(true);
     setError(null);
     try {
-      const [profile, clients, payout, notes, referral, leads] = await Promise.all([
+      const [profile, bankAccounts, clients, payout, notes, referral, leads] = await Promise.all([
         PartnerService.getProfile(),
+        PartnerService.getBankAccounts(),
         PartnerService.getClients(),
         PartnerService.getPayoutSummary(),
         PartnerService.getDebitNotes(),
@@ -58,7 +61,7 @@ export function usePartnerSnapshot(onAccessRevoked: () => void) {
         return;
       }
 
-      setSnapshot({ profile, clients, payout, notes, referral, leads });
+      setSnapshot({ profile, bankAccounts, clients, payout, notes, referral, leads });
       setRefreshedAt(new Date());
     } catch (err) {
       if ((err as Error)?.message === PARTNER_ACCESS_REVOKED) {

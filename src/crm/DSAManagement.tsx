@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
-import { NWEmployee, NWDSA } from './types';
+import { NWEmployee, NWDSA, NWDSABankAccount } from './types';
 import { PartnerOnboardLinks } from './PartnerOnboardLinks';
 import { isPasswordStrong, passwordChecks, passwordError } from '../lib/passwordPolicy';
 import {
@@ -9,6 +9,7 @@ import {
   Search, Phone, Mail, CreditCard, Building2, User, Eye,
   ToggleLeft, ToggleRight, Trash2, ChevronDown, Pencil,
   KeyRound, ShieldOff, ShieldCheck, Copy, RefreshCw, MailCheck, UserCog,
+  Landmark, Star,
 } from 'lucide-react';
 
 /** Policy-compliant temp password (8+, upper, lower, digit, symbol). */
@@ -126,6 +127,14 @@ export default function DSAManagement({ employee }: Props) {
   const [reassignError, setReassignError] = useState('');
   const [reassignCounts, setReassignCounts] =
     useState<{ clients: number; deals: number; txns: number } | null>(null);
+  // Bank Accounts manager — up to 5 accounts per partner, exactly one Primary.
+  // Mirrors the client-side manager in ManageClients.tsx.
+  const [bankDSA, setBankDSA] = useState<NWDSA | null>(null);
+  const [bankAccounts, setBankAccounts] = useState<NWDSABankAccount[]>([]);
+  const [bankBusy, setBankBusy] = useState(false);
+  const [bankError, setBankError] = useState('');
+  const [bankFormOpen, setBankFormOpen] = useState<'new' | string | null>(null); // 'new' | account id | null
+  const [bankForm, setBankForm] = useState<{ account_number: string; ifsc: string; bank_name: string; holder_name: string; label: string }>({ account_number: '', ifsc: '', bank_name: '', holder_name: '', label: '' });
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
 
@@ -194,6 +203,154 @@ export default function DSAManagement({ employee }: Props) {
       : `${movedName} mapped to ${toName} — ${r.clients ?? 0} client(s), ${r.deals ?? 0} deal(s) and ` +
         `${r.transactions ?? 0} transaction(s) moved across.`);
     fetchDSAs();
+  };
+
+  // --- Bank Accounts manager ------------------------------------------------
+  // nw_dsa.bank_* is the explicit primary mirror — the payout debit note, the
+  // partner profile RPC and the list column all read it. Updated here on every
+  // change to the primary account (no DB trigger), exactly as on the client side.
+  const mirrorPrimaryBank = async (dsaId: string, acct: { account_number: string; ifsc: string; bank_name: string } | null) => {
+    await supabase.from('nw_dsa').update({
+      bank_account: acct?.account_number ?? '',
+      bank_ifsc: acct?.ifsc ?? '',
+      bank_name: acct?.bank_name ?? '',
+      updated_at: new Date().toISOString(),
+    }).eq('id', dsaId);
+  };
+
+  /**
+   * Keep the primary bank-account ROW in step with the bank fields on the DSA
+   * form. The form still writes nw_dsa.bank_* (the mirror every payout reads);
+   * without this the primary row would drift away from it the first time
+   * someone edited a DSA. Secondary accounts are untouched.
+   */
+  const syncPrimaryBankRow = async (
+    dsaId: string,
+    acct: { account_number: string; ifsc: string; bank_name: string; holder_name: string },
+  ) => {
+    if (!acct.account_number) return;
+    const { data } = await supabase.from('nw_dsa_bank_accounts')
+      .select('id').eq('dsa_id', dsaId).eq('is_primary', true).maybeSingle();
+    if (data?.id) {
+      await supabase.from('nw_dsa_bank_accounts')
+        .update({ ...acct, updated_at: new Date().toISOString() }).eq('id', (data as { id: string }).id);
+    } else {
+      await supabase.from('nw_dsa_bank_accounts').insert({ dsa_id: dsaId, ...acct, is_primary: true });
+    }
+  };
+
+  const loadBankAccounts = async (dsaId: string) => {
+    const { data } = await supabase.from('nw_dsa_bank_accounts')
+      .select('*').eq('dsa_id', dsaId)
+      .order('is_primary', { ascending: false }).order('created_at', { ascending: true });
+    setBankAccounts((data as NWDSABankAccount[]) || []);
+  };
+
+  const openBankManager = async (dsa: NWDSA) => {
+    setBankDSA(dsa);
+    setBankFormOpen(null);
+    setBankError('');
+    setBankAccounts([]);
+    await loadBankAccounts(dsa.id);
+  };
+  const closeBankManager = () => { setBankDSA(null); setBankFormOpen(null); setBankError(''); fetchDSAs(); };
+
+  const startAddBank = () => {
+    // Holder defaults to the partner's own name — the payout account is theirs.
+    setBankForm({ account_number: '', ifsc: '', bank_name: '', holder_name: bankDSA?.full_name || '', label: '' });
+    setBankError('');
+    setBankFormOpen('new');
+  };
+  const startEditBank = (a: NWDSABankAccount) => {
+    setBankForm({ account_number: a.account_number, ifsc: a.ifsc, bank_name: a.bank_name, holder_name: a.holder_name, label: a.label });
+    setBankError('');
+    setBankFormOpen(a.id);
+  };
+
+  const saveBankAccount = async () => {
+    if (!bankDSA) return;
+    const acct = {
+      account_number: bankForm.account_number.trim(),
+      ifsc: bankForm.ifsc.trim().toUpperCase(),
+      bank_name: bankForm.bank_name.trim(),
+      holder_name: bankForm.holder_name.trim(),
+      label: bankForm.label.trim(),
+    };
+    if (!acct.account_number) { setBankError('Account number is required.'); return; }
+    // Same IFSC rule the DSA form enforces, but only when one is supplied.
+    if (acct.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(acct.ifsc)) { setBankError('Enter a valid IFSC code.'); return; }
+    setBankBusy(true);
+    setBankError('');
+    try {
+      if (bankFormOpen === 'new') {
+        // First account for the partner automatically becomes the primary.
+        const isFirst = bankAccounts.length === 0;
+        const { error } = await supabase.from('nw_dsa_bank_accounts').insert({ dsa_id: bankDSA.id, ...acct, is_primary: isFirst });
+        if (error) throw error;
+        if (isFirst) await mirrorPrimaryBank(bankDSA.id, acct);
+      } else if (bankFormOpen) {
+        // Narrowed rather than asserted: bankFormOpen is 'new' | id | null, and
+        // null here would mean updating a row with no id — nothing to do.
+        const existing = bankAccounts.find(a => a.id === bankFormOpen);
+        const { error } = await supabase.from('nw_dsa_bank_accounts')
+          .update({ ...acct, updated_at: new Date().toISOString() }).eq('id', bankFormOpen);
+        if (error) throw error;
+        if (existing?.is_primary) await mirrorPrimaryBank(bankDSA.id, acct);
+      }
+      setBankFormOpen(null);
+      await loadBankAccounts(bankDSA.id);
+    } catch (e: any) {
+      setBankError(e?.message || 'Could not save bank account.');
+    } finally {
+      setBankBusy(false);
+    }
+  };
+
+  const makeBankPrimary = async (a: NWDSABankAccount) => {
+    if (!bankDSA || a.is_primary) return;
+    setBankBusy(true);
+    setBankError('');
+    try {
+      // Unset the current primary FIRST to satisfy the one-primary unique index.
+      const { error: e1 } = await supabase.from('nw_dsa_bank_accounts')
+        .update({ is_primary: false, updated_at: new Date().toISOString() })
+        .eq('dsa_id', bankDSA.id).eq('is_primary', true);
+      if (e1) throw e1;
+      const { error: e2 } = await supabase.from('nw_dsa_bank_accounts')
+        .update({ is_primary: true, updated_at: new Date().toISOString() }).eq('id', a.id);
+      if (e2) throw e2;
+      await mirrorPrimaryBank(bankDSA.id, a);
+      await loadBankAccounts(bankDSA.id);
+    } catch (e: any) {
+      setBankError(e?.message || 'Could not change the primary account.');
+    } finally {
+      setBankBusy(false);
+    }
+  };
+
+  const deleteBankAccount = async (a: NWDSABankAccount) => {
+    if (!bankDSA) return;
+    // Never leave a partner with accounts but no primary: block deleting the
+    // primary while others exist — pick a new primary first.
+    if (a.is_primary && bankAccounts.length > 1) {
+      setBankError('Set another account as Primary before deleting this one.');
+      return;
+    }
+    setBankBusy(true);
+    setBankError('');
+    try {
+      const wasLast = bankAccounts.length === 1;
+      const { error } = await supabase.from('nw_dsa_bank_accounts').delete().eq('id', a.id);
+      if (error) throw error;
+      // Only clear the mirror when the deleted account was the last one — a
+      // partner with no bank account on file cannot be paid out.
+      if (a.is_primary && wasLast) await mirrorPrimaryBank(bankDSA.id, null);
+      await loadBankAccounts(bankDSA.id);
+    } catch (e: any) {
+      setBankError(e?.message || 'Could not delete bank account.');
+    } finally {
+      setBankBusy(false);
+    }
   };
 
   const set = (k: keyof DSAFormData, v: string) => setForm(f => ({ ...f, [k]: v }));
@@ -288,6 +445,13 @@ export default function DSAManagement({ employee }: Props) {
         const { error: updateErr } = await supabase.from('nw_dsa').update(updates).eq('id', editingId);
         if (updateErr) throw updateErr;
 
+        await syncPrimaryBankRow(editingId, {
+          account_number: updates.bank_account,
+          ifsc: updates.bank_ifsc,
+          bank_name: updates.bank_name,
+          holder_name: updates.full_name,
+        });
+
         setSuccess(`DSA ${editingCode} updated successfully.`);
       } else {
         const { data: dsaCode, error: codeErr } = await supabase.rpc('nw2_generate_dsa_code', { p_employee_id: employee.id });
@@ -300,7 +464,7 @@ export default function DSAManagement({ employee }: Props) {
           docs.bank  ? uploadDoc(docs.bank,  `${slot}/bank`)  : Promise.resolve(null),
         ]);
 
-        const { error: insertErr } = await supabase.from('nw_dsa').insert([{
+        const { data: created, error: insertErr } = await supabase.from('nw_dsa').insert([{
           dsa_code: dsaCode,
           employee_id: employee.id,
           full_name: form.full_name.trim(),
@@ -315,8 +479,19 @@ export default function DSAManagement({ employee }: Props) {
           pan_doc_url: panUrl,
           bank_doc_url: bankUrl,
           status: 'active',
-        }]);
+        }]).select('id').single();
         if (insertErr) throw insertErr;
+
+        // Seed the partner's first (Primary) bank account row from the form, so
+        // the manager and the nw_dsa.bank_* mirror start out agreeing.
+        if (created?.id) {
+          await syncPrimaryBankRow((created as { id: string }).id, {
+            account_number: form.bank_account.trim(),
+            ifsc: form.bank_ifsc.toUpperCase(),
+            bank_name: form.bank_name.trim(),
+            holder_name: form.full_name.trim(),
+          });
+        }
 
         setSuccess(`DSA created successfully with code ${dsaCode}.`);
       }
@@ -664,6 +839,133 @@ export default function DSAManagement({ employee }: Props) {
             </div>
             <div className="px-6 pb-5">
               <button onClick={() => setViewDSA(null)} className="w-full py-2.5 rounded-xl text-sm font-semibold" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bank Accounts manager — 1 Primary + up to 4 Secondary */}
+      {bankDSA && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
+          <div className="w-full max-w-2xl rounded-2xl overflow-hidden max-h-[90vh] flex flex-col" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-xs font-mono" style={{ color: 'var(--accent)' }}>{bankDSA.dsa_code}</p>
+                <h2 className="text-lg font-bold text-text-primary">Bank Accounts — {bankDSA.full_name}</h2>
+              </div>
+              <button onClick={closeBankManager} style={{ color: 'var(--text-faint)' }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-bright)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4 overflow-y-auto">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                  Up to 5 accounts. Exactly one is Primary — payouts and debit notes use it.
+                </p>
+                <button onClick={startAddBank} disabled={bankAccounts.length >= 5 || bankFormOpen === 'new'}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-40"
+                  style={{ background: 'var(--bg-raised)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+                  <Plus className="w-3.5 h-3.5" /> Add Account{bankAccounts.length >= 5 ? ' (max 5)' : ''}
+                </button>
+              </div>
+
+              {bankError && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: 'var(--danger)' }} />
+                  <p className="text-xs" style={{ color: 'var(--danger)' }}>{bankError}</p>
+                </div>
+              )}
+
+              {bankFormOpen && (
+                <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}>
+                  <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--accent)' }}>
+                    {bankFormOpen === 'new' ? 'Add Bank Account' : 'Edit Bank Account'}
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Account Number" required>
+                      <Input value={bankForm.account_number} className="font-mono"
+                        onChange={e => setBankForm(f => ({ ...f, account_number: e.target.value.replace(/\D/g, '') }))}
+                        placeholder="Account number" />
+                    </Field>
+                    <Field label="IFSC">
+                      <Input value={bankForm.ifsc} className="font-mono"
+                        onChange={e => setBankForm(f => ({ ...f, ifsc: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11) }))}
+                        placeholder="HDFC0001234" />
+                    </Field>
+                    <Field label="Bank Name">
+                      <Input value={bankForm.bank_name}
+                        onChange={e => setBankForm(f => ({ ...f, bank_name: e.target.value }))}
+                        placeholder="HDFC Bank" />
+                    </Field>
+                    <Field label="Account Holder">
+                      <Input value={bankForm.holder_name}
+                        onChange={e => setBankForm(f => ({ ...f, holder_name: e.target.value }))}
+                        placeholder={bankDSA.full_name} />
+                    </Field>
+                    <Field label="Label (optional)">
+                      <Input value={bankForm.label}
+                        onChange={e => setBankForm(f => ({ ...f, label: e.target.value }))}
+                        placeholder="e.g. Payout, Savings" />
+                    </Field>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => { setBankFormOpen(null); setBankError(''); }}
+                      className="px-3 py-1.5 rounded-lg text-xs" style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
+                    <button onClick={saveBankAccount} disabled={bankBusy || !bankForm.account_number.trim()}
+                      className="px-4 py-1.5 rounded-lg text-xs font-bold text-on-accent disabled:opacity-50"
+                      style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                      {bankBusy ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {bankAccounts.length === 0 && !bankFormOpen ? (
+                <p className="text-sm text-center py-6" style={{ color: 'var(--text-faint)' }}>
+                  No bank accounts yet. Add the first account (it becomes Primary).
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {bankAccounts.map(a => (
+                    <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold text-text-primary truncate">{a.bank_name || '—'}</p>
+                          {a.is_primary && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold" style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)' }}>
+                              <Star className="w-3 h-3" /> Primary
+                            </span>
+                          )}
+                          {a.label && <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)' }}>{a.label}</span>}
+                        </div>
+                        <p className="text-xs font-mono mt-0.5" style={{ color: 'var(--text-faint)' }}>{a.account_number}{a.ifsc ? ` · ${a.ifsc}` : ''}</p>
+                        {a.holder_name && <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>{a.holder_name}</p>}
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {!a.is_primary && (
+                          <button onClick={() => makeBankPrimary(a)} disabled={bankBusy} title="Make Primary"
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
+                            style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+                            Make Primary
+                          </button>
+                        )}
+                        <button onClick={() => startEditBank(a)} disabled={bankBusy} title="Edit"
+                          className="p-1.5 rounded-lg disabled:opacity-50" style={{ color: 'var(--text-faint)' }}><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => deleteBankAccount(a)} disabled={bankBusy} title="Delete"
+                          className="p-1.5 rounded-lg disabled:opacity-50" style={{ color: 'var(--text-faint)' }}><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4" style={{ borderTop: '1px solid var(--border)' }}>
+              <button onClick={closeBankManager} className="w-full py-2.5 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Close</button>
             </div>
           </div>
         </div>
@@ -1035,6 +1337,18 @@ export default function DSAManagement({ employee }: Props) {
                       onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
                       onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
                       <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
+                  {/* Bank accounts — 1 primary + up to 4 secondary. Same
+                      stewardship as Edit (matches the nw_dsa_bank_accounts
+                      policies). */}
+                  {(isAdmin || dsa.employee_id === employee.id) && (
+                    <button onClick={() => openBankManager(dsa)} title="Bank accounts"
+                      className="p-2 rounded-lg transition-colors"
+                      style={{ background: 'var(--bg-raised)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+                      <Landmark className="w-4 h-4" />
                     </button>
                   )}
                   {/* Reassign — admin only. Hands the partner and their whole

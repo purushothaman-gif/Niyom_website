@@ -24,6 +24,7 @@
  */
 import type {
   PartnerIdentity,
+  PartnerBankAccount,
   PartnerClientRow,
   PartnerHoldingRow,
   PartnerTransactionRow,
@@ -87,6 +88,11 @@ export const demoProfile: PartnerIdentity = {
   rm_mobile: '+91 89394 33113',
   rm_avatar_url: null,
 };
+
+export const demoBankAccounts: PartnerBankAccount[] = [
+  { id: 'demo-bank-1', bank_name: 'HDFC BANK', account_number_masked: 'XXXXXX4321', ifsc: 'HDFC0000123', holder_name: 'Demo Partner', label: 'Payout', is_primary: true },
+  { id: 'demo-bank-2', bank_name: 'ICICI BANK', account_number_masked: 'XXXXXX8890', ifsc: 'ICIC0000456', holder_name: 'Demo Partner', label: 'Savings', is_primary: false },
+];
 
 export const demoClients: PartnerClientRow[] = [
   {

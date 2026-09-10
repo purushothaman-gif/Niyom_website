@@ -87,7 +87,7 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
         return <LeadsPage leads={snapshot.leads} />;
       case 'profile':
         return (
-          <ProfilePage profile={snapshot.profile} onChangePassword={() => setShowChangePw(true)} />
+          <ProfilePage profile={snapshot.profile} bankAccounts={snapshot.bankAccounts} onChangePassword={() => setShowChangePw(true)} />
         );
       default:
         return <DashboardPage snapshot={snapshot} onNavigate={navigate} onOnboarded={refresh} />;

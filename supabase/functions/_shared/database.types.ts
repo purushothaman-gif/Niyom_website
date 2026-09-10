@@ -7387,6 +7387,53 @@ export type Database = {
           },
         ]
       }
+      nw_dsa_bank_accounts: {
+        Row: {
+          account_number: string
+          bank_name: string
+          created_at: string
+          dsa_id: string
+          holder_name: string
+          id: string
+          ifsc: string
+          is_primary: boolean
+          label: string
+          updated_at: string
+        }
+        Insert: {
+          account_number: string
+          bank_name?: string
+          created_at?: string
+          dsa_id: string
+          holder_name?: string
+          id?: string
+          ifsc?: string
+          is_primary?: boolean
+          label?: string
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string
+          bank_name?: string
+          created_at?: string
+          dsa_id?: string
+          holder_name?: string
+          id?: string
+          ifsc?: string
+          is_primary?: boolean
+          label?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_dsa_bank_accounts_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nw_dsa_device_pins: {
         Row: {
           created_at: string
@@ -11081,6 +11128,18 @@ export type Database = {
         Returns: undefined
       }
       nw_notify_dropped_signups: { Args: never; Returns: undefined }
+      nw_partner_bank_accounts: {
+        Args: never
+        Returns: {
+          account_number_masked: string
+          bank_name: string
+          holder_name: string
+          id: string
+          ifsc: string
+          is_primary: boolean
+          label: string
+        }[]
+      }
       nw_partner_bond: {
         Args: { p_id: string }
         Returns: {
