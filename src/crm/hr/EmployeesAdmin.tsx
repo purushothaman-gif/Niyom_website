@@ -17,6 +17,7 @@ import { Building2, Download, Plus, Search, Upload, UserCog, Users } from 'lucid
 import type { NWEmployee } from '../types';
 import * as api from './hrApi';
 import { hrError } from './hrError';
+import { normaliseIfsc } from './ifsc';
 import {
   Drawer, EmptyState, Field, GhostButton, Input, Modal, Notice, Pill,
   PrimaryButton, SectionCard, Select, Skeleton, StatTile, TableWrap, Tabs, Textarea,
@@ -279,6 +280,10 @@ function ProfileDrawer({ row, schedules, paySchedules, canEdit, onClose, onSaved
     account_type: row.bank?.account_type ?? 'savings',
   });
   const [saving, setSaving] = useState(false);
+  // Shown INSIDE the drawer, next to the button that was pressed. A toast is
+  // easy to miss while the eye is on the form, and for a while it rendered
+  // behind the drawer entirely.
+  const [bankError, setBankError] = useState<string | null>(null);
   const [others, setOthers] = useState<HREmployee[]>([]);
 
   useEffect(() => { api.listHREmployees().then(setOthers).catch(() => {}); }, []);
@@ -311,22 +316,40 @@ function ProfileDrawer({ row, schedules, paySchedules, canEdit, onClose, onSaved
   };
 
   const saveBank = async () => {
-    if (!/^[0-9]{6,20}$/.test(bankForm.account_number)) { onError('Account number must be 6–20 digits.'); return; }
-    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(bankForm.ifsc.toUpperCase())) { onError('IFSC must look like IDFB0080131.'); return; }
-    if (!bankForm.bank_name.trim()) { onError('Enter the bank name.'); return; }
+    setBankError(null);
+    const ifsc = normaliseIfsc(bankForm.ifsc);
+    const holder = bankForm.account_holder_name.trim();
+    const problem =
+        !holder ? 'Enter the account holder name.'
+      : !bankForm.bank_name.trim() ? 'Enter the bank name.'
+      : !/^[0-9]{6,20}$/.test(bankForm.account_number)
+        ? `Account number must be 6–20 digits (this one has ${bankForm.account_number.length}).`
+      : ifsc.length !== 11
+        ? `IFSC must be exactly 11 characters (this one has ${ifsc.length}), like IDFB0080131.`
+      : !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)
+        ? 'IFSC must be 4 letters, then a zero, then 6 letters or digits — like IDFB0080131.'
+      : null;
+    if (problem) { setBankError(problem); return; }
+
     setSaving(true);
     try {
       const saved = await api.saveBankAccount(bank?.id ?? null, {
         ...bankForm,
-        ifsc: bankForm.ifsc.toUpperCase(),
+        account_holder_name: holder,
+        bank_name: bankForm.bank_name.trim(),
+        branch: bankForm.branch.trim(),
+        ifsc,
         employee_id: row.id,
         is_primary: true,
         active: true,
       });
       setBank(saved);
+      setBankForm(f => ({ ...f, ifsc }));
       onSaved();
     } catch (err) {
-      onError(hrError(err));
+      const msg = hrError(err);
+      setBankError(msg);
+      onError(msg);
     } finally {
       setSaving(false);
     }
@@ -584,8 +607,8 @@ function ProfileDrawer({ row, schedules, paySchedules, canEdit, onClose, onSaved
                   onChange={e => setBankForm({ ...bankForm, account_number: e.target.value.replace(/\D/g, '') })} />
               </Field>
               <Field label="IFSC" required>
-                <Input value={bankForm.ifsc} disabled={!canEdit} placeholder="IDFB0080131"
-                  onChange={e => setBankForm({ ...bankForm, ifsc: e.target.value.toUpperCase() })} />
+                <Input value={bankForm.ifsc} disabled={!canEdit} placeholder="IDFB0080131" maxLength={14}
+                  onChange={e => { setBankError(null); setBankForm({ ...bankForm, ifsc: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }); }} />
               </Field>
               <Field label="Branch">
                 <Input value={bankForm.branch} disabled={!canEdit}
@@ -598,6 +621,7 @@ function ProfileDrawer({ row, schedules, paySchedules, canEdit, onClose, onSaved
                 </Select>
               </Field>
             </div>
+            {bankError && <Notice tone="bad" title="Bank details not saved">{bankError}</Notice>}
             {canEdit && (
               <div className="flex justify-end">
                 <PrimaryButton onClick={saveBank} disabled={saving}>{saving ? 'Saving…' : 'Save Bank Details'}</PrimaryButton>

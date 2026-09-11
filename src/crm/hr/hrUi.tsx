@@ -11,6 +11,7 @@
  */
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 
 export { Field, Input, Textarea, Select, Modal, Drawer, PrimaryButton, GhostButton } from '../ui/kit';
@@ -210,8 +211,18 @@ export function Skeleton({ rows = 5, height = 44 }: { rows?: number; height?: nu
 export function Toast({ msg, ok, onClose }: { msg: string; ok: boolean; onClose?: () => void }) {
   const rgb = ok ? '16,185,129' : '239,68,68';
   const Icon = ok ? CheckCircle2 : XCircle;
-  return (
-    <div className="fixed bottom-6 right-6 z-[60] px-4 py-3 rounded-xl shadow-2xl flex items-start gap-2.5 max-w-sm"
+  /*
+   * Portaled to <body> and stacked ABOVE drawers and modals.
+   *
+   * It used to render inline at z-[60] -- the same layer as the Drawer, which
+   * portals itself to the end of <body> and so paints later and wins. Every
+   * error raised from inside a drawer landed underneath it: clicking Save on a
+   * form that failed validation looked exactly like clicking a dead button.
+   * That is how an employee's bank details "could not be submitted" -- the form
+   * was saying why, behind the panel.
+   */
+  return createPortal(
+    <div className="fixed bottom-6 right-6 z-[90] px-4 py-3 rounded-xl shadow-2xl flex items-start gap-2.5 max-w-sm"
       role="status"
       style={{ background: 'var(--bg-elevated)', border: `1px solid rgba(${rgb},0.35)` }}>
       <Icon className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: `rgb(${rgb})` }} />
@@ -221,7 +232,8 @@ export function Toast({ msg, ok, onClose }: { msg: string; ok: boolean; onClose?
           <X className="w-3.5 h-3.5" />
         </button>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
