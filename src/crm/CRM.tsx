@@ -213,6 +213,17 @@ export default function CRM() {
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
 
+  // The shared transfer login has exactly one page. Every route, deep link and
+  // alert click lands on the Transfer Queue; the database only lets this role
+  // read queued deals anyway, so any other page would render empty.
+  if (employee.role === 'transfer_admin') {
+    return (
+      <Layout employee={employee} page="transfer_queue" onNavigate={() => {}}>
+        <TransferQueue employee={employee} />
+      </Layout>
+    );
+  }
+
   const renderPage = () => {
     switch (page) {
       case 'dashboard': return <Dashboard employee={employee} onNavigate={navigate} />;

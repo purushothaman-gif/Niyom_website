@@ -26,7 +26,7 @@ export default function MIS({ employee }: Props) {
 
   useEffect(() => {
     if (!isAdmin) return;
-    supabase.from('nw_employees').select('id, full_name, employee_code, designation').eq('status', 'active').order('full_name')
+    supabase.from('nw_employees').select('id, full_name, employee_code, designation').eq('status', 'active').neq('role', 'transfer_admin').order('full_name')
       .then(({ data }) => setEmpList((data as any[]) || []));
   }, [isAdmin]);
 

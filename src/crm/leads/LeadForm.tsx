@@ -71,7 +71,7 @@ export default function LeadForm({ employee, mode, lead, onClose, onSaved, onOpe
   useEffect(() => {
     if (!isAdmin) return;
     supabase.from('nw_employees').select('id, full_name, employee_code')
-      .eq('status', 'active').order('full_name')
+      .eq('status', 'active').neq('role', 'transfer_admin').order('full_name')
       .then(({ data }) => setEmployees(data || []));
   }, [isAdmin]);
 

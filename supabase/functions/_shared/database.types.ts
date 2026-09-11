@@ -10934,7 +10934,12 @@ export type Database = {
       nw_current_client_id: { Args: never; Returns: string }
       nw_current_dsa_id: { Args: never; Returns: string }
       nw_current_emp_is_admin: { Args: never; Returns: boolean }
+      nw_current_emp_is_transfer_admin: { Args: never; Returns: boolean }
       nw_current_employee_id: { Args: never; Returns: string }
+      nw_deal_in_transfer_queue: {
+        Args: { p_deal_id: string }
+        Returns: boolean
+      }
       nw_deal_recompute_from_items: {
         Args: { p_deal_id: string }
         Returns: undefined
@@ -11399,6 +11404,7 @@ export type Database = {
         Args: { p_existing_lead_id: string; p_payload?: Json }
         Returns: undefined
       }
+      nw_revoke_auth_sessions: { Args: { p_user_id: string }; Returns: number }
       nw_set_asset_class: {
         Args: { p_asset_class: string; p_isin: string; p_note?: string }
         Returns: undefined

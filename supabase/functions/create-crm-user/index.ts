@@ -52,13 +52,29 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { email, password, full_name, role, designation, employee_code } = await req.json();
+    const { email, password, full_name, role: rawRole, designation, employee_code } = await req.json();
 
     if (!email || !password || !full_name || !employee_code) {
       return new Response(JSON.stringify({ error: "Missing required fields: email, password, full_name, employee_code" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // The role is an authorization grant, so it is checked here and not only
+    // in the Add Employee form: only a super admin may mint another one.
+    const role = rawRole || "employee";
+    const allowedRoles = caller.role === "super_admin"
+      ? ["employee", "admin", "transfer_admin", "super_admin"]
+      : ["employee", "admin", "transfer_admin"];
+    if (!allowedRoles.includes(role)) {
+      return new Response(JSON.stringify({ error: "You cannot assign this role." }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Shared Transfer-Queue-only login: the admin sets the password and hands
+    // it out, so it is not forced to change on first sign-in (the first person
+    // to log in would otherwise lock everyone else out).
+    const isTransferLogin = role === "transfer_admin";
 
     // Validate employee code format
     const empCodeClean = employee_code.trim().toUpperCase();
@@ -101,6 +117,14 @@ Deno.serve(async (req: Request) => {
     const { data: { users: existingUsers } } = await adminClient.auth.admin.listUsers();
     const existingAuthUser = existingUsers?.find((u: any) => u.email === email);
 
+    if (existingAuthUser && isTransferLogin) {
+      // Reusing an existing login here would reset that person's password and
+      // turn their account into a shared one. Needs a mailbox of its own.
+      return new Response(JSON.stringify({ error: "This email already has a login. Use a dedicated email for the transfer login (e.g. transfers@niyomwealth.com)." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (existingAuthUser) {
       authUserId = existingAuthUser.id;
       await adminClient.auth.admin.updateUserById(authUserId, { password, email_confirm: true });
@@ -117,23 +141,37 @@ Deno.serve(async (req: Request) => {
     }
 
     // Insert into nw_employees with the manually provided code
-    const { error: insertErr } = await adminClient.from("nw_employees").insert([{
+    const { data: inserted, error: insertErr } = await adminClient.from("nw_employees").insert([{
       auth_user_id: authUserId,
       employee_code: empCodeClean,
       full_name,
       email,
-      role: role || "employee",
+      role,
       // Display-only job title (never derived from role). Safe default for new hires.
-      designation: (typeof designation === "string" && designation.trim()) || "Relationship Manager",
+      designation: isTransferLogin
+        ? "Transfer Desk"
+        : (typeof designation === "string" && designation.trim()) || "Relationship Manager",
       status: "active",
-      password_changed: false,
-    }]);
+      password_changed: isTransferLogin,
+    }]).select("id").single();
 
     if (insertErr) {
       if (createdNewAuthUser) {
         await adminClient.auth.admin.deleteUser(authUserId);
       }
       throw insertErr;
+    }
+
+    // Keep the transfer login out of payroll and "My HR": it is a desk, not a
+    // salaried person. Same switch HR uses for partners. Best-effort — HR can
+    // still flip it by hand if this fails.
+    if (isTransferLogin) {
+      const { error: hrErr } = await adminClient.from("hr_employee_profiles").insert({
+        employee_id: inserted.id,
+        on_payroll: false,
+        notes: "Shared Transfer Queue login — not a person.",
+      });
+      if (hrErr) console.error("hr profile for transfer login failed:", hrErr.message);
     }
 
     return new Response(JSON.stringify({ success: true, employee_code: empCodeClean }), {

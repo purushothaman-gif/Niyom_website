@@ -126,7 +126,7 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
     if (!isAdmin) q = q.eq('employee_id', employee.id);
     q.then(({ data }) => setClients((data as NWClient[]) || []));
     if (isAdmin) {
-      supabase.from('nw_employees').select('id, full_name, employee_code').eq('status', 'active').order('full_name')
+      supabase.from('nw_employees').select('id, full_name, employee_code').eq('status', 'active').neq('role', 'transfer_admin').order('full_name')
         .then(({ data }) => setEmpList((data as any[]) || []));
     }
   }, [isAdmin, employee.id]);

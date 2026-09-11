@@ -115,7 +115,7 @@ export default function Dashboard({ employee, onNavigate }: Props) {
         const { data: empData, count } = await supabase
           .from('nw_employees')
           .select('id, full_name, employee_code, avatar_url', { count: 'exact' })
-          .eq('status', 'active');
+          .eq('status', 'active').neq('role', 'transfer_admin');
 
         empCount = count || 0;
 

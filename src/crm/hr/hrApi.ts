@@ -382,8 +382,10 @@ export const deleteHoliday = async (id: string) => {
 export async function listHREmployees(
   includeInactive = false, payrollOnly = false,
 ): Promise<HREmployee[]> {
+  // The shared Transfer Queue login is a desk, not a person HR manages.
   let q = supabase.from('nw_employees')
     .select('id, employee_code, full_name, email, phone, role, designation, avatar_url, status, joining_date')
+    .neq('role', 'transfer_admin')
     .order('employee_code');
   if (!includeInactive) q = q.eq('status', 'active');
 

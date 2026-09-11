@@ -110,7 +110,8 @@ Deno.serve(async (req: Request) => {
     if (!employee || employee.status !== "active") {
       return json({ success: false, error: "Unauthorized" }, 401);
     }
-    if (employee.role !== "admin" && employee.role !== "super_admin") {
+    // transfer_admin is the Transfer-Queue-only login; the RPC accepts it too.
+    if (!["admin", "super_admin", "transfer_admin"].includes(employee.role)) {
       return json({ success: false, error: "Only administrators can approve a transfer." }, 403);
     }
 
@@ -119,8 +120,8 @@ Deno.serve(async (req: Request) => {
     const dealId = typeof body?.dealId === "string" ? body.dealId : null;
     const remarks = sanitiseRemarks(body?.remarks);
     // Admin override: transfer a PAID deal into MIS without the client's digital
-    // acceptance. Payment is still enforced by the RPC. Admin role already
-    // checked above, so this flag only reaches the RPC from an authorised admin.
+    // acceptance. Payment is still enforced by the RPC. Role already checked
+    // above, so this flag only reaches the RPC from an authorised caller.
     const overrideAcceptance = body?.override === true;
     // Optional transfer date (the admin may back-date a late review). Accept only
     // a parseable date; anything else falls back to now() inside the RPC (NULL).

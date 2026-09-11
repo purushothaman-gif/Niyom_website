@@ -189,7 +189,10 @@ const YEARS = (() => { const y = new Date().getFullYear(); return [y, y - 1, y -
 // ===========================================================================
 
 export default function TransferQueue({ employee }: Props) {
-  const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
+  // transfer_admin is the shared Transfer-Queue-only login (RLS scopes it to
+  // queued deals; transfer-deal + nw_transfer_deal accept it).
+  const isTransferLogin = employee.role === 'transfer_admin';
+  const canTransfer = employee.role === 'admin' || employee.role === 'super_admin' || isTransferLogin;
 
   const [view, setView] = useState<'list' | 'preview' | 'success'>('list');
   const [loading, setLoading] = useState(true);
@@ -212,6 +215,10 @@ export default function TransferQueue({ employee }: Props) {
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [remarks, setRemarks] = useState('');
+  // Shared login only: the audit trail records the login, not the person, so
+  // whoever approves types their name and it is stamped into the remarks.
+  // Kept across transfers in the same sitting.
+  const [doneBy, setDoneBy] = useState('');
   // Editable transfer date — defaults to today, but can be back-dated when a
   // deal is reviewed a day or two late so the recorded date stays correct.
   const [transferDate, setTransferDate] = useState<string>(todayLocalISO());
@@ -230,10 +237,11 @@ export default function TransferQueue({ employee }: Props) {
   const [resendMessage, setResendMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   // -------------------------------------------------------------------------
-  // Guard: this page is admin-only. The nav already hides it for RMs, but in
-  // case someone deep-links to /crm/transfer_queue we degrade gracefully.
+  // Guard: this page is admin / transfer-login only. The nav already hides it
+  // for RMs, but in case someone deep-links to /crm/transfer_queue we degrade
+  // gracefully.
   // -------------------------------------------------------------------------
-  if (!isAdmin) {
+  if (!canTransfer) {
     return (
       <div className="p-8 text-center">
         <ShieldCheck className="w-8 h-8 mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
@@ -396,16 +404,21 @@ export default function TransferQueue({ employee }: Props) {
 
   const submit = async () => {
     if (!preview || submitting) return;
+    const who = doneBy.trim();
+    if (isTransferLogin && !who) { setError('Enter your name — it is recorded on this transfer.'); return; }
     setSubmitting(true);
     setError('');
     try {
       // Send the chosen transfer date as a timestamp at local noon, so the stored
       // date can't slip a day across timezones.
       const transferredAt = transferDate ? new Date(`${transferDate}T12:00:00`).toISOString() : null;
+      const finalRemarks = isTransferLogin
+        ? [`Done by: ${who}`, remarks.trim()].filter(Boolean).join(' — ')
+        : remarks.trim();
       const { data, error: fnErr } = await supabase.functions.invoke('transfer-deal', {
         // Digital acceptance is not part of this flow; always transfer a
         // confirmed, paid deal. The view + RPC enforce eligibility.
-        body: { dealId: preview.deal_id, remarks: remarks.trim() || null, override: true, transferredAt },
+        body: { dealId: preview.deal_id, remarks: finalRemarks || null, override: true, transferredAt },
       });
       if (fnErr || !data?.success) {
         throw new Error(await edgeFunctionErrorMessage(fnErr, data, 'Could not complete transfer.'));
@@ -846,6 +859,9 @@ export default function TransferQueue({ employee }: Props) {
             setTransferDate={setTransferDate}
             remarks={remarks}
             setRemarks={setRemarks}
+            askDoneBy={isTransferLogin}
+            doneBy={doneBy}
+            setDoneBy={setDoneBy}
             error={error}
             submitting={submitting}
             onCancel={() => { if (!submitting) { setShowConfirm(false); setError(''); } }}
@@ -1105,6 +1121,7 @@ function FieldRow({
 
 function ConfirmDialog({
   deal, lines, transferDate, setTransferDate, remarks, setRemarks,
+  askDoneBy, doneBy, setDoneBy,
   error, submitting, onCancel, onConfirm,
 }: {
   deal: EligibleDeal;
@@ -1113,11 +1130,15 @@ function ConfirmDialog({
   setTransferDate: (v: string) => void;
   remarks: string;
   setRemarks: (v: string) => void;
+  askDoneBy: boolean;
+  doneBy: string;
+  setDoneBy: (v: string) => void;
   error: string;
   submitting: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const canConfirm = !submitting && (!askDoneBy || !!doneBy.trim());
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.55)' }}
@@ -1208,6 +1229,28 @@ function ConfirmDialog({
             </p>
           </div>
 
+          {askDoneBy && (
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5"
+                style={{ color: 'var(--text-secondary)' }}>
+                Your Name <span style={{ color: 'var(--accent)' }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={doneBy}
+                onChange={e => setDoneBy(e.target.value)}
+                maxLength={80}
+                placeholder="Who is approving this transfer?"
+                disabled={submitting}
+                className="w-full px-3.5 py-2.5 rounded-xl text-sm text-text-primary outline-none"
+                style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}
+              />
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                This is a shared login, so your name is recorded on the transfer.
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5"
               style={{ color: 'var(--text-secondary)' }}>Remarks (optional)</label>
@@ -1234,15 +1277,15 @@ function ConfirmDialog({
             style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
             Cancel
           </button>
-          <button onClick={onConfirm} disabled={submitting}
+          <button onClick={onConfirm} disabled={!canConfirm}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent disabled:cursor-not-allowed"
             style={{
-              background: !submitting
+              background: canConfirm
                 ? 'linear-gradient(135deg, var(--accent), var(--accent-strong))'
                 : 'var(--bg-base)',
-              color: !submitting ? undefined : 'var(--text-muted)',
-              opacity: !submitting ? 1 : 0.6,
-              border: !submitting ? 'none' : '1px solid var(--border)',
+              color: canConfirm ? undefined : 'var(--text-muted)',
+              opacity: canConfirm ? 1 : 0.6,
+              border: canConfirm ? 'none' : '1px solid var(--border)',
             }}>
             {submitting
               ? <><Loader2 className="w-4 h-4 animate-spin" /> Transferring…</>
