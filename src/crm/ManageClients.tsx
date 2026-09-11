@@ -115,7 +115,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   // Load employee list for admin filter
   useEffect(() => {
     if (!isAdmin) return;
-    supabase.from('nw_employees').select('id, full_name, employee_code').eq('status', 'active').order('full_name')
+    supabase.from('nw_employees').select('id, full_name, employee_code').eq('status', 'active').neq('role', 'transfer_admin').order('full_name')
       .then(({ data }) => setEmployees(data || []));
   }, [isAdmin]);
 

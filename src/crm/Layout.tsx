@@ -151,6 +151,10 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
+  // Shared Transfer-Queue-only login: one nav item, no Settings. Settings is
+  // hidden so the password (owned by the admin who hands it out) and a device
+  // PIN are not changed from a desk everyone uses.
+  const isTransferLogin = employee.role === 'transfer_admin';
   const unread = alerts.filter(a => !a.read).length;
 
   /*
@@ -173,6 +177,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
   const [onPayroll, setOnPayroll] = useState(true);
 
   useEffect(() => {
+    if (isTransferLogin) return;
     let cancelled = false;
     supabase.rpc('hr_my_nav_context').then(({ data, error }) => {
       if (cancelled || error || !data) return;
@@ -181,7 +186,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
       setOnPayroll(ctx.on_payroll);
     });
     return () => { cancelled = true; };
-  }, [isAdmin]);
+  }, [isAdmin, isTransferLogin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -221,9 +226,10 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
     else if (a.action_url && a.action_url.includes('/my_hr')) onNavigate('my_hr' as CRMPage);
   };
 
-  const canSee = (n: NavItem) =>
-    (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin)
-    && (!n.hrOnly || hasHrAccess) && (!n.payrollOnly || onPayroll);
+  const canSee = (n: NavItem) => isTransferLogin
+    ? n.key === 'transfer_queue'
+    : (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin)
+      && (!n.hrOnly || hasHrAccess) && (!n.payrollOnly || onPayroll);
   // Filter items by role; a section whose items are all hidden disappears along
   // with its heading (e.g. Documents for an admin who only has the Vault).
   const navSections: NavSection[] = NAV.flatMap(s => {
@@ -300,7 +306,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
             <p className="text-xs truncate" style={{ color: 'var(--text-faint)' }}>{employee.employee_code}</p>
           </div>
           {/* Settings — pinned here so it never scrolls out of reach */}
-          <button onClick={() => {
+          {!isTransferLogin && <button onClick={() => {
             window.history.pushState({}, '', `/crm/${SETTINGS_ITEM.key}`);
             onNavigate(SETTINGS_ITEM.key);
             setMobileOpen(false);
@@ -308,7 +314,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
             title="Settings" aria-label="Settings" aria-current={page === SETTINGS_ITEM.key ? 'page' : undefined}
             className={`crm-icon-action p-1 rounded-lg transition-colors flex-shrink-0 ${page === SETTINGS_ITEM.key ? 'is-active' : ''}`}>
             <Settings className="w-4 h-4" />
-          </button>
+          </button>}
           <button onClick={async () => { await supabase.auth.signOut(); clearStorageKeepingTrustedDevices(); window.location.replace('/crm'); }}
             title="Sign out" aria-label="Sign out" className="crm-icon-danger p-1 rounded-lg transition-colors flex-shrink-0">
             <LogOut className="w-4 h-4" />

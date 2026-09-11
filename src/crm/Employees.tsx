@@ -59,8 +59,13 @@ export default function Employees({ employee }: Props) {
   const [addForm, setAddForm] = useState({ full_name: '', email: '', password: '', role: 'employee', designation: 'Relationship Manager', employee_code: '' });
   const [editForm, setEditForm] = useState({ full_name: '', phone: '', role: 'employee', designation: 'Relationship Manager', status: 'active' });
   const [addError, setAddError] = useState('');
+  // Password rotation for a shared Transfer Queue login (edit modal).
+  const [newTransferPw, setNewTransferPw] = useState('');
+  const [showTransferPw, setShowTransferPw] = useState(false);
+  const [rotatingPw, setRotatingPw] = useState(false);
 
   const isSuperAdmin = employee.role === 'super_admin';
+  const addingTransferLogin = addForm.role === 'transfer_admin';
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -109,6 +114,25 @@ export default function Employees({ employee }: Props) {
     setEditEmp(null);
     showToast('Employee updated.');
     load();
+  };
+
+  // Sets a new password on a shared Transfer Queue login and signs every device
+  // out of it — for when someone who knew the old password should lose access.
+  const handleRotateTransferPw = async () => {
+    if (!editEmp) return;
+    if (newTransferPw.length < 8) { showToast('Password must be at least 8 characters.', false); return; }
+    setRotatingPw(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transfer-login-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ employee_id: editEmp.id, password: newTransferPw }),
+    });
+    const json = await res.json().catch(() => ({}));
+    setRotatingPw(false);
+    if (!res.ok || json.error) { showToast(json.error || 'Could not change the password.', false); return; }
+    setNewTransferPw('');
+    showToast(json.warning || 'Password changed. Everyone signed in with the old password has been signed out.', !json.warning);
   };
 
   // Called with the cropped square (JPEG) blob from the crop modal.
@@ -289,7 +313,7 @@ export default function Employees({ employee }: Props) {
                   <td className="px-5 py-3.5">
                     {e.id !== employee.id && (
                       <div className="flex items-center gap-1">
-                        <button onClick={() => { setEditEmp(e); setEditAvatar(e.avatar_url); setEditForm({ full_name: e.full_name, phone: e.phone || '', role: e.role, designation: e.designation ?? 'Relationship Manager', status: e.status }); }}
+                        <button onClick={() => { setEditEmp(e); setEditAvatar(e.avatar_url); setNewTransferPw(''); setEditForm({ full_name: e.full_name, phone: e.phone || '', role: e.role, designation: e.designation ?? 'Relationship Manager', status: e.status }); }}
                           className="p-1.5 rounded-lg" style={{ color: 'var(--text-faint)' }}
                           onMouseEnter={ev => (ev.currentTarget.style.color = 'rgb(var(--info-soft-rgb))')} onMouseLeave={ev => (ev.currentTarget.style.color = 'var(--text-faint)')}>
                           <Pencil className="w-4 h-4" />
@@ -345,16 +369,26 @@ export default function Employees({ employee }: Props) {
               <select value={addForm.role} onChange={e => setAddForm(f => ({ ...f, role: e.target.value }))} className={inputClass} style={inputStyle}>
                 <option value="employee">Employee</option>
                 <option value="admin">Admin</option>
+                <option value="transfer_admin">Transfer Admin — Transfer Queue only (shared login)</option>
                 {isSuperAdmin && <option value="super_admin">Super Admin</option>}
               </select>
             </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Designation <span className="normal-case font-normal" style={{ color: 'var(--text-faint)' }}>(shown on documents &amp; emails)</span></label>
-              <select value={addForm.designation} onChange={e => setAddForm(f => ({ ...f, designation: e.target.value }))} className={inputClass} style={inputStyle}>
-                {DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-            <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Employee will be prompted to change password on first login.</p>
+            {addingTransferLogin ? (
+              <div className="p-3 rounded-xl text-xs space-y-1.5" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+                <p>This login opens <span className="text-text-primary font-medium">only the Transfer Queue</span>: it can see deals waiting for transfer (client name, PAN, demat, bank, payments) and approve them. No clients, portfolios, MIS or anything else.</p>
+                <p>Use a dedicated email (e.g. transfers@niyomwealth.com). The password you set here is the one you share — it is not forced to change on first login. Change it from Edit whenever someone who knew it should lose access.</p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Designation <span className="normal-case font-normal" style={{ color: 'var(--text-faint)' }}>(shown on documents &amp; emails)</span></label>
+                  <select value={addForm.designation} onChange={e => setAddForm(f => ({ ...f, designation: e.target.value }))} className={inputClass} style={inputStyle}>
+                    {DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Employee will be prompted to change password on first login.</p>
+              </>
+            )}
             <div className="flex justify-end gap-3 pt-2">
               <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded-xl text-sm" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
               <button onClick={handleAdd} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
@@ -406,20 +440,46 @@ export default function Employees({ employee }: Props) {
                 <input type={type} value={(editForm as any)[key]} onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))} className={inputClass} style={inputStyle} />
               </div>
             ))}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Role <span className="normal-case font-normal" style={{ color: 'var(--text-faint)' }}>(access level — internal only)</span></label>
-              <select value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} className={inputClass} style={inputStyle}>
-                <option value="employee">Employee</option>
-                <option value="admin">Admin</option>
-                {isSuperAdmin && <option value="super_admin">Super Admin</option>}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Designation <span className="normal-case font-normal" style={{ color: 'var(--text-faint)' }}>(shown on documents &amp; emails)</span></label>
-              <select value={editForm.designation} onChange={e => setEditForm(f => ({ ...f, designation: e.target.value }))} className={inputClass} style={inputStyle}>
-                {DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
+            {editEmp.role === 'transfer_admin' ? (
+              // A shared login never turns into a person's account (or back):
+              // an RM's own book would follow it. Create a new login instead.
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Change Shared Password</label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input type={showTransferPw ? 'text' : 'password'} value={newTransferPw} onChange={e => setNewTransferPw(e.target.value)} placeholder="New password (min 8 characters)" className={`${inputClass} pr-10`} style={inputStyle} autoComplete="new-password" />
+                    <button type="button" onClick={() => setShowTransferPw(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-faint)' }}>
+                      {showTransferPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <button type="button" onClick={handleRotateTransferPw} disabled={rotatingPw || newTransferPw.length < 8}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-on-accent disabled:opacity-50 whitespace-nowrap"
+                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                    {rotatingPw ? 'Changing…' : 'Change'}
+                  </button>
+                </div>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>
+                  Transfer Queue only login. Changing the password signs out every device using it.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Role <span className="normal-case font-normal" style={{ color: 'var(--text-faint)' }}>(access level — internal only)</span></label>
+                  <select value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} className={inputClass} style={inputStyle}>
+                    <option value="employee">Employee</option>
+                    <option value="admin">Admin</option>
+                    {isSuperAdmin && <option value="super_admin">Super Admin</option>}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Designation <span className="normal-case font-normal" style={{ color: 'var(--text-faint)' }}>(shown on documents &amp; emails)</span></label>
+                  <select value={editForm.designation} onChange={e => setEditForm(f => ({ ...f, designation: e.target.value }))} className={inputClass} style={inputStyle}>
+                    {DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </>
+            )}
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Status</label>
               <select value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))} className={inputClass} style={inputStyle}>
@@ -502,7 +562,7 @@ export default function Employees({ employee }: Props) {
                     </label>
                     <select value={successorId} onChange={e => setSuccessorId(e.target.value)} className={inputClass} style={inputStyle}>
                       <option value="">— Select an employee —</option>
-                      {employees.filter(x => x.id !== deleteEmp.id && x.status === 'active').map(x => (
+                      {employees.filter(x => x.id !== deleteEmp.id && x.status === 'active' && x.role !== 'transfer_admin').map(x => (
                         <option key={x.id} value={x.id}>{x.full_name} ({x.employee_code})</option>
                       ))}
                     </select>

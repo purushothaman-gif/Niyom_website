@@ -72,7 +72,7 @@ export default function DSAPayout({ employee }: Props) {
 
   React.useEffect(() => {
     if (!isAdmin) return;
-    supabase.from('nw_employees').select('id, full_name, employee_code').eq('status', 'active').order('full_name')
+    supabase.from('nw_employees').select('id, full_name, employee_code').eq('status', 'active').neq('role', 'transfer_admin').order('full_name')
       .then(({ data }) => setEmpList((data as any[]) || []));
   }, [isAdmin]);
 

@@ -23,7 +23,7 @@ export default function LeadAssignModal({ leads, onClose, onAssigned }: Props) {
   useEffect(() => {
     (async () => {
       const { data: emps } = await supabase.from('nw_employees')
-        .select('id, full_name, employee_code').eq('status', 'active').order('full_name');
+        .select('id, full_name, employee_code').eq('status', 'active').neq('role', 'transfer_admin').order('full_name');
       const list = emps || [];
       // Workload = active (non-archived) leads currently owned. Admin sees all.
       const rows = await Promise.all(list.map(async e => {

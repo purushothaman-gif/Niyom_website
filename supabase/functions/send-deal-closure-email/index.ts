@@ -80,8 +80,11 @@ Deno.serve(async (req: Request) => {
         .eq("auth_user_id", user.id)
         .maybeSingle();
 
+      // transfer_admin retries from the same Transfer Queue success screen.
+      // The deal must already be transferred (checked below), so the most it
+      // can do is re-send a closure email to that deal's own client.
       if (!emp || emp.status !== "active" ||
-          (emp.role !== "admin" && emp.role !== "super_admin")) {
+          !["admin", "super_admin", "transfer_admin"].includes(emp.role)) {
         return json({ success: false, error: "Admin role required." }, 403);
       }
       callerEmployeeId = emp.id;

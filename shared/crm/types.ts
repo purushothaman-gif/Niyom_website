@@ -5,7 +5,9 @@ export interface NWEmployee {
   full_name: string;
   email: string;
   phone: string;
-  role: 'super_admin' | 'admin' | 'employee'; // authorization only — never shown to clients
+  // authorization only — never shown to clients. transfer_admin is the shared
+  // Transfer-Queue-only login: it sees that one page and nothing else.
+  role: 'super_admin' | 'admin' | 'employee' | 'transfer_admin';
   designation: string | null;                 // display-only job title (Designated Partner, etc.)
   avatar_url: string | null;                   // profile photo (public URL in employee-avatars bucket); null → initials
   status: 'active' | 'inactive';

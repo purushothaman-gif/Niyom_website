@@ -91,7 +91,7 @@ export default function AdminDocuments({ employee }: Props) {
 
   useEffect(() => {
     supabase.from('nw_clients').select('id, full_name, client_code').order('full_name').then(({ data }) => setClients((data as NWClient[]) || []));
-    supabase.from('nw_employees').select('id, full_name, employee_code').order('full_name').then(({ data }) => setEmployees((data as NWEmployee[]) || []));
+    supabase.from('nw_employees').select('id, full_name, employee_code').neq('role', 'transfer_admin').order('full_name').then(({ data }) => setEmployees((data as NWEmployee[]) || []));
   }, []);
 
   const loadDocuments = useCallback(async () => {

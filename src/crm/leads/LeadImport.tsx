@@ -33,7 +33,7 @@ export default function LeadImport({ employee, category, onBack, onDone }: Props
   const [result, setResult] = useState<Result | null>(null);
 
   useEffect(() => {
-    supabase.from('nw_employees').select('id, full_name, employee_code').eq('status', 'active').order('full_name')
+    supabase.from('nw_employees').select('id, full_name, employee_code').eq('status', 'active').neq('role', 'transfer_admin').order('full_name')
       .then(({ data }) => setEmployees(data || []));
   }, []);
 

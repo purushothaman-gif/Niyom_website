@@ -129,7 +129,7 @@ export default function LeadList({ employee, category, onNew, onOpen, onEdit, on
 
   useEffect(() => {
     if (!isAdmin) return;
-    supabase.from('nw_employees').select('id, full_name').eq('status', 'active').order('full_name')
+    supabase.from('nw_employees').select('id, full_name').eq('status', 'active').neq('role', 'transfer_admin').order('full_name')
       .then(({ data }) => setEmployees(data || []));
   }, [isAdmin]);
 
