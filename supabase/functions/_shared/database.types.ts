@@ -8648,6 +8648,76 @@ export type Database = {
           },
         ]
       }
+      nw_mis_revenue_shifts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deal_confirmation_id: string
+          id: string
+          reason: string
+          recognise_on: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deal_confirmation_id: string
+          id?: string
+          reason: string
+          recognise_on: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deal_confirmation_id?: string
+          id?: string
+          reason?: string
+          recognise_on?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_mis_revenue_shifts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_mis_revenue_shifts_deal_confirmation_id_fkey"
+            columns: ["deal_confirmation_id"]
+            isOneToOne: true
+            referencedRelation: "nw_deal_confirmations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_mis_revenue_shifts_deal_confirmation_id_fkey"
+            columns: ["deal_confirmation_id"]
+            isOneToOne: true
+            referencedRelation: "nw_deal_overall_stage"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_mis_revenue_shifts_deal_confirmation_id_fkey"
+            columns: ["deal_confirmation_id"]
+            isOneToOne: true
+            referencedRelation: "nw_deal_payment_summary"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_mis_revenue_shifts_deal_confirmation_id_fkey"
+            columns: ["deal_confirmation_id"]
+            isOneToOne: true
+            referencedRelation: "nw_deal_transfer_eligible"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "nw_mis_revenue_shifts_deal_confirmation_id_fkey"
+            columns: ["deal_confirmation_id"]
+            isOneToOne: true
+            referencedRelation: "nw_deal_transfer_pending_acceptance"
+            referencedColumns: ["deal_id"]
+          },
+        ]
+      }
       nw_otps: {
         Row: {
           attempts: number
