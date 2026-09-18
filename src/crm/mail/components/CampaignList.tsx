@@ -17,7 +17,7 @@ function progress(c: MailCampaign): string | null {
   return null;
 }
 
-export default function CampaignList({ onOpen }: { onOpen: (id: string) => void }) {
+export default function CampaignList({ onOpen, isAdmin }: { onOpen: (id: string) => void; isAdmin: boolean }) {
   const { data: campaigns = [], isLoading, error } = useCampaigns();
   const create = useCreateCampaign();
 
@@ -32,7 +32,9 @@ export default function CampaignList({ onOpen }: { onOpen: (id: string) => void 
         <div>
           <h2 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>Email Campaigns</h2>
           <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-            One email to every client, or every partner. Drafts are private until you approve them.
+            {isAdmin
+              ? 'Professional emails to all or selected clients and partners, sent from support@niyomwealth.com. You also see every employee\'s campaigns here.'
+              : 'Professional emails to all or selected clients and partners you look after, sent from your own Niyom Wealth mailbox.'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -59,7 +61,7 @@ export default function CampaignList({ onOpen }: { onOpen: (id: string) => void 
           style={{ background: 'var(--bg-surface)', border: '1px dashed var(--border)' }}>
           <Mail size={26} className="mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            No campaigns yet. Start one above — you can generate the copy from a few keywords.
+            No campaigns yet. Start one above — give it a topic and your requirements, and it writes a professional draft.
           </p>
         </div>
       ) : (
@@ -81,6 +83,10 @@ export default function CampaignList({ onOpen }: { onOpen: (id: string) => void 
                     <span className="inline-flex items-center gap-1">
                       <Users size={11} /> {c.audience === 'client' ? 'Clients' : 'Partners'}
                     </span>
+                    <span>{c.sender ? `From ${c.sender.name}` : 'From support@'}</span>
+                    {isAdmin && c.sender_kind === 'employee' && c.author_name && c.author_name !== c.sender?.name && (
+                      <span>by {c.author_name}</span>
+                    )}
                     <span>{when(c.created_at)}</span>
                   </div>
                 </div>

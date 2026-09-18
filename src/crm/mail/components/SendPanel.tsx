@@ -94,7 +94,7 @@ export default function SendPanel({ campaign, dirty, onSaveFirst }: Props) {
               {sendable.toLocaleString('en-IN')}
             </p>
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-              {campaign.audience === 'client' ? 'clients' : 'partners'} will receive this
+              {campaign.filters.ids ? 'selected ' : ''}{campaign.audience === 'client' ? 'clients' : 'partners'} will receive this
               {(audience.data?.suppressed ?? 0) > 0 &&
                 `, ${audience.data?.suppressed} excluded for having unsubscribed`}.
             </p>

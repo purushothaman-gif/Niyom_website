@@ -1,7 +1,7 @@
 // Write a campaign: audience, brief, body, preview, send.
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Eye, Save, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, Eye, Save, Sparkles, Trash2, UserRound } from 'lucide-react';
 import { Field, GhostButton, Input, PrimaryButton, Select, StatusBadge, Textarea } from '../../ui/kit';
 import { campaignContentHash } from '../../../../shared/mail/renderEmail';
 import { useDeleteCampaign, useGenerate, useSaveCampaign } from '../mailClient';
@@ -10,20 +10,23 @@ import type { CampaignFilters, MailAudience, MailBlock, MailCampaign } from '../
 import BlockEditor from './BlockEditor';
 import CampaignPreview from './CampaignPreview';
 import SendPanel from './SendPanel';
+import RecipientPicker from './RecipientPicker';
 
-const TONES = ['Warm and personal', 'Straightforward', 'Formal', 'Celebratory'];
+const TONES = ['Professional', 'Warm and personal', 'Formal', 'Straightforward', 'Celebratory'];
 const PURPOSES = [
   'Announcement', 'Market or product update', 'Educational', 'Reminder',
-  'Portal or feature launch', 'Seasonal greeting',
+  'Portal or feature launch', 'Seasonal greeting', 'Invitation', 'Thank you',
 ];
 const LENGTHS = ['Short (3–4 blocks)', 'Medium (5–7 blocks)', 'Detailed (8+ blocks)'];
 
 interface Props {
   campaign: MailCampaign;
   onBack: () => void;
+  /** Viewer is an admin (sees every campaign, the whole book). */
+  isAdmin: boolean;
 }
 
-export default function CampaignComposer({ campaign, onBack }: Props) {
+export default function CampaignComposer({ campaign, onBack, isAdmin }: Props) {
   const save = useSaveCampaign();
   const generate = useGenerate();
   const del = useDeleteCampaign();
@@ -37,7 +40,9 @@ export default function CampaignComposer({ campaign, onBack }: Props) {
   const [filters, setFilters] = useState<CampaignFilters>(campaign.filters);
   const [flags, setFlags] = useState(campaign.compliance_flags);
 
-  const [keywords, setKeywords] = useState('');
+  const [topic, setTopic] = useState(campaign.brief?.topic ?? '');
+  const [requirements, setRequirements] = useState(campaign.brief?.requirements ?? '');
+  const sender = campaign.sender;
   const [purpose, setPurpose] = useState(PURPOSES[0]);
   const [tone, setTone] = useState(TONES[0]);
   const [length, setLength] = useState(LENGTHS[1]);
@@ -64,18 +69,20 @@ export default function CampaignComposer({ campaign, onBack }: Props) {
     let cancelled = false;
     void campaignContentHash({
       subject, preheader, blocks, audience,
-      ctaPortalEnabled: ctaOn, ctaPortalLabel: ctaLabel,
+      ctaPortalEnabled: ctaOn, ctaPortalLabel: ctaLabel, sender,
     }).then((h) => { if (!cancelled) setHash(h); });
     return () => { cancelled = true; };
-  }, [subject, preheader, blocks, audience, ctaOn, ctaLabel]);
+  }, [subject, preheader, blocks, audience, ctaOn, ctaLabel, sender]);
 
+  const briefNow = useMemo(() => ({ topic, requirements }), [topic, requirements]);
   const dirty = hash !== campaign.content_hash ||
-    JSON.stringify(filters) !== JSON.stringify(campaign.filters);
+    JSON.stringify(filters) !== JSON.stringify(campaign.filters) ||
+    (topic !== (campaign.brief?.topic ?? '') || requirements !== (campaign.brief?.requirements ?? ''));
 
   const draft = useMemo(() => ({
-    audience, subject, preheader, blocks, filters,
+    audience, subject, preheader, blocks, filters, sender, brief: briefNow,
     cta_portal_enabled: ctaOn, cta_portal_label: ctaLabel, compliance_flags: flags,
-  }), [audience, subject, preheader, blocks, filters, ctaOn, ctaLabel, flags]);
+  }), [audience, subject, preheader, blocks, filters, sender, briefNow, ctaOn, ctaLabel, flags]);
 
   const doSave = async () => {
     setError('');
@@ -84,9 +91,9 @@ export default function CampaignComposer({ campaign, onBack }: Props) {
 
   const handleGenerate = async () => {
     setError('');
-    if (!keywords.trim()) { setError('Give it a few keywords to work from.'); return; }
+    if (!topic.trim()) { setError('Enter the topic of the email.'); return; }
     try {
-      const d = await generate.mutateAsync({ audience, keywords, purpose, tone, length });
+      const d = await generate.mutateAsync({ audience, topic, requirements, purpose, tone, length });
       setSubject(d.subject);
       setPreheader(d.preheader);
       setBlocks(d.blocks);
@@ -136,9 +143,13 @@ export default function CampaignComposer({ campaign, onBack }: Props) {
                 <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Write it for me</h3>
               </div>
               <div className="space-y-3">
-                <Field label="Keywords">
-                  <Textarea rows={2} value={keywords} onChange={(e) => setKeywords(e.target.value)}
-                    placeholder="e.g. new bond offering, 9.2% coupon, AA rated, applications close 15 September" />
+                <Field label="Topic" required>
+                  <Input value={topic} onChange={(e) => setTopic(e.target.value)}
+                    placeholder="e.g. New AA-rated corporate bond now available" />
+                </Field>
+                <Field label="Requirements" hint="Facts, figures, dates and points the email must cover — one per line. The draft uses only what you give it.">
+                  <Textarea rows={4} value={requirements} onChange={(e) => setRequirements(e.target.value)}
+                    placeholder={'e.g.\nCoupon 9.2% p.a., paid quarterly\nMinimum investment ₹1 lakh\nApplications close 15 October\nAsk them to reply to book a call'} />
                 </Field>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="Purpose">
@@ -192,15 +203,36 @@ export default function CampaignComposer({ campaign, onBack }: Props) {
 
         {/* Sidebar ------------------------------------------------------- */}
         <div className="space-y-5">
+          <section className="rounded-xl p-4 space-y-1"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+              <UserRound size={13} /> SENDING FROM
+            </div>
+            {sender ? (
+              <>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{sender.name} | Niyom Wealth</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{sender.email} · replies come to this inbox</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Niyom Wealth</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>support@niyomwealth.com</p>
+              </>
+            )}
+          </section>
+
           <section className="rounded-xl p-4 space-y-3"
             style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
             <Field label="Send to">
               <Select value={audience} disabled={locked}
                 onChange={(e) => { setAudience(e.target.value as MailAudience); setFilters({}); }}>
-                <option value="client">All clients</option>
-                <option value="partner">All partners</option>
+                <option value="client">{sender ? 'My clients' : 'Clients'}</option>
+                <option value="partner">{sender ? 'My partners' : 'Partners'}</option>
               </Select>
             </Field>
+
+            <RecipientPicker audience={audience} filters={filters} onChange={setFilters}
+              disabled={locked} ownBookOnly={!!sender || !isAdmin} />
 
             {audience === 'client' && (
               <Field label="Only clients who are" hint="Leave as Everyone to reach the whole book.">
@@ -245,7 +277,7 @@ export default function CampaignComposer({ campaign, onBack }: Props) {
       {showPreview && (
         <CampaignPreview
           subject={subject} preheader={preheader} blocks={blocks} audience={audience}
-          ctaPortalEnabled={ctaOn} ctaPortalLabel={ctaLabel}
+          ctaPortalEnabled={ctaOn} ctaPortalLabel={ctaLabel} sender={sender}
         />
       )}
     </div>

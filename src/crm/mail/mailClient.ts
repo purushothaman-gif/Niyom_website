@@ -16,10 +16,10 @@
 
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
-import { campaignContentHash, parseBlocks } from '../../../shared/mail/renderEmail';
+import { campaignContentHash, parseBlocks, toMailSender } from '../../../shared/mail/renderEmail';
 import type {
-  AudiencePreview, CampaignFilters, GeneratedDraft, MailAsset, MailAudience,
-  MailBlock, MailCampaign, SendResult,
+  AudienceMember, AudiencePreview, CampaignFilters, GeneratedDraft, MailAsset, MailAudience,
+  MailBlock, MailCampaign, MailSender, SendResult,
 } from './mailTypes';
 
 export const mailQueryClient = new QueryClient({
@@ -32,6 +32,7 @@ export const mailKeys = {
   one: (id: string) => ['mail_campaigns', 'one', id] as const,
   audience: (audience: MailAudience, filters: CampaignFilters) =>
     ['mail_campaigns', 'audience', audience, JSON.stringify(filters)] as const,
+  members: (audience: MailAudience) => ['mail_campaigns', 'members', audience] as const,
   assets: () => ['mail_assets'] as const,
   recipients: (id: string) => ['mail_campaign_recipients', id] as const,
 };
@@ -40,12 +41,22 @@ const COLUMNS =
   'id, campaign_no, audience, subject, preheader, blocks, filters, cta_portal_enabled, ' +
   'cta_portal_label, status, content_hash, test_sent_at, test_sent_hash, compliance_flags, ' +
   'recipient_count, sent_count, failed_count, approved_by, approved_at, send_started_at, ' +
-  'send_completed_at, created_by, created_at, updated_at';
+  'send_completed_at, created_by, created_at, updated_at, sender_kind, sender_employee_id, brief, ' +
+  'sender:nw_employees!mail_campaigns_sender_employee_id_fkey(full_name, designation, email), ' +
+  'author:nw_employees!mail_campaigns_created_by_fkey(full_name)';
 
 /** Narrow the jsonb columns once, here, so no component has to deal with Json. */
 function hydrate(row: Record<string, unknown>): MailCampaign {
+  const senderRow = row.sender as { full_name?: string; designation?: string | null; email?: string } | null;
+  const authorRow = row.author as { full_name?: string } | null;
   return {
     ...row,
+    // Only an employee campaign has a personal sender; the company one signs
+    // as the firm. toMailSender is the same normaliser the send function uses,
+    // so the hash computed here matches the one recomputed there.
+    sender: row.sender_kind === 'employee' && senderRow ? toMailSender(senderRow) : null,
+    author_name: authorRow?.full_name ?? null,
+    brief: (row.brief ?? {}) as MailCampaign['brief'],
     blocks: parseBlocks(row.blocks),
     filters: (row.filters ?? {}) as CampaignFilters,
     compliance_flags: Array.isArray(row.compliance_flags)
@@ -112,8 +123,23 @@ export function useAudiencePreview(audience: MailAudience, filters: CampaignFilt
   });
 }
 
+/** Everyone the current author may pick from (admins: all; employees: their own book). */
+export function useAudienceMembers(audience: MailAudience, enabled: boolean) {
+  return useQuery({
+    queryKey: mailKeys.members(audience),
+    enabled,
+    queryFn: async (): Promise<AudienceMember[]> => {
+      const { data, error } = await supabase.rpc('mail_audience_members', { p_audience: audience, p_search: '' });
+      if (error) throw error;
+      return (data ?? []) as unknown as AudienceMember[];
+    },
+  });
+}
+
 export interface CampaignDraft {
   audience: MailAudience;
+  sender: MailSender | null;
+  brief: { topic?: string; requirements?: string };
   subject: string;
   preheader: string;
   blocks: MailBlock[];
@@ -154,9 +180,11 @@ export function useSaveCampaign() {
         audience: draft.audience,
         ctaPortalEnabled: draft.cta_portal_enabled,
         ctaPortalLabel: draft.cta_portal_label,
+        sender: draft.sender,
       });
 
       const { error } = await supabase.from('mail_campaigns').update({
+        brief: draft.brief as never,
         audience: draft.audience,
         subject: draft.subject,
         preheader: draft.preheader,
@@ -259,7 +287,7 @@ export function useSendPass() {
 export function useGenerate() {
   return useMutation({
     mutationFn: async (brief: {
-      audience: MailAudience; keywords: string; purpose: string; tone: string; length: string;
+      audience: MailAudience; topic: string; requirements: string; purpose: string; tone: string; length: string;
     }): Promise<GeneratedDraft> => {
       const { data, error } = await supabase.functions.invoke('mail-campaign-generate', { body: brief });
       if (error) throw new Error(await readFunctionError(error, 'The draft could not be generated.'));

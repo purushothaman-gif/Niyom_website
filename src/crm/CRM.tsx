@@ -245,7 +245,8 @@ export default function CRM() {
       // employees get the read-only approved-content gallery (branched inside).
       case 'marketing_content': return <MarketingContent employee={employee} onNavigate={navigate} />;
       case 'marketing_funds': return <FundResearch />;
-      case 'mail_campaigns': return isAdmin ? <Mail employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
+      // Open to every employee: admins mail as the company, employees as themselves to their own book (enforced in the database).
+      case 'mail_campaigns': return <Mail employee={employee} />;
       case 'documents': return <Documents employee={employee} initialClientId={pageParams.clientId} onBack={pageParams.clientId ? () => navigate('clients') : undefined} />;
       case 'admin_documents': return isAdmin ? <AdminDocuments employee={employee} /> : <Documents employee={employee} />;
       case 'mis': return <MIS employee={employee} />;

@@ -11,7 +11,7 @@
 // single left-aligned column that reads correctly at any width because there
 // is no <meta viewport> for a media query to hang off.
 
-import { emailFooterHtml, emailFooterText, NOTICE_AUTOMATED } from '../email_footer.ts';
+import { emailFooterHtml, emailFooterText, LOGO_URL, NOTICE_AUTOMATED } from '../email_footer.ts';
 import type { MailAudience, MailBlock } from './blocks.ts';
 
 const GOLD = '#8B7355';
@@ -193,6 +193,46 @@ export function portalCta(audience: MailAudience, appUrl: string, label: string)
     : { label: label.trim() || 'Open Client Portal', url: `${base}/client-login` };
 }
 
+/**
+ * Who a campaign is from. Absent = the company (support@niyomwealth.com);
+ * present = an employee writing to their own clients or partners, who signs
+ * it and receives the replies.
+ */
+export interface MailSender {
+  name: string;
+  title: string;
+  email: string;
+}
+
+/** Normalise an employee row into the sender shape — the ONE place both the
+ *  browser (preview + hash) and the send function build it, so the hash
+ *  inputs are identical on both sides. */
+export function toMailSender(e: { full_name?: string | null; designation?: string | null; email?: string | null }): MailSender {
+  return {
+    name: String(e.full_name ?? '').trim(),
+    title: String(e.designation ?? '').trim(),
+    email: String(e.email ?? '').trim().toLowerCase(),
+  };
+}
+
+function signOffHtml(sender: MailSender | null | undefined): string {
+  const p = `font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:${BODY};`;
+  if (!sender) {
+    return `<div style="margin:22px 0 0;${p}">Warm regards,<br/><strong style="color:${INK};">Team Niyom Wealth</strong></div>`;
+  }
+  const title = sender.title ? `${escapeHtml(sender.title)}, Niyom Wealth` : 'Niyom Wealth';
+  const mail = sender.email
+    ? `<br/><a href="mailto:${escapeHtml(sender.email)}" style="color:${GOLD};text-decoration:none;">${escapeHtml(sender.email)}</a>`
+    : '';
+  return `<div style="margin:22px 0 0;${p}">Warm regards,<br/><strong style="color:${INK};">${escapeHtml(sender.name)}</strong><br/><span style="font-size:13px;color:#666;">${title}</span>${mail}</div>`;
+}
+
+function signOffText(sender: MailSender | null | undefined): string {
+  if (!sender) return 'Warm regards,\nTeam Niyom Wealth';
+  const title = sender.title ? `${sender.title}, Niyom Wealth` : 'Niyom Wealth';
+  return `Warm regards,\n${sender.name}\n${title}${sender.email ? `\n${sender.email}` : ''}`;
+}
+
 export interface RenderCampaignOptions {
   subject: string;
   preheader: string;
@@ -207,6 +247,8 @@ export interface RenderCampaignOptions {
   /** Omitted for the composer preview; always present on a real send. */
   unsubscribeUrl?: string;
   year?: number;
+  /** Employee sender; omitted for company campaigns. */
+  sender?: MailSender | null;
 }
 
 export function renderCampaign(opts: RenderCampaignOptions): { html: string; text: string } {
@@ -220,7 +262,13 @@ export function renderCampaign(opts: RenderCampaignOptions): { html: string; tex
     blocks.push({ type: 'button', label: cta.label, url: cta.url });
   }
 
-  const body = blocks.map((b) => renderBlock(b, merge)).filter(Boolean).join('\n');
+  const body = blocks.map((b) => renderBlock(b, merge)).filter(Boolean).join('\n') + signOffHtml(opts.sender);
+
+  // An employee's campaign invites replies (they go to the employee); the
+  // company one comes from a monitored-but-shared inbox and says so.
+  const notice = opts.sender
+    ? `You are receiving this as a valued ${opts.audience === 'partner' ? 'partner' : 'client'} of Niyom Wealth. Simply reply to this email to reach ${escapeHtml(opts.sender.name)}.`
+    : NOTICE_AUTOMATED;
 
   // The preheader is the grey line a client shows next to the subject. Hidden
   // in the body, then padded so the client does not pull the footer address
@@ -241,8 +289,20 @@ ${preheader}
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
              style="width:100%;max-width:600px;background:#ffffff;border-collapse:collapse;border-radius:8px;">
         <tr>
-          <td style="padding:32px 32px 0;">
-            <div style="font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:700;color:${INK};padding-bottom:12px;border-bottom:2px solid #D4AF37;">Niyom Wealth</div>
+          <td style="padding:28px 32px 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                   style="border-collapse:collapse;border-bottom:2px solid #D4AF37;">
+              <tr>
+                <td style="padding-bottom:14px;" valign="middle">
+                  <img src="${LOGO_URL}" width="56" height="56" alt="Niyom Wealth"
+                       style="display:block;border:0;outline:none;text-decoration:none;height:56px;width:56px;" />
+                </td>
+                <td style="padding-bottom:14px;padding-left:14px;" valign="middle" width="100%">
+                  <div style="font-family:Georgia,'Times New Roman',serif;font-size:21px;font-weight:700;color:${INK};letter-spacing:0.3px;">Niyom Wealth</div>
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:${GOLD};letter-spacing:1.5px;text-transform:uppercase;padding-top:2px;">Wealth Distribution</div>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
         <tr>
@@ -252,7 +312,7 @@ ${body}
         </tr>
         <tr>
           <td style="padding:0 32px 32px;">
-${emailFooterHtml({ year, notice: NOTICE_AUTOMATED, unsubscribeUrl: opts.unsubscribeUrl })}
+${emailFooterHtml({ year, notice, unsubscribeUrl: opts.unsubscribeUrl })}
           </td>
         </tr>
       </table>
@@ -263,7 +323,7 @@ ${emailFooterHtml({ year, notice: NOTICE_AUTOMATED, unsubscribeUrl: opts.unsubsc
 </html>`;
 
   const textBody = blocks.map((b) => blockText(b, merge)).filter(Boolean).join('\n\n');
-  const text = `${subject}\n\n${textBody}\n\n${emailFooterText({ year, notice: NOTICE_AUTOMATED, unsubscribeUrl: opts.unsubscribeUrl })}`;
+  const text = `${subject}\n\n${textBody}\n\n${signOffText(opts.sender)}\n\n${emailFooterText({ year, notice: notice.replace(/&#39;/g, "'").replace(/&amp;/g, '&'), unsubscribeUrl: opts.unsubscribeUrl })}`;
 
   return { html, text };
 }
@@ -280,10 +340,14 @@ ${emailFooterHtml({ year, notice: NOTICE_AUTOMATED, unsubscribeUrl: opts.unsubsc
 export async function campaignContentHash(input: {
   subject: string; preheader: string; blocks: MailBlock[];
   audience: MailAudience; ctaPortalEnabled: boolean; ctaPortalLabel: string;
+  sender?: MailSender | null;
 }): Promise<string> {
+  // The sender is appended only when there is one, so every company campaign
+  // (all campaigns before employee senders existed) keeps its original hash.
   const canonical = JSON.stringify([
     input.subject, input.preheader, input.audience,
     input.ctaPortalEnabled, input.ctaPortalLabel, input.blocks,
+    ...(input.sender ? [[input.sender.name, input.sender.title, input.sender.email]] : []),
   ]);
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');

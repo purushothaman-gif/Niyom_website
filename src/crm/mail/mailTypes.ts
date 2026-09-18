@@ -5,9 +5,9 @@
 // which every consumer would then have to narrow at each use. `blocks` is
 // declared as MailBlock[] here and narrowed once, in mailClient, by parseBlocks.
 
-import type { MailAudience, MailBlock } from '../../../shared/mail/renderEmail';
+import type { MailAudience, MailBlock, MailSender } from '../../../shared/mail/renderEmail';
 
-export type { MailAudience, MailBlock };
+export type { MailAudience, MailBlock, MailSender };
 
 export type CampaignStatus = 'draft' | 'approved' | 'sending' | 'sent' | 'cancelled' | 'failed';
 
@@ -43,6 +43,16 @@ export interface MailCampaign {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** 'company' = from support@niyomwealth.com (admin); 'employee' = from the
+   *  employee's own mailbox, to their own clients / partners only. */
+  sender_kind: 'company' | 'employee';
+  sender_employee_id: string | null;
+  /** The topic / requirements the draft was generated from. */
+  brief: { topic?: string; requirements?: string };
+  /** Joined employee row behind sender_employee_id, normalised. */
+  sender: MailSender | null;
+  /** Joined author row, for the admin list. */
+  author_name: string | null;
 }
 
 /**
@@ -62,6 +72,17 @@ export interface CampaignFilters {
   city?: string;
   /** both: has portal login enabled */
   login_enabled?: boolean;
+  /** both: hand-picked recipients (client or partner ids). Absent = everyone. */
+  ids?: string[];
+}
+
+/** One person an author can pick as a recipient. */
+export interface AudienceMember {
+  id: string;
+  full_name: string;
+  code: string | null;
+  email: string;
+  suppressed: boolean;
 }
 
 export interface AudiencePreview {
@@ -99,7 +120,7 @@ export interface GeneratedDraft {
 }
 
 export const STATUS_HELP: Record<CampaignStatus, string> = {
-  draft: 'Still being written. Send yourself a test to unlock approval.',
+  draft: 'Still being written. Send yourself a test, check it, then approve.',
   approved: 'Reviewed and ready. Nothing has been sent yet.',
   sending: 'In progress. Safe to resume if it was interrupted.',
   sent: 'Delivered to every recipient on the list.',

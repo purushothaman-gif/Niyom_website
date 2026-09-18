@@ -19,7 +19,10 @@
 
 export const EMAIL_SYSTEM_PROMPT = `You write marketing and update emails for Niyom Wealth, an AMFI-registered mutual fund distributor based in Chennai, India.
 
-The email you produce is sent to the firm's entire client list or its entire partner (DSA) list at once. It is signed by the company, never by an individual, so never write a personal sign-off, a named sender, a job title, or a phone number.
+The email you produce goes to the firm's clients or its distribution partners (DSAs) — either the whole list or a selected group. It is sent either by the company or by the recipient's own relationship manager; the email template adds the correct sign-off, sender name, logo, company footer, address and contact details automatically. So never write a sign-off, a named sender, a job title, a phone number or an address yourself.
+
+QUALITY BAR
+The email must read as if written by a senior communications professional at a premium wealth management firm: polished, courteous, confident and precise. Every sentence earns its place. Prefer clear structure — a short greeting, a crisp opening line that states why the reader is receiving this, well-organised sections with headings where the content warrants it, and a clear closing line that tells the reader what they can do next (for example, reply to this email or reach out to their relationship manager). Never pad, never repeat the subject line verbatim, never use filler such as "We hope this email finds you well".
 
 STRUCTURE
 Return a subject line, a one-line preview text, and a list of content blocks. Available block types:
@@ -88,10 +91,15 @@ export const EMAIL_DRAFT_SCHEMA = {
 
 export interface EmailBrief {
   audience: 'client' | 'partner';
-  keywords: string;
+  /** What the email is about. (Older callers send this as `keywords`.) */
+  topic: string;
+  /** Specific points, facts, dates and instructions the email must cover. */
+  requirements: string;
   purpose: string;
   tone: string;
   length: string;
+  /** Who it is from: the company, or the recipient's relationship manager. */
+  sender: 'company' | 'employee';
 }
 
 /**
@@ -100,13 +108,22 @@ export interface EmailBrief {
  */
 export function buildEmailUserMessage(brief: EmailBrief): string {
   const who = brief.audience === 'partner'
-    ? 'Every distribution partner (DSA) of the firm. They are business associates who introduce clients and earn brokerage, not investors themselves. Address them as partners, and refer to "your clients" where relevant.'
-    : 'Every client of the firm. They are individual retail investors of varied experience.';
+    ? 'Distribution partners (DSAs) of the firm. They are business associates who introduce clients and earn brokerage, not investors themselves. Address them as partners, and refer to "your clients" where relevant.'
+    : 'Clients of the firm. They are individual retail investors of varied experience.';
+  const from = brief.sender === 'employee'
+    ? 'The recipient\'s own relationship manager at Niyom Wealth, writing to people they personally look after. Write in the first person singular ("I") where natural, warm but professional.'
+    : 'Niyom Wealth, the company. Write in the first person plural ("we").';
+  const requirements = brief.requirements.trim()
+    ? brief.requirements.trim()
+    : '(none beyond the topic)';
 
   return `Write one email.
 
 AUDIENCE
 ${who}
+
+FROM
+${from}
 
 PURPOSE
 ${brief.purpose}
@@ -117,8 +134,11 @@ ${brief.tone}
 LENGTH
 ${brief.length}
 
-WHAT THE EMAIL IS ABOUT
-${brief.keywords.trim()}
+TOPIC
+${brief.topic.trim()}
+
+REQUIREMENTS — cover every one of these
+${requirements}
 
 Use only the facts above. Do not introduce products, numbers, rates or dates that are not stated here.`;
 }

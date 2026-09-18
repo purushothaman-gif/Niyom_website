@@ -4686,6 +4686,7 @@ export type Database = {
           approved_by: string | null
           audience: string
           blocks: Json
+          brief: Json
           campaign_no: string
           compliance_ack_at: string | null
           compliance_ack_by: string | null
@@ -4703,6 +4704,8 @@ export type Database = {
           recipient_count: number
           send_completed_at: string | null
           send_started_at: string | null
+          sender_employee_id: string | null
+          sender_kind: string
           sent_count: number
           status: string
           subject: string
@@ -4715,6 +4718,7 @@ export type Database = {
           approved_by?: string | null
           audience: string
           blocks?: Json
+          brief?: Json
           campaign_no?: string
           compliance_ack_at?: string | null
           compliance_ack_by?: string | null
@@ -4732,6 +4736,8 @@ export type Database = {
           recipient_count?: number
           send_completed_at?: string | null
           send_started_at?: string | null
+          sender_employee_id?: string | null
+          sender_kind?: string
           sent_count?: number
           status?: string
           subject?: string
@@ -4744,6 +4750,7 @@ export type Database = {
           approved_by?: string | null
           audience?: string
           blocks?: Json
+          brief?: Json
           campaign_no?: string
           compliance_ack_at?: string | null
           compliance_ack_by?: string | null
@@ -4761,6 +4768,8 @@ export type Database = {
           recipient_count?: number
           send_completed_at?: string | null
           send_started_at?: string | null
+          sender_employee_id?: string | null
+          sender_kind?: string
           sent_count?: number
           status?: string
           subject?: string
@@ -4786,6 +4795,13 @@ export type Database = {
           {
             foreignKeyName: "mail_campaigns_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mail_campaigns_sender_employee_id_fkey"
+            columns: ["sender_employee_id"]
             isOneToOne: false
             referencedRelation: "nw_employees"
             referencedColumns: ["id"]
@@ -10731,6 +10747,16 @@ export type Database = {
         }
         Returns: string
       }
+      mail_audience_members: {
+        Args: { p_audience: string; p_search?: string }
+        Returns: {
+          code: string
+          email: string
+          full_name: string
+          id: string
+          suppressed: boolean
+        }[]
+      }
       mail_audience_rows: {
         Args: { p_audience: string; p_filters?: Json }
         Returns: {
@@ -10743,6 +10769,8 @@ export type Database = {
         }[]
       }
       mail_begin_send: { Args: { p_campaign_id: string }; Returns: Json }
+      mail_can_author: { Args: never; Returns: boolean }
+      mail_can_manage: { Args: { p_campaign_id: string }; Returns: boolean }
       mail_claim_recipients: {
         Args: { p_campaign_id: string; p_limit?: number }
         Returns: {
@@ -10752,6 +10780,10 @@ export type Database = {
           merge: Json
           unsub_token: string
         }[]
+      }
+      mail_effective_filters: {
+        Args: { c: Database["public"]["Tables"]["mail_campaigns"]["Row"] }
+        Returns: Json
       }
       mail_finish_send: { Args: { p_campaign_id: string }; Returns: Json }
       mail_log_event: {
@@ -10797,6 +10829,7 @@ export type Database = {
           approved_by: string | null
           audience: string
           blocks: Json
+          brief: Json
           campaign_no: string
           compliance_ack_at: string | null
           compliance_ack_by: string | null
@@ -10814,6 +10847,8 @@ export type Database = {
           recipient_count: number
           send_completed_at: string | null
           send_started_at: string | null
+          sender_employee_id: string | null
+          sender_kind: string
           sent_count: number
           status: string
           subject: string
