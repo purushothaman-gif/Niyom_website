@@ -40,6 +40,7 @@ import type { PayrollResult } from '../../lib/hr/types';
 import { toEngineComponent, toEngineStructure } from './engineMappers';
 import { inr } from '../../lib/money';
 import { exportWorkbook, periodStamp } from './hrExcel';
+import IncentivePayrollBanner from '../incentive/IncentivePayrollBanner';
 
 const MONTHS = Array.from({ length: 12 }, (_, i) =>
   new Date(2000, i, 1).toLocaleDateString('en-IN', { month: 'long' }));
@@ -634,6 +635,8 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
           Loss of pay, mid-month joiners and similar. Open a row to see the detail.
         </Notice>
       )}
+
+      {editable && isAdmin && <IncentivePayrollBanner run={run} onImported={load} onToast={onToast} />}
 
       <SectionCard title="Payroll register" padded={false}>
         <div className="p-5">

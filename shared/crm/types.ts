@@ -358,6 +358,9 @@ export type CRMPage =
   // the `hr_*` pages are the administrative surfaces, each gated on its own
   // capability (see src/crm/hr/HR.tsx).
   | 'my_hr'
+  // Incentive: `my_incentive` is every employee's tracker; `incentive_admin` is admin-only.
+  | 'my_incentive'
+  | 'incentive_admin'
   | 'hr_dashboard'
   | 'hr_employees'
   | 'hr_attendance'

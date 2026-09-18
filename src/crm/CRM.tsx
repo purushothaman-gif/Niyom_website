@@ -44,6 +44,8 @@ import Mail from './mail/Mail';
  * 1,208 KB -> 1,469 KB.
  */
 const HR = lazy(() => import('./hr/HR'));
+const MyIncentive = lazy(() => import('./incentive/MyIncentive'));
+const IncentiveAdmin = lazy(() => import('./incentive/IncentiveAdmin'));
 import type { HRSection } from './hr/HR';
 
 export default function CRM() {
@@ -98,6 +100,8 @@ export default function CRM() {
     'support_tickets',
     'bond_orders',
     'my_hr',
+    'my_incentive',
+    'incentive_admin',
     'hr_dashboard',
     'hr_employees',
     'hr_attendance',
@@ -279,6 +283,19 @@ export default function CRM() {
             </div>
           }>
             <HR employee={employee} section={page as HRSection} onNavigate={navigate} />
+          </Suspense>
+        );
+      case 'my_incentive':
+      case 'incentive_admin':
+        return (
+          <Suspense fallback={
+            <div className="flex items-center justify-center py-24">
+              <LogoLoader size={40} />
+            </div>
+          }>
+            {page === 'incentive_admin' && isAdmin
+              ? <IncentiveAdmin employee={employee} />
+              : <MyIncentive employee={employee} />}
           </Suspense>
         );
       case 'settings': return <Settings employee={employee} />;

@@ -422,3 +422,50 @@ export async function computeMisRows(
       b.date.localeCompare(a.date) || a.client_name.localeCompare(b.client_name));
   return computed;
 }
+
+// ---------------------------------------------------------------------------
+// Per-employee roll-ups. Shared by the MIS team card and the Incentive tool so
+// both read the same month's revenue and the same salary — and so the same "X".
+// ---------------------------------------------------------------------------
+
+/** Revenue and earning-entry count per owning employee. */
+export function sumRevenueByEmployee(rows: MISRow[]): Map<string, { revenue: number; entries: number }> {
+  const byEmp = new Map<string, { revenue: number; entries: number }>();
+  for (const r of rows) {
+    if (!r.employee_id) continue;          // unassigned client — no one to credit
+    const cur = byEmp.get(r.employee_id) ?? { revenue: 0, entries: 0 };
+    cur.revenue += r.revenue;
+    // Pending rows sit at ₹0 on purpose; they are not an earning entry.
+    if (r.revenue !== 0) cur.entries += 1;
+    byEmp.set(r.employee_id, cur);
+  }
+  return byEmp;
+}
+
+/**
+ * Contracted monthly gross for the structure in force during the month.
+ * Effective-dated, so a mid-year revision is picked up in the month it takes
+ * effect rather than being applied backwards over the whole year. RLS decides
+ * whose rows come back (admins: everyone; an employee: their own).
+ */
+export async function loadGrossMonthlyByEmployee(
+  startDate: string, endDate: string, employeeId?: string,
+): Promise<Map<string, number>> {
+  let q = supabase
+    .from('hr_salary_structures')
+    .select('employee_id, gross_monthly, effective_from, effective_to')
+    .eq('status', 'active')
+    .lte('effective_from', endDate)
+    .or(`effective_to.is.null,effective_to.gte.${startDate}`)
+    .order('effective_from', { ascending: true });
+  if (employeeId) q = q.eq('employee_id', employeeId);
+  const { data } = await q;
+  // Ascending, so the last write per employee is the latest structure that
+  // had taken effect by the end of the month.
+  const grossByEmp = new Map<string, number>();
+  for (const r of (data ?? []) as { employee_id: string; gross_monthly: number | string }[]) {
+    const g = Number(r.gross_monthly);
+    if (Number.isFinite(g) && g > 0) grossByEmp.set(r.employee_id, g);
+  }
+  return grossByEmp;
+}
