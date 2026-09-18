@@ -106,19 +106,27 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: "Client email is missing or invalid." }, 400);
     }
 
-    // --- Resolve linked transaction — must be transferred ---------------
-    const { data: txn } = await db
+    // --- Resolve linked transactions — all must be transferred ----------
+    // Multi-product deals book one txn per line item, so this is 1..n rows.
+    const { data: txns, error: txnErr } = await db
       .from("nw_transactions")
       .select("id, transfer_stage, transferred_at, transfer_reference")
       .eq("deal_confirmation_id", dealId)
-      .maybeSingle();
+      .order("transfer_reference", { ascending: true });
+    if (txnErr) return json({ success: false, error: "Could not read deal transactions." }, 500);
 
-    if (!txn || txn.transfer_stage !== "transferred") {
+    if (!txns?.length || txns.some((t) => t.transfer_stage !== "transferred")) {
       return json(
         { success: false, error: "This deal has not been transferred yet." },
         409
       );
     }
+    const txn = {
+      id: txns[0].id,
+      transaction_ids: txns.map((t) => t.id),
+      transfer_reference: txns.map((t) => t.transfer_reference).filter(Boolean).join(", "),
+      transferred_at: txns.map((t) => t.transferred_at).filter(Boolean).sort().at(-1) ?? null,
+    };
 
     // --- Ledger summary + full active payment list ---------------------
     const [summaryRes, paymentsRes] = await Promise.all([
@@ -226,6 +234,7 @@ Deno.serve(async (req: Request) => {
         case_kind:           caseKind,
         transfer_reference:  txn.transfer_reference,
         transaction_id:      txn.id,
+        transaction_ids:     txn.transaction_ids,
         payment_count:       summary.payment_count,
         total_paid_amount:   summary.total_paid_amount,
         transferred_at:      txn.transferred_at,
@@ -252,6 +261,7 @@ Deno.serve(async (req: Request) => {
           case_kind:            caseKind,
           transfer_reference:   txn.transfer_reference,
           transaction_id:       txn.id,
+          transaction_ids:      txn.transaction_ids,
           provider_message_id:  respBody?.id ?? null,
           to:                   clientTo,
           cc,
