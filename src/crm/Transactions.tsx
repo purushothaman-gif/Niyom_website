@@ -102,6 +102,7 @@ function getNextPayouts(payoutDateStr: string, freq: string, count = 3): string[
   } catch { return []; }
   return dates.slice(0, count);
 }
+const MF_MODES: Record<string, string> = { lumpsum: 'Lumpsum', sip: 'SIP' };
 const SCHEME_TYPES: Record<string, string> = { equity: 'Equity', debt: 'Debt', hybrid: 'Hybrid', index: 'Index Fund', elss: 'ELSS (Tax Saving)', liquid: 'Liquid', others: 'Others' };
 const INS_TYPES: Record<string, string> = { term: 'Term Insurance', ulip: 'ULIP', traditional: 'Traditional Insurance', medical: 'Medical Insurance', vehicle: 'Vehicle Insurance' };
 const PREM_FREQ: Record<string, string> = { monthly: 'Monthly', quarterly: 'Quarterly', halfyearly: 'Half-Yearly', annual: 'Annual', single: 'Single Premium' };
@@ -192,6 +193,7 @@ interface TxnForm {
   isin: string; face_value: string; coupon_rate: string; interest_payout_date: string;
   payout_frequency: string; issuer_name: string;
   folio_number: string; fund_house: string; scheme_type: string; nav_date: string; purchase_nav: string;
+  mf_mode: string;
   policy_number: string; insurance_type: string; insurer_name: string;
   sum_assured: string; premium_amount: string; premium_frequency: string;
 }
@@ -203,7 +205,7 @@ const emptyForm = (): TxnForm => ({
   dsa_price: '', client_price: '',
   landing_cost: '', insurance_revenue: '', trail_percent: '', trail_start_date: '',
   isin: '', face_value: '', coupon_rate: '', interest_payout_date: '', payout_frequency: 'annual', issuer_name: '',
-  folio_number: '', fund_house: '', scheme_type: 'equity', nav_date: '', purchase_nav: '',
+  folio_number: '', fund_house: '', scheme_type: 'equity', nav_date: '', purchase_nav: '', mf_mode: 'lumpsum',
   policy_number: '', insurance_type: 'term', insurer_name: '', sum_assured: '', premium_amount: '', premium_frequency: 'annual',
 });
 
@@ -617,6 +619,8 @@ export default function Transactions({ employee, onNavigate }: Props) {
       interest_payout_date: (t as any).payout_date_pattern || '', payout_frequency: t.payout_frequency || 'annual', issuer_name: t.issuer_name || '',
       folio_number: t.folio_number || '', fund_house: t.fund_house || '', scheme_type: t.scheme_type || 'equity',
       nav_date: t.nav_date || '', purchase_nav: t.purchase_nav?.toString() || '',
+      // Rows booked before the mode existed read as lumpsum.
+      mf_mode: t.mf_mode || 'lumpsum',
       policy_number: t.policy_number || '', insurance_type: t.insurance_type || 'term', insurer_name: t.insurer_name || '',
       sum_assured: t.sum_assured?.toString() || '', premium_amount: t.premium_amount?.toString() || '', premium_frequency: t.premium_frequency || 'annual',
     });
@@ -680,6 +684,7 @@ export default function Transactions({ employee, onNavigate }: Props) {
     });
     if (isMF) Object.assign(payload, {
       folio_number: form.folio_number, fund_house: form.fund_house, scheme_type: form.scheme_type,
+      mf_mode: form.mf_mode === 'sip' ? 'sip' : 'lumpsum',
       nav_date: form.nav_date || null, purchase_nav: form.purchase_nav ? parseFloat(form.purchase_nav) : null,
     });
     if (isIns) Object.assign(payload, {
@@ -1062,6 +1067,16 @@ export default function Transactions({ employee, onNavigate }: Props) {
       {isMF && (
         <div className="grid grid-cols-2 gap-4">
           <SecHead icon={TrendingUp} label="Mutual Fund Details" color="var(--chart-4)" />
+          <Field label="Investment Mode *"><S value={form.mf_mode} onChange={v => setF('mf_mode', v)}>
+            {Object.entries(MF_MODES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </S></Field>
+          <div className="flex items-end pb-2">
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {form.mf_mode === 'sip'
+                ? 'SIP: enter the monthly instalment (units × NAV of this instalment).'
+                : 'Lumpsum: one-time investment.'}
+            </p>
+          </div>
           <Field label="Fund House / AMC"><I value={form.fund_house} onChange={e => setF('fund_house', e.target.value)} placeholder="e.g. HDFC Asset Management" /></Field>
           <Field label="Folio Number"><I value={form.folio_number} onChange={e => setF('folio_number', e.target.value)} placeholder="e.g. 1234567890" /></Field>
           <Field label="Scheme Type"><S value={form.scheme_type} onChange={v => setF('scheme_type', v)}>
@@ -1214,6 +1229,7 @@ export default function Transactions({ employee, onNavigate }: Props) {
                         {t.fund_house && <p className="text-xs text-text-primary">{t.fund_house}</p>}
                         {t.folio_number && <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{t.folio_number}</p>}
                         {t.scheme_type && <p className="text-xs" style={{ color: 'var(--chart-4)' }}>{SCHEME_TYPES[t.scheme_type] || t.scheme_type}</p>}
+                        {t.mf_mode && <p className="text-xs font-semibold" style={{ color: 'var(--chart-4)' }}>{MF_MODES[t.mf_mode] || t.mf_mode}</p>}
                       </div>}
                       {isIt && <div className="space-y-0.5">
                         {t.policy_number && <p className="text-xs font-mono" style={{ color: 'var(--chart-6)' }}>{t.policy_number}</p>}
@@ -1287,12 +1303,13 @@ export default function Transactions({ employee, onNavigate }: Props) {
                 </div>
               </div>
             )}
-            {viewTxn.product_type === 'mutual_fund' && (viewTxn.fund_house || viewTxn.folio_number) && (
+            {viewTxn.product_type === 'mutual_fund' && (viewTxn.fund_house || viewTxn.folio_number || viewTxn.mf_mode) && (
               <div className="rounded-xl p-4 space-y-3" style={{ background: 'rgba(236,72,153,0.05)', border: '1px solid rgba(236,72,153,0.2)' }}>
                 <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--chart-4)' }}>Mutual Fund Details</p>
                 <div className="grid grid-cols-2 gap-3">
                   {viewTxn.fund_house && <div><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Fund House</p><p className="text-sm text-text-primary">{viewTxn.fund_house}</p></div>}
                   {viewTxn.folio_number && <div><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Folio No.</p><p className="text-sm font-mono text-text-primary">{viewTxn.folio_number}</p></div>}
+                  {viewTxn.mf_mode && <div><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Mode</p><p className="text-sm text-text-primary">{MF_MODES[viewTxn.mf_mode] || viewTxn.mf_mode}</p></div>}
                   {viewTxn.scheme_type && <div><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Scheme</p><p className="text-sm text-text-primary">{SCHEME_TYPES[viewTxn.scheme_type] || viewTxn.scheme_type}</p></div>}
                   {viewTxn.purchase_nav != null && <div><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Purchase NAV</p><p className="text-sm text-text-primary">₹{viewTxn.purchase_nav}</p></div>}
                 </div>

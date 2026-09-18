@@ -163,7 +163,7 @@ export default function MyIncentive({ employee }: { employee: NWEmployee }) {
                 </p>
               )}
             </SectionCard>
-            <SectionCard title="Product qualification" subtitle="SIP is entered by admin; other products come from your transactions.">
+            <SectionCard title="Product qualification" subtitle="From your transactions (MF split by SIP / Lumpsum); admin can adjust any figure.">
               <ProductChecklist result={view.result} manualKeys={view.manualKeys} />
             </SectionCard>
           </div>

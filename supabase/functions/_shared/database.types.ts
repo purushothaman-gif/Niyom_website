@@ -9466,6 +9466,7 @@ export type Database = {
           isin: string | null
           issuer_name: string | null
           landing_cost: number | null
+          mf_mode: string | null
           nav_date: string | null
           notes: string | null
           payout_date_pattern: string | null
@@ -9518,6 +9519,7 @@ export type Database = {
           isin?: string | null
           issuer_name?: string | null
           landing_cost?: number | null
+          mf_mode?: string | null
           nav_date?: string | null
           notes?: string | null
           payout_date_pattern?: string | null
@@ -9570,6 +9572,7 @@ export type Database = {
           isin?: string | null
           issuer_name?: string | null
           landing_cost?: number | null
+          mf_mode?: string | null
           nav_date?: string | null
           notes?: string | null
           payout_date_pattern?: string | null
