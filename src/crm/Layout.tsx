@@ -7,7 +7,7 @@ import {
   FolderOpen, Shield, BarChart3, Wallet, Handshake, ClipboardList,
   Send, Target, Landmark, LifeBuoy, Sparkles, LineChart, BadgePercent, Gem,
   CalendarCheck, CalendarClock, CalendarDays, Coins, Receipt, Fingerprint,
-  BadgeIndianRupee, SlidersHorizontal, Mail,
+  BadgeIndianRupee, SlidersHorizontal, Mail, Trophy,
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
@@ -112,6 +112,7 @@ const NAV: NavSection[] = [
     id: 'me', label: 'My Workspace',
     items: [
       { key: 'my_hr' as CRMPage,             label: 'My HR',             icon: Fingerprint, payrollOnly: true },
+      { key: 'my_incentive' as CRMPage,      label: 'My Incentive',      icon: Trophy, hideForAdmin: true },
     ],
   },
   {
@@ -125,6 +126,7 @@ const NAV: NavSection[] = [
       { key: 'hr_salary' as CRMPage,         label: 'Salary',            icon: Coins,           hrOnly: true },
       { key: 'hr_payroll' as CRMPage,        label: 'Payroll',           icon: BadgeIndianRupee, hrOnly: true },
       { key: 'hr_payslips' as CRMPage,       label: 'Payslips',          icon: Receipt,         hrOnly: true },
+      { key: 'incentive_admin' as CRMPage,   label: 'Incentives',        icon: Trophy,          adminOnly: true },
       { key: 'hr_reports' as CRMPage,        label: 'HR Reports',        icon: BarChart3,       hrOnly: true },
       { key: 'hr_settings' as CRMPage,       label: 'HR Settings',       icon: SlidersHorizontal, hrOnly: true },
     ],

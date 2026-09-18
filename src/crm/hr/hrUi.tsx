@@ -158,6 +158,10 @@ const GENERIC_TONE: Record<string, [string, string]> = {
   office:        ['16,185,129', 'Office network'],
   off_network:   ['245,158,11', 'Off network'],
   unknown:       ['148,163,184','Unknown network'],
+  // Incentive statements.
+  in_payroll:    ['139,92,246', 'In payroll'],
+  not_saved:     ['148,163,184','Not reviewed'],
+  draft:         ['59,130,246', 'Draft'],
 };
 
 export function Pill({ value, kind = 'generic', small }: {

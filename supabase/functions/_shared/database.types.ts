@@ -3230,6 +3230,7 @@ export type Database = {
           created_by: string | null
           employee_id: string
           id: string
+          incentive_statement_id: string | null
           kind: string
           label: string
           prorate_on_lop: boolean
@@ -3244,6 +3245,7 @@ export type Database = {
           created_by?: string | null
           employee_id: string
           id?: string
+          incentive_statement_id?: string | null
           kind: string
           label: string
           prorate_on_lop?: boolean
@@ -3258,6 +3260,7 @@ export type Database = {
           created_by?: string | null
           employee_id?: string
           id?: string
+          incentive_statement_id?: string | null
           kind?: string
           label?: string
           prorate_on_lop?: boolean
@@ -3285,6 +3288,13 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hr_payroll_adjustments_incentive_statement_id_fkey"
+            columns: ["incentive_statement_id"]
+            isOneToOne: true
+            referencedRelation: "inc_monthly_statements"
             referencedColumns: ["id"]
           },
           {
@@ -4318,6 +4328,216 @@ export type Database = {
           weekly_offs?: number[]
         }
         Relationships: []
+      }
+      inc_events: {
+        Row: {
+          actor_employee_id: string | null
+          actor_name: string
+          after_value: Json
+          before_value: Json
+          created_at: string
+          employee_id: string | null
+          event: string
+          id: string
+          period_month: string | null
+          reason: string
+          statement_id: string | null
+        }
+        Insert: {
+          actor_employee_id?: string | null
+          actor_name?: string
+          after_value?: Json
+          before_value?: Json
+          created_at?: string
+          employee_id?: string | null
+          event: string
+          id?: string
+          period_month?: string | null
+          reason?: string
+          statement_id?: string | null
+        }
+        Update: {
+          actor_employee_id?: string | null
+          actor_name?: string
+          after_value?: Json
+          before_value?: Json
+          created_at?: string
+          employee_id?: string | null
+          event?: string
+          id?: string
+          period_month?: string | null
+          reason?: string
+          statement_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inc_events_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inc_events_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inc_events_statement_id_fkey"
+            columns: ["statement_id"]
+            isOneToOne: false
+            referencedRelation: "inc_monthly_statements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inc_monthly_statements: {
+        Row: {
+          amount_override: number | null
+          approved_at: string | null
+          approved_by: string | null
+          computed_amount: number
+          created_at: string
+          employee_id: string
+          final_amount: number
+          id: string
+          override_reason: string
+          payroll_adjustment_id: string | null
+          payroll_run_id: string | null
+          period_month: string
+          plan_version_id: string | null
+          result: Json
+          revenue_auto: number
+          revenue_override: number | null
+          salary: number
+          status: string
+          updated_at: string
+          updated_by: string | null
+          volumes_auto: Json
+          volumes_manual: Json
+        }
+        Insert: {
+          amount_override?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          computed_amount?: number
+          created_at?: string
+          employee_id: string
+          final_amount?: number
+          id?: string
+          override_reason?: string
+          payroll_adjustment_id?: string | null
+          payroll_run_id?: string | null
+          period_month: string
+          plan_version_id?: string | null
+          result?: Json
+          revenue_auto?: number
+          revenue_override?: number | null
+          salary?: number
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          volumes_auto?: Json
+          volumes_manual?: Json
+        }
+        Update: {
+          amount_override?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          computed_amount?: number
+          created_at?: string
+          employee_id?: string
+          final_amount?: number
+          id?: string
+          override_reason?: string
+          payroll_adjustment_id?: string | null
+          payroll_run_id?: string | null
+          period_month?: string
+          plan_version_id?: string | null
+          result?: Json
+          revenue_auto?: number
+          revenue_override?: number | null
+          salary?: number
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          volumes_auto?: Json
+          volumes_manual?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inc_monthly_statements_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inc_monthly_statements_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inc_monthly_statements_payroll_run_id_fkey"
+            columns: ["payroll_run_id"]
+            isOneToOne: false
+            referencedRelation: "hr_payroll_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inc_monthly_statements_plan_version_id_fkey"
+            columns: ["plan_version_id"]
+            isOneToOne: false
+            referencedRelation: "inc_plan_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inc_monthly_statements_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inc_plan_versions: {
+        Row: {
+          config: Json
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          id: string
+          note: string
+        }
+        Insert: {
+          config: Json
+          created_at?: string
+          created_by?: string | null
+          effective_from: string
+          id?: string
+          note: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          note?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inc_plan_versions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       incentive_slabs: {
         Row: {
@@ -10465,6 +10685,49 @@ export type Database = {
       }
       hr_today: { Args: never; Returns: string }
       hr_within_punch_window: { Args: { p_at: string }; Returns: boolean }
+      inc_approve_statements: { Args: { p_ids: string[] }; Returns: number }
+      inc_create_plan_version: {
+        Args: { p_config: Json; p_effective_from: string; p_note: string }
+        Returns: string
+      }
+      inc_log: {
+        Args: {
+          p_after: Json
+          p_before: Json
+          p_employee_id: string
+          p_event: string
+          p_period: string
+          p_reason: string
+          p_statement_id: string
+        }
+        Returns: undefined
+      }
+      inc_push_to_payroll: {
+        Args: { p_period_month: string; p_run_id: string }
+        Returns: number
+      }
+      inc_reopen_statement: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      inc_require_admin: { Args: never; Returns: undefined }
+      inc_save_statement: {
+        Args: {
+          p_amount_override: number
+          p_computed_amount: number
+          p_employee_id: string
+          p_override_reason: string
+          p_period_month: string
+          p_plan_version_id: string
+          p_result: Json
+          p_revenue_auto: number
+          p_revenue_override: number
+          p_salary: number
+          p_volumes_auto: Json
+          p_volumes_manual: Json
+        }
+        Returns: string
+      }
       mail_audience_rows: {
         Args: { p_audience: string; p_filters?: Json }
         Returns: {
