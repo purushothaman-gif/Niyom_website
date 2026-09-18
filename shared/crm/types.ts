@@ -273,6 +273,8 @@ export interface NWTransaction {
   folio_number?: string;
   fund_house?: string;
   scheme_type?: string;
+  /** Mutual funds: 'lumpsum' | 'sip'; null on rows booked before it existed. */
+  mf_mode?: string | null;
   nav_date?: string | null;
   purchase_nav?: number | null;
   // Insurance

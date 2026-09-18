@@ -10,9 +10,10 @@
  *            the same basis the team card divides by;
  *   volumes  buy-side business per product from nw_transactions, by txn_date.
  *
- * SIP is not stored anywhere in the CRM (SIPs live on the BSE side and are not
- * mirrored into Supabase), and MF buys cannot be told apart from SIP instalments,
- * so SIP is always a manual figure entered by admin.
+ * Mutual fund rows are split by nw_transactions.mf_mode: 'sip' rows (amount =
+ * the instalment) count towards SIP, everything else — including rows booked
+ * before the mode existed — towards Mutual Fund. SIPs registered only on the
+ * BSE side are not in nw_transactions, so admin can still enter SIP by hand.
  */
 import { supabase } from '../../lib/supabase';
 import type { Json } from '../../lib/database.types';
@@ -60,7 +61,7 @@ export interface MonthInputs {
 }
 
 /** Which products the CRM can fill automatically. Everything else is manual. */
-export const AUTO_PRODUCT_KEYS = new Set(['mf', 'bond_fd', 'unlisted', 'insurance']);
+export const AUTO_PRODUCT_KEYS = new Set(['mf', 'sip', 'bond_fd', 'unlisted', 'insurance']);
 
 const PAYMENTS_PER_YEAR: Record<string, number> = {
   monthly: 12, quarterly: 4, halfyearly: 2, annual: 1, single: 1,
@@ -135,7 +136,7 @@ export async function loadAutoVolumes(
   for (let i = 0; i < ids.length; i += 150) {
     const { data, error } = await supabase
       .from('nw_transactions')
-      .select('client_id, product_type, txn_type, consolidated_amount, premium_amount, premium_frequency')
+      .select('client_id, product_type, txn_type, mf_mode, consolidated_amount, premium_amount, premium_frequency')
       .in('client_id', ids.slice(i, i + 150))
       .eq('txn_type', 'buy')
       .gte('txn_date', startDate)
@@ -147,7 +148,7 @@ export async function loadAutoVolumes(
       const v = out.get(emp) ?? {};
       const add = (k: string, n: number) => { v[k] = (v[k] ?? 0) + n; };
       switch (t.product_type) {
-        case 'mutual_fund':    add('mf', toNum(t.consolidated_amount)); break;
+        case 'mutual_fund':    add(t.mf_mode === 'sip' ? 'sip' : 'mf', toNum(t.consolidated_amount)); break;
         case 'primary_bond':
         case 'secondary_bond':
         case 'fixed_deposit':  add('bond_fd', toNum(t.consolidated_amount)); break;
