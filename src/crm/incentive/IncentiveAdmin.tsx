@@ -29,11 +29,12 @@ import {
   Drawer, ConfirmDialog, PrimaryButton, GhostButton, EmptyState,
 } from '../hr/hrUi';
 import { useToast } from '../hr/useToast';
+import IncentiveCalculator, { type CalculatorPreset } from './IncentiveCalculator';
 import { hrError } from '../hr/hrError';
 import { isExcludedFromTeamCard } from '../misTeamImage';
 import { exportSheet } from '../hr/hrExcel';
 
-type Tab = 'board' | 'structure' | 'audit';
+type Tab = 'board' | 'calculator' | 'structure' | 'audit';
 
 interface Emp { id: string; full_name: string; employee_code: string; designation: string | null }
 
@@ -73,11 +74,13 @@ export default function IncentiveAdmin({ employee }: { employee: NWEmployee }) {
       </div>
       <Tabs<Tab> active={tab} onChange={setTab} tabs={[
         { key: 'board', label: 'Monthly board' },
+        { key: 'calculator', label: 'Calculator' },
         { key: 'structure', label: 'Structure' },
         { key: 'audit', label: 'Audit log' },
       ]} />
       {tab === 'board' && <Board show={toast.show} />}
       {tab === 'structure' && <StructureEditor show={toast.show} />}
+      {tab === 'calculator' && <AdminCalculator show={toast.show} />}
       {tab === 'audit' && <AuditLog />}
       {toast.node}
     </div>
@@ -673,6 +676,79 @@ function StructureEditor({ show }: { show: (m: string, ok?: boolean) => void }) 
         title={`Apply this structure from ${monthLabel(effective)}?`}
         message={`Every month from ${monthLabel(effective)} onwards that is not yet approved will be calculated on it. Approved months are not affected.`}
         confirmLabel="Save version" onConfirm={save} onCancel={() => setConfirm(false)} />
+    </div>
+  );
+}
+
+/* =========================================================== calculator */
+
+/**
+ * Admin what-if: blank, or seeded from any employee's live figures for a
+ * month, against any structure version (handy before saving a new one).
+ */
+function AdminCalculator({ show }: { show: (m: string, ok?: boolean) => void }) {
+  const today = new Date();
+  const [versions, setVersions] = useState<PlanVersion[]>([]);
+  const [versionId, setVersionId] = useState('');
+  const [emps, setEmps] = useState<Emp[]>([]);
+  const [empId, setEmpId] = useState('');
+  const [month0, setMonth0] = useState(today.getMonth());
+  const [year] = useState(today.getFullYear());
+  const [preset, setPreset] = useState<CalculatorPreset | null>(null);
+  const [loadingEmp, setLoadingEmp] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      loadPlanVersions(),
+      supabase.from('nw_employees').select('id, full_name, employee_code, designation')
+        .eq('status', 'active').neq('role', 'transfer_admin').order('full_name'),
+    ]).then(([v, { data }]) => {
+      setVersions(v);
+      setVersionId(planForMonth(v, periodKey(today.getFullYear(), today.getMonth()))?.id ?? v[0]?.id ?? '');
+      setEmps(((data ?? []) as Emp[]).filter(e => !isExcludedFromTeamCard(e)));
+    }).catch(e => show(hrError(e, 'Could not load the calculator.'), false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show]);
+
+  useEffect(() => {
+    if (!empId) { setPreset(null); return; }
+    setLoadingEmp(true);
+    loadTeamMonth(year, month0)
+      .then(team => {
+        const m = team.get(empId);
+        setPreset({ salary: m?.salary ?? 0, revenue: m?.revenue ?? 0, volumes: m?.volumesAuto ?? {} });
+      })
+      .catch(e => show(hrError(e, 'Could not load that employee.'), false))
+      .finally(() => setLoadingEmp(false));
+  }, [empId, month0, year, show]);
+
+  const plan = versions.find(v => v.id === versionId) ?? null;
+  const emp = emps.find(e => e.id === empId);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Structure version">
+          <Select value={versionId} onChange={e => setVersionId(e.target.value)}>
+            {versions.map(v => <option key={v.id} value={v.id}>From {monthLabel(v.effective_from)} — {v.note}</option>)}
+          </Select>
+        </Field>
+        <Field label="Start from employee (optional)" hint={loadingEmp ? 'Loading figures…' : 'Blank = enter everything by hand'}>
+          <Select value={empId} onChange={e => setEmpId(e.target.value)}>
+            <option value="">— Blank —</option>
+            {emps.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+          </Select>
+        </Field>
+        <Field label={`Month (${year})`}>
+          <Select value={month0} disabled={!empId} onChange={e => setMonth0(Number(e.target.value))}>
+            {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
+          </Select>
+        </Field>
+      </div>
+      {plan
+        ? <IncentiveCalculator config={plan.config} preset={preset}
+            presetLabel={emp ? `Reset to ${emp.full_name}'s ${MONTHS[month0]} figures` : undefined} />
+        : <Skeleton rows={4} />}
     </div>
   );
 }
