@@ -112,6 +112,27 @@ export async function computeMisRows(
         if (!prev || p.payment_date > prev) clearedOn.set(p.deal_confirmation_id, p.payment_date);
       }
     }
+
+    // Management-approved revenue shifts (nw_mis_revenue_shifts): recognise a
+    // settled deal in another month without editing its payments. Applied to
+    // clearedOn itself so every path below — booked txns, the by-payment
+    // fetch, un-booked paid deals — moves together and the deal still counts
+    // in exactly one month. paidOn keeps the real date for the row notes.
+    const paidOn = new Map(clearedOn);
+    const shiftedDeals = new Set<string>();
+    if (clearedOn.size) {
+      const { data: shifts } = await supabase
+        .from('nw_mis_revenue_shifts')
+        .select('deal_confirmation_id, recognise_on')
+        .in('deal_confirmation_id', [...clearedOn.keys()]);
+      for (const s of (shifts ?? []) as any[]) {
+        clearedOn.set(s.deal_confirmation_id, s.recognise_on);
+        shiftedDeals.add(s.deal_confirmation_id);
+      }
+    }
+    const shiftNote = (dealId: string) => shiftedDeals.has(dealId)
+      ? ` | Moved to ${fmtDate(clearedOn.get(dealId)!)} MIS (paid ${fmtDate(paidOn.get(dealId)!)})`
+      : '';
     const inPeriod = (d: string | null | undefined) => !!d && d >= startDate && d <= endDate;
 
     // Two fetches, merged: transactions DATED inside the period (insurance, MF
@@ -229,9 +250,9 @@ export async function computeMisRows(
             ? (landingCost - price) * qty
             : (price - landingCost) * qty;
           if (revenue !== 0) {
-            const basis = dealId
-              ? ` | Paid ${fmtDate(revenueDate)}`
-              : ' | Dated by transaction (no deal confirmation)';
+            const basis = !dealId
+              ? ' | Dated by transaction (no deal confirmation)'
+              : shiftedDeals.has(dealId) ? shiftNote(dealId) : ` | Paid ${fmtDate(revenueDate)}`;
             computed.push({
               ...rowDate,
               revenue_type: 'landing_cost',
@@ -387,7 +408,7 @@ export async function computeMisRows(
               ...baseRow,
               revenue_type: 'landing_cost',
               revenue,
-              notes: `Paid deal (not yet booked) — Price ${fmt(price)} | Landing ${fmt(landing)} | Qty ${qty}`,
+              notes: `Paid deal (not yet booked) — Price ${fmt(price)} | Landing ${fmt(landing)} | Qty ${qty}${shiftNote(d.id)}`,
             });
           }
         }
