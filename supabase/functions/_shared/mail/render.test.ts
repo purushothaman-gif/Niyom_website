@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyMerge, campaignContentHash, portalCta, renderCampaign, safeUrl } from './render.ts';
+import { applyMerge, campaignContentHash, portalCta, renderCampaign, safeUrl, toMailSender } from './render.ts';
 import { parseBlocks } from './blocks.ts';
 import type { MailBlock } from './blocks.ts';
 
@@ -212,5 +212,49 @@ describe('campaignContentHash', () => {
     expect(await campaignContentHash({ ...input, blocks: [{ type: 'paragraph', text: 'b' }] })).not.toBe(baseline);
     expect(await campaignContentHash({ ...input, ctaPortalEnabled: false })).not.toBe(baseline);
     expect(await campaignContentHash({ ...input, audience: 'partner' })).not.toBe(baseline);
+  });
+});
+
+describe('senders, sign-off and logo', () => {
+  const base = {
+    subject: 'S', preheader: '', blocks: [{ type: 'paragraph', text: 'Hi' }] as MailBlock[],
+    audience: 'client' as const, ctaPortalEnabled: false, ctaPortalLabel: '', appUrl: 'https://www.niyomwealth.com',
+  };
+  const sender = toMailSender({ full_name: ' Suriya M ', designation: 'Relationship Manager', email: 'Suriya@NiyomWealth.com' });
+
+  it('normalises an employee into a sender', () => {
+    expect(sender).toEqual({ name: 'Suriya M', title: 'Relationship Manager', email: 'suriya@niyomwealth.com' });
+  });
+
+  it('puts the logo in the header', () => {
+    expect(renderCampaign(base).html).toContain('/email/niyom-logo.png');
+  });
+
+  it('company mail signs as the team and says do not reply', () => {
+    const { html, text } = renderCampaign(base);
+    expect(html).toContain('Team Niyom Wealth');
+    expect(text).toContain('Team Niyom Wealth');
+    expect(html).toContain('Please do not reply');
+  });
+
+  it('employee mail signs with the employee and invites replies', () => {
+    const { html, text } = renderCampaign({ ...base, sender });
+    expect(html).toContain('Suriya M');
+    expect(html).toContain('Relationship Manager, Niyom Wealth');
+    expect(html).toContain('mailto:suriya@niyomwealth.com');
+    expect(html).not.toContain('Please do not reply');
+    expect(text).toContain('reply to this email to reach Suriya M');
+  });
+
+  it('escapes a sender name', () => {
+    const evil = toMailSender({ full_name: '<script>x</script>', designation: '', email: 'a@niyomwealth.com' });
+    expect(renderCampaign({ ...base, sender: evil }).html).not.toContain('<script>x');
+  });
+
+  it('company hash is unchanged by the sender feature; an employee sender changes it', async () => {
+    const h = { subject: 'S', preheader: 'P', blocks: base.blocks, audience: 'client' as const, ctaPortalEnabled: true, ctaPortalLabel: '' };
+    const company = await campaignContentHash(h);
+    expect(await campaignContentHash({ ...h, sender: null })).toBe(company);
+    expect(await campaignContentHash({ ...h, sender })).not.toBe(company);
   });
 });

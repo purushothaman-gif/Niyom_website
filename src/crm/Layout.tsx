@@ -96,7 +96,7 @@ const NAV: NavSection[] = [
       { key: 'share_pricing' as CRMPage,     label: 'Share Pricing',     icon: BadgePercent },
       { key: 'marketing_content' as CRMPage, label: 'Content Creation',  icon: Sparkles },
       { key: 'marketing_funds' as CRMPage,   label: 'Mutual Funds',     icon: LineChart },
-      { key: 'mail_campaigns' as CRMPage,    label: 'Email Campaigns',  icon: Mail, adminOnly: true },
+      { key: 'mail_campaigns' as CRMPage,    label: 'Email Campaigns',  icon: Mail },
     ],
   },
   {

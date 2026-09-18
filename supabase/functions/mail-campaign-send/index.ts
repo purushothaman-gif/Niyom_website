@@ -20,7 +20,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { parseBlocks } from "../_shared/mail/blocks.ts";
-import { campaignContentHash, renderCampaign } from "../_shared/mail/render.ts";
+import { campaignContentHash, renderCampaign, toMailSender } from "../_shared/mail/render.ts";
+import type { MailSender } from "../_shared/mail/render.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,7 +35,11 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-const FROM = "Niyom Wealth <support@niyomwealth.com>";
+const COMPANY_FROM = "Niyom Wealth <support@niyomwealth.com>";
+// Employee campaigns go out from the employee's own mailbox on the verified
+// niyomwealth.com domain. Anything else falls back to the company address
+// with a Reply-To, rather than failing or spoofing an outside domain.
+const SENDING_DOMAIN = "niyomwealth.com";
 const RESEND_BATCH_URL = "https://api.resend.com/emails/batch";
 
 // Resend's batch endpoint takes 100 per call. Stopping at 110s leaves headroom
@@ -85,8 +90,8 @@ Deno.serve(async (req: Request) => {
       .eq("auth_user_id", callerUser.id)
       .maybeSingle();
 
-    if (!caller || caller.status !== "active" || !["admin", "super_admin"].includes(caller.role)) {
-      return json({ error: "Forbidden: admin access required" }, 403);
+    if (!caller || caller.status !== "active" || !["employee", "admin", "super_admin"].includes(caller.role)) {
+      return json({ error: "Forbidden" }, 403);
     }
 
     const body = await req.json().catch(() => ({})) as { campaignId?: string; mode?: string };
@@ -101,6 +106,28 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (cErr || !campaign) return json({ error: "Unknown campaign." }, 404);
 
+    // Read with the service role, so ownership is checked explicitly: an
+    // admin, or the employee who wrote it. (Every RPC below re-checks.)
+    const { data: canManage } = await callerClient.rpc("mail_can_manage", { p_campaign_id: campaignId });
+    if (canManage !== true) return json({ error: "Forbidden" }, 403);
+
+    // Who it is from — decided by the database at creation, never the request.
+    let sender: MailSender | null = null;
+    if (campaign.sender_kind === "employee") {
+      const { data: emp } = await admin.from("nw_employees")
+        .select("full_name, designation, email").eq("id", String(campaign.sender_employee_id ?? "")).maybeSingle();
+      if (!emp) return json({ error: "The employee this campaign is from no longer exists." }, 400);
+      sender = toMailSender(emp);
+    }
+    const onDomain = !!sender && sender.email.endsWith(`@${SENDING_DOMAIN}`);
+    const displayName = (s: string) => s.replace(/["<>\r\n]/g, "").trim();
+    const FROM = sender
+      ? (onDomain
+        ? `${displayName(sender.name)} | Niyom Wealth <${sender.email}>`
+        : `${displayName(sender.name)} via Niyom Wealth <support@niyomwealth.com>`)
+      : COMPANY_FROM;
+    const replyTo = sender?.email ? [sender.email] : undefined;
+
     const blocks = parseBlocks(campaign.blocks);
     const shape = {
       subject: campaign.subject as string,
@@ -109,6 +136,7 @@ Deno.serve(async (req: Request) => {
       audience: campaign.audience as "client" | "partner",
       ctaPortalEnabled: campaign.cta_portal_enabled as boolean,
       ctaPortalLabel: campaign.cta_portal_label as string,
+      sender,
     };
 
     // Recomputed here rather than trusted from the row: the hash is the gate,
@@ -145,6 +173,7 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({
           from: FROM,
           to: [to],
+          ...(replyTo ? { reply_to: replyTo } : {}),
           subject: `[TEST] ${campaign.subject}`,
           html,
           text,
@@ -197,6 +226,7 @@ Deno.serve(async (req: Request) => {
         return {
           from: FROM,
           to: [r.email],
+          ...(replyTo ? { reply_to: replyTo } : {}),
           subject: campaign.subject as string,
           html,
           text,

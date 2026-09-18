@@ -28,7 +28,7 @@ const SITE = "https://www.niyomwealth.com";
 // Served from public/email/ — 240px logo (44KB, retina for a 120px box) and
 // 48px icons (retina for 24px). The 1000px root logo is 304KB and far too heavy
 // to put in every email.
-const LOGO_URL = `${SITE}/email/niyom-logo.png`;
+export const LOGO_URL = `${SITE}/email/niyom-logo.png`;
 const LINKEDIN_ICON = `${SITE}/email/linkedin.png`;
 const INSTAGRAM_ICON = `${SITE}/email/instagram.png`;
 

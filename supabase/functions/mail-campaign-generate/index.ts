@@ -1,4 +1,4 @@
-// Keywords in, a full email draft out.
+// Topic and requirements in, a full email draft out.
 //
 // Reuses the marketing engine's Anthropic transport wholesale — key handling,
 // error mapping, and the two request settings that were arrived at by watching
@@ -94,23 +94,30 @@ Deno.serve(async (req: Request) => {
       .from("nw_employees").select("role, status")
       .eq("auth_user_id", callerUser.id).maybeSingle();
 
-    if (!caller || caller.status !== "active" || !["admin", "super_admin"].includes(caller.role)) {
-      return json({ error: "Forbidden: admin access required" }, 403);
+    // Any active employee may draft — admins write as the company, employees
+    // as the relationship manager. The draft is only text returned to the
+    // browser; who it can reach is decided by the database at send time.
+    if (!caller || caller.status !== "active" || !["employee", "admin", "super_admin"].includes(caller.role)) {
+      return json({ error: "Forbidden" }, 403);
     }
+    const senderKind = ["admin", "super_admin"].includes(caller.role) ? "company" as const : "employee" as const;
 
     const key = resolveApiKey(Deno.env.get("ANTHROPIC_API_KEY"));
     if ("error" in key) return json({ error: key.error }, 500);
 
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-    const keywords = String(body.keywords ?? "").trim();
-    if (!keywords) return json({ error: "Give the generator a few keywords to work from." }, 400);
+    const topic = String(body.topic ?? body.keywords ?? "").trim().slice(0, 500);
+    const requirements = String(body.requirements ?? "").trim().slice(0, 4000);
+    if (!topic) return json({ error: "Tell the generator what the email is about." }, 400);
 
     const brief = {
       audience: body.audience === "partner" ? "partner" as const : "client" as const,
-      keywords,
+      topic,
+      requirements,
       purpose: String(body.purpose ?? "Announcement"),
-      tone: String(body.tone ?? "Straightforward"),
+      tone: String(body.tone ?? "Professional"),
       length: String(body.length ?? "Medium (5-7 blocks)"),
+      sender: senderKind,
     };
 
     const { draft } = await callAnthropic(
@@ -124,7 +131,7 @@ Deno.serve(async (req: Request) => {
     const preheader = String(draft.preheader ?? "").trim();
 
     if (!subject || blocks.length === 0) {
-      return json({ error: "The model returned an empty draft. Try again with more specific keywords." }, 502);
+      return json({ error: "The model returned an empty draft. Try again with a more specific topic." }, 502);
     }
 
     // The prompt instructs at length about compliance, but instructions are

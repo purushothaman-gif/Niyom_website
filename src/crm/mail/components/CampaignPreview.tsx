@@ -12,7 +12,7 @@
 
 import { useMemo } from 'react';
 import { renderCampaign } from '../../../../shared/mail/renderEmail';
-import type { MailAudience, MailBlock } from '../mailTypes';
+import type { MailAudience, MailBlock, MailSender } from '../mailTypes';
 
 interface Props {
   subject: string;
@@ -21,6 +21,7 @@ interface Props {
   audience: MailAudience;
   ctaPortalEnabled: boolean;
   ctaPortalLabel: string;
+  sender?: MailSender | null;
   height?: number;
 }
 
@@ -43,8 +44,9 @@ export default function CampaignPreview(props: Props) {
       ctaPortalLabel: props.ctaPortalLabel,
       appUrl,
       merge: SAMPLE_MERGE,
+      sender: props.sender ?? null,
     }).html;
-  }, [props.subject, props.preheader, props.blocks, props.audience, props.ctaPortalEnabled, props.ctaPortalLabel]);
+  }, [props.subject, props.preheader, props.blocks, props.audience, props.ctaPortalEnabled, props.ctaPortalLabel, props.sender]);
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>

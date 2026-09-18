@@ -14,8 +14,9 @@ export {
   portalCta,
   renderCampaign,
   safeUrl,
+  toMailSender,
 } from '../../supabase/functions/_shared/mail/render.ts';
-export type { RenderCampaignOptions } from '../../supabase/functions/_shared/mail/render.ts';
+export type { MailSender, RenderCampaignOptions } from '../../supabase/functions/_shared/mail/render.ts';
 
 export { BLOCK_TYPES, blockText, parseBlocks } from '../../supabase/functions/_shared/mail/blocks.ts';
 export type { MailAudience, MailBlock } from '../../supabase/functions/_shared/mail/blocks.ts';
