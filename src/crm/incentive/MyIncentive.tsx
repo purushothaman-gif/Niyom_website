@@ -20,6 +20,7 @@ import {
 import { BandLadder, Breakdown, GoalCards, ProductChecklist, SlabTable } from './IncentiveParts';
 import { SectionCard, StatTile, Notice, Skeleton, Pill, Select, TableWrap } from '../hr/hrUi';
 import { hrError } from '../hr/hrError';
+import IncentiveCalculator, { type CalculatorPreset } from './IncentiveCalculator';
 
 export default function MyIncentive({ employee }: { employee: NWEmployee }) {
   const today = new Date();
@@ -78,6 +79,14 @@ export default function MyIncentive({ employee }: { employee: NWEmployee }) {
       : (statement?.amount_override ?? result.final);
     return { result, goals, payable, manualKeys: new Set(Object.keys(manual)) };
   }, [plan, inputs, statement, approved]);
+
+  // The calculator starts from this month's real figures; memoised so typing
+  // in it is not reset on every render.
+  const preset = useMemo<CalculatorPreset | null>(() => view ? {
+    salary: view.result.salary,
+    revenue: view.result.revenue,
+    volumes: Object.fromEntries(view.result.minChecks.map(c => [c.key, c.actual])),
+  } : null, [view]);
 
   const years = Array.from({ length: 3 }, (_, i) => today.getFullYear() - i);
   const isCurrentMonth = year === today.getFullYear() && month0 === today.getMonth();
@@ -178,6 +187,9 @@ export default function MyIncentive({ employee }: { employee: NWEmployee }) {
                 </TableWrap>
               )}
           </SectionCard>
+
+          <IncentiveCalculator config={plan.config} preset={preset}
+            title="What-if calculator" presetLabel={`Reset to ${monthLabel(period)} actuals`} />
 
           <SectionCard title="Incentive structure" subtitle={`In force from ${monthLabel(plan.effective_from)} — ${plan.note}`}>
             <SlabTable config={plan.config} />
