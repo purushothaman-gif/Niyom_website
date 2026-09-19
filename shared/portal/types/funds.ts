@@ -19,13 +19,21 @@ export type RiskLevel =
 
 export type FundPlan = 'Growth' | 'IDCW';
 
-/** Trailing annualised returns (%). 1M/6M are absolute for the period. */
+/**
+ * Trailing annualised returns (%). 1M/6M are absolute for the period.
+ *
+ * Nullable because the BSE scheme master carries no returns of its own: the
+ * "All schemes" list is enriched from the AMFI universe by name, and a fund
+ * with no match — or one whose NAV history does not reach back over a period —
+ * has no figure there. Null renders as an em dash, never as 0.0%, which would
+ * read as a flat year the fund never actually had.
+ */
 export interface FundReturns {
-  '1M': number;
-  '6M': number;
-  '1Y': number;
-  '3Y': number;
-  '5Y': number;
+  '1M': number | null;
+  '6M': number | null;
+  '1Y': number | null;
+  '3Y': number | null;
+  '5Y': number | null;
 }
 
 /** A single scheme from the BSE scheme master. */

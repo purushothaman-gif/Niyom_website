@@ -24,9 +24,11 @@ export function FundCard({ scheme, onOpen, onInvest }: FundCardProps) {
             <p className="mt-0.5 truncate text-[11px] text-text-secondary">
               {scheme.category} · {scheme.subCategory}
             </p>
-            <div className="mt-1">
-              <RatingStars rating={scheme.rating} />
-            </div>
+            {scheme.rating > 0 && (
+              <div className="mt-1">
+                <RatingStars rating={scheme.rating} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -34,15 +36,19 @@ export function FundCard({ scheme, onOpen, onInvest }: FundCardProps) {
           <ReturnsRow returns={scheme.returns} only={['1Y', '3Y', '5Y']} size="sm" />
           <div className="text-right">
             <p className="text-[10px] uppercase tracking-wide text-text-faint">NAV</p>
-            <p className="text-sm font-bold text-text-primary">₹{scheme.nav.toFixed(2)}</p>
+            <p className="text-sm font-bold text-text-primary">
+              {scheme.nav > 0 ? `₹${scheme.nav.toFixed(2)}` : '—'}
+            </p>
           </div>
         </div>
 
         <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-3">
           <RiskBadge risk={scheme.riskLevel} />
-          <p className="text-[11px] text-text-secondary">
-            AUM <span className="font-semibold text-text-primary">{fmt(scheme.aum * 1e7)}</span>
-          </p>
+          {scheme.aum > 0 && (
+            <p className="text-[11px] text-text-secondary">
+              AUM <span className="font-semibold text-text-primary">{fmt(scheme.aum * 1e7)}</span>
+            </p>
+          )}
         </div>
       </button>
 

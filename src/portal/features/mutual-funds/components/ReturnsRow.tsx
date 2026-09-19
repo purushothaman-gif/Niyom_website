@@ -2,7 +2,8 @@ import type { FundReturns } from '../../../types/funds';
 
 const PERIODS: Array<keyof FundReturns> = ['1M', '6M', '1Y', '3Y', '5Y'];
 
-function color(v: number): string {
+function color(v: number | null): string {
+  if (v === null) return 'var(--text-faint)';
   return v >= 0 ? 'var(--success)' : 'var(--danger)';
 }
 
@@ -25,8 +26,9 @@ export function ReturnsRow({
         <div key={p}>
           <p className="text-[10px] uppercase tracking-wide text-text-faint">{p}</p>
           <p className={`font-semibold ${valueCls}`} style={{ color: color(returns[p]) }}>
-            {returns[p] >= 0 ? '+' : ''}
-            {returns[p].toFixed(1)}%
+            {returns[p] === null
+              ? '—'
+              : `${returns[p]! >= 0 ? '+' : ''}${returns[p]!.toFixed(1)}%`}
           </p>
         </div>
       ))}

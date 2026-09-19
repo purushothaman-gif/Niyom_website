@@ -87,16 +87,38 @@ function createSupabase() {
   return createClient(url, key);
 }
 
-async function getJson<T>(url: string, timeoutMs = 20000): Promise<T | null> {
+/**
+ * The outcome of one mfapi.in fetch, kept distinct so the caller can tell a
+ * scheme that genuinely has no history from one we simply failed to reach.
+ *
+ *   ok        — history in hand.
+ *   empty     — the server answered (HTTP 2xx or a definitive 404) and there is
+ *               no usable history. A durable fact: safe to stamp returns_error.
+ *   transient — timeout, network drop, rate-limit (429) or 5xx. We learned
+ *               NOTHING about the scheme; treating this as "no history" is the
+ *               bug that poisoned ~1,800 live funds. The caller must retry, not
+ *               record a verdict.
+ */
+type Fetched<T> =
+  | { status: 'ok'; data: T }
+  | { status: 'empty' }
+  | { status: 'transient' };
+
+async function fetchJson<T>(url: string, timeoutMs = 20000): Promise<Fetched<T>> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timer);
-    if (!res.ok) return null;
-    return (await res.json()) as T;
+    // 404 = mfapi has never heard of this code: a real, durable "no history".
+    // Every other non-2xx (429, 500, 502, 503…) is the server having a bad
+    // moment, so it is retryable rather than a verdict on the scheme.
+    if (res.status === 404) return { status: 'empty' };
+    if (!res.ok) return { status: 'transient' };
+    return { status: 'ok', data: (await res.json()) as T };
   } catch {
-    return null;
+    // AbortError (timeout) or a network error — we reached no conclusion.
+    return { status: 'transient' };
   }
 }
 
@@ -189,7 +211,13 @@ async function backfill(): Promise<Response> {
 
   const now = new Date().toISOString();
 
-  const updates = await pooled(codes, CONCURRENCY, async (code): Promise<Update> => {
+  /*
+   * A `null` result means "reached no conclusion — leave the row untouched so
+   * the next pass retries it". Anything else is a verdict worth persisting.
+   * This is the fix for the poisoning bug: a transient mfapi.in failure no
+   * longer masquerades as a permanent "no history".
+   */
+  const results = await pooled(codes, CONCURRENCY, async (code): Promise<Update | null> => {
     const blank: Update = {
       scheme_code: code,
       return_6m: null,
@@ -202,23 +230,30 @@ async function backfill(): Promise<Response> {
       returns_error: null,
     };
 
-    const detail = await getJson<SchemeDetail>(`https://api.mfapi.in/mf/${code}`);
+    const fetched = await fetchJson<SchemeDetail>(`https://api.mfapi.in/mf/${code}`);
+
+    // Transient failure: do not stamp anything. The row keeps its prior
+    // returns_synced_at (or stays NULL), so it remains in the queue and is
+    // retried on the next run instead of being permanently excluded.
+    if (fetched.status === 'transient') return null;
 
     /*
-     * A scheme with no history is marked and dropped from the queue.
-     *
-     * ~2,500 of the cached codes are wound-up schemes that mfapi.in still lists
-     * but AMFI no longer prices. Retrying them every cycle would spend half the
-     * budget re-learning the same nothing, so the answer is recorded. It is
-     * plain text rather than a boolean because "why" matters when the cause is
-     * actually a transient outage: clearing returns_error re-queues the lot.
+     * A scheme the server confirms has no history is marked and dropped from
+     * the queue. Some cached codes are wound-up schemes AMFI no longer prices;
+     * retrying them every cycle would spend the budget re-learning the same
+     * nothing. Plain text rather than a boolean because "why" matters — and if
+     * a wave of these ever turns out to be a mfapi outage after all, clearing
+     * returns_error re-queues the lot.
      */
-    if (!detail?.data?.length) return { ...blank, returns_error: 'no history from mfapi.in' };
+    if (fetched.status === 'empty' || !fetched.data?.data?.length) {
+      return { ...blank, returns_error: 'no history from mfapi.in' };
+    }
 
-    const m = computeAll(detail.data);
+    const detail = fetched.data;
+    const m = computeAll(detail.data!);
     if (!m) return { ...blank, returns_error: 'history present but no usable NAV' };
 
-    const oldest = detail.data[detail.data.length - 1];
+    const oldest = detail.data![detail.data!.length - 1];
 
     return {
       ...blank,
@@ -230,6 +265,9 @@ async function backfill(): Promise<Response> {
       launch_date: oldest ? isoDate(parseDate(oldest.date)) : null,
     };
   });
+
+  const updates = results.filter((u): u is Update => u !== null);
+  const skipped = results.length - updates.length;
 
   /*
    * current_nav and nav_date are deliberately NOT written here.
@@ -252,9 +290,12 @@ async function backfill(): Promise<Response> {
   const failed = updates.filter((u) => u.returns_error !== null).length;
   return json({
     success: true,
+    claimed: codes.length,
     processed: written,
     computed: written - failed,
     noHistory: failed,
+    // Transient failures left for retry — NOT recorded as "no history".
+    retryLater: skipped,
     elapsedMs: Date.now() - startedAt,
   });
 }

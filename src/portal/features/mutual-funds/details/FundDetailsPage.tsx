@@ -19,15 +19,18 @@ interface Props {
 }
 
 export function FundDetailsPage({ scheme, onBack, onInvest, gate }: Props) {
+  // BSE's scheme master leaves several of these blank/zero; show an em dash
+  // rather than "₹0" or "0.00%", which would read as real figures.
+  const dash = '—';
   const facts: Array<{ label: string; value: string }> = [
     { label: 'Category', value: `${scheme.category} · ${scheme.subCategory}` },
-    { label: 'Fund Manager', value: scheme.fundManager },
-    { label: 'Benchmark', value: scheme.benchmark },
-    { label: 'Fund Size (AUM)', value: fmt(scheme.aum * 1e7) },
-    { label: 'Expense Ratio', value: `${scheme.expenseRatio.toFixed(2)}%` },
-    { label: 'Exit Load', value: scheme.exitLoad },
-    { label: 'Min. Lumpsum', value: fmt(scheme.minLumpsum) },
-    { label: 'Min. SIP', value: fmt(scheme.minSip) },
+    { label: 'Fund Manager', value: scheme.fundManager || dash },
+    { label: 'Benchmark', value: scheme.benchmark || dash },
+    { label: 'Fund Size (AUM)', value: scheme.aum > 0 ? fmt(scheme.aum * 1e7) : dash },
+    { label: 'Expense Ratio', value: scheme.expenseRatio > 0 ? `${scheme.expenseRatio.toFixed(2)}%` : dash },
+    { label: 'Exit Load', value: scheme.exitLoad || dash },
+    { label: 'Min. Lumpsum', value: scheme.minLumpsum > 0 ? fmt(scheme.minLumpsum) : dash },
+    { label: 'Min. SIP', value: scheme.minSip > 0 ? fmt(scheme.minSip) : dash },
   ];
 
   return (
@@ -51,14 +54,18 @@ export function FundDetailsPage({ scheme, onBack, onInvest, gate }: Props) {
                 {scheme.amc} · {scheme.plans.join(' / ')} Plan
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3">
-                <RatingStars rating={scheme.rating} size={14} />
+                {scheme.rating > 0 && <RatingStars rating={scheme.rating} size={14} />}
                 <RiskBadge risk={scheme.riskLevel} />
               </div>
             </div>
           </div>
           <div className="shrink-0 sm:text-right">
-            <p className="text-[10px] uppercase tracking-wide text-text-faint">NAV · {fmtDate(scheme.navDate)}</p>
-            <p className="font-display text-2xl font-bold text-text-primary">₹{scheme.nav.toFixed(2)}</p>
+            <p className="text-[10px] uppercase tracking-wide text-text-faint">
+              NAV{scheme.nav > 0 && scheme.navDate ? ` · ${fmtDate(scheme.navDate)}` : ''}
+            </p>
+            <p className="font-display text-2xl font-bold text-text-primary">
+              {scheme.nav > 0 ? `₹${scheme.nav.toFixed(2)}` : '—'}
+            </p>
           </div>
         </div>
       </Card>

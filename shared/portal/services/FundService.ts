@@ -44,11 +44,14 @@ export const FundService = {
       return true;
     });
 
+    // Missing returns sort last, never as if they were 0% — a fund with no 1Y
+    // figure is unknown, not flat, so it must not outrank a real -3%.
+    const desc = (v: number | null) => (v === null ? -Infinity : v);
     const sorters: Record<FundFilters['sort'], (a: FundScheme, b: FundScheme) => number> = {
-      returns1Y: (a, b) => b.returns['1Y'] - a.returns['1Y'],
-      returns3Y: (a, b) => b.returns['3Y'] - a.returns['3Y'],
+      returns1Y: (a, b) => desc(b.returns['1Y']) - desc(a.returns['1Y']),
+      returns3Y: (a, b) => desc(b.returns['3Y']) - desc(a.returns['3Y']),
       aum: (a, b) => b.aum - a.aum,
-      rating: (a, b) => b.rating - a.rating || b.returns['1Y'] - a.returns['1Y'],
+      rating: (a, b) => b.rating - a.rating || desc(b.returns['1Y']) - desc(a.returns['1Y']),
       expense: (a, b) => a.expenseRatio - b.expenseRatio,
     };
 
