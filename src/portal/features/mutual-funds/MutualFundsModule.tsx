@@ -17,6 +17,7 @@ import { CollectionPage } from './explore/CollectionPage';
 import { FundComparePage } from './compare/FundComparePage';
 import { ExploreHome } from './explore/ExploreHome';
 import { collectionById } from './explore/collections';
+import { enrichSchemesWithUniverse } from './enrichSchemes';
 import { InvestFlow } from './invest/InvestFlow';
 import { MyFundsPage } from './holdings/MyFundsPage';
 import { RedeemFlow } from './redeem/RedeemFlow';
@@ -144,8 +145,20 @@ export function MutualFundsModule({
     else proceed();
   };
 
-  const mfHoldings = useMemo(() => mapMfHoldings(holdings, schemes), [holdings, schemes]);
-  const schemeOf = (code: string) => schemes.find((s) => s.schemeCode === code) ?? null;
+  // The BSE master carries no NAV/returns of its own, so fold in the AMFI
+  // universe (real prices + trailing returns) by name before anything renders
+  // the schemes. Everything downstream — All schemes, fund details, holdings
+  // NAV fallback — reads the enriched copy so one fund shows one set of numbers.
+  const enrichedSchemes = useMemo(
+    () => enrichSchemesWithUniverse(schemes, catalog.funds),
+    [schemes, catalog.funds],
+  );
+
+  const mfHoldings = useMemo(
+    () => mapMfHoldings(holdings, enrichedSchemes),
+    [holdings, enrichedSchemes],
+  );
+  const schemeOf = (code: string) => enrichedSchemes.find((s) => s.schemeCode === code) ?? null;
   const holdingOf = (id: string) => mfHoldings.find((h) => h.id === id) ?? null;
   const fundOf = (amfiCode: string) =>
     catalog.funds.find((f) => f.amfiCode === amfiCode) ?? null;
@@ -336,7 +349,7 @@ export function MutualFundsModule({
           </Card>
         ) : (
           <FundDiscoveryPage
-            schemes={schemes}
+            schemes={enrichedSchemes}
             facets={facets}
             onOpenFund={(schemeCode) => setScreen({ name: 'details', schemeCode })}
             onInvest={(schemeCode) => {
