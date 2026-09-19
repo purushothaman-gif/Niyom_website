@@ -52,6 +52,9 @@ export interface IncentiveStatement {
   payroll_run_id: string | null;
   payroll_adjustment_id: string | null;
   updated_at: string;
+  /** Multi-product mandate the statement was calculated under; null = saved
+   *  before the switch existed (structure default). */
+  product_mandate: boolean | null;
 }
 
 export interface MonthInputs {
@@ -238,6 +241,7 @@ function toStatement(r: Record<string, unknown>): IncentiveStatement {
     payroll_run_id: (r.payroll_run_id as string | null) ?? null,
     payroll_adjustment_id: (r.payroll_adjustment_id as string | null) ?? null,
     updated_at: String(r.updated_at ?? ''),
+    product_mandate: typeof r.product_mandate === 'boolean' ? r.product_mandate : null,
   };
 }
 
@@ -267,6 +271,8 @@ export interface SaveStatementInput {
   computedAmount: number;
   amountOverride: number | null;
   overrideReason: string;
+  /** The mandate the result was calculated under (frozen with the statement). */
+  productMandate: boolean;
 }
 
 export async function saveStatement(s: SaveStatementInput): Promise<string> {
@@ -283,9 +289,46 @@ export async function saveStatement(s: SaveStatementInput): Promise<string> {
     p_computed_amount: s.computedAmount,
     p_amount_override: s.amountOverride as number,
     p_override_reason: s.overrideReason,
+    p_product_mandate: s.productMandate,
   });
   if (error) throw error;
   return data as string;
+}
+
+// ---------------------------------------------------------------------------
+// Per-month switch for the multi-product mandate
+// ---------------------------------------------------------------------------
+
+export interface MonthSetting { product_mandate: boolean; reason: string; updated_at: string }
+
+/** Admin's override for a revenue month, or null when the structure default applies. */
+export async function loadMonthSetting(period: string): Promise<MonthSetting | null> {
+  const { data, error } = await supabase.from('inc_month_settings')
+    .select('product_mandate, reason, updated_at').eq('period_month', period).maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+/** Switch the mandate for a month; null clears the override (back to the structure default). */
+export async function setMonthSetting(period: string, productMandate: boolean | null, reason: string): Promise<void> {
+  const { error } = await supabase.rpc('inc_set_month_setting', {
+    p_period_month: period, p_product_mandate: productMandate as boolean, p_reason: reason,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Which mandate a statement is calculated under: an approved one keeps the
+ * value it was frozen with; anything else follows the month's switch, falling
+ * back to the structure default.
+ */
+export function mandateFor(
+  statement: Pick<IncentiveStatement, 'status' | 'product_mandate'> | null,
+  monthSetting: MonthSetting | null,
+  config: IncentiveConfig,
+): boolean {
+  if (statement?.status === 'approved') return statement.product_mandate ?? config.rules.product_mandate;
+  return monthSetting?.product_mandate ?? config.rules.product_mandate;
 }
 
 export async function approveStatements(ids: string[]): Promise<number> {

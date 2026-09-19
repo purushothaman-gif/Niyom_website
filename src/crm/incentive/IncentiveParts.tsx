@@ -127,7 +127,10 @@ export function ProductChecklist({ result, manualKeys }: { result: IncentiveResu
         </tbody>
       </table>
       <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
-        Minimum: {result.productsMet} of {result.productsRequired} required · Over-achievement: {result.oaMet} of {result.oaRequired} required
+        {result.productsRequired === 0 && result.minChecks.length > 0
+          ? 'Minimum: not required this month (multi-product requirement off)'
+          : `Minimum: ${result.productsMet} of ${result.productsRequired} required`}
+        {' · '}Over-achievement: {result.oaMet} of {result.oaRequired} required
       </p>
     </div>
   );

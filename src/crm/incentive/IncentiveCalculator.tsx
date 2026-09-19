@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Calculator, RotateCcw } from 'lucide-react';
 import {
-  computeIncentive, nextGoals, type IncentiveConfig, type ProductVolumes,
+  computeIncentive, effectiveConfig, nextGoals, type IncentiveConfig, type ProductVolumes,
 } from '../../../shared/incentive/incentiveEngine';
 import { inr, fmtX } from './incentiveData';
 import { Breakdown, GoalCards, ProductChecklist } from './IncentiveParts';
@@ -38,6 +38,10 @@ export default function IncentiveCalculator({ config, preset, presetLabel, title
     volumes: Object.fromEntries(config.products.map(pr => [pr.key, toText(p?.volumes[pr.key])])) as Record<string, string>,
   });
   const [form, setForm] = useState(() => fromPreset(preset));
+  // Try the numbers with the multi-product requirement on or off; starts at
+  // whatever the month / structure actually uses.
+  const [mandate, setMandate] = useState(config.rules.product_mandate);
+  useEffect(() => { setMandate(config.rules.product_mandate); }, [config]);
   // Re-seed when the preset arrives or changes (month switch, data load).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setForm(fromPreset(preset)); }, [preset]);
@@ -45,10 +49,10 @@ export default function IncentiveCalculator({ config, preset, presetLabel, title
   const calc = useMemo(() => {
     const volumes: ProductVolumes = {};
     for (const [k, v] of Object.entries(form.volumes)) volumes[k] = toNum(v);
-    const input = { config, salary: toNum(form.salary), revenue: toNum(form.revenue), volumes };
+    const input = { config: effectiveConfig(config, mandate), salary: toNum(form.salary), revenue: toNum(form.revenue), volumes };
     const result = computeIncentive(input);
     return { result, goals: nextGoals(input, result) };
-  }, [form, config]);
+  }, [form, config, mandate]);
 
   const { result, goals } = calc;
   const setVol = (k: string, v: string) => setForm(f => ({ ...f, volumes: { ...f.volumes, [k]: v } }));
@@ -99,6 +103,14 @@ export default function IncentiveCalculator({ config, preset, presetLabel, title
           </div>
         )}
 
+        <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+          <input type="checkbox" checked={mandate} onChange={e => setMandate(e.target.checked)} />
+          Multi-product requirement {mandate ? 'ON' : 'OFF'}
+          <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
+            {mandate === config.rules.product_mandate ? '(as this month)' : '(what-if)'}
+          </span>
+        </label>
+
         <div>
           <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>Product business in the month</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -113,7 +125,7 @@ export default function IncentiveCalculator({ config, preset, presetLabel, title
 
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           <StatTile label="Revenue multiple" value={salary > 0 ? fmtX(result.x) : '—'} tone="accent" sub={`Band ${result.band.label}`} />
-          <StatTile label="Eligible products" value={`${result.productsMet} / ${result.productsRequired}`}
+          <StatTile label="Eligible products" value={mandate ? `${result.productsMet} / ${result.productsRequired}` : 'Waived'}
             tone={result.productsMet >= result.productsRequired ? 'good' : 'warn'} />
           <StatTile label="OA products" value={`${result.oaMet} / ${result.oaRequired}`}
             tone={result.oaQualified ? 'good' : 'neutral'} />
