@@ -85,7 +85,7 @@ export function SharesListPage({
                 )}
 
                 <div className="mt-4 grid grid-cols-2 gap-3">
-                  <MiniStat label="Price / share" value={inr(s.client_price ?? 0)} />
+                  <MiniStat label="Price / share" value={inr(s.client_price ?? 0, true)} />
                   <MiniStat label="Min. quantity" value={`${min} share${min === 1 ? '' : 's'}`} />
                 </div>
 

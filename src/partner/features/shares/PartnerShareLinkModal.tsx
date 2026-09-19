@@ -85,10 +85,10 @@ export function PartnerShareLinkModal({
               <div className="rounded-token-lg bg-bg-surface p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-text-secondary">Client sees / share</span>
-                  <span className="text-sm font-bold tabular-nums text-accent">{inr(preview)}</span>
+                  <span className="text-sm font-bold tabular-nums text-accent">{inr(preview, true)}</span>
                 </div>
                 <p className="mt-1 text-[11px] text-text-faint">
-                  Your cost {inr(base)} + your margin {pct(marginNum)}. Your cost is never shown to the client.
+                  Your cost {inr(base, true)} + your margin {pct(marginNum)}. Your cost is never shown to the client.
                 </p>
               </div>
               {error && <div className="rounded-token-md border border-danger-soft/20 bg-danger-soft/10 p-3 text-xs text-danger-soft">{error}</div>}

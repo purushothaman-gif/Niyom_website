@@ -58,7 +58,7 @@ export function ShareOrderFlow({
           </p>
           <div className="mt-4 inline-flex flex-col gap-1 rounded-token-lg bg-bg-surface px-5 py-3 text-left">
             <Row label="Quantity" value={`${qty} share${qty === 1 ? '' : 's'}`} />
-            <Row label="Indicative amount" value={inr(bd.amount)} strong />
+            <Row label="Indicative amount" value={inr(bd.amount, true)} strong />
           </div>
           <button
             type="button"
@@ -95,10 +95,10 @@ export function ShareOrderFlow({
 
       <Card padding="md" className="space-y-1">
         <h3 className="mb-2 text-sm font-bold text-text-primary">Order overview</h3>
-        <Row label={`Quantity (${qty} × ${inr(bd.pricePerShare)})`} value={inr(bd.amount)} />
+        <Row label={`Quantity (${qty} × ${inr(bd.pricePerShare, true)})`} value={inr(bd.amount, true)} />
         <Row label="Stamp duty" value="Finalised at confirmation" muted />
         <div className="mt-1 rounded-token-md bg-bg-surface px-3 py-2.5">
-          <Row label="Amount payable (indicative)" value={inr(bd.amount)} strong />
+          <Row label="Amount payable (indicative)" value={inr(bd.amount, true)} strong />
         </div>
       </Card>
 
@@ -129,7 +129,7 @@ export function ShareOrderFlow({
         className="w-full rounded-token-md py-3 text-sm font-bold text-on-accent disabled:opacity-50"
         style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
       >
-        {placing ? 'Placing order…' : `Place order · ${inr(bd.amount)}`}
+        {placing ? 'Placing order…' : `Place order · ${inr(bd.amount, true)}`}
       </button>
 
       <p className="flex items-start gap-1.5 text-[11px] text-text-faint">

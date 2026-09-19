@@ -50,3 +50,22 @@ export function shareBreakdown(pricePerShare: number | null, qty: number): Share
   const price = Number(pricePerShare) || 0;
   return { qty, pricePerShare: price, amount: r2(qty * price) };
 }
+
+/**
+ * What is wrong with a typed quantity, in words — or null if the server will
+ * accept it. Shared so the client portal, the partner modal and the public offer
+ * page all say the same thing, and say it before the server has to.
+ */
+export function qtyError(share: QuantityRules, qty: number): string | null {
+  const min = minQty(share);
+  const step = stepQty(share);
+  if (!Number.isInteger(qty) || qty < min) {
+    return `Minimum is ${min} share${min === 1 ? '' : 's'}.`;
+  }
+  if ((qty - min) % step !== 0) {
+    // Offer the two nearest valid quantities rather than just refusing.
+    const below = qty - ((qty - min) % step);
+    return `Quantity must go up in steps of ${step} — try ${below} or ${below + step}.`;
+  }
+  return null;
+}

@@ -3,14 +3,15 @@
 // marked-up price; the RM finalises on the deal confirmation.
 
 import { useMemo, useState } from 'react';
-import { ArrowLeft, Minus, Plus, Gem, ShieldCheck, ArrowRight, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Gem, ShieldCheck, ArrowRight, ExternalLink } from 'lucide-react';
 import { inr } from '../../../lib/money';
 import { ShareLogo } from '../../../components/ShareLogo';
+import { QuantityInput } from '../../../components/QuantityInput';
 import { Card } from '../../components/Card';
 import { StatusPill } from '../../components/StatusPill';
 import { Figure } from '../../ui/kit';
 import type { ClientShare } from '../../../../shared/portal/services/ShareOrderService';
-import { minQty, stepQty, shareBreakdown } from '../../../../shared/portal/shares/shareMath';
+import { minQty, stepQty, shareBreakdown, qtyError } from '../../../../shared/portal/shares/shareMath';
 
 export function ShareDetailPage({
   share,
@@ -28,12 +29,13 @@ export function ShareDetailPage({
   const [qty, setQty] = useState(min);
 
   const bd = useMemo(() => shareBreakdown(share.client_price, qty), [share.client_price, qty]);
+  const qtyProblem = qtyError(share, qty);
 
   const rows: Array<[string, string]> = [
     ['ISIN', share.isin || '—'],
     ['Company', share.company_name || '—'],
     ['Sector', share.sector || '—'],
-    ['Face value', share.face_value != null ? inr(share.face_value) : '—'],
+    ['Face value', share.face_value != null ? inr(share.face_value, true) : '—'],
     ['Minimum quantity', `${min} share${min === 1 ? '' : 's'}`],
     ['Lot size', `${step} share${step === 1 ? '' : 's'}`],
   ];
@@ -63,9 +65,9 @@ export function ShareDetailPage({
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Figure label="Price / share" value={inr(share.client_price ?? 0)} />
+          <Figure label="Price / share" value={inr(share.client_price ?? 0, true)} />
           <Figure label="Min. quantity" value={`${min}`} />
-          <Figure label="Min. investment" value={inr((share.client_price ?? 0) * min)} />
+          <Figure label="Min. investment" value={inr((share.client_price ?? 0) * min, true)} />
         </div>
       </Card>
 
@@ -114,35 +116,19 @@ export function ShareDetailPage({
           <Card padding="md">
             <h3 className="text-sm font-bold text-text-primary">Select quantity</h3>
             <p className="mt-0.5 text-[11px] text-text-faint">
-              Minimum {min}, in steps of {step}.
+              Type a number or use − / +. Minimum {min}{step > 1 ? `, in steps of ${step}` : ''}.
             </p>
 
-            <div className="mt-4 flex items-center justify-between rounded-token-md border border-border bg-bg-raised px-2 py-2">
-              <button
-                type="button"
-                onClick={() => setQty((q) => Math.max(min, q - step))}
-                disabled={qty <= min}
-                className="flex h-8 w-8 items-center justify-center rounded-token-sm border border-border text-text-primary disabled:opacity-40"
-                aria-label="Decrease quantity"
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </button>
-              <span className="font-display text-lg font-bold tabular-nums text-text-primary">{qty}</span>
-              <button
-                type="button"
-                onClick={() => setQty((q) => q + step)}
-                className="flex h-8 w-8 items-center justify-center rounded-token-sm border border-border text-text-primary"
-                aria-label="Increase quantity"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
+            <div className="mt-4">
+              <QuantityInput value={qty} onChange={setQty} min={min} step={step} />
+              {qtyProblem && <p className="mt-1.5 text-[11px] text-danger-soft">{qtyProblem}</p>}
             </div>
 
             <div className="mt-4 space-y-1">
-              <Row label={`${qty} × ${inr(bd.pricePerShare)}`} value={inr(bd.amount)} />
+              <Row label={`${qty} × ${inr(bd.pricePerShare, true)}`} value={inr(bd.amount, true)} />
               <Row label="Stamp duty" value="Finalised at confirmation" muted />
               <div className="mt-1 rounded-token-md bg-bg-surface px-3 py-2.5">
-                <Row label="Indicative amount" value={inr(bd.amount)} strong />
+                <Row label="Indicative amount" value={inr(bd.amount, true)} strong />
               </div>
             </div>
 
@@ -150,7 +136,8 @@ export function ShareDetailPage({
               <button
                 type="button"
                 onClick={() => onInvest(qty)}
-                className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-token-md py-3 text-sm font-bold text-on-accent"
+                disabled={!!qtyProblem}
+                className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-token-md py-3 text-sm font-bold text-on-accent disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
               >
                 Continue <ArrowRight className="h-4 w-4" />

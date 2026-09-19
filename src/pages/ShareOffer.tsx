@@ -6,9 +6,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Gem, ShieldCheck, CheckCircle2, Loader2, Minus, Plus } from 'lucide-react';
+import { Gem, ShieldCheck, CheckCircle2, Loader2 } from 'lucide-react';
 import { inr } from '../lib/money';
 import { ShareLogo } from '../components/ShareLogo';
+import { QuantityInput } from '../components/QuantityInput';
+import { qtyError } from '../../shared/portal/shares/shareMath';
 
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -77,8 +79,9 @@ export default function ShareOffer() {
   const price = Number(share?.price_per_share) || 0;
   const amount = useMemo(() => Math.round((qty * price + Number.EPSILON) * 100) / 100, [qty, price]);
 
+  const qtyProblem = share ? qtyError(share, qty) : null;
   const canSubmit =
-    name.trim().length >= 2 && /^\d{10}$/.test(mobile.replace(/\D/g, '')) && qty >= minQty && !submitting;
+    name.trim().length >= 2 && /^\d{10}$/.test(mobile.replace(/\D/g, '')) && !qtyProblem && !submitting;
 
   const submit = async () => {
     setSubmitting(true);
@@ -158,9 +161,9 @@ export default function ShareOffer() {
               )}
             </div>
             <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Fig label="Price / share" value={inr(price)} />
+              <Fig label="Price / share" value={inr(price, true)} />
               <Fig label="Min. quantity" value={String(minQty)} />
-              <Fig label="Min. investment" value={inr(price * minQty)} />
+              <Fig label="Min. investment" value={inr(price * minQty, true)} />
             </div>
           </div>
 
@@ -177,7 +180,7 @@ export default function ShareOffer() {
                 ['ISIN', share.isin || '—'],
                 ['Company', share.company_name || '—'],
                 ['Sector', share.sector || '—'],
-                ['Face value', share.face_value != null ? inr(share.face_value) : '—'],
+                ['Face value', share.face_value != null ? inr(share.face_value, true) : '—'],
                 ['Minimum quantity', `${minQty} share${minQty === 1 ? '' : 's'}`],
                 ['Lot size', `${step} share${step === 1 ? '' : 's'}`],
               ] as Array<[string, string]>).map(([k, v]) => (
@@ -196,30 +199,18 @@ export default function ShareOffer() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-text-faint">Request to buy</p>
               <p className="mt-0.5 text-[11px] text-text-muted">
-                {inr(price)} per share · minimum {minQty}, in steps of {step}
+                {inr(price, true)} per share · minimum {minQty}{step > 1 ? `, in steps of ${step}` : ''} · type or use − / +
               </p>
             </div>
 
-            <div className="flex items-center justify-between rounded-token-lg border border-border bg-bg-surface p-2">
-              <button type="button" onClick={() => setQty((q) => Math.max(minQty, q - step))} disabled={qty <= minQty}
-                className="flex h-9 w-9 items-center justify-center rounded-token-md border border-border bg-bg-elevated text-text-primary disabled:opacity-40"
-                aria-label="Decrease quantity">
-                <Minus className="h-4 w-4" />
-              </button>
-              <div className="text-center">
-                <p className="font-display text-2xl font-bold tabular-nums text-text-primary">{qty}</p>
-                <p className="text-[10px] text-text-faint">shares</p>
-              </div>
-              <button type="button" onClick={() => setQty((q) => q + step)}
-                className="flex h-9 w-9 items-center justify-center rounded-token-md border border-border bg-bg-elevated text-text-primary"
-                aria-label="Increase quantity">
-                <Plus className="h-4 w-4" />
-              </button>
+            <div>
+              <QuantityInput value={qty} onChange={setQty} min={minQty} step={step} size="lg" unitLabel="shares" />
+              {qtyProblem && <p className="mt-1.5 text-[11px] text-danger-soft">{qtyProblem}</p>}
             </div>
 
             <div className="flex items-center justify-between rounded-token-lg bg-bg-surface px-3 py-2.5">
               <span className="text-xs text-text-secondary">Indicative amount</span>
-              <span className="text-sm font-bold tabular-nums text-text-primary">{inr(amount)}</span>
+              <span className="text-sm font-bold tabular-nums text-text-primary">{inr(amount, true)}</span>
             </div>
 
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name"

@@ -143,11 +143,11 @@ export function PartnerSharesList({
                 <div className="mt-4 grid grid-cols-2 gap-3 rounded-token-lg bg-bg-surface p-3">
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">Your cost</p>
-                    <p className="mt-0.5 text-sm font-bold tabular-nums text-text-primary">{inr(s.partner_base ?? 0)}</p>
+                    <p className="mt-0.5 text-sm font-bold tabular-nums text-text-primary">{inr(s.partner_base ?? 0, true)}</p>
                   </div>
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">Your price</p>
-                    <p className="mt-0.5 text-sm font-bold tabular-nums text-accent">{inr(s.partner_price ?? 0)}</p>
+                    <p className="mt-0.5 text-sm font-bold tabular-nums text-accent">{inr(s.partner_price ?? 0, true)}</p>
                   </div>
                 </div>
 

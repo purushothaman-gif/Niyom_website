@@ -48,12 +48,12 @@ export function MyShareOrdersPage({
                 <StatusPill tone={s.tone}>{s.label}</StatusPill>
               </div>
               <p className="mt-0.5 text-[11px] text-text-faint">
-                {o.ref} · {o.qty} share{o.qty === 1 ? '' : 's'} @ {inr(o.price_per_share)} · {dateTime(o.created_at)}
+                {o.ref} · {o.qty} share{o.qty === 1 ? '' : 's'} @ {inr(o.price_per_share, true)} · {dateTime(o.created_at)}
               </p>
             </div>
             <div className="text-right">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">Indicative</p>
-              <p className="font-display text-base font-bold tabular-nums text-text-primary">{inr(o.amount ?? 0)}</p>
+              <p className="font-display text-base font-bold tabular-nums text-text-primary">{inr(o.amount ?? 0, true)}</p>
             </div>
           </Card>
         );
