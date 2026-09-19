@@ -40,13 +40,13 @@ export function PartnerMyShareOrders({ orders, onExplore }: { orders: PartnerSha
                 <span className={`rounded-token-sm border px-1.5 py-0.5 text-[11px] font-semibold ${s.cls}`}>{s.label}</span>
               </div>
               <p className="mt-0.5 text-[11px] text-text-faint">
-                {o.ref} · {o.client?.full_name ?? '—'} · {o.qty} share{o.qty === 1 ? '' : 's'} @ {inr(o.price_per_share)}
+                {o.ref} · {o.client?.full_name ?? '—'} · {o.qty} share{o.qty === 1 ? '' : 's'} @ {inr(o.price_per_share, true)}
                 {o.partner_markup_percent != null ? ` · margin ${pct(o.partner_markup_percent)}` : ''} · {dateTime(o.created_at)}
               </p>
             </div>
             <div className="text-right">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">Indicative</p>
-              <p className="font-display text-base font-bold tabular-nums text-text-primary">{inr(o.amount ?? 0)}</p>
+              <p className="font-display text-base font-bold tabular-nums text-text-primary">{inr(o.amount ?? 0, true)}</p>
             </div>
           </div>
         );

@@ -9,7 +9,7 @@
  * is above the minimum but off the lot step.
  */
 import { describe, it, expect } from 'vitest';
-import { minQty, stepQty, isValidQty, shareBreakdown } from './shareMath';
+import { minQty, stepQty, isValidQty, shareBreakdown, qtyError } from './shareMath';
 
 describe('quantity rules', () => {
   it('defaults a missing or nonsensical rule to 1', () => {
@@ -69,5 +69,35 @@ describe('shareBreakdown', () => {
     // An unpriced share should never reach this screen, but a NaN would spread
     // into every figure on it if one did.
     expect(shareBreakdown(null, 5).amount).toBe(0);
+  });
+});
+
+describe('qtyError', () => {
+  it('is null for any quantity the server accepts', () => {
+    expect(qtyError({ min_qty: 25, lot_size: 5 }, 25)).toBeNull();
+    expect(qtyError({ min_qty: 25, lot_size: 5 }, 1000)).toBeNull();
+    // With a lot of 1 every whole number from the minimum up is fine — the
+    // common case once typing replaced the stepper.
+    expect(qtyError({ min_qty: 100, lot_size: 1 }, 137)).toBeNull();
+  });
+
+  it('names the minimum when the quantity is below it', () => {
+    expect(qtyError({ min_qty: 100, lot_size: 1 }, 99)).toBe('Minimum is 100 shares.');
+    expect(qtyError({ min_qty: 1, lot_size: 1 }, 0)).toBe('Minimum is 1 share.');
+  });
+
+  it('suggests the two nearest valid quantities when off the lot step', () => {
+    expect(qtyError({ min_qty: 25, lot_size: 5 }, 27)).toBe(
+      'Quantity must go up in steps of 5 — try 25 or 30.',
+    );
+  });
+
+  it('agrees with isValidQty on every value in a range', () => {
+    // The message and the boolean must never disagree, or the button would be
+    // enabled under an error (or disabled with no reason given).
+    const share = { min_qty: 15, lot_size: 10 };
+    for (let q = 0; q <= 60; q++) {
+      expect(qtyError(share, q) === null).toBe(isValidQty(share, q));
+    }
   });
 });

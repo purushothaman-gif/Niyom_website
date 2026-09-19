@@ -4,9 +4,10 @@
 // edge function re-derives the price and routes the order to the client's RM.
 
 import { useEffect, useMemo, useState } from 'react';
-import { X, CheckCircle2, Percent, Minus, Plus } from 'lucide-react';
+import { X, CheckCircle2, Percent } from 'lucide-react';
+import { QuantityInput } from '../../../components/QuantityInput';
 import { inr } from '../../../lib/money';
-import { minQty, stepQty } from '../../../../shared/portal/shares/shareMath';
+import { minQty, stepQty, qtyError } from '../../../../shared/portal/shares/shareMath';
 import {
   clampShareMargin, isShareMarginValid, partnerShareBreakdown, MAX_PARTNER_SHARE_MARGIN,
 } from '../../../../shared/partner/shares/partnerShareMath';
@@ -48,7 +49,8 @@ export function PartnerShareOrderModal({
   const marginNum = clampShareMargin(margin);
   const bd = useMemo(() => partnerShareBreakdown(share, qty, margin), [share, qty, margin]);
   const marginValid = isShareMarginValid(margin);
-  const canPlace = !!clientId && marginValid && qty >= min && !placing;
+  const qtyProblem = qtyError(share, qty);
+  const canPlace = !!clientId && marginValid && !qtyProblem && !placing;
 
   const place = async () => {
     setPlacing(true);
@@ -115,25 +117,17 @@ export function PartnerShareOrderModal({
               </label>
               <div>
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-faint">Quantity</span>
-                <div className="flex items-center justify-between rounded-token-md border border-border bg-bg-surface p-1">
-                  <button type="button" onClick={() => setQty((q) => Math.max(min, q - step))} disabled={qty <= min}
-                    className="flex h-8 w-8 items-center justify-center rounded-token-sm border border-border bg-bg-elevated text-text-primary disabled:opacity-40">
-                    <Minus className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="font-display text-base font-bold tabular-nums text-text-primary">{qty}</span>
-                  <button type="button" onClick={() => setQty((q) => q + step)}
-                    className="flex h-8 w-8 items-center justify-center rounded-token-sm border border-border bg-bg-elevated text-text-primary">
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                <QuantityInput value={qty} onChange={setQty} min={min} step={step} />
               </div>
             </div>
 
+            {qtyProblem && <p className="-mt-2 text-[11px] text-danger-soft">{qtyProblem}</p>}
+
             <div className="space-y-2 rounded-token-lg bg-bg-surface p-3">
-              <Row label="Price / share (incl. your margin)" value={inr(bd.pricePerShare)} />
-              <Row label="Your margin on this order" value={inr(bd.yourMargin)} />
+              <Row label="Price / share (incl. your margin)" value={inr(bd.pricePerShare, true)} />
+              <Row label="Your margin on this order" value={inr(bd.yourMargin, true)} />
               <div className="border-t border-border-subtle pt-2">
-                <Row label="Amount payable (indicative)" value={inr(bd.amount)} strong />
+                <Row label="Amount payable (indicative)" value={inr(bd.amount, true)} strong />
               </div>
             </div>
 
@@ -142,7 +136,7 @@ export function PartnerShareOrderModal({
             <button type="button" disabled={!canPlace} onClick={place}
               className="w-full rounded-token-md py-3 text-sm font-bold text-on-accent disabled:opacity-50"
               style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
-              {placing ? 'Placing order…' : `Place order · ${inr(bd.amount)}`}
+              {placing ? 'Placing order…' : `Place order · ${inr(bd.amount, true)}`}
             </button>
             <p className="text-center text-[11px] text-text-faint">
               Routed to the client's relationship manager, who confirms availability and the deal. No payment is taken now.

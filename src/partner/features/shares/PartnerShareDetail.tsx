@@ -29,7 +29,7 @@ export function PartnerShareDetail({
     ['ISIN', share.isin || '—'],
     ['Company', share.company_name || '—'],
     ['Sector', share.sector || '—'],
-    ['Face value', share.face_value != null ? inr(share.face_value) : '—'],
+    ['Face value', share.face_value != null ? inr(share.face_value, true) : '—'],
     ['Minimum quantity', `${min} share${min === 1 ? '' : 's'}`],
     ['Lot size', `${step} share${step === 1 ? '' : 's'}`],
   ];
@@ -103,15 +103,15 @@ export function PartnerShareDetail({
             <h3 className="text-sm font-bold text-text-primary">Your pricing</h3>
 
             <div className="mt-4 space-y-1">
-              <Row label="Your cost / share" value={inr(share.partner_base ?? 0)} />
+              <Row label="Your cost / share" value={inr(share.partner_base ?? 0, true)} />
               <Row label="Your markup" value={pct(markup)} />
               <div className="mt-1 rounded-token-md bg-bg-surface px-3 py-2.5">
-                <Row label="Your price / share" value={inr(share.partner_price ?? 0)} strong />
+                <Row label="Your price / share" value={inr(share.partner_price ?? 0, true)} strong />
               </div>
             </div>
 
             <p className="mt-3 text-[11px] text-text-faint">
-              Minimum {min} share{min === 1 ? '' : 's'} — about {inr((share.partner_price ?? 0) * min)} at your price.
+              Minimum {min} share{min === 1 ? '' : 's'} — about {inr((share.partner_price ?? 0) * min, true)} at your price.
             </p>
 
             <div className="mt-4 space-y-2">
