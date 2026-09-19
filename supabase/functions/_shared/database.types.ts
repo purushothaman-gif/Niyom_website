@@ -4393,6 +4393,38 @@ export type Database = {
           },
         ]
       }
+      inc_month_settings: {
+        Row: {
+          period_month: string
+          product_mandate: boolean
+          reason: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          period_month: string
+          product_mandate: boolean
+          reason?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          period_month?: string
+          product_mandate?: boolean
+          reason?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inc_month_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inc_monthly_statements: {
         Row: {
           amount_override: number | null
@@ -4408,6 +4440,7 @@ export type Database = {
           payroll_run_id: string | null
           period_month: string
           plan_version_id: string | null
+          product_mandate: boolean | null
           result: Json
           revenue_auto: number
           revenue_override: number | null
@@ -4432,6 +4465,7 @@ export type Database = {
           payroll_run_id?: string | null
           period_month: string
           plan_version_id?: string | null
+          product_mandate?: boolean | null
           result?: Json
           revenue_auto?: number
           revenue_override?: number | null
@@ -4456,6 +4490,7 @@ export type Database = {
           payroll_run_id?: string | null
           period_month?: string
           plan_version_id?: string | null
+          product_mandate?: boolean | null
           result?: Json
           revenue_auto?: number
           revenue_override?: number | null
@@ -10738,6 +10773,7 @@ export type Database = {
           p_override_reason: string
           p_period_month: string
           p_plan_version_id: string
+          p_product_mandate?: boolean
           p_result: Json
           p_revenue_auto: number
           p_revenue_override: number
@@ -10746,6 +10782,14 @@ export type Database = {
           p_volumes_manual: Json
         }
         Returns: string
+      }
+      inc_set_month_setting: {
+        Args: {
+          p_period_month: string
+          p_product_mandate: boolean
+          p_reason: string
+        }
+        Returns: undefined
       }
       mail_audience_members: {
         Args: { p_audience: string; p_search?: string }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  DEFAULT_CONFIG_V1, computeIncentive, nextGoals, parseIncentiveConfig,
+  DEFAULT_CONFIG_V1, computeIncentive, nextGoals, parseIncentiveConfig, effectiveConfig,
   mergeVolumes, payrollMonthFor, periodKey,
 } from './incentiveEngine';
 
@@ -144,5 +144,37 @@ describe('config + helpers', () => {
   it('August revenue is paid in September; December rolls the year', () => {
     expect(payrollMonthFor(periodKey(2026, 7))).toEqual({ year: 2026, month0: 8 });
     expect(payrollMonthFor('2026-12-01')).toEqual({ year: 2027, month0: 0 });
+  });
+});
+
+describe('multi-product mandate switch', () => {
+  const oneProduct = { mf: 100_000 };
+
+  it('ON (default): 6x with one product is not eligible', () => {
+    const r = computeIncentive({ config, salary: 40_000, revenue: 240_000, volumes: oneProduct });
+    expect(r.eligible).toBe(false);
+  });
+
+  it('OFF for the month: revenue alone decides; OA still needs its products', () => {
+    const off = effectiveConfig(config, false);
+    const r = computeIncentive({ config: off, salary: 40_000, revenue: 240_000, volumes: oneProduct });
+    expect(r.productsRequired).toBe(0);
+    expect(r.eligible).toBe(true);
+    expect(r.oaBonus).toBe(0);
+    expect(r.final).toBe(64_000 + 19_200);
+    expect(nextGoals({ config: off, salary: 40_000, revenue: 240_000, volumes: oneProduct }).eligibility).toBeNull();
+  });
+
+  it('OFF still requires the minimum X', () => {
+    const r = computeIncentive({ config: effectiveConfig(config, false), salary: 40_000, revenue: 60_000, volumes: {} });
+    expect(r.eligible).toBe(false);
+  });
+
+  it('null override keeps the structure setting; old versions without the key parse as ON', () => {
+    expect(effectiveConfig(config, null)).toBe(config);
+    const old = JSON.parse(JSON.stringify(config));
+    delete old.rules.product_mandate;
+    const p = parseIncentiveConfig(old);
+    expect(p.ok && p.config.rules.product_mandate).toBe(true);
   });
 });

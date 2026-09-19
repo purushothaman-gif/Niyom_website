@@ -8,18 +8,19 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  RefreshCw, Download, CheckCheck, Send, Pencil, RotateCcw, Plus, Trash2, Save, History,
+  RefreshCw, Download, CheckCheck, Send, Pencil, RotateCcw, Plus, Trash2, Save, History, Layers,
 } from 'lucide-react';
 import type { NWEmployee } from '../types';
 import { supabase } from '../../lib/supabase';
 import {
-  computeIncentive, mergeVolumes, parseIncentiveConfig, payrollMonthFor, periodKey,
+  computeIncentive, effectiveConfig, mergeVolumes, parseIncentiveConfig, payrollMonthFor, periodKey,
   DEFAULT_CONFIG_V1,
   type IncentiveConfig, type IncentiveResult, type ProductVolumes,
 } from '../../../shared/incentive/incentiveEngine';
 import {
   loadTeamMonth, loadStatementsForPeriod, loadPlanVersions, planForMonth, saveStatement,
   approveStatements, reopenStatement, pushToPayroll, findPayrollRun, loadEvents, createPlanVersion,
+  loadMonthSetting, setMonthSetting, mandateFor, type MonthSetting,
   inr, fmtX, monthLabel, MONTHS, AUTO_PRODUCT_KEYS,
   type IncentiveStatement, type MonthInputs, type PlanVersion, type IncEvent,
 } from './incentiveData';
@@ -42,6 +43,9 @@ interface BoardRow {
   emp: Emp;
   statement: IncentiveStatement | null;
   plan: PlanVersion | null;
+  /** The plan's config with this row's product mandate applied. */
+  config: IncentiveConfig | null;
+  productMandate: boolean;
   salary: number;
   revenueAuto: number;
   revenue: number;
@@ -105,6 +109,9 @@ function Board({ show }: { show: (m: string, ok?: boolean) => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<BoardRow | null>(null);
   const [confirmPush, setConfirmPush] = useState(false);
+  const [monthSetting, setMonthSettingState] = useState<MonthSetting | null>(null);
+  const [mandateDialog, setMandateDialog] = useState<null | boolean>(null);
+  const [mandateReason, setMandateReason] = useState('');
 
   const period = periodKey(year, month0);
   const pay = payrollMonthFor(period);
@@ -113,17 +120,18 @@ function Board({ show }: { show: (m: string, ok?: boolean) => void }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: empData, error: empErr }, t, s, v, r] = await Promise.all([
+      const [{ data: empData, error: empErr }, t, s, v, r, ms] = await Promise.all([
         supabase.from('nw_employees').select('id, full_name, employee_code, designation')
           .eq('status', 'active').neq('role', 'transfer_admin').order('full_name'),
         loadTeamMonth(year, month0),
         loadStatementsForPeriod(period),
         loadPlanVersions(),
         findPayrollRun(pay.year, pay.month0),
+        loadMonthSetting(period),
       ]);
       if (empErr) throw empErr;
       setEmps(((empData ?? []) as Emp[]).filter(e => !isExcludedFromTeamCard(e)));
-      setTeam(t); setStatements(s); setVersions(v); setRun(r);
+      setTeam(t); setStatements(s); setVersions(v); setRun(r); setMonthSettingState(ms);
       setSelected(new Set());
     } catch (e) {
       show(hrError(e, 'Could not load the board.'), false);
@@ -151,13 +159,37 @@ function Board({ show }: { show: (m: string, ok?: boolean) => void }) {
       const revenue = st?.revenue_override ?? revenueAuto;
       const volumesAuto = approved ? st!.volumes_auto : (live?.volumesAuto ?? {});
       const volumesManual = st?.volumes_manual ?? {};
-      const result = plan
-        ? computeIncentive({ config: plan.config, salary, revenue, volumes: mergeVolumes(volumesAuto, volumesManual) })
+      const productMandate = plan ? mandateFor(st, monthSetting, plan.config) : true;
+      const config = plan ? effectiveConfig(plan.config, productMandate) : null;
+      const result = config
+        ? computeIncentive({ config, salary, revenue, volumes: mergeVolumes(volumesAuto, volumesManual) })
         : null;
       const payable = approved ? st!.final_amount : (st?.amount_override ?? result?.final ?? 0);
-      return { emp, statement: st, plan, salary, revenueAuto, revenue, volumesAuto, volumesManual, result, payable };
+      return { emp, statement: st, plan, config, productMandate, salary, revenueAuto, revenue, volumesAuto, volumesManual, result, payable };
     });
-  }, [emps, team, statements, versions, period]);
+  }, [emps, team, statements, versions, period, monthSetting]);
+
+  const monthPlan = planForMonth(versions, period);
+  const structureDefault = monthPlan?.config.rules.product_mandate ?? true;
+  const mandateOn = monthSetting?.product_mandate ?? structureDefault;
+
+  const applyMandate = async () => {
+    if (mandateDialog === null) return;
+    if (mandateReason.trim().length < 3) { show('Give a reason.', false); return; }
+    setBusy(true);
+    try {
+      // Setting it back to the structure default clears the override rather
+      // than pinning a value that would hide a later structure change.
+      await setMonthSetting(period, mandateDialog === structureDefault ? null : mandateDialog, mandateReason.trim());
+      show(`Multi-product requirement ${mandateDialog ? 'switched ON' : 'switched OFF'} for ${monthLabel(period)}.`);
+      setMandateDialog(null); setMandateReason('');
+      await load();
+    } catch (e) {
+      show(hrError(e, 'Could not change the product requirement.'), false);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const totals = useMemo(() => ({
     revenue: rows.reduce((s, r) => s + r.revenue, 0),
@@ -169,13 +201,13 @@ function Board({ show }: { show: (m: string, ok?: boolean) => void }) {
 
   /** Save the row's CURRENT live figures as a draft (keeps manual inputs / overrides). */
   const snapshot = async (r: BoardRow, patch?: Partial<{ volumesManual: ProductVolumes; revenueOverride: number | null; amountOverride: number | null; reason: string }>) => {
-    if (!r.plan) throw new Error('No incentive structure is in force for this month.');
+    if (!r.plan || !r.config) throw new Error('No incentive structure is in force for this month.');
     const volumesManual = patch?.volumesManual ?? r.volumesManual;
     const revenueOverride = patch && 'revenueOverride' in patch ? patch.revenueOverride ?? null : r.statement?.revenue_override ?? null;
     const amountOverride = patch && 'amountOverride' in patch ? patch.amountOverride ?? null : r.statement?.amount_override ?? null;
     const reason = patch?.reason ?? r.statement?.override_reason ?? '';
     const result = computeIncentive({
-      config: r.plan.config, salary: r.salary,
+      config: r.config, salary: r.salary,
       revenue: revenueOverride ?? r.revenueAuto,
       volumes: mergeVolumes(r.volumesAuto, volumesManual),
     });
@@ -183,6 +215,7 @@ function Board({ show }: { show: (m: string, ok?: boolean) => void }) {
       employeeId: r.emp.id, period, planVersionId: r.plan.id, salary: r.salary,
       revenueAuto: r.revenueAuto, revenueOverride, volumesAuto: r.volumesAuto, volumesManual,
       result, computedAmount: result.final, amountOverride, overrideReason: reason,
+      productMandate: r.productMandate,
     });
   };
 
@@ -273,6 +306,33 @@ function Board({ show }: { show: (m: string, ok?: boolean) => void }) {
         {run ? <>The {payLabel} payroll run is <b>{run.status}</b>.</>
              : <>The {payLabel} payroll run is not open yet. Open it under HR &amp; Payroll → Payroll before sending.</>}
       </Notice>
+
+      <div className="rounded-2xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: 'var(--bg-surface)', border: `1px solid ${mandateOn ? 'var(--border)' : 'rgba(245,158,11,0.4)'}` }}>
+        <div className="flex items-start gap-3 min-w-0">
+          <Layers className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: mandateOn ? 'var(--text-muted)' : 'rgb(245,158,11)' }} />
+          <div>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Multi-product requirement for {monthLabel(period)}: {mandateOn ? 'ON' : 'OFF'}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+              {mandateOn
+                ? 'Employees must meet the minimum on enough products to be eligible.'
+                : 'Waived — eligibility rests on revenue alone. The over-achievement bonus still needs its products.'}
+              {monthSetting ? ` Set for this month${monthSetting.reason ? ` — ${monthSetting.reason}` : ''}.` : ' (structure default)'}
+              {' '}Approved rows keep the setting they were approved under.
+            </p>
+          </div>
+        </div>
+        <button type="button" role="switch" aria-checked={mandateOn} disabled={busy || !monthPlan}
+          onClick={() => { setMandateReason(''); setMandateDialog(!mandateOn); }}
+          className="relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50"
+          style={{ background: mandateOn ? 'rgb(16,185,129)' : 'var(--bg-base)', border: '1px solid var(--border)' }}
+          title={mandateOn ? 'Switch OFF for this month' : 'Switch ON for this month'}>
+          <span className="inline-block h-5 w-5 rounded-full bg-white shadow transition-transform"
+            style={{ transform: mandateOn ? 'translateX(24px)' : 'translateX(3px)' }} />
+        </button>
+      </div>
 
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <StatTile label="Team revenue" value={inr(totals.revenue)} />
@@ -379,6 +439,19 @@ function Board({ show }: { show: (m: string, ok?: boolean) => void }) {
         confirmLabel="Send to payroll"
         onConfirm={run ? doPush : () => setConfirmPush(false)}
         onCancel={() => setConfirmPush(false)} />
+
+      <ConfirmDialog open={mandateDialog !== null} tone="accent" busy={busy}
+        title={`Switch the multi-product requirement ${mandateDialog ? 'ON' : 'OFF'} for ${monthLabel(period)}?`}
+        message={mandateDialog
+          ? 'Employees will again need the minimum on enough products to be eligible. Draft figures recalculate; approved rows are not changed.'
+          : 'Eligibility will rest on revenue alone for this month. Draft figures recalculate; approved rows are not changed — reopen them to apply it.'}
+        confirmLabel={mandateDialog ? 'Switch ON' : 'Switch OFF'}
+        onConfirm={applyMandate} onCancel={() => setMandateDialog(null)}>
+        <Field label="Reason" required>
+          <Input value={mandateReason} onChange={e => setMandateReason(e.target.value)}
+            placeholder="e.g. Festive month — revenue-only incentive" />
+        </Field>
+      </ConfirmDialog>
     </div>
   );
 }
@@ -405,8 +478,8 @@ function EditDrawer({ row, period, onClose, onSave, onReopen, show }: {
   const volumesManual: ProductVolumes = {};
   for (const [k, v] of Object.entries(manual)) { const n = numOrNull(v); if (n != null) volumesManual[k] = n; }
   const revenue = numOrNull(revOverride) ?? row.revenueAuto;
-  const preview = row.plan
-    ? computeIncentive({ config: row.plan.config, salary: row.salary, revenue, volumes: mergeVolumes(row.volumesAuto, volumesManual) })
+  const preview = row.config
+    ? computeIncentive({ config: row.config, salary: row.salary, revenue, volumes: mergeVolumes(row.volumesAuto, volumesManual) })
     : null;
   const needsReason = numOrNull(revOverride) != null || numOrNull(amtOverride) != null;
 
@@ -606,6 +679,16 @@ function StructureEditor({ show }: { show: (m: string, ok?: boolean) => void }) 
       </SectionCard>
 
       <SectionCard title="Rules">
+        <label className="flex items-start gap-2.5 mb-4 cursor-pointer">
+          <input type="checkbox" className="mt-0.5" checked={draft.rules.product_mandate}
+            onChange={e => setDraft(d => d && ({ ...d, rules: { ...d.rules, product_mandate: e.target.checked } }))} />
+          <span>
+            <span className="block text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Multi-product requirement ON by default</span>
+            <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>
+              When off, eligibility rests on revenue alone. You can also switch it for a single month on the Monthly board.
+            </span>
+          </span>
+        </label>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Minimum X for any incentive">{numCell(draft.rules.min_x, s => setRule('min_x', Number(s)), 120)}</Field>
           <Field label="Product rule switches at X">{numCell(draft.rules.product_switch_x, s => setRule('product_switch_x', Number(s)), 120)}</Field>
@@ -762,6 +845,7 @@ const EVENT_LABEL: Record<string, string> = {
   reopened: 'Reopened',
   pushed_to_payroll: 'Sent to payroll',
   removed_from_payroll: 'Removed from payroll',
+  month_setting_changed: 'Product requirement switched',
 };
 
 function AuditLog() {
@@ -782,6 +866,11 @@ function AuditLog() {
     const a = (e.after_value ?? {}) as Record<string, unknown>;
     if (typeof a.final_amount === 'number' || typeof a.final_amount === 'string') return `Payable ${inr(Number(a.final_amount))}`;
     if (a.amount != null) return `${inr(Number(a.amount))}`;
+    if (e.event === 'month_setting_changed') {
+      return a.product_mandate === null || a.product_mandate === undefined
+        ? 'Back to structure default'
+        : `Multi-product requirement ${a.product_mandate ? 'ON' : 'OFF'}`;
+    }
     return '';
   };
   return (

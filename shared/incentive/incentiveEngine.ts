@@ -13,7 +13,9 @@
  *   band     = the highest band whose lower_x ≤ X      (Excel MATCH(...,1))
  *   eligible = X ≥ min_x  AND  enough products meet their MINIMUM threshold
  *              (products_required_below_switch when X < switch_x, else
- *               products_required_at_or_above_switch)
+ *               products_required_at_or_above_switch) — unless the
+ *              multi-product mandate is switched OFF (rules.product_mandate,
+ *              overridable per month), when revenue alone decides
  *   base     = salary  × band.base_mult                 (4.5 = 450% of salary)
  *   add-on   = revenue × band.addon_pct, only when X > addon_min_x (strictly)
  *   OA bonus = revenue × band.oa_pct,    only when ≥ oa_products_required
@@ -56,6 +58,14 @@ export interface IncentiveProduct {
 }
 
 export interface IncentiveRules {
+  /**
+   * The multi-product mandate. When false, the minimum-product requirement is
+   * waived and eligibility rests on revenue (min_x) alone. Admin can also
+   * switch it per month (inc_month_settings), which wins over this default.
+   * The OA bonus still needs its OA products either way — it is a bonus for
+   * breadth, not a gate.
+   */
+  product_mandate: boolean;
   /** No incentive at all below this X. */
   min_x: number;
   /** Below this X the stricter product count applies. */
@@ -103,6 +113,7 @@ export const DEFAULT_CONFIG_V1: IncentiveConfig = {
     { key: 'insurance', label: 'Insurance',          unit: '₹ annual premium',  min_threshold: 25000,  oa_threshold: 150000 },
   ],
   rules: {
+    product_mandate: true,
     min_x: 2,
     product_switch_x: 10,
     products_required_below_switch: 3,
@@ -178,6 +189,8 @@ export function parseIncentiveConfig(raw: unknown): ConfigParse {
 
   const rr = (o.rules ?? {}) as Record<string, unknown>;
   const rules: IncentiveRules = {
+    // Versions saved before the switch existed have no key: that means ON.
+    product_mandate: rr.product_mandate !== false,
     min_x: num(rr.min_x),
     product_switch_x: num(rr.product_switch_x),
     products_required_below_switch: Math.trunc(num(rr.products_required_below_switch)),
@@ -278,9 +291,10 @@ export function computeIncentive({ config, salary, revenue, volumes }: Incentive
   const oaChecks = checks(config, volumes, 'oa_threshold');
   const productsMet = minChecks.filter(c => c.met).length;
   const oaMet = oaChecks.filter(c => c.met).length;
-  const productsRequired = x < rules.product_switch_x
-    ? rules.products_required_below_switch
-    : rules.products_required_at_or_above_switch;
+  const productsRequired = !rules.product_mandate ? 0
+    : x < rules.product_switch_x
+      ? rules.products_required_below_switch
+      : rules.products_required_at_or_above_switch;
 
   const ineligibleReasons: string[] = [];
   if (!hasSalary) ineligibleReasons.push('No active salary structure for this month');
@@ -382,6 +396,16 @@ export function nextGoals(input: IncentiveInput, current?: IncentiveResult): Inc
 // ---------------------------------------------------------------------------
 // Small helpers shared by the screens
 // ---------------------------------------------------------------------------
+
+/**
+ * The config a month is actually calculated with: the structure version, with
+ * the multi-product mandate overridden when admin has switched it for that
+ * month (null = no override, use the structure's own setting).
+ */
+export function effectiveConfig(config: IncentiveConfig, productMandate: boolean | null | undefined): IncentiveConfig {
+  if (productMandate === null || productMandate === undefined || productMandate === config.rules.product_mandate) return config;
+  return { ...config, rules: { ...config.rules, product_mandate: productMandate } };
+}
 
 /** Manual figures win over auto figures, per product. Blank manual = use auto. */
 export function mergeVolumes(auto: ProductVolumes, manual: Partial<ProductVolumes> | null | undefined): ProductVolumes {

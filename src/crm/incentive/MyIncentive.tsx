@@ -10,12 +10,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Award, Wallet, TrendingUp, Gauge, RefreshCw } from 'lucide-react';
 import type { NWEmployee } from '../types';
 import {
-  computeIncentive, nextGoals, mergeVolumes, payrollMonthFor, periodKey,
+  computeIncentive, effectiveConfig, nextGoals, mergeVolumes, payrollMonthFor, periodKey,
   type IncentiveResult,
 } from '../../../shared/incentive/incentiveEngine';
 import {
   loadMyMonth, loadMyStatements, loadPlanVersions, planForMonth, inr, fmtX, monthLabel, MONTHS,
-  type IncentiveStatement, type MonthInputs, type PlanVersion,
+  loadMonthSetting, mandateFor,
+  type IncentiveStatement, type MonthInputs, type MonthSetting, type PlanVersion,
 } from './incentiveData';
 import { BandLadder, Breakdown, GoalCards, ProductChecklist, SlabTable } from './IncentiveParts';
 import { SectionCard, StatTile, Notice, Skeleton, Pill, Select, TableWrap } from '../hr/hrUi';
@@ -29,6 +30,7 @@ export default function MyIncentive({ employee }: { employee: NWEmployee }) {
   const [versions, setVersions] = useState<PlanVersion[]>([]);
   const [statements, setStatements] = useState<IncentiveStatement[]>([]);
   const [inputs, setInputs] = useState<MonthInputs | null>(null);
+  const [monthSetting, setMonthSetting] = useState<MonthSetting | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,10 +40,11 @@ export default function MyIncentive({ employee }: { employee: NWEmployee }) {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const [v, s, m] = await Promise.all([
+      const [v, s, m, ms] = await Promise.all([
         loadPlanVersions(), loadMyStatements(employee.id), loadMyMonth(employee.id, year, month0),
+        loadMonthSetting(periodKey(year, month0)),
       ]);
-      setVersions(v); setStatements(s); setInputs(m);
+      setVersions(v); setStatements(s); setInputs(m); setMonthSetting(ms);
     } catch (e) {
       setError(hrError(e, 'Could not load your incentive.'));
     } finally {
@@ -72,13 +75,15 @@ export default function MyIncentive({ employee }: { employee: NWEmployee }) {
     const volumes = approved
       ? mergeVolumes(statement!.volumes_auto, manual)
       : mergeVolumes(inputs.volumesAuto, manual);
-    const engineInput = { config: plan.config, salary, revenue, volumes };
+    const productMandate = mandateFor(statement, monthSetting, plan.config);
+    const config = effectiveConfig(plan.config, productMandate);
+    const engineInput = { config, salary, revenue, volumes };
     const result: IncentiveResult = computeIncentive(engineInput);
     const goals = nextGoals(engineInput, result);
     const payable = approved ? statement!.final_amount
       : (statement?.amount_override ?? result.final);
-    return { result, goals, payable, manualKeys: new Set(Object.keys(manual)) };
-  }, [plan, inputs, statement, approved]);
+    return { result, goals, payable, config, productMandate, manualKeys: new Set(Object.keys(manual)) };
+  }, [plan, inputs, statement, approved, monthSetting]);
 
   // The calculator starts from this month's real figures; memoised so typing
   // in it is not reset on every render.
@@ -125,6 +130,12 @@ export default function MyIncentive({ employee }: { employee: NWEmployee }) {
               Your salary structure for {monthLabel(period)} is not visible here, so the revenue multiple cannot be worked out. Please contact HR.
             </Notice>
           )}
+          {!view.productMandate && (
+            <Notice tone="good" title="Multi-product requirement waived">
+              For {monthLabel(period)} your incentive depends on revenue alone — you do not need the product minimums to be eligible.
+              The over-achievement bonus still needs its products.
+            </Notice>
+          )}
           <Notice tone={approved ? 'good' : 'info'}>
             {approved
               ? <>Approved{statement?.payroll_adjustment_id ? ' and added to payroll' : ''}. This is the amount that will be paid.</>
@@ -136,8 +147,10 @@ export default function MyIncentive({ employee }: { employee: NWEmployee }) {
               sub={statement?.revenue_override != null ? 'Adjusted by admin' : 'From MIS'} />
             <StatTile label="Revenue multiple" value={fmtX(view.result.x)} icon={Gauge} tone="accent"
               sub={`Band ${view.result.band.label}`} />
-            <StatTile label="Eligible products" value={`${view.result.productsMet} / ${view.result.productsRequired}`} icon={Award}
-              tone={view.result.productsMet >= view.result.productsRequired ? 'good' : 'warn'} sub="at minimum threshold" />
+            <StatTile label="Eligible products" icon={Award}
+              value={view.productMandate ? `${view.result.productsMet} / ${view.result.productsRequired}` : 'Waived'}
+              tone={view.result.productsMet >= view.result.productsRequired ? 'good' : 'warn'}
+              sub={view.productMandate ? 'at minimum threshold' : 'not required this month'} />
             <StatTile label={approved ? 'Approved incentive' : 'Eligible incentive'} value={inr(view.payable)} icon={Wallet}
               tone={view.payable > 0 ? 'good' : 'neutral'}
               sub={statement?.amount_override != null ? 'Set by admin' : view.result.eligible ? 'Provisional' : 'Not eligible yet'} />
@@ -188,7 +201,7 @@ export default function MyIncentive({ employee }: { employee: NWEmployee }) {
               )}
           </SectionCard>
 
-          <IncentiveCalculator config={plan.config} preset={preset}
+          <IncentiveCalculator config={view.config} preset={preset}
             title="What-if calculator" presetLabel={`Reset to ${monthLabel(period)} actuals`} />
 
           <SectionCard title="Incentive structure" subtitle={`In force from ${monthLabel(plan.effective_from)} — ${plan.note}`}>
