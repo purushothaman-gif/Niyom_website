@@ -11819,6 +11819,10 @@ export type Database = {
         Args: { p_existing_lead_id: string; p_payload?: Json }
         Returns: undefined
       }
+      nw_reverse_transfer: {
+        Args: { p_deal_id: string; p_reason: string }
+        Returns: Json
+      }
       nw_revoke_auth_sessions: { Args: { p_user_id: string }; Returns: number }
       nw_set_asset_class: {
         Args: { p_asset_class: string; p_isin: string; p_note?: string }

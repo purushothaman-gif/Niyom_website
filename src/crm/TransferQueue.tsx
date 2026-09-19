@@ -3,10 +3,11 @@ import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { edgeFunctionErrorMessage } from '../lib/edgeFunctionError';
 import { NWEmployee } from './types';
+import TransferHistory, { ReverseTransferDialog } from './TransferReversal';
 import {
   Send, Search, ChevronLeft, ChevronRight,
   CheckCircle2, AlertCircle, Loader2, X,
-  ShieldCheck, Info, RefreshCw,
+  ShieldCheck, Info, RefreshCw, Undo2,
 } from 'lucide-react';
 
 // ===========================================================================
@@ -193,6 +194,12 @@ export default function TransferQueue({ employee }: Props) {
   // deals; transfer-deal + nw_transfer_deal accept it). Same screen as admins.
   const canTransfer = employee.role === 'admin' || employee.role === 'super_admin'
     || employee.role === 'transfer_admin';
+  // Undoing a transfer is admin-only (nw_reverse_transfer enforces it too);
+  // the Transfer-Queue-only login can approve but not reverse.
+  const canReverse = employee.role === 'admin' || employee.role === 'super_admin';
+  const [tab, setTab] = useState<'queue' | 'transferred'>('queue');
+  const [reverseOpen, setReverseOpen] = useState(false);
+  const [reversedMsg, setReversedMsg] = useState('');
 
   const [view, setView] = useState<'list' | 'preview' | 'success'>('list');
   const [loading, setLoading] = useState(true);
@@ -519,6 +526,13 @@ export default function TransferQueue({ employee }: Props) {
             >
               ← Back to Transfer Queue
             </button>
+            {canReverse && (
+              <button onClick={() => setReverseOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: 'rgba(239,68,68,0.08)', color: 'rgb(239,68,68)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                <Undo2 className="w-4 h-4" /> Reverse this transfer
+              </button>
+            )}
             {successResult.email_status !== 'sent' && (
               <button
                 onClick={resendClosureEmail}
@@ -538,6 +552,21 @@ export default function TransferQueue({ employee }: Props) {
             )}
           </div>
         </div>
+        {reverseOpen && (
+          <ReverseTransferDialog
+            dealId={successResult.deal.deal_id}
+            dealLabel={successResult.deal.confirmation_number}
+            clientName={successResult.deal.snap_client_name}
+            references={[successResult.transfer_reference]}
+            onCancel={() => setReverseOpen(false)}
+            onDone={(refs) => {
+              setReverseOpen(false);
+              setReversedMsg(`Reversed ${refs.join(', ')}. ${successResult.deal.confirmation_number} is back in the queue.`);
+              setSuccessResult(null); setResendMessage(null); setPreview(null);
+              setView('list'); setTab('queue'); setPage(0); loadList();
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -868,9 +897,35 @@ export default function TransferQueue({ employee }: Props) {
         <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--accent)' }}>Operations</p>
         <h1 className="text-2xl font-bold text-text-primary">Transfer Queue</h1>
         <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-          Confirmed deals, paid (settled within ₹{SETTLEMENT_TOLERANCE}), awaiting review &amp; transfer.
+          {tab === 'queue'
+            ? <>Confirmed deals, paid (settled within ₹{SETTLEMENT_TOLERANCE}), awaiting review &amp; transfer.</>
+            : <>Transferred deals. Reverse one that was approved by mistake — it returns to the queue.</>}
         </p>
       </div>
+
+      {canReverse && (
+        <div className="flex gap-1">
+          {([['queue', 'Awaiting transfer'], ['transferred', 'Transferred']] as const).map(([k, label]) => (
+            <button key={k} onClick={() => { setTab(k); setReversedMsg(''); }}
+              className="px-3.5 py-2 rounded-xl text-sm font-semibold"
+              style={{
+                background: tab === k ? 'rgba(var(--accent-soft-rgb),0.14)' : 'transparent',
+                color: tab === k ? 'var(--accent-soft)' : 'var(--text-muted)',
+                border: `1px solid ${tab === k ? 'rgba(var(--accent-soft-rgb),0.3)' : 'transparent'}`,
+              }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {reversedMsg && (
+        <div className="rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', color: 'var(--success)' }}>
+          {reversedMsg}
+        </div>
+      )}
+
+      {tab === 'transferred' && canReverse ? <TransferHistory onReversed={loadList} /> : <>
 
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -1025,6 +1080,7 @@ export default function TransferQueue({ employee }: Props) {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }
