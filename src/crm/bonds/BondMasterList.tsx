@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { LogoLoader } from '../../components/LogoLoader';
 import { useQueryClient } from '@tanstack/react-query';
-import { Search, UploadCloud, Loader2, ShieldCheck, ShieldAlert, Clock, Landmark, Sparkles, SlidersHorizontal, X, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Search, UploadCloud, Loader2, ShieldCheck, ShieldAlert, Clock, Landmark, Sparkles, SlidersHorizontal, X, ArrowUp, ArrowDown, ArrowUpDown, Download, FileDown } from 'lucide-react';
 import { useBonds, enrichPendingLoop } from './bondClient';
 import { BondPublic } from './bondTypes';
 
@@ -112,6 +112,13 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
     return true;
   });
 
+  // Download-with-margin: ask the margin %, then export the shown list as a
+  // Niyom-branded PDF with each price marked up by that margin.
+  const [showDownload, setShowDownload] = useState(false);
+  const [dlMargin, setDlMargin] = useState('0');
+  const [downloading, setDownloading] = useState(false);
+  const [dlErr, setDlErr] = useState('');
+
   // Column sort — click a header to toggle asc/desc (numbers/dates default high→low, text A→Z).
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
   const clickSort = (col: typeof COLUMNS[number]) => setSort(s =>
@@ -137,6 +144,19 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
       return cmp * dir;
     });
   }
+
+  const doDownload = async () => {
+    const m = parseFloat(dlMargin);
+    const margin = Number.isFinite(m) && m >= 0 ? m : 0;
+    setDownloading(true); setDlErr('');
+    try {
+      const { generateBondListPdf } = await import('./bondListPdf');
+      await generateBondListPdf(sorted, margin);
+      setShowDownload(false);
+    } catch (e) {
+      setDlErr(e instanceof Error ? e.message : 'Could not generate the PDF.');
+    } finally { setDownloading(false); }
+  };
 
   const masterPending = async () => {
     setMastering(0);
@@ -168,6 +188,10 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
             style={{ background: showFilters || activeCount ? 'rgba(var(--accent-soft-rgb),0.12)' : 'var(--bg-surface)', border: `1px solid ${activeCount ? 'var(--accent)' : 'var(--border)'}`, color: activeCount ? 'var(--accent)' : 'var(--text-secondary)' }}>
             <SlidersHorizontal className="w-4 h-4" /> Filters{activeCount ? ` · ${activeCount}` : ''}
           </button>
+          <button onClick={() => { setDlErr(''); setShowDownload(true); }} className="px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+            <Download className="w-4 h-4" /> Download
+          </button>
           {isAdmin && review > 0 && (
             <button onClick={onVerify} className="px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2"
               style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: 'rgb(180,120,10)' }}>
@@ -189,6 +213,33 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
           )}
         </div>
       </div>
+
+      {showDownload && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => !downloading && setShowDownload(false)}>
+          <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Download price list</h3>
+              <button onClick={() => !downloading && setShowDownload(false)} style={{ color: 'var(--text-secondary)' }}><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
+              A Niyom-branded PDF of the {sorted.length} bond{sorted.length === 1 ? '' : 's'} shown, priced with the margin you set below.
+            </p>
+            <label className="block text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--text-faint)' }}>Margin to add (%)</label>
+            <input type="number" step="0.01" min={0} value={dlMargin} onChange={e => setDlMargin(e.target.value)} autoFocus
+              className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }} />
+            <p className="text-[11px] mt-1.5" style={{ color: 'var(--text-faint)' }}>The printed price per ₹100 = current price × (1 + margin%). Use 0 for the base price.</p>
+            {dlErr && <p className="text-xs mt-2" style={{ color: 'rgb(220,38,38)' }}>{dlErr}</p>}
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setShowDownload(false)} disabled={downloading} className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
+                style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
+              <button onClick={doDownload} disabled={downloading} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-on-accent flex items-center justify-center gap-2 disabled:opacity-60"
+                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} {downloading ? 'Preparing…' : 'Download PDF'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showFilters && (
         <div className="rounded-2xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
