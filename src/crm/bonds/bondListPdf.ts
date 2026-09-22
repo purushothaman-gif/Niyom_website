@@ -66,7 +66,7 @@ export async function generateBondListPdf(bonds: BondPublic[], marginPct: number
       <div style="display:flex;align-items:center;gap:12px;"><img src="${LOGO}" style="height:38px;width:auto;object-fit:contain;"/><div><div style="font-size:15px;font-weight:800;">NIYOM WEALTH</div><div style="font-size:8px;letter-spacing:0.16em;text-transform:uppercase;color:${goldSoft};">${NIYOM.tagline}</div></div></div>
       <div style="text-align:right;">
         <div style="font-size:14px;font-weight:800;color:${goldSoft};">BOND PRICE LIST</div>
-        <div style="font-size:9px;color:#cfd8ea;margin-top:2px;">${bonds.length} bond${bonds.length === 1 ? '' : 's'} · ${today}${m ? ` · prices incl. ${m}% margin` : ''}</div>
+        <div style="font-size:9px;color:#cfd8ea;margin-top:2px;">${bonds.length} bond${bonds.length === 1 ? '' : 's'} · ${today} · prices per ₹100 face value</div>
       </div>
     </div>
     <div style="padding:14px 26px 6px;">
@@ -79,7 +79,7 @@ export async function generateBondListPdf(bonds: BondPublic[], marginPct: number
     </div>
     <div style="margin:10px 26px 0;padding:9px 13px;background:#fbfbfd;border:1px solid ${line};border-radius:8px;">
       <div style="font-size:8px;color:#6b7688;line-height:1.5;text-align:justify;">
-        <strong style="color:${navy};">Indicative:</strong> Prices are per ₹100 face value and include the applied margin${m ? ` (${m}%)` : ''}; they are indicative and subject to change without notice. Investments in bonds carry market, credit, interest-rate and liquidity risks including possible loss of principal. Ratings are assigned by third-party agencies and may be revised. ${NIYOM.name} acts as a distributor.
+        <strong style="color:${navy};">Indicative:</strong> Prices are per ₹100 face value and are indicative and subject to change without notice. Investments in bonds carry market, credit, interest-rate and liquidity risks including possible loss of principal. Ratings are assigned by third-party agencies and may be revised. ${NIYOM.name} acts as a distributor.
       </div>
     </div>
     <div style="margin-top:10px;background:linear-gradient(135deg,${darkBlue},${navy});color:${white};padding:12px 26px;display:flex;justify-content:space-between;align-items:flex-end;">
