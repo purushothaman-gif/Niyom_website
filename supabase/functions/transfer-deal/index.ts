@@ -64,6 +64,9 @@ function mapRpcError(err: { code?: string; message?: string; details?: string } 
   if (msg.includes("Deal is no longer accepted")) {
     return { message: "This deal has not been accepted by the client yet. Use the admin override to transfer it without a signature (payment is still required).", status: 409 };
   }
+  if (msg.includes("A Sell deal is not transferred")) {
+    return { message: "A Sell deal is not transferred — the stock is bought from the client. Book it from Transactions instead.", status: 400 };
+  }
   if (msg.includes("Deal is not fully paid")) {
     return { message: "Deal is no longer eligible — the payment ledger has changed. Please reload.", status: 409 };
   }

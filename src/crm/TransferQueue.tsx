@@ -21,6 +21,13 @@ import {
 // Eligibility (which deals appear) is enforced authoritatively by the
 // nw_deal_transfer_eligible view; this component only renders it and drives
 // the transfer via the `transfer-deal` edge function (→ nw_transfer_deal RPC).
+//
+// BUY deals only. A Sell is stock bought FROM the client, so nothing leaves our
+// demat and there is no registrar transfer to make; sells reach the ledger
+// through Transactions -> "book a confirmed deal" instead. The view keeps
+// listing them for that picker, so the exclusion lives in this screen's query
+// and, authoritatively, in nw_transfer_deal + nw_deal_in_transfer_queue
+// (20260925120000_transfer_queue_exclude_sell.sql).
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
@@ -282,6 +289,12 @@ export default function TransferQueue({ employee }: Props) {
     let q = supabase
       .from('nw_deal_transfer_eligible')
       .select('*', { count: 'exact' })
+      // A Sell is stock we BUY from the client — nothing leaves our demat, so
+      // there is no transfer to do. The view still lists sells because it also
+      // feeds the "book a confirmed deal" picker in Transactions (that is how a
+      // sell reaches the ledger); the queue filters them out here, and
+      // nw_transfer_deal refuses one outright.
+      .not('transaction_type', 'ilike', 'sell')
       .order('deal_date', { ascending: false })
       .range(from, to);
 
@@ -898,7 +911,7 @@ export default function TransferQueue({ employee }: Props) {
         <h1 className="text-2xl font-bold text-text-primary">Transfer Queue</h1>
         <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
           {tab === 'queue'
-            ? <>Confirmed deals, paid (settled within ₹{SETTLEMENT_TOLERANCE}), awaiting review &amp; transfer.</>
+            ? <>Buy deals, confirmed and paid (settled within ₹{SETTLEMENT_TOLERANCE}), awaiting review &amp; transfer. A Sell is bought from the client, so it is never transferred.</>
             : <>Transferred deals. Reverse one that was approved by mistake — it returns to the queue.</>}
         </p>
       </div>
