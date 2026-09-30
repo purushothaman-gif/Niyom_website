@@ -93,6 +93,14 @@ export function payableRatio(mode: LopDivisorMode, att: AttendanceSummary): numb
   return Math.min(1, Math.max(0, ratio));
 }
 
+/** Inclusive day count of a period, from two ISO dates. */
+export function periodDays(startISO: string, endISO: string): number {
+  const a = Date.parse(startISO + 'T00:00:00Z');
+  const b = Date.parse(endISO + 'T00:00:00Z');
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return 0;
+  return Math.round((b - a) / 86_400_000) + 1;
+}
+
 /** Slab lookup for calc_type = 'slab'. Slabs are inclusive of from, exclusive of to. */
 export function slabAmount(component: SalaryComponent, base: number): number {
   const slabs = component.slabs ?? [];
@@ -405,6 +413,33 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
       code: 'unapproved_attendance', severity: 'blocker',
       message: `${attendance.pending_punch_days} day(s) have off-network punches still awaiting approval. ` +
                `They are not counted, so this pay may be understated.`,
+    });
+  }
+  /*
+   * ATTENDANCE MUST COVER THE WHOLE PERIOD.
+   *
+   * calendar_days is just how many daily rows were handed in, and it is also
+   * the pro-rata divisor. If rows are missing, the divisor silently shrinks and
+   * everybody looks like they worked a higher fraction of the month than they
+   * did -- the arithmetic stays consistent, and the answer is wrong.
+   *
+   * It bit a mid-month joiner: created on the 8th, so the nightly job (which
+   * only ever computes yesterday) had never written the 1st-7th. Twenty-three
+   * rows instead of thirty meant 21/23 paid rather than 21/30 -- most of a
+   * month's salary for two-thirds of a month's work, with nothing on screen to
+   * suggest anything was wrong.
+   *
+   * A blocker, not a warning. Refusing to pay a number we know is wrong costs
+   * one recalculation; paying it costs real money and is found, if at all, by
+   * the person underpaid.
+   */
+  const expectedDays = periodDays(input.period.start_date, input.period.end_date);
+  if (expectedDays > 0 && attendance.calendar_days < expectedDays) {
+    exceptions.push({
+      code: 'attendance_gap', severity: 'blocker',
+      message: `Attendance covers only ${attendance.calendar_days} of the ${expectedDays} days in this period, `
+             + 'so the pro-rata would be calculated against the wrong number of days. '
+             + 'Recalculate attendance for the period, then run payroll again.',
     });
   }
   if ((attendance.lop_waived_days ?? 0) > 0) {

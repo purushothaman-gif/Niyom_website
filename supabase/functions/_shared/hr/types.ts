@@ -164,6 +164,7 @@ export type PayrollExceptionCode =
   | 'full_month_lop'
   | 'has_lop'
   | 'lop_waived'
+  | 'attendance_gap'
   | 'negative_net'
   | 'gross_mismatch'
   | 'joined_mid_month'

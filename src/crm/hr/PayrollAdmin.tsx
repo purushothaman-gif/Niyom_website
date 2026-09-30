@@ -355,6 +355,19 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
        */
       const waivedFor = (id: string) => Number(waivers.find(w => w.employee_id === id)?.days ?? 0);
       const engineComponents = components.map(c => toEngineComponent(c));
+
+      /*
+       * Rebuild the register for the period BEFORE reading it.
+       *
+       * The nightly job only ever computes yesterday, so nobody had written
+       * the days before a mid-month joiner existed. calendar_days came up
+       * short, and since calendar_days is also the pro-rata divisor, the joiner
+       * was paid most of a month for two-thirds of one. Recomputing here means
+       * the rows always cover the whole period, whatever happened during it.
+       *
+       * Idempotent, and it cannot touch a day a finalised payroll has locked.
+       */
+      await api.recomputeAttendance(null, run.period_start, run.period_end);
       const daily = await api.listDailyForRange(run.period_start, run.period_end);
 
       const computed: PayrollResult[] = [];
