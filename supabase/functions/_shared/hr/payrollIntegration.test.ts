@@ -278,3 +278,65 @@ describe('waiving LOP restores the pay it cost', () => {
     expect(withWaiver(0)).toEqual(none);
   });
 });
+
+/*
+ * SURIYA M, September 2026. Created in the CRM on the 8th, so the nightly job
+ * -- which only ever computes yesterday -- had never written the 1st to the
+ * 7th. The register held 23 rows instead of 30.
+ *
+ * calendar_days IS the pro-rata divisor, so 23 rows meant she was paid 21/23
+ * of a month rather than 21/30: most of a month's salary for two-thirds of a
+ * month's work, and nothing on screen said so.
+ */
+describe('a mid-month joiner whose first week was never written', () => {
+  const GROSS = 42_000;
+  const SEPT = { year: 2026, month: 9, start_date: '2026-09-01', end_date: '2026-09-30' };
+
+  const run = (rows: DailyRow[]) => calculatePayroll({
+    employee: {
+      employee_id: 'e', employee_code: 'NIYOM-009', full_name: 'Suriya M', designation: '', department: '',
+      joining_date: '2026-09-08', exit_date: null, pan: null, uan: null,
+      bank_name: 'B', bank_account: '1', bank_ifsc: 'ABCD0123456', account_holder: 'Suriya M',
+    },
+    structure: structureFor(GROSS), components: COMPONENTS,
+    attendance: summariseAttendance(rows), adjustments: [],
+    period: SEPT,
+    rules: { lop_divisor_mode: 'calendar_days', round_net_to_rupee: true },
+  });
+
+  // 21 payable days out of 30, however the month is described.
+  const worked = [...rep(21, 'present', 1), ...rep(2, 'absent', 0)];
+  const complete = [...rep(7, 'not_joined', 0), ...worked];   // 30 rows
+  const truncated = worked;                                    // 23 rows — the bug
+
+  it('pays 21/30 when the register covers the whole month', () => {
+    const r = run(complete);
+    expect(r.lop_divisor).toBe(30);
+    expect(r.gross_earnings).toBe(Math.round(GROSS * 21 / 30));
+  });
+
+  it('REFUSES to pay when the register is short, instead of quietly rebasing', () => {
+    const r = run(truncated);
+    expect(r.payable).toBe(false);
+    expect(r.exceptions.some(e => e.code === 'attendance_gap' && e.severity === 'blocker')).toBe(true);
+  });
+
+  it('names how short it is, so the fix is obvious', () => {
+    const msg = run(truncated).exceptions.find(e => e.code === 'attendance_gap')!.message;
+    expect(msg).toContain('23 of the 30 days');
+  });
+
+  it('the truncated month would otherwise have paid 21/23 — far more', () => {
+    // What the old behaviour produced, stated so the cost is on the record.
+    const wrong = Math.round(GROSS * 21 / 23);
+    const right = Math.round(GROSS * 21 / 30);
+    expect(wrong).toBeGreaterThan(right);
+    expect(wrong - right).toBe(Math.round(GROSS * 21 / 23) - Math.round(GROSS * 21 / 30));
+  });
+
+  it('a full month with no joiner is unaffected', () => {
+    const r = run(rep(30, 'present', 1));
+    expect(r.payable).toBe(true);
+    expect(r.gross_earnings).toBe(GROSS);
+  });
+});

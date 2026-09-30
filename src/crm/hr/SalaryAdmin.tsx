@@ -260,7 +260,10 @@ function StructureEditor({ employee, components, current, currentLines, onClose,
         late_days: 0, early_out_days: 0, overtime_minutes: 0, pending_punch_days: 0,
       },
       adjustments: [],
-      period: { year: 2026, month: 1, start_date: '2026-01-01', end_date: '2026-01-31' },
+      // A 30-day month, matching the 30 calendar_days above. They used to
+      // disagree, which is harmless in a preview but is exactly the mismatch
+      // the engine now refuses to compute against.
+      period: { year: 2026, month: 4, start_date: '2026-04-01', end_date: '2026-04-30' },
       rules: { lop_divisor_mode: 'calendar_days', round_net_to_rupee: true },
     });
   }, [recurring, rows, gross, employee, effectiveFrom]);
