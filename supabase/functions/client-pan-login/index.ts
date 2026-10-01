@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { clientAuthEmail } from "../_shared/clientAuth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -84,7 +85,7 @@ Deno.serve(async (req: Request) => {
     // an arbitrary row.
     const { data: rows } = await db
       .from("nw_clients")
-      .select("id, email, client_password_changed")
+      .select("id, email, client_auth_user_id, client_password_changed")
       .eq("pan", pan)
       .eq("client_login_enabled", true)
       .limit(2);
@@ -95,6 +96,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const client = rows[0];
+    // The sign-in email is the auth user's, which differs from the record's
+    // when related clients share one address.
+    const authEmail = await clientAuthEmail(db, client);
 
     // The password itself is verified by GoTrue on the next call; this only
     // records the successful PAN *resolution*.
@@ -107,7 +111,7 @@ Deno.serve(async (req: Request) => {
     // Return only what the frontend needs to proceed with signInWithPassword
     return json({
       client_id: client.id,
-      client_email: client.email,
+      client_email: authEmail,
       password_changed: client.client_password_changed,
     }, 200);
   } catch (err: any) {

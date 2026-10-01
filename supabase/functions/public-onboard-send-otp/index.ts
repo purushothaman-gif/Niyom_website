@@ -33,9 +33,15 @@ Deno.serve(async (req: Request) => {
       .from("nw_clients")
       .select("id, email, phone")
       .eq("client_login_enabled", true);
-    const { data: client } = await (byEmail
+    // limit(2), not maybeSingle(): related clients may share one mobile/email,
+    // and a code can't be addressed to "whichever of them" — PAN identifies one.
+    const { data: found } = await (byEmail
       ? lookup.eq("email", email)
-      : lookup.eq("phone", phoneIn)).maybeSingle();
+      : lookup.eq("phone", phoneIn)).limit(2);
+    if (found && found.length > 1) {
+      return json({ error: "This email is linked to more than one account. Please sign in with your PAN and password." }, 409);
+    }
+    const client = found?.[0] ?? null;
 
     let emailMasked = "your registered email";
     if (client && client.phone) {

@@ -4,6 +4,7 @@ import {
   normalizePhone, isValidPhone, isValidEmail, isValidPan,
   generateOTP, persistOtp, deliverOtp, isRateLimited, maskEmail,
 } from "../_shared/onboarding.ts";
+import { findAuthUserByEmail } from "../_shared/clientAuth.ts";
 
 // Step 1 of the conversion-first onboarding. Creates a usable client account
 // from just Full Name + Mobile + Email, provisions a Supabase auth user, and
@@ -35,10 +36,13 @@ Deno.serve(async (req: Request) => {
     // Two separate equality queries avoid interpolating email into an .or()
     // filter (an email may legally contain a comma).
     const [{ data: byPhone }, { data: byEmail }] = await Promise.all([
-      db.from("nw_clients").select("id").eq("phone", phone).maybeSingle(),
-      db.from("nw_clients").select("id").eq("email", email).maybeSingle(),
+      // limit(1), not maybeSingle(): RM-onboarded related clients may share a
+      // mobile/email, and maybeSingle() reports two rows as "none" — which let
+      // a self-signup create yet another account on the same details.
+      db.from("nw_clients").select("id").eq("phone", phone).limit(1),
+      db.from("nw_clients").select("id").eq("email", email).limit(1),
     ]);
-    const existing = byPhone || byEmail;
+    const existing = byPhone?.[0] || byEmail?.[0];
 
     if (existing) {
       // Still send an OTP so the client can sign in and resume.
@@ -176,8 +180,7 @@ Deno.serve(async (req: Request) => {
     const randomPw = `${crypto.randomUUID()}${crypto.randomUUID()}`;
     let authUserId: string | null = null;
 
-    const { data: listed } = await db.auth.admin.listUsers();
-    const existingUser = listed?.users?.find((u: { email?: string }) => u.email?.toLowerCase() === email);
+    const existingUser = await findAuthUserByEmail(db, email);
 
     if (existingUser) {
       await db.auth.admin.updateUserById(existingUser.id, {

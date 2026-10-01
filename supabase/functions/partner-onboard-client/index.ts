@@ -60,13 +60,15 @@ Deno.serve(async (req: Request) => {
     // Dedupe — a client can't be created twice. Separate equality queries avoid
     // interpolating an email (which may contain a comma) into an .or() filter.
     const [{ data: byPan }, { data: byPhone }, { data: byEmail }] = await Promise.all([
-      db.from("nw_clients").select("id").eq("pan", pan).maybeSingle(),
-      db.from("nw_clients").select("id").eq("phone", phone).maybeSingle(),
-      db.from("nw_clients").select("id").eq("email", email).maybeSingle(),
+      // limit(1), not maybeSingle(): RM-onboarded related clients may share a
+      // mobile/email, and maybeSingle() reports two rows as "none".
+      db.from("nw_clients").select("id").eq("pan", pan).limit(1),
+      db.from("nw_clients").select("id").eq("phone", phone).limit(1),
+      db.from("nw_clients").select("id").eq("email", email).limit(1),
     ]);
-    if (byPan)   return json({ error: "A client with this PAN already exists." }, 409);
-    if (byPhone) return json({ error: "A client with this mobile number already exists." }, 409);
-    if (byEmail) return json({ error: "A client with this email already exists." }, 409);
+    if (byPan?.length)   return json({ error: "A client with this PAN already exists." }, 409);
+    if (byPhone?.length) return json({ error: "A client with this mobile number already exists." }, 409);
+    if (byEmail?.length) return json({ error: "A client with this email already exists." }, 409);
 
     // The client is owned by the partner's RM; fall back to the house account when
     // a partner has no RM mapped (employee_id is nullable in production).

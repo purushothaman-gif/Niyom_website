@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { NWEmployee, NWClient, NWClientBankAccount } from './types';
 import { fmt, fmtDate, VERIFICATION_LABELS, VERIFICATION_COLORS } from './utils';
 import { passwordChecks, isPasswordStrong } from '../lib/passwordPolicy';
+import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
 import { Search, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog } from 'lucide-react';
 
 interface Props { employee: NWEmployee; onNavigate: (page: any, params?: any) => void; }
@@ -92,6 +93,11 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [editDupWarnings, setEditDupWarnings] = useState<Record<'pan' | 'phone' | 'email', string | null>>({ pan: null, phone: null, email: null });
   const dupTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Shared mobile / email with another client (allowed within one employee's
+  // book, with a stated relationship — see SharedContact.tsx).
+  const [editMatches, setEditMatches] = useState<ContactMatch[]>([]);
+  const [editRelChosen, setEditRelChosen] = useState<Record<string, string>>({});
+  const [viewRelations, setViewRelations] = useState<string[]>([]);
   // Admin-only "Reassign" — move a client to another owning employee (RM)
   const [reassignClient, setReassignClient] = useState<NWClient | null>(null);
   const [reassignToId, setReassignToId] = useState('');
@@ -175,13 +181,40 @@ export default function ManageClients({ employee, onNavigate }: Props) {
 
   const onEditFieldChange = (field: 'pan' | 'phone' | 'email', value: string, excludeId: string) => {
     setEditForm(f => ({ ...f, [field]: value }));
-    clearTimeout(dupTimers.current[field]);
-    dupTimers.current[field] = setTimeout(() => checkEditDuplicate(field, value, excludeId), 600);
+    if (field === 'pan') {
+      clearTimeout(dupTimers.current.pan);
+      dupTimers.current.pan = setTimeout(() => checkEditDuplicate('pan', value, excludeId), 600);
+      return;
+    }
+    const phone = field === 'phone' ? value : (editForm.phone || '');
+    const email = field === 'email' ? value : (editForm.email || '');
+    const ownerId = editClient?.employee_id ?? null;
+    clearTimeout(dupTimers.current.contact);
+    dupTimers.current.contact = setTimeout(() => {
+      findContactMatches(phone, email, ownerId, excludeId).then(setEditMatches).catch(() => {});
+    }, 600);
   };
+
+  // Relationships recorded for the client being viewed, in either direction.
+  useEffect(() => {
+    setViewRelations([]);
+    if (!viewClient) return;
+    const id = viewClient.id;
+    supabase.from('nw_client_relationships')
+      .select('client_id, relationship, client:nw_clients!nw_client_relationships_client_id_fkey(full_name, client_code), related:nw_clients!nw_client_relationships_related_client_id_fkey(full_name, client_code)')
+      .or(`client_id.eq.${id},related_client_id.eq.${id}`)
+      .then(({ data }) => {
+        setViewRelations(((data ?? []) as any[]).map(r => r.client_id === id
+          ? `${r.relationship} of ${r.related?.full_name ?? '—'} (${r.related?.client_code ?? '—'})`
+          : `${r.client?.full_name ?? '—'} (${r.client?.client_code ?? '—'}) is the ${r.relationship} of this client`));
+      });
+  }, [viewClient]);
 
   const handleEdit = (c: NWClient) => {
     setEditClient(c);
     setEditDupWarnings({ pan: null, phone: null, email: null });
+    setEditMatches([]);
+    setEditRelChosen({});
     setEditForm({
       full_name: c.full_name, email: c.email, phone: c.phone, pan: c.pan,
       gender: c.gender ?? '',
@@ -194,6 +227,24 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   const handleSaveEdit = async () => {
     if (!editClient) return;
     setSaving(true);
+    // A mobile / email being CHANGED may land on one another client already
+    // uses: fine within the same employee's book once the relationship is
+    // given, blocked across employees. Untouched contacts are not re-judged.
+    const contactChanged = (editForm.phone || '') !== (editClient.phone || '')
+      || (editForm.email || '').trim().toLowerCase() !== (editClient.email || '').trim().toLowerCase();
+    let matches: ContactMatch[] = [];
+    if (contactChanged) {
+      try {
+        matches = await findContactMatches(editForm.phone || '', editForm.email || '', editClient.employee_id ?? null, editClient.id);
+      } catch {
+        setSaving(false);
+        showToast('Could not check whether this mobile number / email is already in use.', false);
+        return;
+      }
+      setEditMatches(matches);
+      const contactErr = sharedContactError(matches, editRelChosen);
+      if (contactErr) { setSaving(false); showToast(contactErr, false); return; }
+    }
     const { error } = await supabase
       .from('nw_clients')
       .update({
@@ -206,6 +257,10 @@ export default function ManageClients({ employee, onNavigate }: Props) {
       .eq('id', editClient.id);
     setSaving(false);
     if (error) { showToast(error.message, false); return; }
+    if (contactChanged) {
+      const { error: relErr } = await saveRelationships(editClient.id, matches, editRelChosen, employee.id);
+      if (relErr) console.warn('Could not save client relationship:', relErr.message);
+    }
     setEditClient(null);
     showToast('Client updated.');
     load();
@@ -636,6 +691,16 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                 </div>
               </div>
             ))}
+            {viewRelations.length > 0 && (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--accent)' }}>Related Clients</p>
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-subtle)' }}>
+                  {viewRelations.map(r => (
+                    <p key={r} className="text-xs text-text-primary px-4 py-2.5" style={{ borderBottom: '1px solid var(--bg-surface)' }}>{r}</p>
+                  ))}
+                </div>
+              </div>
+            )}
             {viewClient.notes && (
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--accent)' }}>Notes</p>
@@ -672,13 +737,17 @@ export default function ManageClients({ employee, onNavigate }: Props) {
               <InlineField label="Email">
                 <input type="email" value={editForm.email || ''} onChange={e => onEditFieldChange('email', e.target.value, editClient!.id)}
                   className="w-full px-3 py-2 rounded-xl text-sm text-text-primary outline-none" style={inputStyle} />
-                <EditDupWarn msg={editDupWarnings.email} />
               </InlineField>
               <InlineField label="Phone">
                 <input type="tel" value={editForm.phone || ''} onChange={e => onEditFieldChange('phone', e.target.value.replace(/\D/g, '').slice(0, 10), editClient!.id)}
                   className="w-full px-3 py-2 rounded-xl text-sm text-text-primary outline-none" style={inputStyle} />
-                <EditDupWarn msg={editDupWarnings.phone} />
               </InlineField>
+              {editMatches.length > 0 && (
+                <div className="col-span-2">
+                  <SharedContactPanel matches={editMatches} chosen={editRelChosen}
+                    onChoose={(id, rel) => setEditRelChosen(c => ({ ...c, [id]: rel }))} />
+                </div>
+              )}
               <InlineField label="PAN">
                 <input type="text" value={editForm.pan || ''} onChange={e => onEditFieldChange('pan', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10), editClient!.id)}
                   className="w-full px-3 py-2 rounded-xl text-sm text-text-primary outline-none" style={inputStyle} />

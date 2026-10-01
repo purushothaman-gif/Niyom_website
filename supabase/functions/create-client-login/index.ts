@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { resolveClientAuthSlot } from "../_shared/clientAuth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -74,7 +75,7 @@ Deno.serve(async (req: Request) => {
 
     // Verify the client record exists and doesn't already have login
     const { data: client } = await adminClient
-      .from("nw_clients").select("id, pan, email, client_auth_user_id")
+      .from("nw_clients").select("id, pan, email, client_code, client_auth_user_id")
       .eq("id", client_id).maybeSingle();
 
     if (!client) {
@@ -89,12 +90,16 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
     let authUserId: string;
 
-    // Check if an auth user with this email already exists (e.g. registered on public site)
-    const { data: { users: existingUsers } } = await adminClient.auth.admin.listUsers();
-    const existingUser = existingUsers?.find((u: { email?: string }) => u.email?.toLowerCase() === normalizedEmail);
+    // An auth user may already exist for this email (e.g. registered on the
+    // public site) and is then reused — UNLESS it already signs in a different
+    // client. Related clients can share one email, and reusing it there would
+    // hand this client the other one's login and overwrite their password; they
+    // get their own auth user under an alias instead (see _shared/clientAuth.ts).
+    const slot = await resolveClientAuthSlot(adminClient, client.id, client.client_code, email);
+    const normalizedEmail = slot.email;
+    const existingUser = slot.existing;
 
     if (existingUser) {
       // Reuse existing auth user — update their password and tag as client
