@@ -3,6 +3,7 @@ import {
   corsHeaders, json, serviceClient,
   normalizePhone, isValidPhone, isValidEmail, checkOtp,
 } from "../_shared/onboarding.ts";
+import { clientAuthEmail } from "../_shared/clientAuth.ts";
 
 // Verifies an email OTP and returns a magic-link token the client exchanges for
 // a live Supabase session (no password on the wire). Serves both first-time
@@ -29,11 +30,17 @@ Deno.serve(async (req: Request) => {
 
     const lookup = db
       .from("nw_clients")
-      .select("id, full_name, email, phone, onboarding_status, phone_verified, client_password_changed")
+      .select("id, full_name, email, phone, client_auth_user_id, onboarding_status, phone_verified, client_password_changed")
       .eq("client_login_enabled", true);
-    const { data: client } = await (byEmail
+    // limit(2), not maybeSingle(): related clients may share one mobile/email.
+    // An ambiguous match is refused rather than signed in as either of them.
+    const { data: found } = await (byEmail
       ? lookup.eq("email", email)
-      : lookup.eq("phone", phoneIn)).maybeSingle();
+      : lookup.eq("phone", phoneIn)).limit(2);
+    if (found && found.length > 1) {
+      return json({ error: "This email is linked to more than one account. Please sign in with your PAN and password." }, 409);
+    }
+    const client = found?.[0] ?? null;
 
     if (!client || !client.email || !client.phone) {
       return json({ error: "No account found for these details." }, 404);
@@ -124,7 +131,8 @@ Deno.serve(async (req: Request) => {
     // Mint a one-time magic-link token for programmatic sign-in.
     const { data: link, error: linkErr } = await db.auth.admin.generateLink({
       type: "magiclink",
-      email: client.email,
+      // The auth user's own email — not always the record's (shared addresses).
+      email: (await clientAuthEmail(db, client)) ?? client.email,
     });
     if (linkErr || !link?.properties?.hashed_token) {
       throw linkErr || new Error("Could not create a sign-in token.");

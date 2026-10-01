@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { clientAuthEmail } from "../_shared/clientAuth.ts";
 import {
   ATTEMPTS_BEFORE_BURN,
   ATTEMPTS_BEFORE_LOCK,
@@ -138,7 +139,7 @@ Deno.serve(async (req: Request) => {
     // Correct PIN — but the client record still decides whether they may in.
     const { data: client } = await db
       .from("nw_clients")
-      .select("id, email, client_login_enabled, client_password_changed")
+      .select("id, email, client_auth_user_id, client_login_enabled, client_password_changed")
       .eq("id", row.client_id)
       .maybeSingle();
 
@@ -146,7 +147,8 @@ Deno.serve(async (req: Request) => {
 
     const { data: link, error: linkErr } = await db.auth.admin.generateLink({
       type: "magiclink",
-      email: client.email,
+      // The auth user's own email — not always the record's (shared addresses).
+      email: (await clientAuthEmail(db, client)) ?? client.email,
     });
     if (linkErr || !link?.properties?.hashed_token) {
       console.error("client-pin-login link failed:", linkErr?.message);

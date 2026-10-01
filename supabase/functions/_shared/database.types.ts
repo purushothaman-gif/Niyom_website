@@ -6506,6 +6506,58 @@ export type Database = {
           },
         ]
       }
+      nw_client_relationships: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          related_client_id: string
+          relationship: string
+          shared_contact: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          related_client_id: string
+          relationship: string
+          shared_contact: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          related_client_id?: string
+          relationship?: string
+          shared_contact?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_client_relationships_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_client_relationships_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_client_relationships_related_client_id_fkey"
+            columns: ["related_client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nw_clients: {
         Row: {
           address: string | null
@@ -11309,6 +11361,22 @@ export type Database = {
           security_type: string
           tax_status: string
           trustee: string
+        }[]
+      }
+      nw_client_contact_matches: {
+        Args: {
+          p_email: string
+          p_employee_id: string
+          p_exclude_client_id?: string
+          p_phone: string
+        }
+        Returns: {
+          client_code: string
+          client_id: string
+          existing_relationship: string
+          full_name: string
+          matched_on: string
+          same_employee: boolean
         }[]
       }
       nw_client_unlisted_share: {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { passwordError, isPasswordStrong } from '../lib/passwordPolicy';
 import { NWEmployee, NWDSA, CRMPage } from './types';
+import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
 import { User, Building2, Upload, FileText, CheckCircle2, AlertCircle, ChevronRight, Users, Handshake, UserCheck, UserPlus, Sparkles } from 'lucide-react';
 
 interface Props {
@@ -217,10 +218,29 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     return null;
   }, []);
 
+  // Mobile / email already used by another client. Sharing is allowed between
+  // clients of the same employee (the RM then states the relationship) and
+  // blocked across employees — see SharedContact.tsx.
+  const [contactMatches, setContactMatches] = useState<ContactMatch[]>([]);
+  const [relChosen, setRelChosen] = useState<Record<string, string>>({});
+
+  const checkContacts = useCallback(async (phone: string, email: string): Promise<ContactMatch[]> => {
+    const matches = await findContactMatches(phone, email, employee.id);
+    setContactMatches(matches);
+    return matches;
+  }, [employee.id]);
+
   const onFieldChange = (field: 'pan' | 'phone' | 'email', value: string) => {
     set(field === 'phone' ? 'phone' : field, value);
-    clearTimeout(dupTimers.current[field]);
-    dupTimers.current[field] = setTimeout(() => checkDuplicate(field, value), 600);
+    if (field === 'pan') {
+      clearTimeout(dupTimers.current.pan);
+      dupTimers.current.pan = setTimeout(() => checkDuplicate('pan', value), 600);
+      return;
+    }
+    const phone = field === 'phone' ? value : form.phone;
+    const email = field === 'email' ? value : form.email;
+    clearTimeout(dupTimers.current.contact);
+    dupTimers.current.contact = setTimeout(() => { checkContacts(phone, email).catch(() => {}); }, 600);
   };
 
   useEffect(() => {
@@ -343,6 +363,18 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
         setError('A client with this PAN already exists. Change the PAN to one not already in our records to continue.');
         return;
       }
+      // Shared mobile / email: re-check on the way out (covers a lead pre-fill
+      // or a paste the debounce hasn't caught). Blocks a contact that belongs
+      // to another employee's client, and requires the relationship otherwise.
+      let matches: ContactMatch[];
+      try {
+        matches = await checkContacts(form.phone, form.email);
+      } catch {
+        setError('Could not check whether this mobile number / email is already in use. Please try again.');
+        return;
+      }
+      const contactErr = sharedContactError(matches, relChosen);
+      if (contactErr) { setError(contactErr); return; }
     }
     if (stepName === 'Demat & Bank' && !validateDematBank()) return;
     if (stepName === 'Products' && !validateProducts()) return;
@@ -451,6 +483,11 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
       }]).select().single();
 
       if (clientErr) throw clientErr;
+
+      // Record how this client is related to the existing client(s) whose
+      // mobile / email they share. Non-fatal: the client is already saved.
+      const { error: relErr } = await saveRelationships(client.id, contactMatches, relChosen, employee.id);
+      if (relErr) console.warn('Could not save client relationship:', relErr.message);
 
       // Sprint 5: seed the client's PRIMARY bank account. nw_clients.bank_* was
       // already written above (the mirror); this creates the matching primary row.
@@ -824,13 +861,13 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
               </Field>
               <Field label="Mobile Number" required>
                 <Input type="tel" value={form.phone} onChange={e => onFieldChange('phone', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="9876543210" maxLength={10} />
-                <DupWarn msg={dupWarnings.phone} />
               </Field>
               <Field label="Email Address" required>
                 <Input type="email" value={form.email} onChange={e => onFieldChange('email', e.target.value)} placeholder="client@example.com" />
-                <DupWarn msg={dupWarnings.email} />
               </Field>
             </div>
+            <SharedContactPanel matches={contactMatches} chosen={relChosen}
+              onChoose={(id, rel) => setRelChosen(c => ({ ...c, [id]: rel }))} />
             <Field label="Address" required>
               <Textarea value={form.address} onChange={e => set('address', e.target.value)} placeholder="Full address..." />
             </Field>
