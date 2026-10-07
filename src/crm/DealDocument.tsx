@@ -22,6 +22,9 @@ export interface DealDocumentData {
   confirmation_number: string;
   deal_date: string;
   created_at?: string;
+  // Set when the note was amended after being sent — same reference, new terms.
+  revision_no?: number | null;
+  revised_at?: string | null;
   transaction_type: string;
   product_type: string;
   security_name: string;
@@ -149,6 +152,11 @@ export default function DealDocument({ deal, signatureDataUrl, acceptedDate, pdf
         <div style={{ textAlign: 'right' }}>
           <p style={{ fontSize: '8px', color: '#000', marginBottom: '4px' }}>Ref: {deal.confirmation_number}  •  {headerDate}</p>
           <p style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '3px', color: '#000' }}>DEAL NOTE</p>
+          {!!deal.revision_no && (
+            <p style={{ fontSize: '8px', fontWeight: 700, color: '#000', marginTop: '2px' }}>
+              REVISED — Revision {deal.revision_no}{deal.revised_at ? `  •  ${fmtDate(deal.revised_at)}` : ''} (supersedes earlier note)
+            </p>
+          )}
         </div>
       </div>
       <div style={{ borderBottom: '2px solid #000', marginTop: '8px' }} />
