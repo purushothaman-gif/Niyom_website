@@ -6888,6 +6888,9 @@ export type Database = {
           accepted_at: string | null
           base_rate: number | null
           brokerage_amount: number | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           client_id: string | null
           confirmation_number: string
           created_at: string
@@ -6910,6 +6913,8 @@ export type Database = {
           revenue_basis_entered_by: string | null
           revenue_basis_last_modified_at: string | null
           revenue_basis_last_modified_by: string | null
+          revised_at: string | null
+          revision_no: number
           secure_token: string | null
           security_name: string
           settlement_amount: number | null
@@ -6945,6 +6950,9 @@ export type Database = {
           accepted_at?: string | null
           base_rate?: number | null
           brokerage_amount?: number | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           client_id?: string | null
           confirmation_number?: string
           created_at?: string
@@ -6967,6 +6975,8 @@ export type Database = {
           revenue_basis_entered_by?: string | null
           revenue_basis_last_modified_at?: string | null
           revenue_basis_last_modified_by?: string | null
+          revised_at?: string | null
+          revision_no?: number
           secure_token?: string | null
           security_name?: string
           settlement_amount?: number | null
@@ -7002,6 +7012,9 @@ export type Database = {
           accepted_at?: string | null
           base_rate?: number | null
           brokerage_amount?: number | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           client_id?: string | null
           confirmation_number?: string
           created_at?: string
@@ -7024,6 +7037,8 @@ export type Database = {
           revenue_basis_entered_by?: string | null
           revenue_basis_last_modified_at?: string | null
           revenue_basis_last_modified_by?: string | null
+          revised_at?: string | null
+          revision_no?: number
           secure_token?: string | null
           security_name?: string
           settlement_amount?: number | null
@@ -7055,6 +7070,13 @@ export type Database = {
           viewed_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "nw_deal_confirmations_cancelled_by_fkey"
+            columns: ["cancelled_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "nw_deal_confirmations_client_id_fkey"
             columns: ["client_id"]
@@ -11283,6 +11305,10 @@ export type Database = {
         Returns: number
       }
       nw_can_see_lead: { Args: { p_lead_id: string }; Returns: boolean }
+      nw_cancel_deal: {
+        Args: { p_deal_id: string; p_reason?: string }
+        Returns: Json
+      }
       nw_cancel_payment: {
         Args: { p_payment_id: string; p_reason: string }
         Returns: Json

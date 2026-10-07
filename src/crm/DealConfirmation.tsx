@@ -7,7 +7,7 @@ import type { Insertable } from '../lib/dbJson';
 import { NWEmployee, NWClient } from './types';
 import {
   FileText, Plus, Search, ChevronDown, Eye, Pencil, Trash2,
-  Download, CheckCircle2, AlertCircle, ChevronLeft, Send, Wallet, Lock,
+  Download, CheckCircle2, AlertCircle, ChevronLeft, Send, Wallet, Lock, Ban,
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import DealDocument from './DealDocument';
@@ -80,6 +80,13 @@ interface DealRecord {
   rejection_reason?: string | null;
   signer_email?: string | null;
   signed_pdf_path?: string | null;
+  // Cancelled for non-payment (see nw_cancel_deal). Cleared when the deal is
+  // edited and reissued.
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+  // Number of times the note was amended after first being sent.
+  revision_no?: number | null;
+  revised_at?: string | null;
   client?: { full_name: string; client_code: string };
   // Internal revenue basis + audit stamps
   landing_cost?: number | null;
@@ -191,6 +198,14 @@ function fmtDate(d: string) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
+function fmtDateTime(d: string | number) {
+  return new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+// The client gets this long from the confirmation mail to pay before the deal
+// may be cancelled. MUST match the interval in nw_cancel_deal(), which is what
+// actually enforces it.
+const PAYMENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 // Bonds carry a coupon + maturity year in their full name, e.g.
 // "12.50% Vedika Credit Capital Limited 2031". We compose that from the plain
@@ -329,6 +344,9 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
   const [deleteDeal, setDeleteDeal] = useState<DealRecord | null>(null);
   const [search, setSearch] = useState('');
   const [emailSending, setEmailSending] = useState(false);
+  const [cancelDeal, setCancelDeal] = useState<DealRecord | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
   const [paySummaries, setPaySummaries] = useState<Record<string, { payment_status: 'not_paid' | 'partially_paid' | 'fully_paid' | 'over_paid'; outstanding_amount: number }>>({});
   const [paySummariesLoaded, setPaySummariesLoaded] = useState(false);
 
@@ -645,6 +663,20 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
       // Editing invalidates any outstanding secure link and resets the
       // acceptance lifecycle so the client must review the updated deal afresh.
       const wasSent = editDeal.email_status === 'sent' || !!editDeal.secure_token;
+      // Editing a cancelled deal reissues it: the cancellation is lifted and the
+      // revised note goes back to the client under the same reference.
+      const wasCancelled = !!editDeal.cancelled_at;
+      // The client has already seen a version of this note, so this is a
+      // revision of it — same reference, counted so the note and the resend
+      // mail can say which revision they are looking at.
+      const isRevision = wasSent || wasSigned || wasCancelled;
+      if (isRevision) {
+        payload.revision_no = (editDeal.revision_no ?? 0) + 1;
+        payload.revised_at = new Date().toISOString();
+      }
+      payload.cancelled_at = null;
+      payload.cancelled_by = null;
+      payload.cancellation_reason = null;
       payload.acceptance_status = 'pending';
       payload.secure_token = null;
       payload.token_expires_at = null;
@@ -655,7 +687,8 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
       // An admin editing an already-signed deal fully unwinds the acceptance:
       // the stored signature/PDF no longer matches the amended terms, so it is
       // cleared and the client must re-accept.
-      if (wasSigned) {
+      // (A deal cancelled after signing carries the same stale signature.)
+      if (wasSigned || wasCancelled) {
         payload.accepted_at = null;
         payload.signer_email = null;
         payload.signed_pdf_path = null;
@@ -677,12 +710,17 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
           { deal_id: editDeal.id, event_type: 'token_invalidated', actor: 'employee' },
         ]);
         showToast('Signed deal amended and reset to pending — the client must review and re-accept.');
+      } else if (wasCancelled) {
+        await supabase.from('nw_deal_confirmation_events').insert([
+          { deal_id: editDeal.id, event_type: 'edited', actor: 'employee', metadata: { reissued_after_cancellation: true } },
+        ]);
+        showToast('Cancelled deal revised and reopened — send the revised note to the client.');
       } else if (wasSent) {
         await supabase.from('nw_deal_confirmation_events').insert([
           { deal_id: editDeal.id, event_type: 'edited', actor: 'employee' },
           { deal_id: editDeal.id, event_type: 'token_invalidated', actor: 'employee' },
         ]);
-        showToast('Deal updated. The old link is now invalid — resend to the client.');
+        showToast('Deal revised under the same reference. The old link is now invalid — resend to the client.');
       } else {
         showToast('Deal confirmation updated.');
       }
@@ -742,6 +780,10 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
   // 'pending', emails the link (no PDF attachment), and logs the event.
   const handleSendSecureLink = async (deal: DealRecord) => {
     if (emailSending) return;
+    if (deal.cancelled_at) {
+      showToast('This deal was cancelled. Edit it to revise and reissue before sending.', false);
+      return;
+    }
     if (deal.acceptance_status === 'accepted') {
       showToast('Accepted deals are locked and cannot be resent.', false);
       return;
@@ -772,6 +814,55 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
     }
   };
 
+  // ---------- Cancel for non-payment ----------
+  // Whether a deal can be cancelled for non-payment right now. The database
+  // (nw_cancel_deal) is the authority; this only decides what the UI offers.
+  //   cancelled — already cancelled (the notice can be re-sent)
+  //   waiting   — mailed, unpaid, but the client's 24h window is still open
+  //   eligible  — mailed 24h+ ago and still nothing paid
+  const cancelInfo = (d: DealRecord): { state: 'na' | 'cancelled' | 'waiting' | 'eligible'; due?: number } => {
+    if (d.cancelled_at) return { state: 'cancelled' };
+    if (d.transaction_type !== 'Buy' || d.email_status !== 'sent' || !d.email_sent_at) return { state: 'na' };
+    if (d.acceptance_status === 'rejected') return { state: 'na' };
+    if (!paySummariesLoaded || (paySummaries[d.id]?.payment_status ?? 'not_paid') !== 'not_paid') return { state: 'na' };
+    const due = new Date(d.email_sent_at).getTime() + PAYMENT_WINDOW_MS;
+    return { state: Date.now() < due ? 'waiting' : 'eligible', due };
+  };
+
+  // Cancels the deal and emails the client the cancellation notice. On an
+  // already-cancelled deal the same call just re-sends the notice.
+  const handleCancelDeal = async () => {
+    if (!cancelDeal || cancelling) return;
+    const deal = cancelDeal;
+    const isResend = !!deal.cancelled_at;
+    setCancelling(true);
+    try {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke(
+        'send-deal-cancellation-email',
+        { body: { dealId: deal.id, reason: cancelReason.trim() } }
+      );
+      if (fnError || !fnData?.success) {
+        const expired = await sessionExpiredMessage(fnError);
+        throw new Error(expired ?? await edgeFunctionErrorMessage(fnError, fnData, 'Failed to cancel the deal'));
+      }
+      showToast(isResend ? 'Cancellation mail resent to the client.' : 'Deal cancelled and cancellation mail sent to the client.');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to cancel the deal', false);
+    } finally {
+      setCancelling(false);
+      setCancelDeal(null);
+      setCancelReason('');
+      // Reload either way: if only the email failed, the deal is still cancelled.
+      const { data: fresh } = await supabase
+        .from('nw_deal_confirmations')
+        .select('cancelled_at, cancellation_reason, acceptance_status, secure_token')
+        .eq('id', deal.id)
+        .maybeSingle();
+      if (fresh) setPreviewDeal(prev => (prev && prev.id === deal.id ? { ...prev, ...(fresh as Partial<DealRecord>) } : prev));
+      await loadDeals();
+    }
+  };
+
   // ---------- Download the stored signed PDF (accepted deals) ----------
   const handleDownloadSigned = async (deal: DealRecord) => {
     if (!deal.signed_pdf_path) { showToast('No signed document available yet.', false); return; }
@@ -788,6 +879,73 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
     d.confirmation_number.toLowerCase().includes(search.toLowerCase()) ||
     d.snap_client_name.toLowerCase().includes(search.toLowerCase()) ||
     d.security_name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toastEl = toast && (
+    <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-semibold transition-all ${toast.ok ? 'text-c-emerald' : 'text-c-red'}`}
+      style={{ background: 'var(--bg-surface)', border: `1px solid ${toast.ok ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+      {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+      {toast.msg}
+    </div>
+  );
+
+  const cancelModalEl = cancelDeal && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+      <div className="w-full max-w-md rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(239,68,68,0.1)' }}>
+            <Ban className="w-5 h-5 text-c-red" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-text-primary">
+              {cancelDeal.cancelled_at ? 'Resend Cancellation Mail' : 'Cancel Deal & Send Cancellation Mail'}
+            </p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{cancelDeal.confirmation_number} · {cancelDeal.snap_client_name}</p>
+          </div>
+        </div>
+        {cancelDeal.cancelled_at ? (
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+            This deal is already cancelled. The cancellation mail will be sent again to <span className="font-semibold text-text-primary">{cancelDeal.snap_email}</span>.
+          </p>
+        ) : (
+          <>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              No payment has been received for {fmt(cancelDeal.settlement_amount || 0)} since the confirmation was mailed on{' '}
+              {cancelDeal.email_sent_at ? fmtDateTime(cancelDeal.email_sent_at) : '—'}. The deal will be marked cancelled, its
+              link will stop working, and a cancellation mail will go to{' '}
+              <span className="font-semibold text-text-primary">{cancelDeal.snap_email}</span>.
+            </p>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                Note to client (optional)
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                maxLength={500}
+                rows={3}
+                placeholder="Shown in the cancellation mail, e.g. price validity has lapsed."
+                className="w-full px-3.5 py-2.5 rounded-xl text-sm text-text-primary outline-none"
+                style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}
+              />
+            </div>
+            <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+              The deal stays on record. To revive it later, edit it — it is reissued under the same reference.
+            </p>
+          </>
+        )}
+        <div className="flex gap-3">
+          <button onClick={() => { setCancelDeal(null); setCancelReason(''); }} disabled={cancelling}
+            className="flex-1 py-2.5 rounded-xl text-sm disabled:opacity-50" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+            Keep Deal
+          </button>
+          <button onClick={handleCancelDeal} disabled={cancelling}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-60" style={{ background: 'var(--danger)' }}>
+            {cancelling ? 'Sending...' : cancelDeal.cancelled_at ? 'Resend Mail' : 'Cancel Deal & Send Mail'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 
   // ===================== PAYMENTS ======================
@@ -825,9 +983,12 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
   // ===================== PREVIEW ======================
   if (view === 'preview' && previewDeal) {
     const pdfOpt = buildPdfOpts(previewDeal.confirmation_number, previewDeal.deal_date, 3);
+    const pvCancel = cancelInfo(previewDeal);
 
     return (
       <div className="space-y-6">
+        {toastEl}
+        {cancelModalEl}
         {/* Top Action Bar */}
         <div className="flex items-center gap-4 flex-wrap">
           <button onClick={() => setView('list')} className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
@@ -846,10 +1007,33 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
           >
             <Download className="w-4 h-4" /> Download PDF
           </button>
+          {/* Amend qty / price / securities on this same deal note. */}
+          <button
+            onClick={() => openEdit(previewDeal)}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold"
+            style={{ background: 'var(--bg-raised)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.3)' }}
+          >
+            <Pencil className="w-4 h-4" /> {previewDeal.cancelled_at ? 'Revise & Reissue' : 'Edit Deal'}
+          </button>
+          {/* Cancel for non-payment — opens 24h after the confirmation mail. */}
+          {pvCancel.state !== 'na' && (
+            <button
+              onClick={() => { setCancelReason(''); setCancelDeal(previewDeal); }}
+              disabled={pvCancel.state === 'waiting'}
+              title={pvCancel.state === 'waiting' && pvCancel.due ? `Available from ${fmtDateTime(pvCancel.due)} — 24 hours after the mail` : undefined}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: 'rgba(239,68,68,0.08)', color: 'var(--danger)', border: '1px solid rgba(239,68,68,0.3)' }}
+            >
+              <Ban className="w-4 h-4" />
+              {pvCancel.state === 'cancelled' ? 'Resend Cancellation Mail'
+                : pvCancel.state === 'waiting' && pvCancel.due ? `Cancel available ${fmtDateTime(pvCancel.due)}`
+                : 'Cancel Deal & Send Mail'}
+            </button>
+          )}
           {/* Email the deal confirmation to the client, and manage its payments. */}
           <button
             onClick={() => handleSendSecureLink(previewDeal)}
-            disabled={emailSending}
+            disabled={emailSending || !!previewDeal.cancelled_at}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent transition-all disabled:cursor-not-allowed"
             style={{ background: 'linear-gradient(135deg, var(--accent-strong), var(--accent-strong-deep))', opacity: emailSending ? 0.75 : 1 }}
           >
@@ -873,6 +1057,17 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
             <Wallet className="w-4 h-4" /> Manage Payments
           </button>
         </div>
+
+        {previewDeal.cancelled_at && (
+          <div className="p-4 rounded-2xl flex items-start gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <Ban className="w-4 h-4 text-c-red flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-c-red">
+              <p className="font-semibold">Cancelled for non-payment on {fmtDateTime(previewDeal.cancelled_at)}</p>
+              {previewDeal.cancellation_reason && <p className="mt-0.5">Note sent to client: {previewDeal.cancellation_reason}</p>}
+              <p className="mt-0.5" style={{ color: 'var(--text-secondary)' }}>To revive it, use Revise &amp; Reissue — the note keeps the same reference.</p>
+            </div>
+          </div>
+        )}
 
         {/* ===== Deal Note (shared 2-page A4 layout) ===== */}
         <DealDocument deal={previewDeal} />
@@ -1135,14 +1330,8 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
         </button>
       </div>
 
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-semibold transition-all ${toast.ok ? 'text-c-emerald' : 'text-c-red'}`}
-          style={{ background: 'var(--bg-surface)', border: `1px solid ${toast.ok ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
-          {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-          {toast.msg}
-        </div>
-      )}
+      {toastEl}
+      {cancelModalEl}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1150,7 +1339,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
           { label: 'Total', value: deals.length, color: 'var(--accent)' },
           { label: 'Fully Paid', value: deals.filter(d => ['fully_paid', 'over_paid'].includes(paySummaries[d.id]?.payment_status ?? 'not_paid')).length, color: 'var(--success)' },
           { label: 'Partially Paid', value: deals.filter(d => (paySummaries[d.id]?.payment_status ?? 'not_paid') === 'partially_paid').length, color: 'var(--warning)' },
-          { label: 'Awaiting Payment', value: deals.filter(d => (paySummaries[d.id]?.payment_status ?? 'not_paid') === 'not_paid').length, color: 'rgb(var(--info-soft-rgb))' },
+          { label: 'Awaiting Payment', value: deals.filter(d => !d.cancelled_at && (paySummaries[d.id]?.payment_status ?? 'not_paid') === 'not_paid').length, color: 'rgb(var(--info-soft-rgb))' },
         ].map(s => (
           <div key={s.label} className="rounded-2xl p-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
             <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-faint)' }}>{s.label}</p>
@@ -1229,10 +1418,21 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
                         until now it was invisible, so an RM had no way to see
                         that a client had signed short of opening the record.
                       */}
-                      {d.email_status === 'sent' && (
+                      {d.cancelled_at ? (
+                        <div className="mt-1">
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg"
+                            title={`Cancelled for non-payment on ${fmtDateTime(d.cancelled_at)}`}
+                            style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', border: '1px solid color-mix(in srgb, var(--danger) 20%, transparent)' }}>
+                            <Ban className="w-3 h-3" /> Cancelled
+                          </span>
+                        </div>
+                      ) : d.email_status === 'sent' && (
                         <div className="mt-1">
                           <AcceptanceBadge status={d.acceptance_status} />
                         </div>
+                      )}
+                      {!!d.revision_no && (
+                        <p className="text-[10px] font-semibold mt-1" style={{ color: 'var(--text-faint)' }}>Revision {d.revision_no}</p>
                       )}
                     </td>
                     {/* Payment Status — derived from nw_deal_payment_summary.
@@ -1266,9 +1466,9 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
                         </button>
                         <button
                           onClick={() => handleSendSecureLink(d)}
-                          disabled={emailSending}
+                          disabled={emailSending || !!d.cancelled_at}
                           className="p-1.5 rounded-lg transition-colors disabled:opacity-40"
-                          title={d.email_status === 'sent' ? 'Resend mail' : 'Send mail'}
+                          title={d.cancelled_at ? 'Cancelled — edit to revise and reissue' : d.email_status === 'sent' ? 'Resend mail' : 'Send mail'}
                           style={{ color: 'var(--text-faint)' }}
                           onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
                           onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}>
@@ -1288,6 +1488,17 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
                             onMouseEnter={e => (e.currentTarget.style.color = 'var(--success)')}
                             onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}>
                             <Download className="w-4 h-4" />
+                          </button>
+                        )}
+                        {/* Unpaid 24h after the confirmation mail → cancel + notify.
+                            Also re-sends the notice on a cancelled deal. */}
+                        {['eligible', 'cancelled'].includes(cancelInfo(d).state) && (
+                          <button
+                            onClick={() => { setCancelReason(''); setCancelDeal(d); }}
+                            className="p-1.5 rounded-lg transition-colors"
+                            title={d.cancelled_at ? 'Resend cancellation mail' : 'Unpaid for 24h — cancel deal & send cancellation mail'}
+                            style={{ color: d.cancelled_at ? 'var(--text-faint)' : 'var(--danger)' }}>
+                            <Ban className="w-4 h-4" />
                           </button>
                         )}
                         <button

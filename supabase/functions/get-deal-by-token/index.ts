@@ -56,6 +56,8 @@ function sanitize(deal: Record<string, any>, items: Record<string, any>[]) {
     snap_bank_account: deal.snap_bank_account,
     snap_bank_ifsc: deal.snap_bank_ifsc,
     acceptance_status: deal.acceptance_status,
+    revision_no: deal.revision_no ?? 0,
+    revised_at: deal.revised_at ?? null,
     // masked email for display ("jo****@gmail.com")
     client_email_masked: maskEmail(deal.snap_email || ""),
   };

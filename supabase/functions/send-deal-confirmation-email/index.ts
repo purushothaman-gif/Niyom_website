@@ -77,7 +77,7 @@ Deno.serve(async (req: Request) => {
     // --- Load the deal (server-side source of truth) ---
     const { data: deal } = await db
       .from("nw_deal_confirmations")
-      .select("id, confirmation_number, snap_client_name, snap_email, acceptance_status, employee_id, email_status")
+      .select("id, confirmation_number, snap_client_name, snap_email, acceptance_status, employee_id, email_status, cancelled_at, revision_no")
       .eq("id", dealId)
       .maybeSingle();
     if (!deal) return json({ success: false, error: "Deal not found." }, 404);
@@ -90,6 +90,11 @@ Deno.serve(async (req: Request) => {
 
     if (deal.acceptance_status === "accepted") {
       return json({ success: false, error: "This deal is accepted and locked. Create a new deal for changes." }, 409);
+    }
+    // A cancelled deal is reissued by editing it (which clears the cancellation
+    // and bumps the revision) — never by simply re-sending the dead note.
+    if (deal.cancelled_at) {
+      return json({ success: false, error: "This deal was cancelled. Edit it to revise and reissue before sending." }, 409);
     }
     if (!deal.snap_email) {
       return json({ success: false, error: "No client email is on record for this deal." }, 400);
@@ -131,11 +136,20 @@ Deno.serve(async (req: Request) => {
       hour: "2-digit", minute: "2-digit", hour12: true,
     });
     const year = new Date().getFullYear();
-    const subject = `Your Deal Confirmation Note – Ref ${deal.confirmation_number}`;
+    // A deal edited after it was first sent keeps its reference; the mail says
+    // so, so the client knows this note replaces the earlier one.
+    const revisionNo = Number(deal.revision_no) || 0;
+    const isRevised = revisionNo > 0;
+    const subject = isRevised
+      ? `Revised Deal Confirmation Note – Ref ${deal.confirmation_number} (Revision ${revisionNo})`
+      : `Your Deal Confirmation Note – Ref ${deal.confirmation_number}`;
+    const intro = isRevised
+      ? `Your Deal Confirmation Note (Ref ${deal.confirmation_number}) has been revised. This updated note (Revision ${revisionNo}) replaces the one shared earlier, and the earlier link is no longer valid. The complete revised details are available on the secure link below for your review.`
+      : "Your Deal Confirmation Note is now available for review and confirmation. The complete details are available on the secure link below for your review.";
 
     const text = `Dear ${deal.snap_client_name},
 
-Your Deal Confirmation Note is now available for review and confirmation. The complete details are available on the secure link below for your review.
+${intro}
 
 Once you are comfortable with the particulars, you may confirm the transaction using a one-time password sent to this email, followed by a brief electronic signature. If you would prefer to decline, the same option is available on the page.
 
@@ -166,7 +180,7 @@ ${emailFooterText({ year, ref: deal.confirmation_number })}`;
       <div style="font-size:20px;font-weight:700;color:#111;">Niyom Wealth</div>
     </div>
     <p style="font-size:15px;font-weight:600;color:#111;margin:0 0 16px;">Dear ${deal.snap_client_name},</p>
-    <p style="margin:0 0 14px;">Your Deal Confirmation Note is now available for review and confirmation. The complete details are available on the secure link below for your review.</p>
+    <p style="margin:0 0 14px;">${intro}</p>
     <p style="margin:0 0 14px;">Once you are comfortable with the particulars, you may confirm the transaction using a one-time password sent to this email, followed by a brief electronic signature. If you would prefer to decline, the same option is available on the page.</p>
     <p style="margin:0 0 14px;">The link is unique to you and remains active until <strong>${expiryIst} IST</strong>.</p>
     <div style="text-align:center;margin:28px 0;">
@@ -227,7 +241,7 @@ ${emailFooterText({ year, ref: deal.confirmation_number })}`;
 
     await db.from("nw_deal_confirmation_events").insert({
       deal_id: deal.id, event_type: "link_sent", actor: "employee",
-      metadata: { emailId: resendData.id, to: clientTo, cc: ccRecipients, resend: isResend },
+      metadata: { emailId: resendData.id, to: clientTo, cc: ccRecipients, resend: isResend, revision_no: revisionNo },
     });
     await logEmail("sent", resendData.id ?? null);
 
