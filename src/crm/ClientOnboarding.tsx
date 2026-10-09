@@ -113,6 +113,8 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
   const [sourcedVia, setSourcedVia] = useState<'direct' | 'dsa' | ''>('');
   const [leadBanner, setLeadBanner] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  // Synchronous re-entry guard — `saving` state only blocks after a re-render.
+  const submittingRef = useRef(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -400,6 +402,8 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
       setError(`Please upload all required documents: ${missingDocs.map(d => d.label).join(', ')}`);
       return;
     }
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError('');
     setSaving(true);
 
@@ -565,12 +569,15 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
           .then(() => {}, () => {});
       }
 
+      // Keep `saving` true: the form stays mounted for 2s before navigating, and
+      // re-enabling the button here let a second click onboard the client again
+      // under a fresh client code.
       setSuccess(`Client ${form.full_name} onboarded successfully with code ${clientCode}!`);
-      setSaving(false);
       setTimeout(() => onNavigate('clients'), 2000);
     } catch (err: any) {
       setError(err.message || 'Failed to save client');
       setSaving(false);
+      submittingRef.current = false;
     }
   };
 
