@@ -103,8 +103,9 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   const [reassignToId, setReassignToId] = useState('');
   const [reassignReason, setReassignReason] = useState('');
   const [reassignSaving, setReassignSaving] = useState(false);
-  // Admin-only "Modify Mapping" (Direct -> DSA) correction
+  // Admin-only "Modify Mapping" correction — Direct -> DSA, or DSA -> Direct
   const [mapClient, setMapClient] = useState<NWClient | null>(null);
+  const [mapCurrentDsa, setMapCurrentDsa] = useState<{ dsa_code: string; full_name: string } | null>(null);
   const [dsaList, setDsaList] = useState<{ id: string; dsa_code: string; full_name: string }[]>([]);
   const [selectedDsaId, setSelectedDsaId] = useState('');
   const [mapCounts, setMapCounts] = useState<{ deals: number; txns: number; holdings: number } | null>(null);
@@ -301,17 +302,28 @@ export default function ManageClients({ employee, onNavigate }: Props) {
     load();
   };
 
-  // --- Modify Mapping: correct a Direct client to a DSA client (admin only) ---
+  // --- Modify Mapping: correct a Direct client to a DSA client, or a DSA client
+  // back to Direct (admin only) ---
   // Reuses the existing nw_clients update path. Only sourced_via + dsa_id change;
   // the client id and every existing relationship are preserved. No new records.
   const openModifyMapping = async (c: NWClient) => {
     setMapClient(c);
     setSelectedDsaId('');
     setMapCounts(null);
-    // Active DSAs for the picker (admin sees all).
-    const { data: dsaData } = await supabase.from('nw_dsa')
-      .select('id, dsa_code, full_name').eq('status', 'active').order('full_name');
-    setDsaList((dsaData as { id: string; dsa_code: string; full_name: string }[]) || []);
+    setMapCurrentDsa(null);
+    if (c.sourced_via === 'dsa') {
+      // DSA -> Direct: no picker, just name the partner being unmapped.
+      if (c.dsa_id) {
+        const { data: cur } = await supabase.from('nw_dsa')
+          .select('dsa_code, full_name').eq('id', c.dsa_id).maybeSingle();
+        setMapCurrentDsa((cur as { dsa_code: string; full_name: string } | null) ?? null);
+      }
+    } else {
+      // Active DSAs for the picker (admin sees all).
+      const { data: dsaData } = await supabase.from('nw_dsa')
+        .select('id, dsa_code, full_name').eq('status', 'active').order('full_name');
+      setDsaList((dsaData as { id: string; dsa_code: string; full_name: string }[]) || []);
+    }
     // Existing business records — drives the warning (payments live under deals).
     const [dcRes, txRes, hldRes] = await Promise.all([
       supabase.from('nw_deal_confirmations').select('id', { count: 'exact', head: true }).eq('client_id', c.id),
@@ -339,6 +351,26 @@ export default function ManageClients({ employee, onNavigate }: Props) {
     setMapSaving(false);
     setMapClient(null);
     showToast('Client mapping updated to DSA.');
+    load();
+  };
+
+  const confirmConvertToDirect = async () => {
+    if (!mapClient || mapClient.sourced_via !== 'dsa') return;
+    setMapSaving(true);
+    const { error } = await supabase.from('nw_clients')
+      .update({ sourced_via: 'direct', dsa_id: null, updated_at: new Date().toISOString() })
+      .eq('id', mapClient.id);
+    if (error) { setMapSaving(false); showToast(error.message, false); return; }
+    // Audit trail — records the correction without altering any existing history.
+    await supabase.from('nw_activity_logs').insert({
+      employee_id: employee.id,
+      client_id: mapClient.id,
+      action: 'client_mapping_corrected',
+      description: `Client mapping corrected: DSA (${mapCurrentDsa?.full_name ?? ''}${mapCurrentDsa?.dsa_code ? ` / ${mapCurrentDsa.dsa_code}` : ''}) → Direct by ${employee.full_name}`,
+    });
+    setMapSaving(false);
+    setMapClient(null);
+    showToast('Client mapping updated to Direct.');
     load();
   };
 
@@ -639,7 +671,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                         : <button onClick={() => { setLoginClient(c); setLoginPassword(''); setShowLoginPw(false); }} className="p-1.5 rounded-lg transition-colors" title="Enable Client Login" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--warning)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><KeyRound className="w-4 h-4" /></button>
                       }
                       {isAdmin && <button onClick={() => openReassign(c)} className="p-1.5 rounded-lg transition-colors" title="Reassign to Employee" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'rgb(var(--info-soft-rgb))')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><UserCog className="w-4 h-4" /></button>}
-                      {isAdmin && c.sourced_via === 'direct' && <button onClick={() => openModifyMapping(c)} className="p-1.5 rounded-lg transition-colors" title="Modify Mapping (Direct → DSA)" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Handshake className="w-4 h-4" /></button>}
+                      {isAdmin && (c.sourced_via === 'direct' || c.sourced_via === 'dsa') && <button onClick={() => openModifyMapping(c)} className="p-1.5 rounded-lg transition-colors" title={c.sourced_via === 'dsa' ? 'Modify Mapping (DSA → Direct)' : 'Modify Mapping (Direct → DSA)'} style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Handshake className="w-4 h-4" /></button>}
                       {isAdmin && <button onClick={() => setDeleteClient(c)} className="p-1.5 rounded-lg transition-colors" title="Delete" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Trash2 className="w-4 h-4" /></button>}
                     </div>
                   </td>
@@ -907,7 +939,43 @@ export default function ManageClients({ employee, onNavigate }: Props) {
         </Modal>
       )}
 
-      {mapClient && (
+      {mapClient && mapClient.sourced_via === 'dsa' && (
+        <Modal title={`Modify Mapping — ${mapClient.full_name}`} onClose={() => setMapClient(null)}>
+          <div className="p-6 space-y-5">
+            <div className="p-4 rounded-xl" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center gap-2 text-xs flex-wrap" style={{ color: 'var(--text-secondary)' }}>
+                <span className="font-semibold text-text-primary">Current mapping:</span>
+                <span className="px-2 py-0.5 rounded-lg" style={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
+                  DSA Client{mapCurrentDsa ? ` — ${mapCurrentDsa.full_name} (${mapCurrentDsa.dsa_code})` : ''}
+                </span>
+                <ArrowRight className="w-3.5 h-3.5" style={{ color: 'var(--text-faint)' }} />
+                <span className="px-2 py-0.5 rounded-lg" style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Direct Client</span>
+              </div>
+              <p className="text-xs mt-2" style={{ color: 'var(--text-faint)' }}>
+                Only the client's source mapping changes. The client ID, the owning employee and all existing records (deals, transactions, portfolio, documents, payments, audit history) are preserved.
+              </p>
+            </div>
+
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl" style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.25)' }}>
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'rgb(var(--warning-soft-rgb))' }} />
+              <p className="text-xs" style={{ color: 'rgb(var(--warning-soft-rgb))' }}>
+                The partner will no longer see this client in the Partner Portal, and this client's transactions will stop counting towards DSA payouts — including past months whose debit note has not been raised yet.
+                {mapCounts && (mapCounts.deals + mapCounts.txns + mapCounts.holdings) > 0 ? ' Debit notes already raised are not modified automatically.' : ''}
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setMapClient(null)} className="px-4 py-2 rounded-xl text-sm" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
+              <button onClick={confirmConvertToDirect} disabled={mapSaving}
+                className="px-5 py-2 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+                {mapSaving ? 'Updating...' : 'Confirm & Convert to Direct'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {mapClient && mapClient.sourced_via !== 'dsa' && (
         <Modal title={`Modify Mapping — ${mapClient.full_name}`} onClose={() => setMapClient(null)}>
           <div className="p-6 space-y-5">
             <div className="p-4 rounded-xl" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}>
