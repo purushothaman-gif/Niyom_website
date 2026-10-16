@@ -53,7 +53,7 @@ const BY_CODE: Record<string, string> = {
  * already phrased for a person, so translating them would make them worse.
  */
 function raisedByUs(message: string): boolean {
-  return /^(You |Only |Not permitted|Attendance |Payroll |This payroll|Leave |Approve |Lock |A reason|That range|Not enough|Salary structure|Unknown employee|Employee |Recalculate|Correction|Punch not found)/.test(message);
+  return /^(You |Only |Not permitted|Attendance |Payroll |This payroll|Leave |Approve |Lock |A reason|That range|Not enough|Salary structure|Unknown employee|Employee |Recalculate|Correction|Punch not found|This salary structure)/.test(message);
 }
 
 export function hrErrorMessage(err: unknown, fallback = 'Something went wrong. Please try again.'): string {
