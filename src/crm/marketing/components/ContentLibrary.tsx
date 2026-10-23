@@ -21,7 +21,13 @@ interface Props {
   onCompanyPosting: () => void;
 }
 
-const STATUSES: (ContentStatus | 'all')[] = ['all', 'draft', 'approved', 'rejected', 'archived'];
+/*
+ * 'draft' and 'rejected' are gone from the filter, not from the type: content
+ * is published on creation so nothing new can be either, but historical rows
+ * from before the approval step was removed may still carry them and should
+ * stay readable under 'all'.
+ */
+const STATUSES: (ContentStatus | 'all')[] = ['all', 'approved', 'archived'];
 
 export default function ContentLibrary({ onOpen, onNew, onAnalytics, onAutoSchedule, onCompanyPosting }: Props) {
   const [filters, setFilters] = useState<ContentFilters>(EMPTY_FILTERS);
@@ -41,7 +47,7 @@ export default function ContentLibrary({ onOpen, onNew, onAnalytics, onAutoSched
           </p>
           <h1 className="text-2xl font-bold mt-1" style={{ color: 'var(--text-primary)' }}>Content Creation</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-            {content.length} {content.length === 1 ? 'item' : 'items'} · approved content expires 48 hours after it goes live
+            {content.length} {content.length === 1 ? 'item' : 'items'} · content goes live on creation and expires 48 hours later
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -128,7 +134,7 @@ export default function ContentLibrary({ onOpen, onNew, onAnalytics, onAutoSched
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</p>
       ) : content.length === 0 ? (
         <EmptyState icon={Sparkles} title="No content yet"
-          message="Generate your first educational post — employees will see it as soon as you approve it."
+          message="Generate your first educational post — employees see it as soon as it is saved."
           action={<PrimaryButton onClick={onNew}>Create content</PrimaryButton>} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

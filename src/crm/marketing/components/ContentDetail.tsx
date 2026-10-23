@@ -1,9 +1,13 @@
-// Admin detail view: review the copy and artwork, edit, then approve, reject,
-// schedule, archive or delete.
+// Admin detail view: read the copy and artwork, edit, schedule, archive or
+// delete.
+//
+// There is no approve step — content is live from the moment it is created
+// (see the mkt_content_auto_publish trigger). Archive is the takedown path for
+// something that should not have gone out, not a review gate it has to pass.
 
 import { useMemo, useState } from 'react';
 import {
-  ArrowLeft, Check, X, Archive, Trash2, Save, Calendar, AlertTriangle,
+  ArrowLeft, Check, Archive, Trash2, Save, Calendar, AlertTriangle,
 } from 'lucide-react';
 import { NWEmployee } from '../../types';
 import { CONTENT_TYPES, formatHashtags, lintContent, REF_LINK_PLACEHOLDER } from '../marketingConstants';
@@ -28,8 +32,6 @@ interface Props {
 export default function ContentDetail({ content, employee, onBack, onChanged, onDeleted }: Props) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(content);
-  const [rejectNote, setRejectNote] = useState('');
-  const [showReject, setShowReject] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [schedule, setSchedule] = useState(content.scheduled_publish_at?.slice(0, 16) ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +50,13 @@ export default function ContentDetail({ content, employee, onBack, onChanged, on
   );
 
   const placeholderCount = form.caption.split(REF_LINK_PLACEHOLDER).length - 1;
-  const blocked = findings.length > 0 || placeholderCount !== 1;
+  /*
+   * Advisory, not a gate. Nothing blocks publication any more, so these are
+   * shown on live content for an admin to fix or take down — which is why the
+   * banner below is no longer conditional on a draft status that no longer
+   * exists.
+   */
+  const hasWarnings = findings.length > 0 || placeholderCount !== 1;
 
   const run = async (fn: () => Promise<unknown>, after?: () => void) => {
     setError(null);
@@ -75,12 +83,11 @@ export default function ContentDetail({ content, employee, onBack, onChanged, on
     setEditing(false);
   });
 
-  const handleStatus = (action: 'approved' | 'rejected' | 'archived', note?: string) =>
+  const handleStatus = (action: 'approved' | 'archived', note?: string) =>
     run(async () => {
       const updated = await setStatus.mutateAsync({ id: content.id, action, note });
       onChanged(updated);
       setForm(updated);
-      setShowReject(false);
     });
 
   const handleDelete = () => run(
@@ -112,29 +119,19 @@ export default function ContentDetail({ content, employee, onBack, onChanged, on
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {form.status === 'draft' && (
-            <>
-              <PrimaryButton onClick={() => handleStatus('approved')} disabled={busy || blocked}
-                className="flex items-center gap-2"
-                title={blocked ? 'Resolve the compliance issues before approving' : undefined}>
-                <Check className="w-4 h-4" /> Approve
-              </PrimaryButton>
-              <GhostButton onClick={() => setShowReject(s => !s)} disabled={busy}
-                className="flex items-center gap-2">
-                <X className="w-4 h-4" /> Reject
-              </GhostButton>
-            </>
-          )}
-          {form.status === 'approved' && (
+          {form.status === 'approved' ? (
+            /* Takedown. Pulls live content out of the employee gallery. */
             <GhostButton onClick={() => handleStatus('archived')} disabled={busy}
               className="flex items-center gap-2">
               <Archive className="w-4 h-4" /> Archive
             </GhostButton>
-          )}
-          {(form.status === 'rejected' || form.status === 'archived') && (
-            <PrimaryButton onClick={() => handleStatus('approved')} disabled={busy || blocked}
+          ) : (
+            /* Put an archived (or historically rejected) item back on the
+               shelf. This is a restore, not an approval — new content never
+               passes through here. */
+            <PrimaryButton onClick={() => handleStatus('approved')} disabled={busy}
               className="flex items-center gap-2">
-              <Check className="w-4 h-4" /> Approve
+              <Check className="w-4 h-4" /> Publish again
             </PrimaryButton>
           )}
           <GhostButton onClick={() => setConfirmDelete(true)} disabled={busy}
@@ -151,33 +148,17 @@ export default function ContentDetail({ content, employee, onBack, onChanged, on
         </div>
       )}
 
-      {blocked && form.status === 'draft' && (
+      {hasWarnings && (
         <div className="mb-4">
           <LintBadges findings={findings} />
           {placeholderCount !== 1 && (
             <div className="rounded-xl p-3 mt-2 text-xs"
               style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
-              The caption must contain <code>{REF_LINK_PLACEHOLDER}</code> exactly once
-              (found {placeholderCount}). Approval is blocked until this is fixed.
+              The caption should contain <code>{REF_LINK_PLACEHOLDER}</code> exactly once
+              (found {placeholderCount}). Without it an employee&rsquo;s post carries no
+              referral link, so nothing they share is attributed back to them.
             </div>
           )}
-        </div>
-      )}
-
-      {showReject && (
-        <div className="rounded-2xl p-4 mb-4 space-y-3"
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-          <Field label="Reason for rejection">
-            <input className={inputClass} style={inputStyle} value={rejectNote}
-              onChange={e => setRejectNote(e.target.value)}
-              placeholder="What needs to change?" />
-          </Field>
-          <div className="flex gap-2">
-            <PrimaryButton onClick={() => handleStatus('rejected', rejectNote)} disabled={busy}>
-              Confirm rejection
-            </PrimaryButton>
-            <GhostButton onClick={() => setShowReject(false)}>Cancel</GhostButton>
-          </div>
         </div>
       )}
 

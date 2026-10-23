@@ -44,7 +44,7 @@ const IS_DECK = new Set(CONTENT_TYPES.filter(t => t.slides).map(t => t.id as str
 const STATE_STYLE: Record<AutoSlotState, { fg: string; bg: string; label: string }> = {
   planned:    { fg: 'var(--text-muted)', bg: 'rgba(142,160,181,0.12)', label: 'Planned' },
   generating: { fg: '#38bdf8',           bg: 'rgba(56,189,248,0.12)',  label: 'Writing' },
-  generated:  { fg: '#f59e0b',           bg: 'rgba(245,158,11,0.12)',  label: 'Draft' },
+  generated:  { fg: '#f59e0b',           bg: 'rgba(245,158,11,0.12)',  label: 'Generated' },
   rendering:  { fg: '#38bdf8',           bg: 'rgba(56,189,248,0.12)',  label: 'Rendering' },
   rendered:   { fg: '#f59e0b',           bg: 'rgba(245,158,11,0.12)',  label: 'Rendered' },
   approved:   { fg: '#22c55e',           bg: 'rgba(34,197,94,0.14)',   label: 'Live' },
