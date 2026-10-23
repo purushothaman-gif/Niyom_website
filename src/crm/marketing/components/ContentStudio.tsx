@@ -1,8 +1,9 @@
 // Admin content studio: pick a brief -> generate -> edit -> preview -> save.
 //
-// The generated draft is held in local state and stays fully editable; nothing
-// is written to the database until the admin saves, and nothing is visible to
-// employees until it is separately approved.
+// The generated copy is held in local state and stays fully editable; nothing
+// is written to the database until the admin saves. Saving PUBLISHES it —
+// there is no approval step, so it reaches the employee gallery immediately
+// and starts its 48-hour life there.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, RefreshCw, Save, Wand2, ArrowLeft, Image as ImageIcon, Film } from 'lucide-react';
@@ -335,7 +336,7 @@ export default function ContentStudio({ employee, onBack, onSaved }: Props) {
               {missingPlaceholder && (
                 <div className="rounded-xl p-3 text-xs"
                   style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
-                  The caption must contain <code>{REF_LINK_PLACEHOLDER}</code> exactly once — that token becomes each
+                  The caption should contain <code>{REF_LINK_PLACEHOLDER}</code> exactly once — that token becomes each
                   employee&rsquo;s personal referral link when they copy it.
                 </div>
               )}
@@ -491,10 +492,10 @@ export default function ContentStudio({ employee, onBack, onSaved }: Props) {
                   disabled={saveDraft.isPending || uploadAsset.isPending}
                   className="flex items-center gap-2">
                   <Save className="w-4 h-4" />
-                  {saveDraft.isPending || uploadAsset.isPending ? 'Saving…' : 'Save as draft'}
+                  {saveDraft.isPending || uploadAsset.isPending ? 'Publishing…' : 'Save & publish'}
                 </PrimaryButton>
                 <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
-                  Saved drafts stay hidden from employees until you approve them.
+                  This goes live for employees straight away and expires 48 hours later.
                 </p>
               </div>
             </>

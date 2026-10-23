@@ -9,7 +9,7 @@ import { LintFinding } from '../marketingConstants';
 
 const STATUS_STYLES: Record<ContentStatus, { label: string; bg: string; fg: string }> = {
   draft:    { label: 'Draft',    bg: 'rgba(142,160,181,0.16)', fg: 'var(--text-muted)' },
-  approved: { label: 'Approved', bg: 'rgba(34,197,94,0.16)',   fg: '#22c55e' },
+  approved: { label: 'Live',     bg: 'rgba(34,197,94,0.16)',   fg: '#22c55e' },
   rejected: { label: 'Rejected', bg: 'rgba(239,68,68,0.16)',   fg: '#ef4444' },
   archived: { label: 'Archived', bg: 'rgba(148,163,184,0.16)', fg: '#94a3b8' },
 };
@@ -27,7 +27,7 @@ export function StatusPill({ status }: { status: ContentStatus }) {
 // ---------------------------------------------------------------------------
 
 /**
- * Live countdown to expiry. Approved content is only visible for 48h, so
+ * Live countdown to expiry. Content is only visible for 48h, so
  * employees need to see at a glance how long they have left — and the card must
  * stop claiming time remains the moment it runs out.
  */
@@ -67,7 +67,7 @@ export function ExpiryCountdown({ expiresAt, compact }: { expiresAt: string | nu
 
 // ---------------------------------------------------------------------------
 
-/** Compliance warnings on a draft. Blocks approval while non-empty. */
+/** Compliance warnings. Advisory only — nothing blocks publication. */
 export function LintBadges({ findings }: { findings: LintFinding[] }) {
   if (!findings.length) return null;
 
@@ -75,7 +75,7 @@ export function LintBadges({ findings }: { findings: LintFinding[] }) {
     <div className="rounded-xl p-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)' }}>
       <p className="text-xs font-bold flex items-center gap-1.5 mb-2" style={{ color: '#ef4444' }}>
         <AlertTriangle className="w-3.5 h-3.5" />
-        {findings.length} compliance {findings.length === 1 ? 'issue' : 'issues'} — fix before approving
+        {findings.length} compliance {findings.length === 1 ? 'issue' : 'issues'} — edit the copy or archive the post
       </p>
       <ul className="space-y-1">
         {findings.map((f, i) => (

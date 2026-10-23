@@ -140,13 +140,15 @@ function contentRow(
       video_script: draft.video_script ?? null,
     },
     generation_meta: meta,
-    status: "draft",
+    // status is deliberately absent: the mkt_content_auto_publish trigger
+    // publishes every new row, so naming a status here would only create a
+    // second place for the auto batch to disagree with everything else.
     // No employee owns this. created_by is already nullable and NULL already
     // means exactly that — a synthetic "system" employee would have to be
     // special-cased in auth, the directory, RM assignment and the leaderboard.
     created_by: null,
-    // The existing RLS predicate, not any new code, is what keeps the batch
-    // invisible to employees until 09:30 IST.
+    // The RLS predicate still gates on scheduled_publish_at, so the batch stays
+    // invisible to employees until 09:30 IST even though it is already live.
     scheduled_publish_at: publishAt,
   };
 }

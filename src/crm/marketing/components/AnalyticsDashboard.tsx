@@ -61,10 +61,9 @@ export default function AnalyticsDashboard({ onBack }: { onBack: () => void }) {
           <div className="rounded-2xl p-5 mb-5"
             style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
             <p className="text-sm font-bold mb-3" style={{ color: 'var(--text-primary)' }}>Content</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               <Mini label="Generated" value={totals?.generated_total ?? 0} />
-              <Mini label="Approved" value={totals?.approved_total ?? 0} />
-              <Mini label="Rejected" value={totals?.rejected_total ?? 0} />
+              <Mini label="Published" value={totals?.approved_total ?? 0} />
               <Mini label="Expired" value={totals?.expired_total ?? 0} />
               <Mini label="Deleted" value={totals?.admin_deleted_total ?? 0} />
               <Mini label="Downloads" value={totals?.downloads_total ?? 0} />

@@ -1,7 +1,7 @@
 // Marketing Tool — Content Creation module container.
 //
 // Admins get the studio, library, detail review and analytics; employees get a
-// read-only gallery of approved, unexpired content. The role branch happens
+// read-only gallery of live, unexpired content. The role branch happens
 // here rather than at the router so both roles can share the one page key.
 // Scopes React Query to the module, mirroring bonds/Bonds.tsx.
 

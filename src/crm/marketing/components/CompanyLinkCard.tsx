@@ -1,6 +1,6 @@
 // The company onboarding link, for posts made from NIYOM's own social accounts.
 //
-// Distinct from an employee's personal link on purpose. Employees post approved
+// Distinct from an employee's personal link on purpose. Employees post live
 // content from their own accounts and get credited through their own code; the
 // company's official accounts post on behalf of nobody in particular. Signups
 // arriving through this link stay on the house account (NIYOM-001), exactly as a

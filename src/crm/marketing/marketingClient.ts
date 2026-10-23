@@ -87,7 +87,7 @@ export function useContentList(filters: ContentFilters) {
 }
 
 /**
- * Employee gallery. RLS already restricts this to approved, unexpired,
+ * Employee gallery. RLS already restricts this to live, unexpired,
  * published content — the query does not need (and must not rely on) its own
  * status filter.
  */
@@ -255,14 +255,18 @@ export function useUpdateContent() {
 }
 
 /**
- * Approve / reject / archive. Routed through the RPC so expires_at is computed
- * on the server clock and the audit event is always written.
+ * Archive (takedown) or publish again (restore).
+ *
+ * New content never comes through here — the mkt_content_auto_publish trigger
+ * publishes it on insert. This is the path for pulling something back off the
+ * shelf and putting it back. Still routed through the RPC so expires_at is
+ * computed on the server clock and the audit event is always written.
  */
 export function useSetContentStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, action, note }: {
-      id: string; action: 'approved' | 'rejected' | 'archived'; note?: string;
+      id: string; action: 'approved' | 'archived'; note?: string;
     }) => {
       const { data, error } = await supabase.rpc('mkt_set_content_status', {
         p_content_id: id, p_action: action, p_note: note ?? '',
