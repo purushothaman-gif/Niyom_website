@@ -29,7 +29,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { resolveApiKey } from "../_shared/mkt/anthropic.ts";
+import { AnthropicAccountError, resolveApiKey } from "../_shared/mkt/anthropic.ts";
 import { generateDraft } from "../_shared/mkt/generate.ts";
 import { loadCategoryTopics, loadRecentAcrossCategories } from "../_shared/mkt/history.ts";
 import { loadTrends } from "../_shared/mkt/trends.ts";
@@ -197,6 +197,9 @@ Deno.serve(async (req: Request) => {
 
     const publishAt = new Date(`${runDate}T04:00:00.000Z`).toISOString();   // 09:30 IST
     const results: Record<string, unknown>[] = [];
+    /* Set when the account itself is the problem, so the rest of the batch is
+       abandoned rather than rediscovering it slot by slot. */
+    let accountOutage = false;
 
     for (const slot of claimed) {
       if (Date.now() - started > DEADLINE_MS) {
@@ -289,6 +292,36 @@ Deno.serve(async (req: Request) => {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`mkt-auto-generate slot ${runDate}/${slot.slot_no} failed:`, message);
+
+        /*
+          An account-level outage is not this slot's fault and will not be
+          cured by trying again in five minutes. Hand the slot back WITHOUT
+          spending an attempt, stop working through the rest of the batch, and
+          tell someone — then the whole day regenerates by itself once the
+          account is healthy.
+
+          Without this, eleven days of content were lost in October: the
+          account ran out of credit, every slot burned both attempts
+          rediscovering that, and the days became permanently unclaimable even
+          after the credit was topped up.
+        */
+        if (err instanceof AnthropicAccountError) {
+          await sbRpc(cfg, "mkt_auto_release_slot", {
+            p_slot_id: slot.id, p_note: message.slice(0, 300),
+          }).catch(() => {});
+
+          await sbRpc(cfg, "mkt_auto_alert_admins", {
+            p_title: "Auto content paused — Anthropic account needs attention",
+            p_message:
+              `${message} Today's batch (${runDate}) has been left untouched and will generate ` +
+              `on the next scheduled run once this is resolved. No attempts were consumed.`,
+          }).catch(() => {});
+
+          results.push({ slot_no: slot.slot_no, state: "paused", error: message.slice(0, 300) });
+          accountOutage = true;
+          break;
+        }
+
         if (dryRun) {
           await sbRpc(cfg, "mkt_auto_release_slot", { p_slot_id: slot.id }).catch(() => {});
         } else {
@@ -316,6 +349,7 @@ Deno.serve(async (req: Request) => {
       ok: true,
       run_date: runDate,
       dry_run: dryRun,
+      account_outage: accountOutage,
       processed: results.length,
       remaining,
       trends_used: trends.length,

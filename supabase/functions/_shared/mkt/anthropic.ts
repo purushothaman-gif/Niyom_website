@@ -8,6 +8,25 @@
 import { DRAFT_SCHEMA, SYSTEM_PROMPT } from './prompt.ts';
 import type { Usage } from './types.ts';
 
+/**
+ * An Anthropic failure that will not fix itself: the account is out of credit,
+ * or the key is rejected. Distinct from a rate limit or a 5xx, which are worth
+ * retrying.
+ *
+ * It matters because the caller's retry budget is finite. On 2026-10-19 the
+ * account ran out of credit, and for eleven days every slot spent BOTH of its
+ * generation attempts discovering the same thing. The attempts cost no tokens —
+ * a 400 is rejected before any work — but they exhausted `regen_count`, so even
+ * after credit was restored those days could never be re-generated. Eleven days
+ * of content were lost to a billing problem that was fixed in a minute.
+ */
+export class AnthropicAccountError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AnthropicAccountError';
+  }
+}
+
 export const ANTHROPIC_MODEL = 'claude-sonnet-5';
 export const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
@@ -118,10 +137,26 @@ export async function callAnthropic(
     // reading this message has already authenticated against the CRM. Say so
     // plainly instead of surfacing a raw API dump they can't act on.
     if (res.status === 401) {
-      throw new Error(
+      throw new AnthropicAccountError(
         'The Anthropic API key was rejected. The ANTHROPIC_API_KEY secret for this project ' +
         'is missing, revoked, or malformed — set a fresh key from console.anthropic.com and ' +
         'redeploy is not required (the function reads the secret on each run).',
+      );
+    }
+
+    /*
+      A 400 is normally a bad request — our fault, and not worth retrying for a
+      different reason. But Anthropic also answers 400 for billing, and that one
+      is an account state rather than a request defect: nothing about the
+      request will make it succeed, and it will start working again the moment
+      someone tops up. Treat it as an outage so the caller can hand the slot
+      back untouched instead of spending its attempts.
+    */
+    if (res.status === 400 && /credit balance|billing|insufficient|quota/i.test(detail)) {
+      throw new AnthropicAccountError(
+        'Anthropic rejected the request because the account has no credit left. Nothing is ' +
+        'wrong with the content pipeline — top up at console.anthropic.com and the next ' +
+        'scheduled run will generate normally.',
       );
     }
     if (res.status === 429) {
