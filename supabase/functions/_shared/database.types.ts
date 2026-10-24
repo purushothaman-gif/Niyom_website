@@ -5234,6 +5234,27 @@ export type Database = {
         }
         Relationships: []
       }
+      mkt_auto_health_alerts: {
+        Row: {
+          alerted_at: string
+          live_count: number
+          reason: string
+          run_date: string
+        }
+        Insert: {
+          alerted_at?: string
+          live_count: number
+          reason: string
+          run_date: string
+        }
+        Update: {
+          alerted_at?: string
+          live_count?: number
+          reason?: string
+          run_date?: string
+        }
+        Relationships: []
+      }
       mkt_auto_settings: {
         Row: {
           approve_window_hours: number
@@ -11266,6 +11287,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      mkt_auto_health_check: { Args: { p_run_date?: string }; Returns: string }
       mkt_auto_is_run_day: { Args: { p_day: string }; Returns: boolean }
       mkt_auto_next_categories: {
         Args: { p_n: number; p_run_date: string }
