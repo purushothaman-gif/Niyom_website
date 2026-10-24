@@ -77,6 +77,17 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/**
+ * Drop switched-off products (see src/lib/productAccess.ts). Item keys ARE the
+ * product keys; groups left empty disappear.
+ */
+export function withoutProducts(groups: NavGroup[], hidden: ReadonlySet<string>): NavGroup[] {
+  if (hidden.size === 0) return groups;
+  return groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => !hidden.has(i.key)) }))
+    .filter((g) => g.items.length > 0);
+}
+
 /** Human-readable titles for the topbar. */
 export const VIEW_TITLES: Record<PartnerView, string> = {
   dashboard: 'Partner Dashboard',

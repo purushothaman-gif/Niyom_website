@@ -9406,6 +9406,93 @@ export type Database = {
           },
         ]
       }
+      nw_product_defaults: {
+        Row: {
+          audience: string
+          enabled: boolean
+          product: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          audience: string
+          enabled?: boolean
+          product: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          audience?: string
+          enabled?: boolean
+          product?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_product_defaults_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nw_product_overrides: {
+        Row: {
+          audience: string
+          client_id: string | null
+          dsa_id: string | null
+          enabled: boolean
+          id: string
+          product: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          audience: string
+          client_id?: string | null
+          dsa_id?: string | null
+          enabled: boolean
+          id?: string
+          product: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          audience?: string
+          client_id?: string | null
+          dsa_id?: string | null
+          enabled?: boolean
+          id?: string
+          product?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_product_overrides_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_product_overrides_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_product_overrides_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nw_share_orders: {
         Row: {
           amount: number | null
@@ -11705,6 +11792,13 @@ export type Database = {
         Args: { p_duplicate: string; p_primary: string }
         Returns: undefined
       }
+      nw_my_products: {
+        Args: { p_audience: string }
+        Returns: {
+          enabled: boolean
+          product: string
+        }[]
+      }
       nw_next_lead_code: { Args: never; Returns: string }
       nw_notify_admins: {
         Args: {
@@ -11972,6 +12066,15 @@ export type Database = {
           website: string
         }[]
       }
+      nw_product_enabled: {
+        Args: {
+          p_audience: string
+          p_client_id: string
+          p_dsa_id: string
+          p_product: string
+        }
+        Returns: boolean
+      }
       nw_reassign_client: {
         Args: { p_client_id: string; p_reason?: string; p_to_employee: string }
         Returns: undefined
@@ -11995,6 +12098,20 @@ export type Database = {
       nw_revoke_auth_sessions: { Args: { p_user_id: string }; Returns: number }
       nw_set_asset_class: {
         Args: { p_asset_class: string; p_isin: string; p_note?: string }
+        Returns: undefined
+      }
+      nw_set_product_default: {
+        Args: { p_audience: string; p_enabled: boolean; p_product: string }
+        Returns: undefined
+      }
+      nw_set_product_override: {
+        Args: {
+          p_audience: string
+          p_client_id: string
+          p_dsa_id: string
+          p_enabled: boolean
+          p_product: string
+        }
         Returns: undefined
       }
       nw_stamp_duty_rate: { Args: { p_product_type: string }; Returns: number }

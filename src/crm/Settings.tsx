@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { NWEmployee } from './types';
 import { fmtDate } from './utils';
-import { User, Lock, Bell, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Smartphone, Camera } from 'lucide-react';
+import { User, Lock, Bell, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Smartphone, Camera, Package } from 'lucide-react';
 import { EmployeeAvatar } from './EmployeeAvatar';
+import { ProductDefaultsPanel } from './ProductAccess';
 import ImageCropModal from './ImageCropModal';
 import {
   listVerifiedTotpFactors, startTotpEnrollment, verifyTotpCode, cancelEnrollment,
@@ -36,7 +37,7 @@ function Input({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
 }
 
 export default function Settings({ employee }: Props) {
-  const [tab, setTab] = useState<'profile' | 'security' | 'notifications'>('profile');
+  const [tab, setTab] = useState<'profile' | 'security' | 'notifications' | 'products'>('profile');
   const [profile, setProfile] = useState({ full_name: employee.full_name, phone: employee.phone || '' });
   const [passwords, setPasswords] = useState({ next: '', confirm: '' });
   const [showPw, setShowPw] = useState(false);
@@ -50,7 +51,8 @@ export default function Settings({ employee }: Props) {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
-  const canEditPhoto = employee.role === 'admin' || employee.role === 'super_admin';
+  const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
+  const canEditPhoto = isAdmin;
 
   // --- Two-factor (TOTP) ---
   // Opt-in: the login gate no longer forces enrolment, so this is the only place
@@ -166,6 +168,7 @@ export default function Settings({ employee }: Props) {
     { key: 'profile' as const, label: 'Profile', icon: User },
     { key: 'security' as const, label: 'Security', icon: Lock },
     { key: 'notifications' as const, label: 'Notifications', icon: Bell },
+    ...(isAdmin ? [{ key: 'products' as const, label: 'Products', icon: Package }] : []),
   ];
 
   return (
@@ -459,6 +462,8 @@ export default function Settings({ employee }: Props) {
           </div>
         </div>
       )}
+
+      {tab === 'products' && isAdmin && <ProductDefaultsPanel />}
 
       {cropFile && (
         <ImageCropModal file={cropFile} busy={uploadingPhoto} onCancel={() => setCropFile(null)} onApply={handleCroppedAvatar} />

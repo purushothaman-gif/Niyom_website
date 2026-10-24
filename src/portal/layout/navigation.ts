@@ -258,3 +258,14 @@ export const VIEW_SUBTITLES: Partial<Record<PortalView, string>> = {
   support: 'Raise a ticket and track the ones you have open.',
   profile: 'Your personal, bank and KYC details — and how the portal behaves.',
 };
+
+/**
+ * Drop switched-off products (see src/lib/productAccess.ts). Item keys ARE the
+ * product keys, so this is a plain key filter; groups left empty disappear.
+ */
+export function withoutProducts(groups: NavGroup[], hidden: ReadonlySet<string>): NavGroup[] {
+  if (hidden.size === 0) return groups;
+  return groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => !hidden.has(i.key)) }))
+    .filter((g) => g.items.length > 0);
+}

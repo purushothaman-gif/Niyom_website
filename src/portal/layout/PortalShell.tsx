@@ -25,10 +25,13 @@ import {
   NAV_GROUPS,
   PRIMARY_VIEWS,
   VIEW_SUBTITLES,
+  withoutProducts,
   type NavGroup,
   type NavItem,
   type PortalView,
 } from './navigation';
+
+const NO_HIDDEN: ReadonlySet<string> = new Set();
 
 interface PortalShellProps {
   view: PortalView;
@@ -39,6 +42,8 @@ interface PortalShellProps {
   onRefresh: () => void;
   onChangePassword: () => void;
   onLogout: () => void;
+  /** Product keys switched off for this client; their nav items are dropped. */
+  hiddenProducts?: ReadonlySet<string>;
   children: ReactNode;
 }
 
@@ -51,6 +56,7 @@ export function PortalShell({
   onRefresh,
   onChangePassword,
   onLogout,
+  hiddenProducts = NO_HIDDEN,
   children,
 }: PortalShellProps) {
   const [moreOpen, setMoreOpen] = useState(false);
@@ -90,7 +96,10 @@ export function PortalShell({
     setOpenMenu(null);
   };
 
-  const primaryViews = PRIMARY_VIEWS.map((p) => p.view);
+  const navGroups = withoutProducts(NAV_GROUPS, hiddenProducts);
+  const headerMenus = withoutProducts(HEADER_MENUS, hiddenProducts);
+  const primaryTabs = PRIMARY_VIEWS.filter((p) => !hiddenProducts.has(p.view));
+  const primaryViews = primaryTabs.map((p) => p.view);
   const subtitle = VIEW_SUBTITLES[view];
   const accountActive = ACCOUNT_ITEMS.some((i) => i.view === view);
 
@@ -120,7 +129,7 @@ export function PortalShell({
               </TopButton>
             ))}
 
-            {HEADER_MENUS.map((group) => {
+            {headerMenus.map((group) => {
               const heading = group.heading!;
               const active = group.items.some((i) => i.view === view);
               const open = openMenu === heading;
@@ -284,7 +293,7 @@ export function PortalShell({
       {/* ---- Mobile tab bar ---- */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border-subtle bg-header/95 backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-lg items-stretch">
-          {PRIMARY_VIEWS.map((p) => {
+          {primaryTabs.map((p) => {
             const active = p.view === view;
             const Icon = p.icon;
             return (
@@ -348,7 +357,7 @@ export function PortalShell({
               </button>
             </div>
 
-            {NAV_GROUPS.map((group: NavGroup, gi) => (
+            {navGroups.map((group: NavGroup, gi) => (
               <div key={group.heading ?? gi} className="mb-4 last:mb-0">
                 {group.heading && (
                   <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-text-faint">
