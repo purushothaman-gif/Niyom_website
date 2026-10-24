@@ -11,6 +11,7 @@
  * The wording is `CAS_FRESHNESS_COPY` from `shared/`, so the app and the
  * website say the same thing about the same state.
  */
+import { mfSsoEnabled } from '@shared/platform/env';
 import { View } from 'react-native';
 import { AlertTriangle, CheckCircle2, Upload } from 'lucide-react-native';
 import { CAS_FRESHNESS_COPY, type CasFreshness } from '@shared/portal/types/cas';
@@ -31,6 +32,9 @@ export function CasStatusNote({
   onImport: () => void;
 }) {
   const p = usePalette();
+
+  // Statement imports retire once mutual funds run on the MF platform.
+  if (mfSsoEnabled()) return null;
 
   /* No statement at all — the useful thing to say is what importing one adds. */
   if (!hasImportedStatement || freshness.state === 'none') {

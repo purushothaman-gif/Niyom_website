@@ -9,6 +9,7 @@
  * Amounts are written as raw numbers rather than formatted strings — the point
  * of a spreadsheet is that it can be summed.
  */
+import { mfSsoEnabled } from '@shared/platform/env';
 import { useMemo, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { router } from 'expo-router';
@@ -130,7 +131,8 @@ export default function Reports() {
             </Card>
           </Animated.View>
 
-          <View>
+          {/* Gains are built on MF statements, which retire on the MF platform. */}
+          {mfSsoEnabled() ? null : <View>
             <Text variant="overline" tone="muted" caps style={{ marginBottom: space[3] }}>
               Also available
             </Text>
@@ -144,7 +146,7 @@ export default function Reports() {
                 last
               />
             </Card>
-          </View>
+          </View>}
 
           <Text variant="caption" tone="faint" center>
             Reports are built on your phone from data already loaded — nothing is emailed and

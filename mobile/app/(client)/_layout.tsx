@@ -11,7 +11,7 @@
  * client. Without that, a session expiring while the app is open would leave
  * the dashboard mounted, querying as nobody.
  */
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Tabs, router } from 'expo-router';
 import {
   CalendarClock,
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/features/auth/AuthContext';
 import { makeTabBar, type TabSpec } from '@/ui/TabBar';
+import { mfSsoEnabled } from '@shared/platform/env';
 
 const TABS: TabSpec[] = [
   { name: 'dashboard', label: 'Home', icon: LayoutDashboard },
@@ -32,6 +33,9 @@ const TABS: TabSpec[] = [
 ];
 
 const TabBar = makeTabBar(TABS);
+// SIPs live on the MF platform once the switch is on; the route stays (it
+// redirects) but the tab goes.
+const MF_PLATFORM_TAB_BAR = makeTabBar(TABS.filter((t) => t.name !== 'sip'));
 
 export default function ClientLayout() {
   const { session, restoring } = useAuth();
@@ -41,11 +45,13 @@ export default function ClientLayout() {
     if (session?.surface !== 'client') router.replace('/');
   }, [session, restoring]);
 
+  const Bar = useMemo(() => (mfSsoEnabled() ? MF_PLATFORM_TAB_BAR : TabBar), []);
+
   if (session?.surface !== 'client') return null;
 
   return (
     <Tabs
-      tabBar={(props) => <TabBar {...props} />}
+      tabBar={(props) => <Bar {...props} />}
       screenOptions={{ headerShown: false }}
     >
       {TABS.map((t) => (

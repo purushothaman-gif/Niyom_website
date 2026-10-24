@@ -11,6 +11,7 @@ import type { PortfolioData } from '../../types';
 import type { CasFreshness } from '../../types/cas';
 import { HoldingsTable, type SortKey } from './HoldingsTable';
 import { ImportPortfolioCard } from './ImportPortfolioCard';
+import { mfSsoEnabled } from '../../../../shared/platform/env';
 
 type Filter = ProductType | 'all';
 
@@ -73,11 +74,13 @@ export function PortfolioPage({
    * nothing". So the empty state offers the import rather than waiting for them
    * to start from scratch with us.
    */
+  // Statement imports retire once mutual funds run on the MF platform.
+  const mfOnPlatform = mfSsoEnabled();
   if (rows.length === 0) {
     return (
       <div className="space-y-5">
         {/* The pitch does the work here; a bare "no holdings" card would not. */}
-        <ImportPortfolioCard onImport={onImport} dismissible={false} />
+        {!mfOnPlatform && <ImportPortfolioCard onImport={onImport} dismissible={false} />}
         <Card>
           <EmptyState
             icon={Wallet}
@@ -104,7 +107,7 @@ export function PortfolioPage({
         so the case for it gets real space. Once imported, the same action
         becomes a quiet "bring it up to date" button.
       */}
-      {!hasImportedStatement && (
+      {!hasImportedStatement && !mfOnPlatform && (
         <ImportPortfolioCard
           onImport={onImport}
           visibleHoldings={rows.length}

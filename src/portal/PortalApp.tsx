@@ -43,6 +43,9 @@ import type { PortalView } from './layout/navigation';
 import { clientSupabase } from '../lib/supabase';
 import { useHiddenProducts } from '../lib/productAccess';
 
+/** In-house MF views that have no place once mutual funds run on the MF platform. */
+const MF_PLATFORM_RETIRED_VIEWS: PortalView[] = ['sip', 'capital-gains'];
+
 interface PortalAppProps {
   clientId: string;
   onLogout: () => void;
@@ -69,7 +72,17 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
    */
   const mf = useMfLaunch(clientId);
   const mfSsoOn = mfSsoEnabled();
-  const hiddenProducts = useHiddenProducts(clientSupabase, 'client');
+  const productHidden = useHiddenProducts(clientSupabase, 'client');
+  /*
+   * With mutual funds on the MF platform, our own SIP book and the CAS-based
+   * capital gains page retire with the rest of the in-house MF machinery; they
+   * ride the same hidden-view path, so links and bookmarks to them land on the
+   * dashboard too.
+   */
+  const hiddenProducts = useMemo(
+    () => (mfSsoOn ? new Set([...productHidden, ...MF_PLATFORM_RETIRED_VIEWS]) : productHidden),
+    [mfSsoOn, productHidden],
+  );
   const navigate = (v: PortalView) => {
     // A switched-off product is unreachable from every entry point, not just the nav.
     if (hiddenProducts.has(v)) return routeTo('dashboard');

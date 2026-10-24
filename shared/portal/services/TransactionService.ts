@@ -9,18 +9,24 @@ import type { NWTransaction, ProductType } from '../../crm/types';
 import { PRODUCT_LABELS, PRODUCT_CHART_COLORS } from '../../crm/utils';
 import type { TransactionRow, TxnFilter, TxnSummary } from '../types/activity';
 import { isDemoClientSession, demoClientTransactions } from '../demo/demoClient';
+import { mfSsoEnabled } from '../../platform/env';
+
+async function fetchAll(clientId: string): Promise<NWTransaction[]> {
+  const { data, error } = await supabase
+    .from('nw_transactions')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('txn_date', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data as NWTransaction[]) ?? [];
+}
 
 export const TransactionService = {
   /** All transactions for a client, newest first. Sole Supabase boundary here. */
   async getAll(clientId: string): Promise<NWTransaction[]> {
-    if (isDemoClientSession()) return demoClientTransactions;
-    const { data, error } = await supabase
-      .from('nw_transactions')
-      .select('*')
-      .eq('client_id', clientId)
-      .order('txn_date', { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data as NWTransaction[]) ?? [];
+    const txns = isDemoClientSession() ? demoClientTransactions : await fetchAll(clientId);
+    // The MF platform is the mutual fund record once the switch is on.
+    return mfSsoEnabled() ? txns.filter((t) => t.product_type !== 'mutual_fund') : txns;
   },
 
   /** Normalize DB rows into presentation rows. */

@@ -21,9 +21,10 @@
  * disposal computed from a partial history is a wrong number, not an
  * approximate one. Those funds are excluded and named, with the reason.
  */
+import { mfSsoEnabled } from '@shared/platform/env';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { router } from 'expo-router';
+import { router, Redirect } from 'expo-router';
 import { AlertTriangle, Receipt, Upload } from 'lucide-react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { fmt, fmtFull, fmtDate } from '@shared/crm/utils';
@@ -40,7 +41,15 @@ import { Money } from '@/ui/Money';
 import { Button } from '@/ui/Button';
 import { EmptyState, ErrorState, Segmented, SkeletonScreen } from '@/ui/kit';
 
+/**
+ * Retired once mutual funds run on the MF platform (EXPO_PUBLIC_MF_SSO): the
+ * platform owns this, so any link here lands on the Invest tab's launcher.
+ */
 export default function CapitalGains() {
+  return mfSsoEnabled() ? <Redirect href="/(client)/invest" /> : <CapitalGainsScreen />;
+}
+
+function CapitalGainsScreen() {
   const clientId = useClientId();
   const p = usePalette();
 

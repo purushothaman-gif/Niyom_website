@@ -13,6 +13,7 @@
  * changes what "complete" means, so `CasStatusNote` says so plainly rather than
  * leaving someone to wonder why a fund they hold elsewhere is missing.
  */
+import { mfSsoEnabled } from '@shared/platform/env';
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
@@ -130,13 +131,19 @@ export default function Portfolio() {
             <EmptyState
               icon={Wallet}
               title="Nothing here yet"
-              message="Once you invest through Niyom — or import your statement — your holdings appear here."
+              message={
+                mfSsoEnabled()
+                  ? 'Holdings you buy through Niyom appear here. Mutual funds are in your mutual fund account.'
+                  : 'Once you invest through Niyom — or import your statement — your holdings appear here.'
+              }
               action={
-                <Button
-                  label="Import my statement"
-                  icon={Upload}
-                  onPress={() => router.push('/import-portfolio')}
-                />
+                mfSsoEnabled() ? undefined : (
+                  <Button
+                    label="Import my statement"
+                    icon={Upload}
+                    onPress={() => router.push('/import-portfolio')}
+                  />
+                )
               }
             />
           ) : (

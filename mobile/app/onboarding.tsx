@@ -20,6 +20,7 @@
  * so the step is shown conditionally, and choosing them later triggers the same
  * requirement through Activate Products.
  */
+import { mfSsoEnabled } from '@shared/platform/env';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { router } from 'expo-router';
@@ -242,7 +243,7 @@ export default function Onboarding() {
             </Text>
           </Card>
           <Button
-            label="Explore funds"
+            label={mfSsoEnabled() ? 'Open Mutual Funds' : 'Explore funds'}
             onPress={() => router.replace('/(client)/invest')}
             fullWidth
             size="lg"
