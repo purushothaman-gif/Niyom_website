@@ -5,11 +5,20 @@ import { NWEmployee, NWTransaction, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, TXN_LABELS, TXN_COLORS } from './utils';
 import { Plus, X, Pencil, Trash2, FileText, ExternalLink, Search, ChevronDown, ChevronRight, Percent, TrendingUp, Shield } from 'lucide-react';
 import type { Insertable } from '../lib/dbJson';
+import { recalcPortfolioValue } from './portfolioValue';
+import { mfSsoEnabled } from '../../shared/platform/env';
 
 interface Props { employee: NWEmployee; onNavigate?: (page: string, params?: Record<string, string>) => void; }
 
 const PRODUCTS: ProductType[] = ['unlisted_share', 'secondary_bond', 'primary_bond', 'mutual_fund', 'fixed_deposit', 'insurance'];
 const TXN_TYPES = ['buy', 'sell'];
+/*
+ * New mutual fund transactions are booked on the MF platform once VITE_MF_SSO
+ * is on, so the entry form stops offering it. Past MF transactions stay listed
+ * and filterable — MIS trail and MF/SIP incentives still read them — and an
+ * existing MF row keeps its own type when opened for editing.
+ */
+const ENTRY_PRODUCTS: ProductType[] = PRODUCTS.filter((p) => !mfSsoEnabled() || p !== 'mutual_fund');
 
 // ---------------------------------------------------------------------------
 // Book-from-deal
@@ -298,10 +307,7 @@ async function syncTransactionToHolding(txn: Record<string, any>) {
     await supabase.from('nw_holdings').insert([holdingPayload as Insertable<'nw_holdings'>]);
   }
 
-  // Recalculate portfolio_value for client
-  const { data: allHoldings } = await supabase.from('nw_holdings').select('current_value').eq('client_id', txn.client_id);
-  const total = (allHoldings || []).reduce((s: number, h: any) => s + (h.current_value || 0), 0);
-  await supabase.from('nw_clients').update({ portfolio_value: total }).eq('id', txn.client_id);
+  await recalcPortfolioValue(txn.client_id);
 }
 
 // Reverse a previously-synced BUY transaction out of its holding. The inverse of
@@ -344,9 +350,7 @@ async function reverseTransactionFromHolding(txn: Record<string, any>): Promise<
     }).eq('id', existing.id);
   }
 
-  const { data: allHoldings } = await supabase.from('nw_holdings').select('current_value').eq('client_id', txn.client_id);
-  const total = (allHoldings || []).reduce((s: number, h: any) => s + (h.current_value || 0), 0);
-  await supabase.from('nw_clients').update({ portfolio_value: total }).eq('id', txn.client_id);
+  await recalcPortfolioValue(txn.client_id);
   return true;
 }
 
@@ -390,9 +394,7 @@ async function reduceHoldingForSell(txn: Record<string, any>) {
     }).eq('id', existing.id);
   }
 
-  const { data: allHoldings } = await supabase.from('nw_holdings').select('current_value').eq('client_id', txn.client_id);
-  const total = (allHoldings || []).reduce((s: number, h: any) => s + (h.current_value || 0), 0);
-  await supabase.from('nw_clients').update({ portfolio_value: total }).eq('id', txn.client_id);
+  await recalcPortfolioValue(txn.client_id);
 }
 
 export default function Transactions({ employee, onNavigate }: Props) {
@@ -960,7 +962,7 @@ export default function Transactions({ employee, onNavigate }: Props) {
           {TXN_TYPES.map(t => <option key={t} value={t}>{TXN_LABELS[t]}</option>)}
         </S></Field>
         <Field label="Product Type"><S value={form.product_type} onChange={v => setF('product_type', v as ProductType)} disabled={locked}>
-          {PRODUCTS.map(p => <option key={p} value={p}>{PRODUCT_LABELS[p]}</option>)}
+          {(ENTRY_PRODUCTS.includes(form.product_type) ? ENTRY_PRODUCTS : [...ENTRY_PRODUCTS, form.product_type]).map(p => <option key={p} value={p}>{PRODUCT_LABELS[p]}</option>)}
         </S></Field>
         <Field label="Product Name *">
           <I value={form.product_name} onChange={e => setF('product_name', e.target.value)} readOnly={locked}

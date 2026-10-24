@@ -102,6 +102,17 @@ function isAccessRevoked(message?: string) {
  * pages themselves stay entirely unaware that demo mode exists.
  */
 
+/** A sample client's totals with its sample mutual fund holdings taken out. */
+function withoutDemoMf(c: PartnerClientRow): PartnerClientRow {
+  const mf = (demoPortfolios[c.client_id] ?? []).filter((h) => h.product_type === 'mutual_fund');
+  return {
+    ...c,
+    invested_amount: c.invested_amount - mf.reduce((s, h) => s + h.invested_amount, 0),
+    current_value: c.current_value - mf.reduce((s, h) => s + h.current_value, 0),
+    holdings_count: c.holdings_count - mf.length,
+  };
+}
+
 export const PartnerService = {
   async getProfile(): Promise<PartnerIdentity | null> {
     if (isDemoSession()) return demoProfile;
@@ -135,7 +146,7 @@ export const PartnerService = {
   },
 
   async getClients(): Promise<PartnerClientRow[]> {
-    if (isDemoSession()) return demoClients;
+    if (isDemoSession()) return mfSsoEnabled() ? demoClients.map(withoutDemoMf) : demoClients;
     // Once mutual funds run on the MF platform, totals leave our MF rows out.
     const { data, error } = await supabase.rpc(
       mfSsoEnabled() ? 'nw_partner_clients_excluding_mf' : 'nw_partner_clients',
