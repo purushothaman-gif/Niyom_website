@@ -85,6 +85,24 @@ async function io<T>(action: string, payload: Record<string, unknown> = {}): Pro
     body: JSON.stringify({ action, ...payload }),
   });
   const text = await res.text();
+
+  /*
+   * A 401 here means one thing only, and it has now caused two multi-week
+   * outages: the MKT_RENDER_SECRET in GitHub is not the one the edge function
+   * holds. The first time it was absent; the second it was present but a
+   * different, longer value, and the raw body ("Unauthorized") said none of
+   * that. Spell out the actual check, including the length we sent — a length
+   * that does not match is the whole diagnosis.
+   */
+  if (res.status === 401) {
+    throw new Error(
+      `${action} failed (401): the MKT_RENDER_SECRET this run sent (${SECRET.length} chars) is ` +
+      `not the value mkt-auto-render-io holds. These are two separate copies and nothing keeps ` +
+      `them in sync. Compare the GitHub repository secret against the Supabase function secret ` +
+      `of the same name and make them identical.`,
+    );
+  }
+
   if (!res.ok) throw new Error(`${action} failed (${res.status}): ${text.slice(0, 400)}`);
   return JSON.parse(text) as T;
 }
