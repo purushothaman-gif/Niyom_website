@@ -20,10 +20,10 @@ export interface NiyomEnv {
   bseProxyUrl?: string;
   /** 'mock' shows illustrative funds; anything else uses the real rail. */
   bseMode?: string;
-  /** 'true' sends the client Mutual Funds entry to Wylth via SSO. */
-  wylthMf?: string;
-  /** 'true' shows the admin / partner Wylth entries (no Wylth spec yet). */
-  wylthStaff?: string;
+  /** 'true' sends the client Mutual Funds entry to the MF platform via SSO. */
+  mfSso?: string;
+  /** 'true' shows the admin / partner MF platform entries (no platform spec yet). */
+  mfSsoStaff?: string;
 }
 
 /** Where the NIYOM proxy runs. Not a secret — it ships in every client. */
@@ -40,14 +40,14 @@ export function bseProxyBaseUrl(): string | null {
   return (configured || DEFAULT_BSE_PROXY).replace(/\/$/, '');
 }
 
-/** Client Mutual Funds opens Wylth (investor SSO) instead of our own module. */
-export function wylthMfEnabled(): boolean {
-  return getEnv().wylthMf?.trim().toLowerCase() === 'true';
+/** Client Mutual Funds opens the MF platform (investor SSO) instead of our own module. */
+export function mfSsoEnabled(): boolean {
+  return getEnv().mfSso?.trim().toLowerCase() === 'true';
 }
 
-/** Admin / partner Wylth entries — off until Wylth ships a staff SSO spec. */
-export function wylthStaffEnabled(): boolean {
-  return getEnv().wylthStaff?.trim().toLowerCase() === 'true';
+/** Admin / partner MF platform entries — off until the platform ships a staff SSO spec. */
+export function mfStaffSsoEnabled(): boolean {
+  return getEnv().mfSsoStaff?.trim().toLowerCase() === 'true';
 }
 
 let env: NiyomEnv | null = null;

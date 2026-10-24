@@ -332,7 +332,7 @@ export type ProductType = 'unlisted_share' | 'secondary_bond' | 'primary_bond' |
 
 export type CRMPage =
   | 'dashboard'
-  | 'wylth_mf'
+  | 'mf_platform'
   | 'leads'
   | 'onboarding'
   | 'clients'

@@ -77,8 +77,8 @@ registerEnv({
   supabaseAnonKey,
   bseProxyUrl: process.env.EXPO_PUBLIC_BSE_PROXY_URL,
   bseMode: process.env.EXPO_PUBLIC_BSE_MODE,
-  wylthMf: process.env.EXPO_PUBLIC_WYLTH_MF,
-  wylthStaff: process.env.EXPO_PUBLIC_WYLTH_STAFF,
+  mfSso: process.env.EXPO_PUBLIC_MF_SSO,
+  mfSsoStaff: process.env.EXPO_PUBLIC_MF_SSO_STAFF,
 });
 registerDb('default', supabase);
 registerDb('client', clientSupabase);

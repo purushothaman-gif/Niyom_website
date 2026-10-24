@@ -19,7 +19,7 @@ import SharePricing from './pricing/SharePricing';
 import UnlistedShares from './shares/UnlistedShares';
 import MarketingContent from './marketing/MarketingContent';
 import FundResearch from './marketing/funds/FundResearch';
-import { WylthStaffPlaceholder } from '../components/WylthStaffPlaceholder';
+import { MfStaffPlaceholder } from '../components/MfStaffPlaceholder';
 import ClientOnboarding from './ClientOnboarding';
 import ManageClients from './ManageClients';
 import Portfolio from './Portfolio';
@@ -91,7 +91,7 @@ export default function CRM() {
     'share_orders',
     'marketing_content',
     'marketing_funds',
-    'wylth_mf',
+    'mf_platform',
     'mail_campaigns',
     'mis',
     'dsa_management',
@@ -247,8 +247,8 @@ export default function CRM() {
       // employees get the read-only approved-content gallery (branched inside).
       case 'marketing_content': return <MarketingContent employee={employee} onNavigate={navigate} />;
       case 'marketing_funds': return <FundResearch />;
-      // Wylth staff SSO isn't specced yet; the nav entry is hidden until it is.
-      case 'wylth_mf': return <WylthStaffPlaceholder />;
+      // Staff SSO isn't specced yet; the nav entry is hidden until it is.
+      case 'mf_platform': return <MfStaffPlaceholder />;
       // Open to every employee: admins mail as the company, employees as themselves to their own book (enforced in the database).
       case 'mail_campaigns': return <Mail employee={employee} />;
       case 'documents': return <Documents employee={employee} initialClientId={pageParams.clientId} onBack={pageParams.clientId ? () => navigate('clients') : undefined} />;

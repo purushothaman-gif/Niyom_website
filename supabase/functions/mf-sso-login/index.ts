@@ -3,7 +3,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, json, serviceClient } from "../_shared/onboarding.ts";
 import { getWylthGateway } from "../_shared/wylthGateway.ts";
 
-// wylth-sso-login — the client clicks Mutual Funds in the wealth portal and we
+// WHITE-LABEL: the platform (Wylth) must never be named in anything a client,
+// partner or RM sees — responses, alert text, URLs. Server-side names only.
+//
+// mf-sso-login — the client clicks Mutual Funds in the wealth portal and we
 // hand back a one-time Wylth sign-in link (Wylth Investor SSO v1.0). Runs public
 // (verify_jwt=false) but requires the client's own bearer token and verifies
 // ownership of the client record server-side; the PAN is read from nw_clients,
@@ -33,7 +36,7 @@ Deno.serve(async (req: Request) => {
     wylth_message?: string | null;
     latency_ms?: number | null;
   }) => db.from("nw_wylth_sso_log").insert(row).then(({ error }) => {
-    if (error) console.error("wylth-sso-login: log insert failed", error.message);
+    if (error) console.error("mf-sso-login: log insert failed", error.message);
   });
 
   try {
@@ -72,7 +75,7 @@ Deno.serve(async (req: Request) => {
 
     const gateway = getWylthGateway();
     if (!gateway) {
-      console.error("wylth-sso-login: Wylth credentials are not configured");
+      console.error("mf-sso-login: Wylth credentials are not configured");
       await log({ caller_type: "client", caller_auth_id: user.id, client_id, outcome: "error", wylth_message: "not configured" });
       return json({ status: "error" });
     }
@@ -101,21 +104,21 @@ Deno.serve(async (req: Request) => {
         const who = `${client.full_name || "A client"}${client.client_code ? ` (${client.client_code})` : ""}`;
         const { error: alertErr } = await db.from("nw_alerts").insert({
           employee_id: client.employee_id,
-          title: "Client not mapped in Wylth",
-          message: `${who} tried to open Mutual Funds but isn't mapped in Wylth yet — send their PAN to Wylth for mapping.`,
-          category: "wylth_mapping",
+          title: "Client not mapped on MF platform",
+          message: `${who} tried to open Mutual Funds but isn't mapped on the MF platform yet — send their PAN to the platform team for mapping.`,
+          category: "mf_mapping",
           action_url: "/clients",
         });
-        if (alertErr) console.error("wylth-sso-login: RM alert failed", alertErr.message);
+        if (alertErr) console.error("mf-sso-login: RM alert failed", alertErr.message);
       }
       return json({ status: "not_mapped" });
     }
 
-    console.error("wylth-sso-login: Wylth login failed:", result.message);
+    console.error("mf-sso-login: Wylth login failed:", result.message);
     await log({ caller_type: "client", caller_auth_id: user.id, client_id, outcome: "error", wylth_message: result.message, latency_ms });
     return json({ status: "error" });
   } catch (e) {
-    console.error("wylth-sso-login: unexpected", e instanceof Error ? e.message : e);
+    console.error("mf-sso-login: unexpected", e instanceof Error ? e.message : e);
     return json({ status: "error" }, 500);
   }
 });

@@ -1,6 +1,6 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NAV_GROUPS, type NavItem, type PartnerView } from './navigation';
-import { wylthStaffEnabled } from '../../../shared/platform/env';
+import { mfStaffSsoEnabled } from '../../../shared/platform/env';
 import { ComingSoonBadge } from '../../portal/components/StatusPill';
 
 interface SidebarProps {
@@ -113,7 +113,7 @@ export function Sidebar({
               {group.heading && collapsed && (
                 <div className="mx-auto mb-1 h-px w-6 bg-border-subtle" />
               )}
-              {group.items.filter((item) => item.view !== 'mutual-funds' || wylthStaffEnabled()).map((item) => (
+              {group.items.filter((item) => item.view !== 'mutual-funds' || mfStaffSsoEnabled()).map((item) => (
                 <NavButton
                   key={item.key}
                   item={item}

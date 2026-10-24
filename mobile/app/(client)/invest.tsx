@@ -38,15 +38,15 @@ import { Input } from '@/ui/Input';
 import { Button } from '@/ui/Button';
 import { TopTabs } from '@/ui/TopTabs';
 import { EmptyState, ErrorState, KpiStat, Segmented, SkeletonScreen } from '@/ui/kit';
-import { wylthMfEnabled } from '@shared/platform/env';
-import { WylthLaunchScreen } from '@/features/client/mf/WylthLaunchScreen';
+import { mfSsoEnabled } from '@shared/platform/env';
+import { MfLaunchScreen } from '@/features/client/mf/MfLaunchScreen';
 
 type Tab = 'explore' | 'dashboard' | 'all' | 'watchlist';
 type Period = '1Y' | '3Y' | '5Y';
 
-/** Mutual funds run on Wylth once the flag is on; until then, our own catalog. */
+/** Mutual funds run on the MF platform once the flag is on; until then, our own catalog. */
 export default function Invest() {
-  return wylthMfEnabled() ? <WylthLaunchScreen /> : <FundCatalog />;
+  return mfSsoEnabled() ? <MfLaunchScreen /> : <FundCatalog />;
 }
 
 function FundCatalog() {

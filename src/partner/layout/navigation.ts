@@ -55,7 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { view: 'clients', key: 'clients', label: 'My Clients', icon: Users },
       { view: 'bonds', key: 'bonds', label: 'Bonds', icon: Landmark },
       { view: 'unlisted-shares', key: 'unlisted-shares', label: 'Unlisted Shares', icon: Gem },
-      // Wylth partner SSO isn't specced yet; Sidebar hides this until VITE_WYLTH_STAFF.
+      // Partner SSO isn't specced yet; Sidebar hides this until VITE_MF_SSO_STAFF.
       { view: 'mutual-funds', key: 'mutual-funds', label: 'Mutual Funds', icon: TrendingUp },
       { view: 'leads', key: 'leads', label: 'My Leads', icon: ClipboardList },
     ],
