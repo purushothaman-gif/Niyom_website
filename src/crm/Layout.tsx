@@ -12,7 +12,7 @@ import {
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
 import { EmployeeAvatar } from './EmployeeAvatar';
-import { wylthStaffEnabled } from '../../shared/platform/env';
+import { mfStaffSsoEnabled } from '../../shared/platform/env';
 
 interface Props {
   children: React.ReactNode;
@@ -97,7 +97,7 @@ const NAV: NavSection[] = [
       { key: 'share_pricing' as CRMPage,     label: 'Share Pricing',     icon: BadgePercent },
       { key: 'marketing_content' as CRMPage, label: 'Content Creation',  icon: Sparkles },
       { key: 'marketing_funds' as CRMPage,   label: 'Mutual Funds',     icon: LineChart },
-      { key: 'wylth_mf' as CRMPage,          label: 'Wylth MF',         icon: LineChart },
+      { key: 'mf_platform' as CRMPage,       label: 'MF Platform',      icon: LineChart },
       { key: 'mail_campaigns' as CRMPage,    label: 'Email Campaigns',  icon: Mail },
     ],
   },
@@ -232,7 +232,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
 
   const canSee = (n: NavItem) => isTransferLogin
     ? n.key === 'transfer_queue'
-    : (n.key !== 'wylth_mf' || wylthStaffEnabled()) && (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin)
+    : (n.key !== 'mf_platform' || mfStaffSsoEnabled()) && (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin)
       && (!n.hrOnly || hasHrAccess) && (!n.payrollOnly || onPayroll);
   // Filter items by role; a section whose items are all hidden disappears along
   // with its heading (e.g. Documents for an admin who only has the Vault).

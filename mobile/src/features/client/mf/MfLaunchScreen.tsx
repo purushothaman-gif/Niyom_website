@@ -1,6 +1,6 @@
 /**
- * Mutual funds run on Wylth. The Invest tab becomes one button that asks the
- * server for a one-time Wylth sign-in link (investor SSO) and opens it in the
+ * Mutual funds run on the MF platform. The Invest tab becomes one button that asks the
+ * server for a one-time MF platform sign-in link (investor SSO) and opens it in the
  * in-app browser — the client lands on their holdings without a second login.
  *
  * The link is a credential: it is opened at once and never kept, so every tap
@@ -11,7 +11,7 @@ import { View } from 'react-native';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { AlertTriangle, ExternalLink, Hourglass, TrendingUp } from 'lucide-react-native';
-import { WylthSsoService, type WylthLaunchResult } from '@shared/portal/services/WylthSsoService';
+import { MfSsoService, type MfLaunchResult } from '@shared/portal/services/MfSsoService';
 import { space } from '@/design/tokens';
 import { useClientId } from '@/features/auth/AuthContext';
 import { Screen } from '@/ui/Screen';
@@ -19,7 +19,7 @@ import { Text } from '@/ui/Text';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/kit';
 
-type State = 'idle' | WylthLaunchResult['status'];
+type State = 'idle' | MfLaunchResult['status'];
 
 const COPY: Record<Exclude<State, 'ok'>, { title: string; message: string }> = {
   idle: {
@@ -48,7 +48,7 @@ const COPY: Record<Exclude<State, 'ok'>, { title: string; message: string }> = {
   },
 };
 
-export function WylthLaunchScreen() {
+export function MfLaunchScreen() {
   const clientId = useClientId();
   const [state, setState] = useState<State>('idle');
   const [busy, setBusy] = useState(false);
@@ -56,7 +56,7 @@ export function WylthLaunchScreen() {
   const open = async () => {
     if (busy || !clientId) return;
     setBusy(true);
-    const res = await WylthSsoService.getLoginLink(clientId);
+    const res = await MfSsoService.getLoginLink(clientId);
     setBusy(false);
     if (res.status === 'ok') {
       setState('idle');

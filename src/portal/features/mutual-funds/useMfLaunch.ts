@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
-import { WylthSsoService } from '../../../../shared/portal/services/WylthSsoService';
+import { MfSsoService } from '../../../../shared/portal/services/MfSsoService';
 import { isDemoClientSession } from '../../../../shared/portal/demo/demoClient';
 
-export type WylthLaunchState =
+export type MfLaunchState =
   | 'idle'
   | 'opening'
   | 'opened'
@@ -20,15 +20,15 @@ const OPENING_HTML =
   'Opening your mutual fund account…</body>';
 
 /**
- * Opens the client's Wylth portal in a new tab via investor SSO.
+ * Opens the client's MF platform portal in a new tab via investor SSO.
  *
  * `launch()` must run inside the click handler: the tab is opened
  * synchronously (before the network call) so popup blockers treat it as
  * user-initiated, then pointed at the one-time link once it arrives. The link
  * is never kept — every launch asks for a fresh one.
  */
-export function useWylthLaunch(clientId: string) {
-  const [state, setState] = useState<WylthLaunchState>('idle');
+export function useMfLaunch(clientId: string) {
+  const [state, setState] = useState<MfLaunchState>('idle');
   const inFlight = useRef(false);
 
   const launch = useCallback(() => {
@@ -36,7 +36,7 @@ export function useWylthLaunch(clientId: string) {
     inFlight.current = true;
     setState('opening');
 
-    // The sample portal never reaches Wylth; don't flash an empty tab.
+    // The sample portal never reaches the MF platform; don't flash an empty tab.
     const tab = isDemoClientSession() ? null : window.open('', '_blank');
     if (tab) {
       try {
@@ -47,7 +47,7 @@ export function useWylthLaunch(clientId: string) {
       }
     }
 
-    void WylthSsoService.getLoginLink(clientId)
+    void MfSsoService.getLoginLink(clientId)
       .then((res) => {
         if (res.status === 'ok') {
           if (tab && !tab.closed) {

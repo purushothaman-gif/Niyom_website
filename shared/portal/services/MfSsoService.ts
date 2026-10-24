@@ -1,9 +1,9 @@
 /**
- * WylthSsoService
+ * MfSsoService
  * -----------------------------------------------------------------------------
- * Mutual funds run on Wylth. Clicking Mutual Funds asks the `wylth-sso-login`
- * edge function for a one-time Wylth sign-in link for the signed-in client
- * (Wylth Investor SSO). The PAN never leaves the server; the function reads it
+ * Mutual funds run on the MF platform. Clicking Mutual Funds asks the `mf-sso-login`
+ * edge function for a one-time MF platform sign-in link for the signed-in client
+ * (investor SSO). The PAN never leaves the server; the function reads it
  * from the client row.
  *
  * The link is a short-lived credential: open it straight away and never cache,
@@ -13,18 +13,18 @@ import { clientSupabase as supabase } from '../../lib/supabase';
 import { functionUrl, getEnv } from '../../platform/env';
 import { isDemoClientSession } from '../demo/demoClient';
 
-export type WylthLaunchResult =
+export type MfLaunchResult =
   | { status: 'ok'; redirectUrl: string }
   | { status: 'not_mapped' | 'kyc_incomplete' | 'not_available' | 'demo' | 'error' };
 
-export const WylthSsoService = {
-  async getLoginLink(clientId: string): Promise<WylthLaunchResult> {
+export const MfSsoService = {
+  async getLoginLink(clientId: string): Promise<MfLaunchResult> {
     if (isDemoClientSession()) return { status: 'demo' };
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess.session?.access_token;
       const anon = getEnv().supabaseAnonKey;
-      const res = await fetch(functionUrl('wylth-sso-login'), {
+      const res = await fetch(functionUrl('mf-sso-login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

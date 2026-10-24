@@ -2,15 +2,15 @@ import { AlertTriangle, ExternalLink, Hourglass, Loader2, ShieldCheck, TrendingU
 import type { LucideIcon } from 'lucide-react';
 import { PortalButton, Tile } from '../../ui/kit';
 import type { PortalView } from '../../layout/navigation';
-import type { WylthLaunchState } from './useWylthLaunch';
+import type { MfLaunchState } from './useMfLaunch';
 
 interface Props {
-  state: WylthLaunchState;
+  state: MfLaunchState;
   onLaunch: () => void;
   onNavigate: (view: PortalView) => void;
 }
 
-const COPY: Record<WylthLaunchState, { icon: LucideIcon; title: string; hint: string; tone?: 'warn' }> = {
+const COPY: Record<MfLaunchState, { icon: LucideIcon; title: string; hint: string; tone?: 'warn' }> = {
   idle: {
     icon: TrendingUp,
     title: 'Your mutual fund account',
@@ -62,8 +62,8 @@ const COPY: Record<WylthLaunchState, { icon: LucideIcon; title: string; hint: st
   },
 };
 
-/** What the Mutual Funds view shows now that funds run on Wylth. */
-export function WylthLaunchPage({ state, onLaunch, onNavigate }: Props) {
+/** What the Mutual Funds view shows now that funds run on the MF platform. */
+export function MfLaunchPage({ state, onLaunch, onNavigate }: Props) {
   const c = COPY[state];
   const Icon = c.icon;
   const busy = state === 'opening';

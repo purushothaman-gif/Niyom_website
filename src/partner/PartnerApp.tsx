@@ -16,7 +16,7 @@ import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ClientsPage } from './features/clients/ClientsPage';
 import { BondsModule } from './features/bonds/BondsModule';
 import { SharesModule } from './features/shares/SharesModule';
-import { WylthStaffPlaceholder } from '../components/WylthStaffPlaceholder';
+import { MfStaffPlaceholder } from '../components/MfStaffPlaceholder';
 import { PayoutsPage } from './features/payouts/PayoutsPage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { ReferralPage } from './features/referral/ReferralPage';
@@ -79,7 +79,7 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
       case 'unlisted-shares':
         return <SharesModule onAccessRevoked={handleAccessRevoked} />;
       case 'mutual-funds':
-        return <WylthStaffPlaceholder />;
+        return <MfStaffPlaceholder />;
       case 'payouts':
         return <PayoutsPage payout={snapshot.payout} notes={snapshot.notes} />;
       case 'referral':
