@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { NWEmployee, NWClient, NWClientBankAccount } from './types';
 import { fmt, fmtDate, VERIFICATION_LABELS, VERIFICATION_COLORS } from './utils';
 import { passwordChecks, isPasswordStrong } from '../lib/passwordPolicy';
+import { ProductAccessEditor } from './ProductAccess';
 import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
 import { Search, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog } from 'lucide-react';
 
@@ -817,6 +818,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                 style={inputStyle}
               />
             </InlineField>
+            <ProductAccessEditor audience="client" clientId={editClient.id} />
             <div className="flex justify-end gap-3 pt-2">
               <button onClick={() => setEditClient(null)} className="px-4 py-2 rounded-xl text-sm" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
               <button onClick={handleSaveEdit} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-bold text-on-accent disabled:opacity-50" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>

@@ -15,6 +15,7 @@ interface PartnerShellProps {
   onRefresh: () => void;
   onChangePassword: () => void;
   onLogout: () => void;
+  hiddenProducts: ReadonlySet<string>;
   children: ReactNode;
 }
 
@@ -29,6 +30,7 @@ export function PartnerShell({
   onRefresh,
   onChangePassword,
   onLogout,
+  hiddenProducts,
   children,
 }: PartnerShellProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -44,6 +46,7 @@ export function PartnerShell({
           onToggleCollapse={() => setCollapsed((c) => !c)}
           mobileOpen={mobileOpen}
           onCloseMobile={() => setMobileOpen(false)}
+          hiddenProducts={hiddenProducts}
         />
 
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">

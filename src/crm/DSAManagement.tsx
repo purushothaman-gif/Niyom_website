@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
+import { ProductAccessEditor } from './ProductAccess';
 import { NWEmployee, NWDSA, NWDSABankAccount } from './types';
 import { PartnerOnboardLinks } from './PartnerOnboardLinks';
 import { isPasswordStrong, passwordChecks, passwordError } from '../lib/passwordPolicy';
@@ -775,6 +776,8 @@ export default function DSAManagement({ employee }: Props) {
                     ))}
                   </div>
                 </div>
+
+                {editingId && <ProductAccessEditor audience="partner" dsaId={editingId} />}
               </div>
 
               {/* Footer */}

@@ -40,6 +40,8 @@ import {
 import { isDemoClientSession } from '../../shared/portal/demo/demoClient';
 import { mfSsoEnabled } from '../../shared/platform/env';
 import type { PortalView } from './layout/navigation';
+import { clientSupabase } from '../lib/supabase';
+import { useHiddenProducts } from '../lib/productAccess';
 
 interface PortalAppProps {
   clientId: string;
@@ -67,10 +69,17 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
    */
   const mf = useMfLaunch(clientId);
   const mfSsoOn = mfSsoEnabled();
+  const hiddenProducts = useHiddenProducts(clientSupabase, 'client');
   const navigate = (v: PortalView) => {
+    // A switched-off product is unreachable from every entry point, not just the nav.
+    if (hiddenProducts.has(v)) return routeTo('dashboard');
     if (mfSsoOn && v === 'mutual-funds') mf.launch();
     routeTo(v);
   };
+  // ...including a bookmarked or back-button URL to it.
+  useEffect(() => {
+    if (hiddenProducts.has(view)) routeTo('dashboard');
+  }, [hiddenProducts, view, routeTo]);
   const { snapshot, loading, error, refreshedAt, refresh } = useClientSnapshot(clientId);
   const [showChangePw, setShowChangePw] = useState(false);
   const [showActivate, setShowActivate] = useState(false);
@@ -260,6 +269,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
         onRefresh={refresh}
         onChangePassword={() => setShowChangePw(true)}
         onLogout={onLogout}
+        hiddenProducts={hiddenProducts}
       >
         {renderView()}
       </PortalShell>

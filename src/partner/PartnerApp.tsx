@@ -10,6 +10,8 @@ import {
 import { PartnerShell } from './layout/PartnerShell';
 import { VIEW_TITLES } from './layout/navigation';
 import { usePartnerRouter } from './routing/usePartnerRouter';
+import { useHiddenProducts } from '../lib/productAccess';
+import type { PartnerView } from './layout/navigation';
 import { usePartnerSnapshot } from './hooks/usePartnerSnapshot';
 import { isDemoSession } from './demo/demoData';
 import { DashboardPage } from './features/dashboard/DashboardPage';
@@ -34,7 +36,16 @@ interface PartnerAppProps {
  * lazily. Owns internal routing and leaves the host router in App.tsx untouched.
  */
 export default function PartnerApp({ onLogout }: PartnerAppProps) {
-  const { view, navigate } = usePartnerRouter();
+  const { view, navigate: routeTo } = usePartnerRouter();
+  // The demo partner has no auth session to resolve products against.
+  const hiddenProducts = useHiddenProducts(partnerSupabase, 'partner', !isDemoSession());
+  const navigate = useCallback(
+    (v: PartnerView) => routeTo(hiddenProducts.has(v) ? 'dashboard' : v),
+    [routeTo, hiddenProducts],
+  );
+  useEffect(() => {
+    if (hiddenProducts.has(view)) routeTo('dashboard');
+  }, [hiddenProducts, view, routeTo]);
   const [showChangePw, setShowChangePw] = useState(false);
 
   // Kill-switch: nw_current_dsa_id() embeds the enabled + active checks, so the
@@ -108,6 +119,7 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
         onRefresh={refresh}
         onChangePassword={() => setShowChangePw(true)}
         onLogout={onLogout}
+        hiddenProducts={hiddenProducts}
       >
         {renderView()}
       </PartnerShell>

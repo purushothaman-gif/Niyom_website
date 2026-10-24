@@ -1,5 +1,5 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { NAV_GROUPS, type NavItem, type PartnerView } from './navigation';
+import { NAV_GROUPS, withoutProducts, type NavItem, type PartnerView } from './navigation';
 import { mfStaffSsoEnabled } from '../../../shared/platform/env';
 import { ComingSoonBadge } from '../../portal/components/StatusPill';
 
@@ -11,6 +11,8 @@ interface SidebarProps {
   /** Mobile drawer open state (ignored on desktop). */
   mobileOpen: boolean;
   onCloseMobile: () => void;
+  /** Product keys switched off for this partner. */
+  hiddenProducts: ReadonlySet<string>;
 }
 
 function NavButton({
@@ -63,6 +65,7 @@ export function Sidebar({
   onToggleCollapse,
   mobileOpen,
   onCloseMobile,
+  hiddenProducts,
 }: SidebarProps) {
   const handleSelect = (item: NavItem) => {
     if (item.comingSoon || !item.view) return;
@@ -103,7 +106,7 @@ export function Sidebar({
         </div>
 
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
-          {NAV_GROUPS.map((group, gi) => (
+          {withoutProducts(NAV_GROUPS, hiddenProducts).map((group, gi) => (
             <div key={group.heading ?? `group-${gi}`} className="space-y-1">
               {group.heading && !collapsed && (
                 <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">
