@@ -29,6 +29,7 @@ import { clientSupabase as supabase } from '../../lib/supabase';
 import type { NWClient, NWHolding, NWTransaction } from '../../crm/types';
 import type { CasFreshness, PortalHolding } from '../types/cas';
 import { CasPortfolioService } from './CasPortfolioService';
+import { mfSsoEnabled } from '../../platform/env';
 import {
   applyNav,
   assessCasFreshness,
@@ -107,7 +108,12 @@ export interface ClientWealthSnapshot {
 export const HoldingService = {
   /** Fetch the client, all holdings, and recent transactions in one round-trip. */
   async getSnapshot(clientId: string): Promise<ClientWealthSnapshot> {
-    if (isDemoClientSession()) return demoSnapshot();
+    if (isDemoClientSession()) {
+      return mfSsoEnabled() ? withoutMutualFunds(demoSnapshot()) : demoSnapshot();
+    }
+    // Mutual funds live on the MF platform: neither our MF rows nor an
+    // imported statement may appear beside it, so skip the statement read.
+    const mfOnPlatform = mfSsoEnabled();
     const [clientRes, holdingsRes, txnRes, latestMfRes, cas] = await Promise.all([
       supabase.from('nw_clients').select('*').eq('id', clientId).maybeSingle(),
       supabase
@@ -137,7 +143,7 @@ export const HoldingService = {
         .maybeSingle(),
       // Best-effort: a client with no import, or a failure reading one, still
       // gets the portfolio we hold for them rather than an error screen.
-      CasPortfolioService.getPortfolio(clientId).catch(() => null),
+      mfOnPlatform ? null : CasPortfolioService.getPortfolio(clientId).catch(() => null),
     ]);
 
     const manual = (holdingsRes.data as NWHolding[]) ?? [];
@@ -152,7 +158,7 @@ export const HoldingService = {
     const quotes = await loadNavQuotes(chosen.map((h) => h.cas?.isin ?? h.isin ?? ''));
     const holdings = chosen.map((h) => applyNav(h, quotes.get(h.cas?.isin ?? h.isin ?? '')));
 
-    return {
+    const snapshot: ClientWealthSnapshot = {
       client: (clientRes.data as NWClient) ?? null,
       holdings,
       transactions: (txnRes.data as NWTransaction[]) ?? [],
@@ -165,5 +171,30 @@ export const HoldingService = {
       dayChange: portfolioDayChange(holdings),
       valuedOn: valuationDate(holdings),
     };
+    return mfOnPlatform ? withoutMutualFunds(snapshot) : snapshot;
   },
 };
+
+/**
+ * The snapshot with every mutual fund trace removed. Once mutual funds run on
+ * the MF platform, that platform is the record: an older Niyom row or an
+ * imported statement next to it would be stale at best and double-counted at
+ * worst. The rows stay in the database; they are only kept out of view and out
+ * of every total, return and allocation built from this snapshot.
+ */
+function withoutMutualFunds(s: ClientWealthSnapshot): ClientWealthSnapshot {
+  const holdings = s.holdings.filter((h) => h.product_type !== 'mutual_fund');
+  return {
+    ...s,
+    holdings,
+    transactions: s.transactions.filter((t) => t.product_type !== 'mutual_fund'),
+    mfSource: 'manual',
+    casStatementTo: null,
+    casFreshness: { state: 'none', statementTo: null, latestOwnMfTxnDate: null },
+    casFlows: [],
+    historyComplete: true,
+    casStatementFrom: null,
+    dayChange: portfolioDayChange(holdings),
+    valuedOn: valuationDate(holdings),
+  };
+}

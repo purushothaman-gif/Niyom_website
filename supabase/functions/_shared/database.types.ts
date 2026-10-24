@@ -11946,6 +11946,22 @@ export type Database = {
           verification_status: string
         }[]
       }
+      nw_partner_clients_excluding_mf: {
+        Args: never
+        Returns: {
+          city: string
+          client_code: string
+          client_id: string
+          current_value: number
+          full_name: string
+          holdings_count: number
+          invested_amount: number
+          mobile_masked: string
+          onboarding_status: string
+          sourced_on: string
+          verification_status: string
+        }[]
+      }
       nw_partner_create_bond_share: {
         Args: { p_bond_id: string; p_margin: number }
         Returns: string

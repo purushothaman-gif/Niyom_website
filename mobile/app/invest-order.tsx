@@ -12,9 +12,10 @@
  * People invest round numbers they have decided on. The quick chips cover the
  * common ones; the field takes anything else.
  */
+import { mfSsoEnabled } from '@shared/platform/env';
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, Redirect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Haptics from 'expo-haptics';
 import { ArrowRight, CalendarClock, CheckCircle2, ShieldCheck, TrendingUp } from 'lucide-react-native';
@@ -39,7 +40,15 @@ const SIP_CHIPS = [1_000, 2_500, 5_000, 10_000, 25_000];
 /** BSE accepts a limited set of debit days; these are the common ones. */
 const SIP_DAYS = [1, 5, 10, 15, 20, 25];
 
+/**
+ * Retired once mutual funds run on the MF platform (EXPO_PUBLIC_MF_SSO): the
+ * platform owns this, so any link here lands on the Invest tab's launcher.
+ */
 export default function InvestOrder() {
+  return mfSsoEnabled() ? <Redirect href="/(client)/invest" /> : <InvestOrderScreen />;
+}
+
+function InvestOrderScreen() {
   const { code, mode } = useLocalSearchParams<{ code?: string; mode?: string }>();
   const clientId = useClientId();
   const p = usePalette();

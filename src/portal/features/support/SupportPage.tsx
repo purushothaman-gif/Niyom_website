@@ -14,6 +14,7 @@ import { timeAgo } from '../../../crm/utils';
 import { SupportService, type SupportTicket, type TicketStatus } from '../../services/SupportService';
 import { RaiseTicketModal } from './RaiseTicketModal';
 import { SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_PHONE_HREF, SUPPORT_WHATSAPP_HREF, copyText } from './contact';
+import { mfSsoEnabled } from '../../../../shared/platform/env';
 
 const CONTACTS: Array<{ icon: LucideIcon; label: string; value: string; href: string; copy?: string }> = [
   { icon: Phone, label: 'Call us', value: SUPPORT_PHONE, href: SUPPORT_PHONE_HREF },
@@ -49,6 +50,31 @@ const FAQS: Array<{ q: string; a: string }> = [
     q: 'Is my data secure?',
     a: 'Your portal is private to you. Documents are served over short-lived secure links and sensitive account numbers are masked on screen.',
   },
+];
+
+/*
+ * Mutual fund answers once mutual funds run on the MF platform: there is no
+ * in-portal My Funds or BSE cut-off to point at any more.
+ */
+const MF_PLATFORM_FAQS: Array<{ q: string; a: string }> = [
+  {
+    q: 'Where are my mutual funds?',
+    a: 'Open Mutual Funds from the menu. Your mutual fund account opens in a new tab, already signed in — no separate password.',
+  },
+  {
+    q: 'How do I invest, start a SIP, redeem or switch?',
+    a: 'All mutual fund transactions happen in your mutual fund account: open Mutual Funds, then choose the fund and the action. Redemptions are credited to your registered bank account per the fund’s settlement cycle.',
+  },
+  {
+    q: 'Mutual Funds says my account is being set up. What now?',
+    a: 'Your relationship manager has been notified and will let you know as soon as your mutual fund account is ready.',
+  },
+  ...FAQS.slice(2, 3),
+  {
+    q: 'Where can I download my statements?',
+    a: 'Reports → download your Transaction or Holdings statement for bonds and other products. Mutual fund statements are available inside your mutual fund account.',
+  },
+  ...FAQS.slice(4),
 ];
 
 function FaqItem({ q, a, open, onToggle }: { q: string; a: string; open: boolean; onToggle: () => void }) {
@@ -201,7 +227,7 @@ export function SupportPage({ clientId }: { clientId: string }) {
       <Card>
         <h3 className="mb-1 text-sm font-bold text-text-primary">Frequently Asked Questions</h3>
         <div>
-          {FAQS.map((f, i) => (
+          {(mfSsoEnabled() ? MF_PLATFORM_FAQS : FAQS).map((f, i) => (
             <FaqItem key={f.q} q={f.q} a={f.a} open={openFaq === i} onToggle={() => setOpenFaq(openFaq === i ? null : i)} />
           ))}
         </div>

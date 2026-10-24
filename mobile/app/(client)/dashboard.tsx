@@ -22,6 +22,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { fmt, fmtFull, PRODUCT_LABELS } from '@shared/crm/utils';
 import { buildDashboardData } from '@shared/portal/services/dashboardModel';
 import { useClientSnapshot } from '@shared/portal/hooks/useClientSnapshot';
+import { mfSsoEnabled } from '@shared/platform/env';
 import { radius, space } from '@/design/tokens';
 import { usePalette, useTheme } from '@/design/ThemeProvider';
 import { useClientId } from '@/features/auth/AuthContext';
@@ -39,6 +40,8 @@ export default function Dashboard() {
   const p = usePalette();
   const { theme } = useTheme();
   const { snapshot, loading, error, refreshedAt, refresh } = useClientSnapshot(clientId);
+  // Mutual funds run on the MF platform: one card opens it, no MF figures here.
+  const mfOnPlatform = mfSsoEnabled();
 
   const hasData = !!refreshedAt;
   const data = useMemo(() => (hasData ? buildDashboardData(snapshot) : null), [hasData, snapshot]);
@@ -104,9 +107,15 @@ export default function Dashboard() {
           {/* --------------------------- Quick actions ------------------------ */}
           <Animated.View entering={FadeInDown.duration(420).delay(60)}>
             <View style={{ flexDirection: 'row', gap: space[3] }}>
-              <QuickAction icon={TrendingUp} label="Invest" onPress={() => router.push('/(client)/invest')} />
-              <QuickAction icon={Upload} label="Import CAS" onPress={() => router.push('/import-portfolio')} />
-              <QuickAction icon={Receipt} label="Gains" onPress={() => router.push('/capital-gains')} />
+              <QuickAction icon={TrendingUp} label={mfOnPlatform ? 'Funds' : 'Invest'} onPress={() => router.push('/(client)/invest')} />
+              {mfOnPlatform ? (
+                <QuickAction icon={Wallet} label="Portfolio" onPress={() => router.push('/(client)/portfolio')} />
+              ) : (
+                <>
+                  <QuickAction icon={Upload} label="Import CAS" onPress={() => router.push('/import-portfolio')} />
+                  <QuickAction icon={Receipt} label="Gains" onPress={() => router.push('/capital-gains')} />
+                </>
+              )}
               <QuickAction icon={ArrowLeftRight} label="Activity" onPress={() => router.push('/transactions')} />
             </View>
           </Animated.View>
@@ -142,7 +151,22 @@ export default function Dashboard() {
           ) : null}
 
           {/* --------------------------- Mutual funds ------------------------- */}
-          {data.mutualFunds.folioCount > 0 ? (
+          {mfOnPlatform ? (
+            <Animated.View entering={FadeInDown.duration(420).delay(180)}>
+              <SectionHeader title="Mutual funds" />
+              <Card padding={5} onPress={() => router.push('/(client)/invest')}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
+                  <TrendingUp size={19} color={p.accent.DEFAULT} />
+                  <View style={{ flex: 1 }}>
+                    <Text variant="smallMedium">Open your mutual fund account</Text>
+                    <Text variant="caption" tone="muted" style={{ marginTop: 2 }}>
+                      Holdings, SIPs, invest, redeem or switch · no separate sign-in
+                    </Text>
+                  </View>
+                </View>
+              </Card>
+            </Animated.View>
+          ) : data.mutualFunds.folioCount > 0 ? (
             <Animated.View entering={FadeInDown.duration(420).delay(180)}>
               <SectionHeader
                 title="Mutual funds"
@@ -203,7 +227,7 @@ export default function Dashboard() {
           ) : null}
 
           {/* --------------------------- Data provenance ---------------------- */}
-          <View style={{ alignItems: 'center', gap: space[2] }}>
+          {mfOnPlatform ? null : <View style={{ alignItems: 'center', gap: space[2] }}>
             <StatusPill
               dot
               tone={snapshot.mfSource === 'cas' ? 'success' : 'neutral'}
@@ -218,7 +242,7 @@ export default function Dashboard() {
                 Import your CAS to include funds bought elsewhere.
               </Text>
             ) : null}
-          </View>
+          </View>}
         </View>
       ) : null}
       <SetPinPrompt surface="client" id={clientId} />

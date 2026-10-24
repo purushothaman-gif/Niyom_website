@@ -17,6 +17,7 @@ import type { SystematicPlan } from '../../services/bse/contract';
 import type { PortalView } from '../../layout/navigation';
 import { Blank, PortalButton, ScreenHead, Tile } from '../../ui/kit';
 import { onboardingIncomplete } from '../onboarding/onboardingSteps';
+import { mfSsoEnabled } from '../../../../shared/platform/env';
 
 interface Alert {
   id: string;
@@ -37,6 +38,8 @@ export function NotificationsPage({
   const [plans, setPlans] = useState<SystematicPlan[]>([]);
 
   useEffect(() => {
+    // Systematic plans live on the MF platform once the switch is on.
+    if (mfSsoEnabled()) return;
     let alive = true;
     bseGateway()
       .getSystematicPlans()

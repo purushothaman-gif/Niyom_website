@@ -33,7 +33,7 @@ import type {
   PartnerReferral,
   PartnerLead,
 } from '../types';
-import { getEnv } from '../../platform/env';
+import { getEnv, mfSsoEnabled } from '../../platform/env';
 
 /** Thrown when the RM has disabled the login (or deactivated the DSA) mid-session. */
 export const PARTNER_ACCESS_REVOKED = 'PARTNER_ACCESS_REVOKED';
@@ -136,7 +136,10 @@ export const PartnerService = {
 
   async getClients(): Promise<PartnerClientRow[]> {
     if (isDemoSession()) return demoClients;
-    const { data, error } = await supabase.rpc('nw_partner_clients');
+    // Once mutual funds run on the MF platform, totals leave our MF rows out.
+    const { data, error } = await supabase.rpc(
+      mfSsoEnabled() ? 'nw_partner_clients_excluding_mf' : 'nw_partner_clients',
+    );
     if (error) {
       if (isAccessRevoked(error.message)) throw new Error(PARTNER_ACCESS_REVOKED);
       throw error;
@@ -145,21 +148,29 @@ export const PartnerService = {
   },
 
   async getClientPortfolio(clientId: string): Promise<PartnerHoldingRow[]> {
-    if (isDemoSession()) return demoPortfolios[clientId] ?? [];
-    const { data, error } = await supabase.rpc('nw_partner_client_portfolio', {
-      p_client_id: clientId,
-    });
-    if (error) throw error;
-    return (data ?? []) as PartnerHoldingRow[];
+    const rows = isDemoSession()
+      ? demoPortfolios[clientId] ?? []
+      : await (async () => {
+          const { data, error } = await supabase.rpc('nw_partner_client_portfolio', {
+            p_client_id: clientId,
+          });
+          if (error) throw error;
+          return (data ?? []) as PartnerHoldingRow[];
+        })();
+    return mfSsoEnabled() ? rows.filter((r) => r.product_type !== 'mutual_fund') : rows;
   },
 
   async getClientTransactions(clientId: string): Promise<PartnerTransactionRow[]> {
-    if (isDemoSession()) return demoTransactions[clientId] ?? [];
-    const { data, error } = await supabase.rpc('nw_partner_client_transactions', {
-      p_client_id: clientId,
-    });
-    if (error) throw error;
-    return (data ?? []) as PartnerTransactionRow[];
+    const rows = isDemoSession()
+      ? demoTransactions[clientId] ?? []
+      : await (async () => {
+          const { data, error } = await supabase.rpc('nw_partner_client_transactions', {
+            p_client_id: clientId,
+          });
+          if (error) throw error;
+          return (data ?? []) as PartnerTransactionRow[];
+        })();
+    return mfSsoEnabled() ? rows.filter((r) => r.product_type !== 'mutual_fund') : rows;
   },
 
   async getPayoutSummary(): Promise<PartnerPayoutSummary | null> {

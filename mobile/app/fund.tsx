@@ -12,9 +12,10 @@
  * different number, which is what XIRR on the dashboard is for — so the section
  * is labelled "Scheme returns" rather than "Returns".
  */
+import { mfSsoEnabled } from '@shared/platform/env';
 import { useMemo } from 'react';
 import { View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, Redirect } from 'expo-router';
 import { CalendarClock, TrendingUp } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { fmtDate } from '@shared/crm/utils';
@@ -34,7 +35,15 @@ import { ErrorState, Skeleton, SkeletonScreen, StatusPill } from '@/ui/kit';
 
 const PERIODS = ['6M', '1Y', '3Y', '5Y', 'SI'] as const;
 
+/**
+ * Retired once mutual funds run on the MF platform (EXPO_PUBLIC_MF_SSO): the
+ * platform owns this, so any link here lands on the Invest tab's launcher.
+ */
 export default function Fund() {
+  return mfSsoEnabled() ? <Redirect href="/(client)/invest" /> : <FundScreen />;
+}
+
+function FundScreen() {
   const { code } = useLocalSearchParams<{ code?: string }>();
   const clientId = useClientId();
   const p = usePalette();

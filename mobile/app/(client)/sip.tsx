@@ -12,9 +12,10 @@
  * finds out months later that no money moved. So anything not active is lifted
  * to the top with the reason and what to do about it.
  */
+import { mfSsoEnabled } from '@shared/platform/env';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { router } from 'expo-router';
+import { router, Redirect } from 'expo-router';
 import { AlertTriangle, CalendarClock, TrendingUp } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { fmt, fmtDate } from '@shared/crm/utils';
@@ -29,7 +30,15 @@ import { Text } from '@/ui/Text';
 import { Button } from '@/ui/Button';
 import { EmptyState, ErrorState, KpiStat, SkeletonScreen, StatusPill } from '@/ui/kit';
 
+/**
+ * Retired once mutual funds run on the MF platform (EXPO_PUBLIC_MF_SSO): the
+ * platform owns this, so any link here lands on the Invest tab's launcher.
+ */
 export default function Sip() {
+  return mfSsoEnabled() ? <Redirect href="/(client)/invest" /> : <SipScreen />;
+}
+
+function SipScreen() {
   const p = usePalette();
 
   const [plans, setPlans] = useState<SystematicPlan[]>([]);

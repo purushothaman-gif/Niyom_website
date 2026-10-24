@@ -10,6 +10,7 @@
  * derived list can only contain things that are still true, so an item
  * disappearing means it got done.
  */
+import { mfSsoEnabled } from '@shared/platform/env';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
@@ -45,6 +46,8 @@ export default function Notifications() {
   const [plans, setPlans] = useState<SystematicPlan[]>([]);
 
   useEffect(() => {
+    // Systematic plans live on the MF platform once the switch is on.
+    if (mfSsoEnabled()) return;
     let alive = true;
     bseGateway()
       .getSystematicPlans()

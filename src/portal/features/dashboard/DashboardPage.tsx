@@ -16,6 +16,8 @@ import { Figure, MiniStat, Tile } from '../../ui/kit';
 import { AllocationCard } from './sections/AllocationCard';
 import { AccountSummaryCard } from './sections/AccountSummaryCard';
 import { MutualFundSummaryCard } from './sections/MutualFundSummaryCard';
+import { MfPlatformCard } from './sections/MfPlatformCard';
+import { mfSsoEnabled } from '../../../../shared/platform/env';
 import { RecentTransactionsCard } from './sections/RecentTransactionsCard';
 import { QuickActions } from './sections/QuickActions';
 import { SupportCard } from './sections/SupportCard';
@@ -170,7 +172,8 @@ export function DashboardPage({
         figure is their portfolio; if it is only the part we sold them, this is
         the moment to say so.
       */}
-      {!hasImportedStatement && (
+      {/* No statement import once mutual funds run on the MF platform. */}
+      {!hasImportedStatement && !mfSsoEnabled() && (
         <ImportPortfolioCard
           onImport={onImport}
           visibleHoldings={summary.holdingsCount}
@@ -184,7 +187,11 @@ export function DashboardPage({
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <MutualFundSummaryCard mf={data.mutualFunds} onViewAll={() => onNavigate('mutual-funds')} />
+        {mfSsoEnabled() ? (
+          <MfPlatformCard onOpen={() => onNavigate('mutual-funds')} />
+        ) : (
+          <MutualFundSummaryCard mf={data.mutualFunds} onViewAll={() => onNavigate('mutual-funds')} />
+        )}
         <RecentTransactionsCard
           transactions={data.recentTransactions}
           onViewAll={() => onNavigate('transactions')}

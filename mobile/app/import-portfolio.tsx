@@ -24,9 +24,10 @@
  * app's storage, not into Supabase storage. It is parsed in memory, the
  * extracted rows are kept, and the file is discarded.
  */
+import { mfSsoEnabled } from '@shared/platform/env';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, Redirect } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import * as Clipboard from 'expo-clipboard';
@@ -70,7 +71,15 @@ import { ListRow, SkeletonScreen, StatusPill } from '@/ui/kit';
 
 type Step = 'request' | 'upload' | 'done';
 
+/**
+ * Retired once mutual funds run on the MF platform (EXPO_PUBLIC_MF_SSO): the
+ * platform owns this, so any link here lands on the Invest tab's launcher.
+ */
 export default function ImportPortfolio() {
+  return mfSsoEnabled() ? <Redirect href="/(client)/invest" /> : <ImportPortfolioScreen />;
+}
+
+function ImportPortfolioScreen() {
   const clientId = useClientId();
   const p = usePalette();
   const { snapshot } = useClientSnapshot(clientId);

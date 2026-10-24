@@ -1,5 +1,6 @@
-import { Download, PlusCircle, RefreshCw, TrendingUp, type LucideIcon } from 'lucide-react';
+import { Briefcase, Download, FileText, PlusCircle, RefreshCw, TrendingUp, type LucideIcon } from 'lucide-react';
 import type { PortalView } from '../../../layout/navigation';
+import { mfSsoEnabled } from '../../../../../shared/platform/env';
 
 interface Action {
   label: string;
@@ -14,10 +15,21 @@ const ACTIONS: Action[] = [
   { label: 'Statement', icon: Download, view: 'reports' },
 ];
 
+/*
+ * On the MF platform, invest / SIP / redeem all happen inside the platform, so
+ * one Mutual Funds tile opens it and the other slots go to pages every client has.
+ */
+const MF_PLATFORM_ACTIONS: Action[] = [
+  { label: 'Mutual Funds', icon: TrendingUp, view: 'mutual-funds' },
+  { label: 'Portfolio', icon: Briefcase, view: 'portfolio' },
+  { label: 'Transactions', icon: FileText, view: 'transactions' },
+  { label: 'Statement', icon: Download, view: 'reports' },
+];
+
 export function QuickActions({ onNavigate }: { onNavigate: (view: PortalView) => void }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {ACTIONS.map((a, i) => (
+      {(mfSsoEnabled() ? MF_PLATFORM_ACTIONS : ACTIONS).map((a, i) => (
         <button
           key={a.label}
           type="button"

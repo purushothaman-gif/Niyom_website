@@ -18,6 +18,7 @@ import { ComingSoonBadge } from '../../components/StatusPill';
 import { PortfolioService } from '../../services/PortfolioService';
 import { exportHoldingsXlsx, exportTransactionsXlsx } from '../../services/exporters';
 import { useTransactions } from '../../hooks/useTransactions';
+import { mfSsoEnabled } from '../../../../shared/platform/env';
 
 interface Props {
   clientId: string;
@@ -93,7 +94,7 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
   const summary = useMemo(() => PortfolioService.buildSummary(holdings), [holdings]);
   const holdingRows = useMemo(() => PortfolioService.buildHoldingRows(holdings), [holdings]);
 
-  const reports: ReportDef[] = [
+  const allReports: ReportDef[] = [
     {
       key: 'txn',
       title: 'Transaction Statement',
@@ -126,6 +127,11 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
       soon: true,
     },
   ];
+  // Both are built on imported MF statements, which retire once mutual funds
+  // run on the MF platform (the platform issues its own statements).
+  const reports = mfSsoEnabled()
+    ? allReports.filter((r) => r.key !== 'capgain' && r.key !== 'cas')
+    : allReports;
 
   const gainUp = summary.gain >= 0;
 
