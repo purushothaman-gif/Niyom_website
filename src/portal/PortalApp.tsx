@@ -13,6 +13,8 @@ import { ActivateProductsModal } from './features/onboarding/ActivateProductsMod
 import { PortfolioPage } from './features/portfolio/PortfolioPage';
 import { AllocationPage } from './features/allocation/AllocationPage';
 import { MutualFundsModule } from './features/mutual-funds/MutualFundsModule';
+import { WylthLaunchPage } from './features/mutual-funds/WylthLaunchPage';
+import { useWylthLaunch } from './features/mutual-funds/useWylthLaunch';
 import { BondsModule } from './features/bonds/BondsModule';
 import { SharesModule } from './features/shares/SharesModule';
 import { TransactionsPage } from './features/transactions/TransactionsPage';
@@ -36,6 +38,8 @@ import {
   silencePinPrompt,
 } from '../lib/pinDevice';
 import { isDemoClientSession } from '../../shared/portal/demo/demoClient';
+import { wylthMfEnabled } from '../../shared/platform/env';
+import type { PortalView } from './layout/navigation';
 
 interface PortalAppProps {
   clientId: string;
@@ -54,7 +58,19 @@ interface PortalAppProps {
  * re-queries. Owns internal routing; leaves the host router in App.tsx untouched.
  */
 export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAppProps) {
-  const { view, navigate } = usePortalRouter();
+  const { view, navigate: routeTo } = usePortalRouter();
+  /*
+   * Mutual funds run on Wylth. Every way into the Mutual Funds view (nav,
+   * dashboard card, quick actions, SIP) passes through here, so the click that
+   * navigates also opens the Wylth tab — in the same gesture, which is what
+   * keeps popup blockers out of the way.
+   */
+  const wylth = useWylthLaunch(clientId);
+  const wylthOn = wylthMfEnabled();
+  const navigate = (v: PortalView) => {
+    if (wylthOn && v === 'mutual-funds') wylth.launch();
+    routeTo(v);
+  };
   const { snapshot, loading, error, refreshedAt, refresh } = useClientSnapshot(clientId);
   const [showChangePw, setShowChangePw] = useState(false);
   const [showActivate, setShowActivate] = useState(false);
@@ -112,6 +128,8 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
 
   const renderView = () => {
     // Views that fetch their own data don't wait on the client snapshot.
+    if (view === 'mutual-funds' && wylthOn)
+      return <WylthLaunchPage state={wylth.state} onLaunch={wylth.launch} onNavigate={navigate} />;
     if (view === 'mutual-funds')
       return (
         <MutualFundsModule

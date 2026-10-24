@@ -13,6 +13,7 @@ import {
   UserPlus,
   ClipboardList,
   UserRound,
+  TrendingUp,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -22,6 +23,7 @@ export type PartnerView =
   | 'clients'
   | 'bonds'
   | 'unlisted-shares'
+  | 'mutual-funds'
   | 'payouts'
   | 'referral'
   | 'submit-lead'
@@ -53,6 +55,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { view: 'clients', key: 'clients', label: 'My Clients', icon: Users },
       { view: 'bonds', key: 'bonds', label: 'Bonds', icon: Landmark },
       { view: 'unlisted-shares', key: 'unlisted-shares', label: 'Unlisted Shares', icon: Gem },
+      // Wylth partner SSO isn't specced yet; Sidebar hides this until VITE_WYLTH_STAFF.
+      { view: 'mutual-funds', key: 'mutual-funds', label: 'Mutual Funds', icon: TrendingUp },
       { view: 'leads', key: 'leads', label: 'My Leads', icon: ClipboardList },
     ],
   },
@@ -79,6 +83,7 @@ export const VIEW_TITLES: Record<PartnerView, string> = {
   clients: 'My Clients',
   bonds: 'Bonds',
   'unlisted-shares': 'Unlisted Shares',
+  'mutual-funds': 'Mutual Funds',
   payouts: 'Payouts & Statements',
   referral: 'Referral Link',
   'submit-lead': 'Submit a Lead',

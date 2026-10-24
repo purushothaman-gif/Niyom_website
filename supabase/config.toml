@@ -493,6 +493,12 @@ verify_jwt = false
 [functions.raise-support-ticket]
 verify_jwt = false
 
+# Wylth investor SSO: the portal's Mutual Funds button. Public verify_jwt —
+# runs with the client's own bearer token, checks is_client + ownership of the
+# client row inside, and reads the PAN server-side (never from the request).
+[functions.wylth-sso-login]
+verify_jwt = false
+
 # Client-portal bond ordering. Public verify_jwt: runs with the client's own
 # bearer token and verifies ownership + is_client inside the function; re-derives
 # the price server-side (approved markup only) and inserts the order (fires the RM

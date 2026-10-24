@@ -116,7 +116,7 @@ export const NAV_GROUPS: NavGroup[] = [
         view: 'mutual-funds',
         key: 'mutual-funds',
         label: 'Mutual Funds',
-        description: 'Explore funds and invest',
+        description: 'Holdings, investments and SIPs',
         icon: TrendingUp,
       },
       { view: 'bonds', key: 'bonds', label: 'Bonds', description: 'Fixed income', icon: Landmark },
@@ -246,7 +246,7 @@ export const VIEW_TITLES: Record<PortalView, string> = {
 export const VIEW_SUBTITLES: Partial<Record<PortalView, string>> = {
   portfolio: 'Every holding you have with us, valued at the latest published NAV.',
   allocation: 'How your money is spread across asset classes, products and fund houses.',
-  'mutual-funds': 'Research funds, start a SIP or invest a lump sum.',
+  'mutual-funds': 'Your mutual fund holdings, investments and SIPs.',
   bonds: 'Fixed-income options curated for you, with your indicative price.',
   'unlisted-shares': 'Pre-IPO and unlisted companies, with your indicative price per share.',
   transactions: 'Every purchase, redemption, switch and payout on your account.',

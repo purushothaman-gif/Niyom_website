@@ -82,6 +82,8 @@ registerEnv({
   supabaseAnonKey,
   bseProxyUrl: import.meta.env.VITE_BSE_PROXY_URL,
   bseMode: import.meta.env.VITE_BSE_MODE,
+  wylthMf: import.meta.env.VITE_WYLTH_MF,
+  wylthStaff: import.meta.env.VITE_WYLTH_STAFF,
 });
 registerDb('default', supabase);
 registerDb('client', clientSupabase);

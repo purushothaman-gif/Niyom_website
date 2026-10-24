@@ -20,6 +20,10 @@ export interface NiyomEnv {
   bseProxyUrl?: string;
   /** 'mock' shows illustrative funds; anything else uses the real rail. */
   bseMode?: string;
+  /** 'true' sends the client Mutual Funds entry to Wylth via SSO. */
+  wylthMf?: string;
+  /** 'true' shows the admin / partner Wylth entries (no Wylth spec yet). */
+  wylthStaff?: string;
 }
 
 /** Where the NIYOM proxy runs. Not a secret — it ships in every client. */
@@ -34,6 +38,16 @@ export function bseProxyBaseUrl(): string | null {
   const configured = getEnv().bseProxyUrl?.trim();
   if (configured?.toLowerCase() === 'none') return null;
   return (configured || DEFAULT_BSE_PROXY).replace(/\/$/, '');
+}
+
+/** Client Mutual Funds opens Wylth (investor SSO) instead of our own module. */
+export function wylthMfEnabled(): boolean {
+  return getEnv().wylthMf?.trim().toLowerCase() === 'true';
+}
+
+/** Admin / partner Wylth entries — off until Wylth ships a staff SSO spec. */
+export function wylthStaffEnabled(): boolean {
+  return getEnv().wylthStaff?.trim().toLowerCase() === 'true';
 }
 
 let env: NiyomEnv | null = null;
