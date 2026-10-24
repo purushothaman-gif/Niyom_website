@@ -24,7 +24,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -9848,6 +9848,47 @@ export type Database = {
           },
         ]
       }
+      nw_wylth_sso_log: {
+        Row: {
+          caller_auth_id: string | null
+          caller_type: string
+          client_id: string | null
+          created_at: string
+          id: string
+          latency_ms: number | null
+          outcome: string
+          wylth_message: string | null
+        }
+        Insert: {
+          caller_auth_id?: string | null
+          caller_type: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          latency_ms?: number | null
+          outcome: string
+          wylth_message?: string | null
+        }
+        Update: {
+          caller_auth_id?: string | null
+          caller_type?: string
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          latency_ms?: number | null
+          outcome?: string
+          wylth_message?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_wylth_sso_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_rules: {
         Row: {
           min_value: number
@@ -10466,6 +10507,7 @@ export type Database = {
       }
     }
     Functions: {
+      bm_adjust_ytm: { Args: { a: Json; price_factor: number }; Returns: Json }
       bm_approve_markup: { Args: { p_id: string }; Returns: undefined }
       bm_import_prices: { Args: { p_rows: Json }; Returns: Json }
       bm_overlay_from_import_raw: {
