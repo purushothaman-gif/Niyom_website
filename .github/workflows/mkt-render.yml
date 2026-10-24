@@ -3,13 +3,14 @@
 # Draws the artwork for content that mkt-auto-generate wrote a little earlier,
 # uploads it, and hands each slot back to be finalised.
 #
-# Two things about this workflow are load-bearing and easy to break:
+# It is triggered by pg_cron calling GitHub's workflow_dispatch API, NOT by a
+# schedule here — see the note on `on:` below for why. It must stay on the
+# repository's default branch (niyom-main), which is the ref the dispatch asks
+# for.
 #
-#   1. It must live on the repository's DEFAULT branch or `schedule` never
-#      fires. GitHub ignores cron on other branches.
-#   2. On a private repo, scheduled workflows are disabled after 60 days with no
-#      repository activity. The Auto Schedule screen in the CRM shows a batch
-#      with nothing live in red, which is the monitor for that.
+# The end-to-end monitor is the Auto Schedule screen in the CRM: a batch with
+# nothing live renders red. `select * from mkt_auto_dispatch_status();` shows
+# whether GitHub accepted the dispatch at all (204 = yes).
 #
 # The only credential here is MKT_RENDER_SECRET, which opens four verbs on
 # mkt-auto-render-io and nothing else. There is deliberately no service-role key.
@@ -17,16 +18,19 @@
 name: Render daily content
 
 on:
-  schedule:
-    # Times are UTC; IST is UTC+5:30 with no DST. The publish gate is 09:30 IST
-    # (04:00 UTC), and generation finishes by ~02:55 UTC.
-    #
-    # GitHub's scheduler is best-effort and routinely runs 5-20 minutes late, so
-    # these avoid the top of the hour and leave real slack. Every run is
-    # claim-based, so the later two cost nothing when the first succeeds.
-    - cron: '20 3 * * *'   # 08:50 IST — primary
-    - cron: '40 3 * * *'   # 09:10 IST — retry
-    - cron: '55 3 * * *'   # 09:25 IST — last chance before the gate
+  # No `schedule:` here, deliberately.
+  #
+  # GitHub does not dispatch scheduled events on time for this repository:
+  # eight consecutive days measured 274-345 minutes of delay against a 03:20
+  # UTC cron. The window this job has to hit is 65 minutes wide — generation
+  # finishes at 02:55 UTC, the publish gate is 04:00 UTC (09:30 IST) — so a
+  # five-hour queue can never land inside it, whatever the cron says. Leaving
+  # the schedule in place produced three late, useless runs a day and three
+  # failure emails with them.
+  #
+  # pg_cron keeps time reliably, so it now dispatches this workflow instead
+  # (trigger_mkt_render_dispatch, migration 20261024100000). Dispatch events
+  # are not subject to the schedule backlog.
   workflow_dispatch:
     inputs:
       run_date:
