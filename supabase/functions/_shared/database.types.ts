@@ -5210,6 +5210,30 @@ export type Database = {
         }
         Relationships: []
       }
+      mkt_auto_dispatch_log: {
+        Row: {
+          id: number
+          note: string
+          request_id: number | null
+          requested_at: string
+          run_date: string
+        }
+        Insert: {
+          id?: number
+          note?: string
+          request_id?: number | null
+          requested_at?: string
+          run_date: string
+        }
+        Update: {
+          id?: number
+          note?: string
+          request_id?: number | null
+          requested_at?: string
+          run_date?: string
+        }
+        Relationships: []
+      }
       mkt_auto_settings: {
         Row: {
           approve_window_hours: number
@@ -11136,6 +11160,15 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      mkt_auto_dispatch_status: {
+        Args: { p_limit?: number }
+        Returns: {
+          requested_at: string
+          response: string
+          run_date: string
+          status_code: number
+        }[]
+      }
       mkt_auto_finish_slot: {
         Args: {
           p_content_id?: string
@@ -11998,6 +12031,7 @@ export type Database = {
       trigger_mf_universe_refresh: { Args: never; Returns: undefined }
       trigger_mkt_auto_generate: { Args: never; Returns: undefined }
       trigger_mkt_expire_content: { Args: never; Returns: undefined }
+      trigger_mkt_render_dispatch: { Args: never; Returns: undefined }
       trigger_mutual_funds_update: { Args: never; Returns: undefined }
       trigger_nav_refresh: { Args: never; Returns: undefined }
       trigger_nsdl_refresh: { Args: never; Returns: undefined }
