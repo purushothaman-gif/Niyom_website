@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { NWEmployee, NWHolding, NWTransaction, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_CHART_COLORS, TXN_LABELS, TXN_COLORS } from './utils';
 import { Download, BarChart3, ArrowLeftRight, Users, ChevronDown } from 'lucide-react';
+import { mfSsoEnabled } from '../../shared/platform/env';
 
 interface Props { employee: NWEmployee; }
 
@@ -33,6 +34,9 @@ export default function Reports({ employee }: Props) {
       ]);
 
       let hList = (holdRes.data as (NWHolding & { client: any })[]) || [];
+      // The MF platform is the MF record once VITE_MF_SSO is on; transactions
+      // keep their MF history, holdings drop our older MF rows.
+      if (mfSsoEnabled()) hList = hList.filter(h => h.product_type !== 'mutual_fund');
       let tList = (txnRes.data as (NWTransaction & { client: any })[]) || [];
       let cList = (clientRes.data as (NWClient & { employee: any })[]) || [];
 

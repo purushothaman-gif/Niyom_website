@@ -7,6 +7,7 @@ import { passwordChecks, isPasswordStrong } from '../lib/passwordPolicy';
 import { ProductAccessEditor } from './ProductAccess';
 import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
 import { Search, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog } from 'lucide-react';
+import { mfSsoEnabled } from '../../shared/platform/env';
 
 interface Props { employee: NWEmployee; onNavigate: (page: any, params?: any) => void; }
 
@@ -66,6 +67,10 @@ const BSE_REQUIRED: [keyof NWClient, string][] = [
   ['bank_account', 'bank a/c'],
   ['bank_ifsc', 'IFSC'],
 ];
+
+// The BSE readiness check belongs to the in-house MF rail, which retires once
+// mutual funds run on the MF platform (VITE_MF_SSO).
+const BSE_CHECKS = !mfSsoEnabled();
 
 function missingForBse(c: NWClient): string[] {
   return BSE_REQUIRED.filter(([k]) => !String((c as never)[k] ?? '').trim()).map(([, label]) => label);
@@ -587,7 +592,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
           />
         </div>
-        <div className="relative flex-shrink-0">
+        {BSE_CHECKS && <div className="relative flex-shrink-0">
           <select
             value={bseReadyFilter}
             onChange={e => setBseReadyFilter(e.target.value as 'all' | 'incomplete')}
@@ -598,7 +603,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
             <option value="all">All clients</option>
             <option value="incomplete">Incomplete for BSE</option>
           </select>
-        </div>
+        </div>}
         {isAdmin && (
           <div className="relative flex-shrink-0">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: 'var(--text-faint)' }} />
@@ -640,7 +645,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                     <p className="text-sm font-medium text-text-primary">{c.full_name}</p>
                     <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{c.phone || c.email || '—'}</p>
                     {(() => {
-                      const gaps = missingForBse(c);
+                      const gaps = BSE_CHECKS ? missingForBse(c) : [];
                       return gaps.length > 0 ? (
                         <span
                           className="mt-1 inline-block text-[10px] px-1.5 py-0.5 rounded cursor-help"

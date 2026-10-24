@@ -10,12 +10,14 @@ import { LogoLoader } from './components/LogoLoader';
 import { PUBLIC_ROUTES, type PublicRoute } from './routes/publicRoutes';
 import { isDemoSession, endDemoSession } from './partner/demo/demoData';
 import { endDemoClientSession, isDemoClientSession } from '../shared/portal/demo/demoClient';
+import { mfSsoEnabled } from '../shared/platform/env';
 
 // Authenticated / utility surfaces are code-split so the public marketing bundle
 // stays lean. They keep their own internal navigation (CRM = state, Portal & MF
 // Admin = ?v= query param) unchanged — react-router only owns the top-level path.
 const CRM = lazy(() => import('./crm/CRM'));
 const MfAdminApp = lazy(() => import('./mfadmin/MfAdminApp'));
+const MfAdminRetired = lazy(() => import('./mfadmin/MfAdminRetired'));
 const ClientLogin = lazy(() => import('./pages/ClientLogin'));
 const ClientChangePassword = lazy(() => import('./pages/ClientChangePassword'));
 const ClientPortal = lazy(() => import('./pages/ClientPortal'));
@@ -368,7 +370,8 @@ function AppContent() {
           <Route path="/partner-onboarding" element={<PartnerOnboardingRoute />} />
           <Route path="/onboarding" element={<OnboardingRoute />} />
           <Route path="/crm/*" element={<CRM />} />
-          <Route path="/mf-admin" element={<MfAdminApp />} />
+          {/* The in-house BSE console retires once MF runs on the MF platform. */}
+          <Route path="/mf-admin" element={mfSsoEnabled() ? <MfAdminRetired /> : <MfAdminApp />} />
           <Route path="/deal/:token" element={<DealRoute />} />
           <Route path="/debit-note/:token" element={<DebitNoteRoute />} />
           <Route path="/bond-offer" element={<BondOffer />} />

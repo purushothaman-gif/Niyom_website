@@ -7,6 +7,8 @@ import { NWEmployee, NWHolding, NWClient, ProductType } from './types';
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, PRODUCT_CHART_COLORS } from './utils';
 import { Plus, X, Pencil, Trash2, ChevronDown, Printer, TrendingUp, Percent, Shield, ArrowLeft, ArrowUp, ArrowDown, Search, Download } from 'lucide-react';
 import type { Insertable } from '../lib/dbJson';
+import { recalcPortfolioValue } from './portfolioValue';
+import { mfSsoEnabled } from '../../shared/platform/env';
 
 interface Props {
   employee: NWEmployee;
@@ -14,7 +16,14 @@ interface Props {
   pageParams?: Record<string, string>;
 }
 
-const PRODUCTS: ProductType[] = ['unlisted_share', 'secondary_bond', 'primary_bond', 'mutual_fund', 'fixed_deposit', 'insurance'];
+/*
+ * Once mutual funds run on the MF platform (VITE_MF_SSO) it is the MF record:
+ * older MF holdings drop out of this page and its totals, and no new ones can
+ * be keyed in. The rows themselves stay in nw_holdings.
+ */
+const MF_ON_PLATFORM = mfSsoEnabled();
+const PRODUCTS: ProductType[] = (['unlisted_share', 'secondary_bond', 'primary_bond', 'mutual_fund', 'fixed_deposit', 'insurance'] as ProductType[])
+  .filter((p) => !MF_ON_PLATFORM || p !== 'mutual_fund');
 const BOND_TYPES: ProductType[] = ['secondary_bond', 'primary_bond', 'fixed_deposit'];
 const ISIN_TYPES: ProductType[] = ['secondary_bond', 'primary_bond'];
 const PAYOUT_FREQ: Record<string, string> = { annual: 'Annual', halfyearly: 'Half-Yearly', quarterly: 'Quarterly', monthly: 'Monthly' };
@@ -343,6 +352,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
     if (productFilter !== 'all') query = query.eq('product_type', productFilter);
     const { data } = await query;
     let list = (data as (NWHolding & { client: any })[]) || [];
+    if (MF_ON_PLATFORM) list = list.filter(h => h.product_type !== 'mutual_fund');
     if (!isAdmin) {
       list = list.filter(h => h.client?.employee_id === employee.id);
     } else if (empFilter !== 'all') {
@@ -354,11 +364,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
 
   useEffect(() => { loadHoldings(); }, [loadHoldings]);
 
-  const updatePortfolioValue = async (clientId: string) => {
-    const { data } = await supabase.from('nw_holdings').select('current_value').eq('client_id', clientId);
-    const total = (data || []).reduce((s: number, h: any) => s + (h.current_value || 0), 0);
-    await supabase.from('nw_clients').update({ portfolio_value: total }).eq('id', clientId);
-  };
+  const updatePortfolioValue = recalcPortfolioValue;
 
   const setF = (k: keyof HoldingForm, v: string) => {
     setForm(prev => {
@@ -630,10 +636,10 @@ export default function Portfolio({ employee, pageParams }: Props) {
   }, [scopedHoldings, clients, clientMap, isAdmin, employee.id, empFilter, matchesSearch, sortKey, sortDir]);
 
   const exportClientsCsv = () => {
-    const headers = ['Client Name', 'Client Code', 'Employee', 'Total Invested', 'Current AUM', 'Unlisted', 'Bonds', 'Mutual Fund', 'P&L', 'P&L %'];
+    const headers = ['Client Name', 'Client Code', 'Employee', 'Total Invested', 'Current AUM', 'Unlisted', 'Bonds', ...(MF_ON_PLATFORM ? [] : ['Mutual Fund']), 'P&L', 'P&L %'];
     const rows = clientRows.map(r => [
       r.name, r.code, r.employeeName,
-      r.invested.toFixed(2), r.aum.toFixed(2), r.unlisted.toFixed(2), r.bonds.toFixed(2), r.mf.toFixed(2),
+      r.invested.toFixed(2), r.aum.toFixed(2), r.unlisted.toFixed(2), r.bonds.toFixed(2), ...(MF_ON_PLATFORM ? [] : [r.mf.toFixed(2)]),
       r.pl.toFixed(2), r.plPct.toFixed(2),
     ]);
     const csv = [headers, ...rows].map(r => r.map(v => `"${v ?? ''}"`).join(',')).join('\n');
@@ -1248,7 +1254,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
                     { key: 'aum', label: 'Current AUM', align: 'right' },
                     { key: 'unlisted', label: 'Unlisted', align: 'right' },
                     { key: 'bonds', label: 'Bonds', align: 'right' },
-                    { key: 'mf', label: 'Mutual Fund', align: 'right' },
+                    ...(MF_ON_PLATFORM ? [] : [{ key: 'mf', label: 'Mutual Fund', align: 'right' }]),
                     { key: 'pl', label: 'P&L', align: 'right' },
                   ] as { key: ClientSortKey; label: string; align: 'left' | 'right' }[]).map(col => (
                     <th key={col.key} onClick={() => toggleSort(col.key)}
@@ -1281,7 +1287,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
                     <td className="px-5 py-3.5 text-right text-sm font-bold" style={{ color: r.aum > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{fmt(r.aum)}</td>
                     <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.unlisted > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.unlisted > 0 ? fmt(r.unlisted) : '—'}</td>
                     <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.bonds > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.bonds > 0 ? fmt(r.bonds) : '—'}</td>
-                    <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.mf > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.mf > 0 ? fmt(r.mf) : '—'}</td>
+                    {!MF_ON_PLATFORM && <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.mf > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.mf > 0 ? fmt(r.mf) : '—'}</td>}
                     <td className="px-5 py-3.5 text-right">
                       {r.invested === 0 && r.aum === 0 ? (
                         <span className="text-sm" style={{ color: 'var(--text-faint)' }}>—</span>
@@ -1457,7 +1463,8 @@ export default function Portfolio({ employee, pageParams }: Props) {
         funds bought elsewhere, which is precisely why it must not be counted as
         ours. Read-only for the same reason.
       */}
-      {view === 'detail' && clientFilter && (
+      {/* Statement imports retire with the rest of in-house MF on the MF platform. */}
+      {view === 'detail' && clientFilter && !MF_ON_PLATFORM && (
         <div className="mt-6">
           <CasHoldingsPanel clientId={clientFilter} />
         </div>

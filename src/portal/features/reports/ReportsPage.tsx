@@ -164,8 +164,10 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
 
       <p className="px-1 text-[11px] text-text-faint">
         Excel statements are generated on your device from your portfolio data — nothing leaves your
-        browser. A Consolidated Account Statement is issued by the registrars themselves; we cannot
-        produce one, but importing yours is what powers everything above.
+        browser.{' '}
+        {mfSsoEnabled()
+          ? 'Mutual fund statements are available in your mutual fund account.'
+          : 'A Consolidated Account Statement is issued by the registrars themselves; we cannot produce one, but importing yours is what powers everything above.'}
       </p>
     </div>
   );

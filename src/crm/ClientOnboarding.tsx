@@ -4,6 +4,7 @@ import { passwordError, isPasswordStrong } from '../lib/passwordPolicy';
 import { NWEmployee, NWDSA, CRMPage } from './types';
 import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
 import { User, Building2, Upload, FileText, CheckCircle2, AlertCircle, ChevronRight, Users, Handshake, UserCheck, UserPlus, Sparkles } from 'lucide-react';
+import { mfSsoEnabled } from '../../shared/platform/env';
 
 interface Props {
   employee: NWEmployee;
@@ -315,7 +316,8 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     if (!form.pan.trim())        { setError('PAN number is required.'); return false; }
     if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan)) { setError('PAN format is invalid (e.g. ABCDE1234F).'); return false; }
     if (!form.dob)               { setError('Date of birth is required.'); return false; }
-    if (!form.gender)            { setError('Gender is required — BSE needs it to register the client.'); return false; }
+    // Only the in-house BSE rail needed gender; optional once MF is on the MF platform.
+    if (!form.gender && !mfSsoEnabled()) { setError('Gender is required — BSE needs it to register the client.'); return false; }
     if (!form.phone.trim())      { setError('Mobile number is required.'); return false; }
     if (!/^[6-9]\d{9}$/.test(form.phone)) { setError('Enter a valid 10-digit Indian mobile number.'); return false; }
     if (!form.email.trim())      { setError('Email address is required.'); return false; }
@@ -853,7 +855,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
               <Field label="Date of Birth" required>
                 <Input type="date" value={form.dob} onChange={e => set('dob', e.target.value)} />
               </Field>
-              <Field label="Gender" required>
+              <Field label="Gender" required={!mfSsoEnabled()}>
                 <select
                   value={form.gender}
                   onChange={e => set('gender', e.target.value)}
