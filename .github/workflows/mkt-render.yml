@@ -12,8 +12,9 @@
 # nothing live renders red. `select * from mkt_auto_dispatch_status();` shows
 # whether GitHub accepted the dispatch at all (204 = yes).
 #
-# The only credential here is MKT_RENDER_SECRET, which opens four verbs on
-# mkt-auto-render-io and nothing else. There is deliberately no service-role key.
+# This workflow holds NO credential. It authenticates to mkt-auto-render-io with
+# a GitHub OIDC token minted per run, which the function verifies against
+# GitHub's public keys. There is no service-role key and no shared secret.
 
 name: Render daily content
 
@@ -49,6 +50,12 @@ concurrency:
 
 permissions:
   contents: read
+  # Lets the runner mint a short-lived OIDC token describing this workflow run.
+  # mkt-auto-render-io verifies it against GitHub's public keys and checks the
+  # repository and workflow claims, which is what removed the shared secret
+  # from this repository. Without this line the mint call 403s and the job
+  # falls back to a secret that is no longer stored here.
+  id-token: write
 
 jobs:
   render:
@@ -91,9 +98,14 @@ jobs:
           # not a secret and is hardcoded in the cron migrations too. Set this
           # variable only to point a run at a different project.
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          # Required. A repository SECRET, not a variable — they live on
-          # different tabs and the distinction has already cost one failed run.
-          MKT_RENDER_SECRET: ${{ secrets.MKT_RENDER_SECRET }}
+          # Deliberately NO MKT_RENDER_SECRET.
+          #
+          # The worker authenticates with a GitHub OIDC token minted per run
+          # (see `permissions: id-token: write` above). The secret used to live
+          # here as a second copy of a Supabase function secret, with nothing
+          # keeping the two in sync — it was never set once and set wrong once,
+          # costing about ten weeks between them. Deleting the copy is the fix;
+          # please do not reintroduce it.
           RUN_DATE: ${{ inputs.run_date }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: npx tsx src/index.ts

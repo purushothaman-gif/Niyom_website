@@ -24,11 +24,12 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { entityLeakageFlags, lint, structuralFlags } from "../_shared/mkt/compliance.ts";
 import type { Flag } from "../_shared/mkt/types.ts";
 import type { Json } from "../_shared/database.types.ts";
+import { verifyGithubOidc } from "../_shared/mkt/githubOidc.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, x-mkt-render-secret",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, x-mkt-render-secret, x-github-oidc",
 };
 
 const json = (body: unknown, status = 200) =>
@@ -68,11 +69,40 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const expected = Deno.env.get("MKT_RENDER_SECRET")?.trim();
-    const given = req.headers.get("x-mkt-render-secret");
-    if (!expected || !given || !secretMatches(given, expected)) {
-      return json({ error: "Unauthorized" }, 401);
+    /*
+      Two ways in, and they are not equals.
+
+      A GitHub Actions OIDC token is the one CI uses: short-lived, minted per
+      run, and verified against GitHub's public keys, so there is no copy of
+      anything to keep in sync. That matters here — the shared secret below
+      caused two outages by drifting between its two homes.
+
+      The shared secret stays for local and manual runs, where no OIDC issuer
+      exists. It is no longer stored in GitHub, so it has only one home and
+      cannot drift.
+    */
+    const oidc = req.headers.get("x-github-oidc");
+    let caller = "";
+
+    if (oidc) {
+      const result = await verifyGithubOidc(oidc);
+      if (!result.ok) {
+        // Logged, never returned: telling an unauthenticated caller which
+        // check it failed is a free oracle.
+        console.error("mkt-auto-render-io: OIDC rejected —", result.reason);
+        return json({ error: "Unauthorized" }, 401);
+      }
+      caller = `github:${result.identity.workflowRef} run ${result.identity.runId}`;
+    } else {
+      const expected = Deno.env.get("MKT_RENDER_SECRET")?.trim();
+      const given = req.headers.get("x-mkt-render-secret");
+      if (!expected || !given || !secretMatches(given, expected)) {
+        return json({ error: "Unauthorized" }, 401);
+      }
+      caller = "shared-secret";
     }
+
+    console.log(`mkt-auto-render-io: authenticated as ${caller}`);
 
     const db = createClient(
       Deno.env.get("SUPABASE_URL")!,

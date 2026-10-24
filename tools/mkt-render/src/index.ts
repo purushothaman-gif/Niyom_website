@@ -37,6 +37,45 @@ const DEFAULT_SUPABASE_URL = 'https://jlmwazuwjnhoqqloyeoj.supabase.co';
 const SUPABASE_URL = (process.env.SUPABASE_URL?.trim() || DEFAULT_SUPABASE_URL).replace(/\/$/, '');
 const FUNCTIONS_URL = `${SUPABASE_URL}/functions/v1`;
 const SECRET = process.env.MKT_RENDER_SECRET?.trim() ?? '';
+
+/*
+ * GitHub Actions OIDC.
+ *
+ * When the runner is given `permissions: id-token: write`, it exposes an
+ * endpoint that mints a short-lived token describing this exact workflow run.
+ * mkt-auto-render-io verifies it against GitHub's public keys and checks the
+ * repository and workflow claims.
+ *
+ * This replaces the shared secret in CI. The secret had two homes — a Supabase
+ * function secret and a GitHub repository secret — with nothing keeping them in
+ * sync; it was never set once and set wrong once, costing about ten weeks
+ * between them. A token minted per run has nothing to drift from.
+ *
+ * Returns null outside Actions, where the secret is still the way in.
+ */
+async function githubOidcToken(): Promise<string | null> {
+  const url = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
+  const runnerToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+  if (!url || !runnerToken) return null;
+
+  // The audience names the consumer. Without it GitHub issues a token audienced
+  // to the repository owner, which every workflow this owner has would share.
+  const res = await fetch(`${url}&audience=niyom-mkt-render`, {
+    headers: { Authorization: `Bearer ${runnerToken}` },
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Could not mint a GitHub OIDC token (${res.status}). The job needs ` +
+      `\`permissions: id-token: write\`.`,
+    );
+  }
+  const body = await res.json() as { value?: string };
+  if (!body.value) throw new Error('GitHub returned an OIDC response with no token');
+  return body.value;
+}
+
+/** Set once at startup so every request uses the same token. */
+let OIDC: string | null = null;
 const RUN_DATE = process.env.RUN_DATE?.trim() || undefined;
 const DRY_RUN = process.env.DRY_RUN === 'true';
 
@@ -81,7 +120,10 @@ const annotate = (level: 'notice' | 'warning' | 'error', title: string, msg: str
 async function io<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
   const res = await fetch(`${FUNCTIONS_URL}/mkt-auto-render-io`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-mkt-render-secret': SECRET },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(OIDC ? { 'x-github-oidc': OIDC } : { 'x-mkt-render-secret': SECRET }),
+    },
     body: JSON.stringify({ action, ...payload }),
   });
   const text = await res.text();
@@ -95,12 +137,13 @@ async function io<T>(action: string, payload: Record<string, unknown> = {}): Pro
    * that does not match is the whole diagnosis.
    */
   if (res.status === 401) {
-    throw new Error(
-      `${action} failed (401): the MKT_RENDER_SECRET this run sent (${SECRET.length} chars) is ` +
-      `not the value mkt-auto-render-io holds. These are two separate copies and nothing keeps ` +
-      `them in sync. Compare the GitHub repository secret against the Supabase function secret ` +
-      `of the same name and make them identical.`,
-    );
+    throw new Error(OIDC
+      ? `${action} failed (401): mkt-auto-render-io rejected this run's GitHub OIDC token. ` +
+        `The function checks the repository id, the owner id and the workflow file — see the ` +
+        `function logs for which claim did not match.`
+      : `${action} failed (401): the MKT_RENDER_SECRET this run sent (${SECRET.length} chars) is ` +
+        `not the value mkt-auto-render-io holds. Compare it with the Supabase function secret ` +
+        `of the same name.`);
   }
 
   if (!res.ok) throw new Error(`${action} failed (${res.status}): ${text.slice(0, 400)}`);
@@ -154,17 +197,21 @@ async function main() {
    * inputs was missing; one line of context turns that into a five-second
    * diagnosis. The secret is reported only as present/absent and by length.
    */
+  OIDC = await githubOidcToken();
+
+  const authDesc = OIDC
+    ? 'github-oidc (no shared secret needed)'
+    : SECRET ? `shared-secret(${SECRET.length} chars)` : 'NONE';
   const preflight =
-    `target=${SUPABASE_URL} secret=${SECRET ? `present(${SECRET.length} chars)` : 'MISSING'} ` +
-    `run_date=${RUN_DATE ?? 'today'} dry_run=${DRY_RUN}`;
+    `target=${SUPABASE_URL} auth=${authDesc} run_date=${RUN_DATE ?? 'today'} dry_run=${DRY_RUN}`;
   log(preflight);
   annotate('notice', 'render preflight', preflight);
 
-  if (!SECRET) {
+  if (!OIDC && !SECRET) {
     throw new Error(
-      'MKT_RENDER_SECRET is not set. Add it as a repository SECRET (Settings → ' +
-      'Secrets and variables → Actions → Secrets), matching the MKT_RENDER_SECRET ' +
-      'Supabase function secret.',
+      'No way to authenticate. In GitHub Actions the job needs `permissions: id-token: write` ' +
+      'so it can mint an OIDC token. Running locally, set MKT_RENDER_SECRET (see ' +
+      'tools/mkt-render/.env.local).',
     );
   }
 
