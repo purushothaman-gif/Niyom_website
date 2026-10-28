@@ -33,10 +33,11 @@ research pages, and the backend MF data jobs that feed them.
 
 ## Cutover steps
 
-1. Set the platform credentials as Supabase secrets, then remove the mock:
-   `supabase secrets set WYLTH_API_BASE=… WYLTH_API_KEY=… WYLTH_SECRET_KEY=… WYLTH_IV=… --project-ref jlmwazuwjnhoqqloyeoj`
-   `supabase secrets unset WYLTH_GATEWAY --project-ref jlmwazuwjnhoqqloyeoj`
-2. Test SSO with a client whose PAN the platform has mapped.
+1. Run `bash scripts/mf-sso-prod-setup.sh` yourself (production API base:
+   `https://api.wylth.com`). It asks for the API key, secret key and IV with
+   hidden input, tests them with a mapped PAN, then stores them as Supabase
+   secrets and switches the function off mock. Use it again to rotate keys.
+2. Test SSO end to end with a client whose PAN the platform has mapped.
 3. Set `VITE_MF_SSO=true` on Vercel and redeploy.
 4. **Same day**, backfill the stored AUM so the CRM dashboard, client lists and
    reports drop MF everywhere at once, not only for clients edited afterwards:
