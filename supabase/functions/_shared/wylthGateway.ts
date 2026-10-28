@@ -51,7 +51,7 @@ export async function encryptPayload(pan: string, secretKey: string, iv: string)
 // "Investor or partner not found" family — the PAN isn't mapped under our
 // partner account at Wylth. Kept loose until Wylth confirms the exact text.
 function isNotMapped(message: string): boolean {
-  return /not\s*found/i.test(message);
+  return /not\s+found/i.test(message);
 }
 
 class DirectGateway implements WylthGateway {
