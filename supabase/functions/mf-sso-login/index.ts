@@ -62,13 +62,18 @@ Deno.serve(async (req: Request) => {
 
     const { data: client } = await db
       .from("nw_clients")
-      .select("id, full_name, client_code, pan, pan_verified, employee_id, client_auth_user_id")
+      .select("id, full_name, client_code, pan, pan_verified, onboarding_status, employee_id, client_auth_user_id")
       .eq("id", client_id)
       .maybeSingle();
     if (!client || client.client_auth_user_id !== user.id) return json({ error: "Unauthorized" }, 403);
 
     const pan = (client.pan ?? "").trim().toUpperCase();
-    if (!pan || client.pan_verified !== true) {
+    // The PAN is trusted once Cashfree verified it (self-signup) or staff
+    // approved the client (RM-onboarded clients carry an uploaded PAN document
+    // but pan_verified=false). Clients can't set either field themselves
+    // (nw_clients guard trigger), so a self-typed PAN never reaches the platform.
+    const panTrusted = client.pan_verified === true || client.onboarding_status === "active";
+    if (!pan || !panTrusted) {
       await log({ caller_type: "client", caller_auth_id: user.id, client_id, outcome: "kyc_incomplete" });
       return json({ status: "kyc_incomplete" });
     }
