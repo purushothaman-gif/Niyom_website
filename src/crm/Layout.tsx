@@ -52,6 +52,8 @@ const NAV: NavSection[] = [
     id: 'overview', label: null,
     items: [
       { key: 'dashboard' as CRMPage,         label: 'Dashboard',         icon: LayoutDashboard },
+      // Opens the MF platform's dashboard in a new tab (see mfStaffUrl below).
+      { key: 'mf_platform' as CRMPage,       label: 'MF Platform',       icon: LineChart },
     ],
   },
   {
@@ -95,8 +97,6 @@ const NAV: NavSection[] = [
       { key: 'unlisted_shares' as CRMPage,   label: 'Unlisted Shares',   icon: Gem },
       { key: 'share_pricing' as CRMPage,     label: 'Share Pricing',     icon: BadgePercent },
       { key: 'marketing_content' as CRMPage, label: 'Content Creation',  icon: Sparkles },
-      { key: 'marketing_funds' as CRMPage,   label: 'Mutual Funds',     icon: LineChart },
-      { key: 'mf_platform' as CRMPage,       label: 'MF Platform',      icon: LineChart },
       { key: 'mail_campaigns' as CRMPage,    label: 'Email Campaigns',  icon: Mail },
     ],
   },
