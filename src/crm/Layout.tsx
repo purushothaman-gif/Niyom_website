@@ -7,12 +7,11 @@ import {
   FolderOpen, Shield, BarChart3, Wallet, Handshake, ClipboardList,
   Send, Target, Landmark, LifeBuoy, Sparkles, LineChart, BadgePercent, Gem,
   CalendarCheck, CalendarClock, CalendarDays, Coins, Receipt, Fingerprint,
-  BadgeIndianRupee, SlidersHorizontal, Mail, Trophy,
+  BadgeIndianRupee, SlidersHorizontal, Mail, Trophy, ExternalLink,
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
 import { EmployeeAvatar } from './EmployeeAvatar';
-import { mfStaffSsoEnabled } from '../../shared/platform/env';
 
 interface Props {
   children: React.ReactNode;
@@ -192,6 +191,21 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
     return () => { cancelled = true; };
   }, [isAdmin, isTransferLogin]);
 
+  /**
+   * The MF platform's staff dashboard. Fetched rather than hard-coded: the URL
+   * names the white-labelled platform and this bundle is public, so the server
+   * hands it to active staff only. Null hides the shortcut.
+   */
+  const [mfStaffUrl, setMfStaffUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (isTransferLogin) return;
+    let cancelled = false;
+    supabase.rpc('nw_mf_staff_url').then(({ data, error }) => {
+      if (!cancelled && !error && typeof data === 'string' && data) setMfStaffUrl(data);
+    });
+    return () => { cancelled = true; };
+  }, [isTransferLogin]);
+
   useEffect(() => {
     let cancelled = false;
     const load = () => {
@@ -232,7 +246,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
 
   const canSee = (n: NavItem) => isTransferLogin
     ? n.key === 'transfer_queue'
-    : (n.key !== 'mf_platform' || mfStaffSsoEnabled()) && (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin)
+    : (n.key !== 'mf_platform' || !!mfStaffUrl) && (!n.adminOnly || isAdmin) && !(n.hideForAdmin && isAdmin)
       && (!n.hrOnly || hasHrAccess) && (!n.payrollOnly || onPayroll);
   // Filter items by role; a section whose items are all hidden disappears along
   // with its heading (e.g. Documents for an admin who only has the Vault).
@@ -269,6 +283,18 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
             )}
             <div className="space-y-0.5">
               {section.items.map(({ key, label, icon: Icon }) => {
+                // An outside site, so a plain new-tab link rather than a CRM page.
+                if (key === 'mf_platform' && mfStaffUrl) {
+                  return (
+                    <a key={key} href={mfStaffUrl} target="_blank" rel="noopener noreferrer"
+                      onClick={() => setMobileOpen(false)}
+                      className="crm-nav-item w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all">
+                      <Icon className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate">{label}</span>
+                      <ExternalLink className="w-3.5 h-3.5 ml-auto flex-shrink-0 opacity-60" />
+                    </a>
+                  );
+                }
                 const active = page === key;
                 return (
                   <button key={key} onClick={() => {
