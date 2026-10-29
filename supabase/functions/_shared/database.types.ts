@@ -11814,6 +11814,7 @@ export type Database = {
         Args: { p_duplicate: string; p_primary: string }
         Returns: undefined
       }
+      nw_mf_staff_url: { Args: never; Returns: string }
       nw_my_products: {
         Args: { p_audience: string }
         Returns: {
