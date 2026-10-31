@@ -25,6 +25,7 @@ import { hrError } from './hrError';
 import { summariseAttendance, formatDuration, type DailyRow } from '../../lib/hr/attendanceSummary';
 import type {
   AttendanceAdjustment, AttendanceDaily, Holiday, LeaveBalance, LeaveRequest, LeaveType,
+  PermissionRequest, PermissionSummary,
   PayrollRecord, Payslip,
 } from './hrTypes';
 import { inr } from '../../lib/money';
@@ -67,7 +68,12 @@ export default function MyHR({ employee }: { employee: NWEmployee }) {
       />
 
       {tab === 'attendance' && <MyAttendance employee={employee} onToast={show} />}
-      {tab === 'leave'      && <MyLeave employee={employee} onToast={show} />}
+      {tab === 'leave'      && (
+        <div className="space-y-5">
+          <MyPermission employee={employee} onToast={show} />
+          <MyLeave employee={employee} onToast={show} />
+        </div>
+      )}
       {tab === 'holidays'   && <MyHolidays />}
       {tab === 'payslips'   && <MyPayslips employee={employee} onToast={show} />}
       {tab === 'profile'    && <MyProfile employee={employee} onToast={show} />}
@@ -320,6 +326,223 @@ function CorrectionModal({ employeeId, day, onClose, onDone, onError }: {
 /* ======================================================================== */
 /* Leave                                                                     */
 /* ======================================================================== */
+
+/* ----------------------------------------------------------------------- */
+/* Permission -- short leave of an hour or two                              */
+/* ----------------------------------------------------------------------- */
+
+const PERMISSION_DURATIONS = [
+  { minutes: 60,  label: '1 hour' },
+  { minutes: 120, label: '2 hours' },
+  { minutes: 240, label: 'Half day' },
+];
+
+const hrs = (m: number) => (m % 60 === 0 ? `${m / 60} hr` : `${m} min`);
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+function MyPermission({ employee, onToast }: {
+  employee: NWEmployee; onToast: (m: string, ok?: boolean) => void;
+}) {
+  const [summary, setSummary] = useState<PermissionSummary | null>(null);
+  const [rows, setRows] = useState<PermissionRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({
+    work_date: todayISO(), minutes: 60, start_time: '', reason: '',
+  });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [s, r] = await Promise.all([
+        api.permissionSummary(),
+        api.listPermissions({ employeeId: employee.id }),
+      ]);
+      setSummary(s); setRows(r);
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setLoading(false);
+    }
+  }, [employee.id, onToast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const submit = async () => {
+    if (form.reason.trim().length < 3) { onToast('Say why you need the permission.', false); return; }
+    setBusy(true);
+    try {
+      const res = await api.requestPermission(
+        form.work_date, form.minutes, form.start_time || null, form.reason.trim(),
+      ) as unknown as { would_exceed?: boolean };
+      setOpen(false);
+      setForm({ work_date: todayISO(), minutes: 60, start_time: '', reason: '' });
+      await load();
+      onToast(res?.would_exceed
+        ? 'Sent for approval. This is beyond your monthly allowance, so it may be approved unpaid.'
+        : 'Sent for approval.');
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const withdraw = async (id: string) => {
+    try { await api.cancelPermission(id); await load(); onToast('Request withdrawn.'); }
+    catch (err) { onToast(hrError(err), false); }
+  };
+
+  if (loading) return <Skeleton rows={3} />;
+
+  const used = summary?.used_minutes ?? 0;
+  const allowance = summary?.allowance_minutes ?? 0;
+  const left = summary?.remaining_minutes ?? 0;
+  const pct = allowance > 0 ? Math.min(100, Math.round((used / allowance) * 100)) : 0;
+
+  return (
+    <>
+      <SectionCard
+        title="Permission"
+        subtitle="An hour or two off, agreed in advance. Your working day still counts in full."
+        actions={
+          <PrimaryButton onClick={() => setOpen(true)}>
+            <CalendarClock className="w-3.5 h-3.5 inline mr-1" />Request Permission
+          </PrimaryButton>
+        }
+      >
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="min-w-[180px]">
+            <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
+              {summary?.month} allowance
+            </p>
+            <p className="text-lg font-bold tabular-nums mt-0.5" style={{ color: 'var(--text-primary)' }}>
+              {hrs(left)} <span className="text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
+                left of {hrs(allowance)}
+              </span>
+            </p>
+          </div>
+          <div className="flex-1 min-w-[160px]">
+            <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-base)' }}>
+              <div className="h-full rounded-full" style={{
+                width: `${pct}%`,
+                background: pct >= 100 ? 'rgb(239,68,68)' : pct >= 75 ? 'rgb(245,158,11)' : 'rgb(16,185,129)',
+              }} />
+            </div>
+            <p className="text-[11px] mt-1" style={{ color: 'var(--text-faint)' }}>
+              {hrs(used)} used this month
+              {left === 0 && summary?.enforced && ' — anything further may be approved unpaid.'}
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Your permission requests" padded={false}>
+        <div className="p-5">
+          {rows.length === 0 ? (
+            <EmptyState icon={CalendarClock} title="No requests yet"
+              message="Ask for an hour or two when you need it, and it goes to your manager for approval." />
+          ) : (
+            <TableWrap>
+              <thead>
+                <tr>
+                  <th className="text-left">Date</th><th className="text-left">Length</th>
+                  <th className="text-left">From</th><th className="text-left">Reason</th>
+                  <th className="text-left">Status</th><th className="text-right"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(p => (
+                  <tr key={p.id}>
+                    <td className="whitespace-nowrap">{fmtDay(p.work_date)}</td>
+                    <td className="tabular-nums">{hrs(p.minutes)}</td>
+                    <td className="tabular-nums">{p.start_time ? p.start_time.slice(0, 5) : '—'}</td>
+                    <td className="text-xs">{p.reason}</td>
+                    <td>
+                      <Pill value={p.status} small />
+                      {p.status === 'approved' && p.paid === false && (
+                        <span className="ml-1 text-[11px]" style={{ color: 'rgb(245,158,11)' }}>unpaid</span>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      {p.status === 'pending' && (
+                        <button onClick={() => withdraw(p.id)} className="text-xs font-semibold"
+                          style={{ color: 'rgb(239,68,68)' }}>Withdraw</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableWrap>
+          )}
+        </div>
+      </SectionCard>
+
+      {open && (
+        <Modal open onClose={() => setOpen(false)} title="Request permission">
+          <div className="p-5 space-y-4">
+            <Notice tone="info">
+              Permission is short leave — an hour or two — agreed before you take it. Within your monthly
+              allowance the day still counts as a full day's work and your pay is unaffected.
+              {left > 0
+                ? <> You have <strong>{hrs(left)}</strong> left this month.</>
+                : <> You have <strong>used your allowance</strong> this month, so this may be approved unpaid.</>}
+            </Notice>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Date" required>
+                <Input type="date" value={form.work_date}
+                  onChange={e => setForm({ ...form, work_date: e.target.value })} />
+              </Field>
+              <Field label="From" hint="Optional — when you expect to step out.">
+                <Input type="time" value={form.start_time}
+                  onChange={e => setForm({ ...form, start_time: e.target.value })} />
+              </Field>
+            </div>
+
+            <Field label="How long" required>
+              <div className="flex gap-2 flex-wrap">
+                {PERMISSION_DURATIONS.map(d => {
+                  const on = form.minutes === d.minutes;
+                  const over = (summary?.max_per_request ?? 240) < d.minutes;
+                  return (
+                    <button key={d.minutes} type="button" disabled={over}
+                      onClick={() => setForm({ ...form, minutes: d.minutes })}
+                      className="px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-40"
+                      style={{
+                        background: on ? 'rgba(59,130,246,0.15)' : 'var(--bg-base)',
+                        color: on ? 'rgb(59,130,246)' : 'var(--text-secondary)',
+                        border: `1px solid ${on ? 'rgba(59,130,246,0.35)' : 'var(--border)'}`,
+                      }}>
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+
+            <Field label="Reason" required>
+              <Textarea rows={2} value={form.reason}
+                onChange={e => setForm({ ...form, reason: e.target.value })}
+                placeholder="Bank work / hospital appointment / personal" />
+            </Field>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setOpen(false)} className="px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                Cancel
+              </button>
+              <PrimaryButton onClick={submit} disabled={busy}>
+                {busy ? 'Sending…' : 'Send for Approval'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
 
 function MyLeave({ employee, onToast }: { employee: NWEmployee; onToast: (m: string, ok?: boolean) => void }) {
   const year = new Date().getFullYear();

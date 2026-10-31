@@ -13,7 +13,7 @@
 
 import { supabase } from '../../lib/supabase';
 import type {
-  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch, HRNavContext, OfficeLocation, LopWaiver, WorkArrangement, EmployeeBreak,
+  AllowedNetwork, AttendanceAdjustment, AttendanceDaily, AttendancePunch, HRNavContext, OfficeLocation, LopWaiver, WorkArrangement, EmployeeBreak, PermissionRequest, PermissionSummary,
   AttendanceSettings, AuditLog, BankAccount, BankTemplateColumn, BankTemplateRow,
   ComponentSlabRow, EmployeeProfile, HRAccess, HREmployee, HRModule, HRSettings,
   Holiday, LeaveBalance, LeaveRequest, LeaveType, PaySchedule, PayrollAdjustmentRow,
@@ -305,6 +305,38 @@ export const recomputeAttendance = async (employeeId: string | null, from: strin
     p_employee_id: employeeId as unknown as string,
     p_from: from, p_to: to,
   }));
+
+// ---- Permission (short leave against a monthly allowance) ------------------
+
+export const permissionSummary = async (onDate?: string): Promise<PermissionSummary> =>
+  unwrap(await supabase.rpc('hr_permission_summary',
+    { p_date: (onDate ?? undefined) as unknown as string })) as unknown as PermissionSummary;
+
+export const listPermissions = async (
+  opts: { employeeId?: string; pendingOnly?: boolean } = {},
+): Promise<PermissionRequest[]> => {
+  let q = supabase.from('hr_permission_requests').select('*').order('work_date', { ascending: false });
+  if (opts.employeeId) q = q.eq('employee_id', opts.employeeId);
+  if (opts.pendingOnly) q = q.eq('status', 'pending');
+  return (await q).data ?? [];
+};
+
+export const requestPermission = async (
+  work_date: string, minutes: number, start_time: string | null, reason: string,
+) => unwrap(await supabase.rpc('hr_request_permission', {
+  p_work_date: work_date, p_minutes: minutes,
+  p_start_time: (start_time ?? undefined) as unknown as string, p_reason: reason,
+}));
+
+export const reviewPermission = async (
+  id: string, approve: boolean, note = '', paidOverride?: boolean,
+) => unwrap(await supabase.rpc('hr_review_permission', {
+  p_id: id, p_approve: approve, p_note: note,
+  p_paid_override: (paidOverride ?? undefined) as unknown as boolean,
+}));
+
+export const cancelPermission = async (id: string) =>
+  unwrap(await supabase.rpc('hr_cancel_permission', { p_id: id }));
 
 // ===========================================================================
 // Leave & holidays

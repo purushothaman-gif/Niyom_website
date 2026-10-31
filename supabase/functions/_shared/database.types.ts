@@ -2268,6 +2268,9 @@ export type Database = {
           office_end: string
           office_start: string
           overtime_after_minutes: number
+          permission_enforce_allowance: boolean
+          permission_max_per_request_minutes: number
+          permission_monthly_minutes: number
           punch_cooldown_seconds: number
           punch_window_end: string
           punch_window_start: string
@@ -2301,6 +2304,9 @@ export type Database = {
           office_end?: string
           office_start?: string
           overtime_after_minutes?: number
+          permission_enforce_allowance?: boolean
+          permission_max_per_request_minutes?: number
+          permission_monthly_minutes?: number
           punch_cooldown_seconds?: number
           punch_window_end?: string
           punch_window_start?: string
@@ -2334,6 +2340,9 @@ export type Database = {
           office_end?: string
           office_start?: string
           overtime_after_minutes?: number
+          permission_enforce_allowance?: boolean
+          permission_max_per_request_minutes?: number
+          permission_monthly_minutes?: number
           punch_cooldown_seconds?: number
           punch_window_end?: string
           punch_window_start?: string
@@ -3911,6 +3920,75 @@ export type Database = {
             columns: ["run_id"]
             isOneToOne: false
             referencedRelation: "hr_payroll_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hr_permission_requests: {
+        Row: {
+          applied_at: string
+          approver_id: string | null
+          cancelled_at: string | null
+          created_at: string
+          decided_at: string | null
+          decision_note: string
+          employee_id: string
+          id: string
+          minutes: number
+          paid: boolean | null
+          reason: string
+          start_time: string | null
+          status: string
+          updated_at: string
+          work_date: string
+        }
+        Insert: {
+          applied_at?: string
+          approver_id?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decision_note?: string
+          employee_id: string
+          id?: string
+          minutes: number
+          paid?: boolean | null
+          reason: string
+          start_time?: string | null
+          status?: string
+          updated_at?: string
+          work_date: string
+        }
+        Update: {
+          applied_at?: string
+          approver_id?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decision_note?: string
+          employee_id?: string
+          id?: string
+          minutes?: number
+          paid?: boolean | null
+          reason?: string
+          start_time?: string | null
+          status?: string
+          updated_at?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hr_permission_requests_approver_id_fkey"
+            columns: ["approver_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hr_permission_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
             referencedColumns: ["id"]
           },
         ]
@@ -10797,6 +10875,7 @@ export type Database = {
         Args: { p_reason?: string; p_request_id: string }
         Returns: Json
       }
+      hr_cancel_permission: { Args: { p_id: string }; Returns: Json }
       hr_count_leave_days: {
         Args: {
           p_employee_id: string
@@ -10937,6 +11016,11 @@ export type Database = {
         }
         Returns: string
       }
+      hr_permission_summary: { Args: { p_date?: string }; Returns: Json }
+      hr_permission_used_minutes: {
+        Args: { p_date: string; p_employee_id: string; p_exclude?: string }
+        Returns: number
+      }
       hr_publish_payslips: { Args: { p_run_id: string }; Returns: Json }
       hr_punch_state: {
         Args: {
@@ -10973,8 +11057,26 @@ export type Database = {
         }
         Returns: Json
       }
+      hr_request_permission: {
+        Args: {
+          p_minutes: number
+          p_reason: string
+          p_start_time: string
+          p_work_date: string
+        }
+        Returns: Json
+      }
       hr_review_adjustment: {
         Args: { p_adjustment_id: string; p_approve: boolean; p_note?: string }
+        Returns: Json
+      }
+      hr_review_permission: {
+        Args: {
+          p_approve: boolean
+          p_id: string
+          p_note?: string
+          p_paid_override?: boolean
+        }
         Returns: Json
       }
       hr_review_punch: {
