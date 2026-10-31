@@ -247,8 +247,8 @@ export default function CRM() {
       // employees get the read-only approved-content gallery (branched inside).
       case 'marketing_content': return <MarketingContent employee={employee} onNavigate={navigate} />;
       case 'marketing_funds': return <FundResearch />;
-      // The sidebar entry is a new-tab link to the platform's dashboard; this
-      // page only shows if someone types /crm/mf_platform directly.
+      // No sidebar entry: staff reach the MF platform's CRM from MF Admin on the
+      // main site's employee login (/mf-admin redirects there, see vercel.json).
       case 'mf_platform': return <MfStaffPlaceholder />;
       // Open to every employee: admins mail as the company, employees as themselves to their own book (enforced in the database).
       case 'mail_campaigns': return <Mail employee={employee} />;
