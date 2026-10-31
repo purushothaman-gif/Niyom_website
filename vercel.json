@@ -1,16 +1,4 @@
 {
-  "redirects": [
-    {
-      "source": "/mf-admin",
-      "destination": "https://crmv2.wylth.com/dashboard/",
-      "permanent": false
-    },
-    {
-      "source": "/mf-admin/:path*",
-      "destination": "https://crmv2.wylth.com/dashboard/",
-      "permanent": false
-    }
-  ],
   "rewrites": [
     {
       "source": "/(.*)",

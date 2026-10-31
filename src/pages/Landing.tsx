@@ -86,8 +86,6 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
       label: 'MF Admin',
       hint: 'Mutual fund console',
       icon: BarChart3,
-      // Vercel redirects /mf-admin to the MF platform's CRM (vercel.json), so
-      // the white-labelled platform's address never ships in this bundle.
       open: () => { window.open('/mf-admin', '_blank'); },
     },
   ];
