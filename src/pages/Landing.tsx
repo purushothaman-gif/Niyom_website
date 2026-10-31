@@ -1,4 +1,4 @@
-import { ArrowRight, Shield, Target, Zap, TrendingUp, Users, Award, Instagram, Linkedin, ChevronRight, Phone, Mail, MessageCircle, Menu, X, ChevronDown, ShieldCheck, Search, Eye, Handshake, KeyRound, LayoutDashboard, BarChart3, ArrowUpRight, LogIn } from 'lucide-react';
+import { ArrowRight, Shield, Target, Zap, TrendingUp, Users, Award, Instagram, Linkedin, ChevronRight, Phone, Mail, MessageCircle, Menu, X, ChevronDown, ShieldCheck, Search, Eye, Handshake, KeyRound, LayoutDashboard, ArrowUpRight, LogIn } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Logo } from '../components/Logo';
 import { RegulatoryInfo } from '../components/RegulatoryInfo';
@@ -73,20 +73,15 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
     return () => window.removeEventListener('resize', measure);
   }, [isMobileMenuOpen]);
 
-  // Single source for the two employee consoles — the desktop dropdown and
-  // the mobile sheet render the same set, so they can't drift apart.
+  // Single source for the employee consoles — the desktop dropdown and the
+  // mobile sheet render the same set, so they can't drift apart. MF Admin was
+  // dropped: staff reach the MF platform from the CRM sidebar.
   const employeeLinks = [
     {
       label: 'CRM',
       hint: 'Clients & deal flow',
       icon: LayoutDashboard,
       open: () => { window.location.href = '/crm'; },
-    },
-    {
-      label: 'MF Admin',
-      hint: 'Mutual fund console',
-      icon: BarChart3,
-      open: () => { window.open('/mf-admin', '_blank'); },
     },
   ];
 
