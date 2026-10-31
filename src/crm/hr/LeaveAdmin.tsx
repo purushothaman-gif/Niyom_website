@@ -17,10 +17,12 @@ import {
   PrimaryButton, SectionCard, Select, Skeleton, StatTile, TableWrap, Tabs, Textarea,
 } from './hrUi';
 import { useToast } from './useToast';
-import type { HRAccess, HREmployee, LeaveBalance, LeaveRequest, LeaveType } from './hrTypes';
+import type {
+  HRAccess, HREmployee, LeaveBalance, LeaveRequest, LeaveType, PermissionRequest,
+} from './hrTypes';
 import { exportSheet } from './hrExcel';
 
-type Tab = 'requests' | 'balances' | 'types';
+type Tab = 'requests' | 'permissions' | 'balances' | 'types';
 
 const day = (v: string) =>
   new Date(v + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -28,10 +30,12 @@ const day = (v: string) =>
 export default function LeaveAdmin({ access }: { access: HRAccess }) {
   const [tab, setTab] = useState<Tab>('requests');
   const [pending, setPending] = useState(0);
+  const [permPending, setPermPending] = useState(0);
   const { show, node } = useToast();
 
   const refresh = useCallback(() => {
     api.listLeaveRequests({ pendingOnly: true }).then(r => setPending(r.length)).catch(() => {});
+    api.listPermissions({ pendingOnly: true }).then(r => setPermPending(r.length)).catch(() => {});
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -41,14 +45,177 @@ export default function LeaveAdmin({ access }: { access: HRAccess }) {
         active={tab} onChange={setTab}
         tabs={[
           { key: 'requests', label: 'Requests', count: pending },
+          { key: 'permissions', label: 'Permission', count: permPending },
           { key: 'balances', label: 'Balances' },
           { key: 'types',    label: 'Leave Types' },
         ]}
       />
       {tab === 'requests' && <Requests onToast={show} canEdit={access.canEdit.leave} onChanged={refresh} />}
+      {tab === 'permissions' && <Permissions onToast={show} canEdit={access.canEdit.leave} onChanged={refresh} />}
       {tab === 'balances' && <Balances onToast={show} canEdit={access.canEdit.leave} />}
       {tab === 'types'    && <Types onToast={show} canEdit={access.canEdit.leave} />}
       {node}
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------- permission */
+
+const mins = (m: number) => (m % 60 === 0 ? `${m / 60} hr` : `${m} min`);
+
+function Permissions({ onToast, canEdit, onChanged }: {
+  onToast: (m: string, ok?: boolean) => void; canEdit: boolean; onChanged: () => void;
+}) {
+  const [rows, setRows] = useState<PermissionRequest[]>([]);
+  const [staff, setStaff] = useState<HREmployee[]>([]);
+  const [allowance, setAllowance] = useState(120);
+  const [usage, setUsage] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [r, s, settings] = await Promise.all([
+        api.listPermissions(), api.listHREmployees(true, false), api.getAttendanceSettings(),
+      ]);
+      setRows(r); setStaff(s);
+      setAllowance(settings?.permission_monthly_minutes ?? 120);
+
+      /*
+       * How much of each person's allowance is already committed THIS month.
+       * Shown beside the request because "approve or not" is really "is this
+       * still inside their two hours", and nobody should have to work that out
+       * by eye from a list.
+       */
+      const month = new Date().toISOString().slice(0, 7);
+      const used: Record<string, number> = {};
+      for (const p of r) {
+        if (p.status === 'approved' && p.paid && p.work_date.startsWith(month)) {
+          used[p.employee_id] = (used[p.employee_id] ?? 0) + p.minutes;
+        }
+      }
+      setUsage(used);
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setLoading(false);
+    }
+  }, [onToast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const decide = async (p: PermissionRequest, approve: boolean, paidOverride?: boolean) => {
+    setBusy(p.id);
+    try {
+      const res = await api.reviewPermission(p.id, approve, '', paidOverride) as unknown as { paid?: boolean };
+      await load();
+      onChanged();
+      onToast(!approve ? 'Request rejected.'
+        : res?.paid === false
+          ? 'Approved as UNPAID — it is beyond this month’s allowance, so the day is not credited.'
+          : 'Approved. The day counts in full.');
+    } catch (err) {
+      onToast(hrError(err), false);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (loading) return <Skeleton rows={4} />;
+
+  const nameOf = (id: string) => staff.find(s => s.id === id)?.full_name ?? '—';
+  const shown = showAll ? rows : rows.filter(p => p.status === 'pending');
+
+  return (
+    <div className="space-y-5">
+      <Notice tone="info" title="Short leave, not leave">
+        Permission is an hour or two off, agreed in advance. Approving it within the employee&rsquo;s monthly
+        allowance of <strong>{mins(allowance)}</strong> credits the time, so a short day still settles as a full
+        one. Beyond the allowance it is approved <strong>unpaid</strong> — the absence is agreed, it just stops
+        being free, and the day settles on its own hours.
+      </Notice>
+
+      <SectionCard
+        title={showAll ? 'All permission requests' : 'Awaiting approval'}
+        subtitle="Each row shows how much of that person's allowance this month is already used."
+        actions={
+          <button onClick={() => setShowAll(v => !v)} className="text-xs font-semibold"
+            style={{ color: 'var(--accent-soft)' }}>
+            {showAll ? 'Show pending only' : 'Show all'}
+          </button>
+        }
+        padded={false}
+      >
+        <div className="p-5">
+          {shown.length === 0 ? (
+            <EmptyState icon={CalendarClock} title={showAll ? 'No requests' : 'Nothing awaiting approval'}
+              message="Permission requests raised by employees appear here." />
+          ) : (
+            <TableWrap>
+              <thead>
+                <tr>
+                  <th className="text-left">Employee</th><th className="text-left">Date</th>
+                  <th className="text-left">Length</th><th className="text-left">From</th>
+                  <th className="text-left">Reason</th><th className="text-left">This month</th>
+                  <th className="text-left">Status</th><th className="text-right">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map(p => {
+                  const used = usage[p.employee_id] ?? 0;
+                  const wouldExceed = used + p.minutes > allowance;
+                  return (
+                    <tr key={p.id}>
+                      <td className="font-semibold" style={{ color: 'var(--text-primary)' }}>{nameOf(p.employee_id)}</td>
+                      <td className="whitespace-nowrap">{day(p.work_date)}</td>
+                      <td className="tabular-nums">{mins(p.minutes)}</td>
+                      <td className="tabular-nums">{p.start_time ? p.start_time.slice(0, 5) : '—'}</td>
+                      <td className="text-xs">{p.reason}</td>
+                      <td className="text-xs tabular-nums">
+                        <span style={{ color: wouldExceed ? 'rgb(245,158,11)' : 'var(--text-muted)' }}>
+                          {mins(used)} of {mins(allowance)}
+                        </span>
+                        {p.status === 'pending' && wouldExceed && (
+                          <p className="text-[11px]" style={{ color: 'rgb(245,158,11)' }}>would exceed</p>
+                        )}
+                      </td>
+                      <td>
+                        <Pill value={p.status} small />
+                        {p.status === 'approved' && p.paid === false && (
+                          <span className="ml-1 text-[11px]" style={{ color: 'rgb(245,158,11)' }}>unpaid</span>
+                        )}
+                      </td>
+                      <td className="text-right whitespace-nowrap">
+                        {canEdit && p.status === 'pending' && (
+                          <>
+                            <button onClick={() => decide(p, true)} disabled={busy === p.id}
+                              className="text-xs font-semibold mr-3" style={{ color: 'rgb(16,185,129)' }}>
+                              Approve
+                            </button>
+                            {wouldExceed && (
+                              <button onClick={() => decide(p, true, true)} disabled={busy === p.id}
+                                className="text-xs font-semibold mr-3" style={{ color: 'rgb(59,130,246)' }}
+                                title="Approve and pay it even though it is beyond the allowance">
+                                Approve &amp; pay
+                              </button>
+                            )}
+                            <button onClick={() => decide(p, false)} disabled={busy === p.id}
+                              className="text-xs font-semibold" style={{ color: 'rgb(239,68,68)' }}>
+                              Reject
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </TableWrap>
+          )}
+        </div>
+      </SectionCard>
     </div>
   );
 }

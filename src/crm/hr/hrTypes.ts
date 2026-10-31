@@ -27,6 +27,18 @@ export type PaySchedule         = T['hr_pay_schedules']['Row'];
 export type LeaveType           = T['hr_leave_types']['Row'];
 export type LeaveBalance        = T['hr_leave_balances']['Row'];
 export type LeaveRequest        = T['hr_leave_requests']['Row'];
+export type PermissionRequest   = T['hr_permission_requests']['Row'];
+
+/** What hr_permission_summary() returns: this month's short-leave allowance. */
+export interface PermissionSummary {
+  month: string;
+  allowance_minutes: number;
+  used_minutes: number;
+  remaining_minutes: number;
+  max_per_request: number;
+  enforced: boolean;
+  pending: number;
+}
 export type LeaveDay            = T['hr_leave_days']['Row'];
 export type Holiday             = T['hr_holidays']['Row'];
 export type SalaryComponentRow  = T['hr_salary_components']['Row'];

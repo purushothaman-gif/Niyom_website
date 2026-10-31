@@ -1899,6 +1899,9 @@ function Rules({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => voi
         max_punches_per_day: s.max_punches_per_day, rate_limit_per_minute: s.rate_limit_per_minute,
         auto_punch_out_after_minutes: s.auto_punch_out_after_minutes,
         trusted_proxy_hops: s.trusted_proxy_hops,
+        permission_monthly_minutes: s.permission_monthly_minutes,
+        permission_max_per_request_minutes: s.permission_max_per_request_minutes,
+        permission_enforce_allowance: s.permission_enforce_allowance,
         enforce_punch_window: s.enforce_punch_window,
         punch_window_start: s.punch_window_start,
         punch_window_end: s.punch_window_end,
@@ -2038,6 +2041,32 @@ function Rules({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => voi
           </Field>
         </div>
       </SectionCard>
+
+      <SectionCard
+        title="Permission (short leave)"
+        subtitle="An hour or two off, agreed in advance. Within the allowance the day still counts in full."
+        actions={canEdit && <PrimaryButton onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Rules'}</PrimaryButton>}
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Field label="Paid allowance per month (minutes)"
+            hint="120 = two hours, the usual standard. 0 turns permission off as a paid benefit.">
+            <Input {...num('permission_monthly_minutes')} />
+          </Field>
+          <Field label="Longest single permission (minutes)"
+            hint="240 = half a day. Anything longer should be leave, not permission.">
+            <Input {...num('permission_max_per_request_minutes')} />
+          </Field>
+          <Field label="Beyond the allowance"
+            hint="What happens when someone has already used their monthly allowance.">
+            <Select value={s.permission_enforce_allowance ? 'unpaid' : 'paid'} disabled={!canEdit}
+              onChange={e => setS({ ...s, permission_enforce_allowance: e.target.value === 'unpaid' })}>
+              <option value="unpaid">Approve as unpaid (day settles on hours worked)</option>
+              <option value="paid">Keep paying it (allowance is advisory only)</option>
+            </Select>
+          </Field>
+        </div>
+      </SectionCard>
+
     </div>
   );
 }
