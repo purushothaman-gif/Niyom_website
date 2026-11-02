@@ -10,8 +10,14 @@ import {
   Search, Phone, Mail, CreditCard, Building2, User, Eye,
   ToggleLeft, ToggleRight, Trash2, ChevronDown, Pencil,
   KeyRound, ShieldOff, ShieldCheck, Copy, RefreshCw, MailCheck, UserCog,
-  Landmark, Star,
+  Landmark, Star, Users,
 } from 'lucide-react';
+import { fmt, fmtDate, VERIFICATION_LABELS, VERIFICATION_COLORS } from './utils';
+
+type DSAClientRow = {
+  id: string; full_name: string; client_code: string; phone: string | null; email: string | null;
+  pan: string | null; portfolio_value: number | null; verification_status: string; created_at: string;
+};
 
 /** Policy-compliant temp password (8+, upper, lower, digit, symbol). */
 function generatePassword(): string {
@@ -113,6 +119,12 @@ export default function DSAManagement({ employee }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [empList, setEmpList] = useState<{ id: string; full_name: string; employee_code: string }[]>([]);
   const [empFilter, setEmpFilter] = useState('all');
+  // Clients each partner sourced (nw_clients.dsa_id), for the per-DSA client list.
+  const [clientCounts, setClientCounts] = useState<Record<string, number>>({});
+  const [clientsDSA, setClientsDSA] = useState<NWDSA | null>(null);
+  const [dsaClients, setDsaClients] = useState<DSAClientRow[]>([]);
+  const [dsaClientsLoading, setDsaClientsLoading] = useState(false);
+  const [dsaClientSearch, setDsaClientSearch] = useState('');
   // Partner Portal login provisioning
   const [loginDSA, setLoginDSA] = useState<NWDSA | null>(null);
   const [loginEmail, setLoginEmail] = useState('');
@@ -147,10 +159,28 @@ export default function DSAManagement({ employee }: Props) {
     let q = supabase.from('nw_dsa').select('*, employee:nw_employees(full_name, employee_code)').order('dsa_code');
     if (!isAdmin) q = q.eq('employee_id', employee.id);
     else if (empFilter !== 'all') q = q.eq('employee_id', empFilter);
-    const { data } = await q;
+    const [{ data }, { data: links }] = await Promise.all([
+      q,
+      supabase.from('nw_clients').select('dsa_id').not('dsa_id', 'is', null).range(0, 9999),
+    ]);
     setDsas((data as NWDSA[]) || []);
+    const counts: Record<string, number> = {};
+    for (const l of (links as { dsa_id: string }[]) || []) counts[l.dsa_id] = (counts[l.dsa_id] || 0) + 1;
+    setClientCounts(counts);
     setLoading(false);
   }, [isAdmin, employee.id, empFilter]);
+
+  const openClients = async (dsa: NWDSA) => {
+    setClientsDSA(dsa);
+    setDsaClientSearch('');
+    setDsaClients([]);
+    setDsaClientsLoading(true);
+    const { data } = await supabase.from('nw_clients')
+      .select('id, full_name, client_code, phone, email, pan, portfolio_value, verification_status, created_at')
+      .eq('dsa_id', dsa.id).order('full_name');
+    setDsaClients((data as DSAClientRow[]) || []);
+    setDsaClientsLoading(false);
+  };
 
   useEffect(() => { fetchDSAs(); }, [fetchDSAs]);
 
@@ -847,6 +877,78 @@ export default function DSAManagement({ employee }: Props) {
         </div>
       )}
 
+      {/* Clients sourced by one DSA */}
+      {clientsDSA && (() => {
+        const q = dsaClientSearch.trim().toLowerCase();
+        const rows = q
+          ? dsaClients.filter(c => [c.full_name, c.client_code, c.phone, c.email, c.pan].some(v => (v || '').toLowerCase().includes(q)))
+          : dsaClients;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
+            <div className="w-full max-w-3xl rounded-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', maxHeight: '85vh' }}>
+              <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid var(--border)' }}>
+                <div>
+                  <p className="text-xs font-mono" style={{ color: 'var(--accent)' }}>{clientsDSA.dsa_code}</p>
+                  <h2 className="text-lg font-bold text-text-primary">Clients of {clientsDSA.full_name}</h2>
+                  {!dsaClientsLoading && <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>{dsaClients.length} client{dsaClients.length === 1 ? '' : 's'}</p>}
+                </div>
+                <button onClick={() => setClientsDSA(null)} style={{ color: 'var(--text-faint)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-bright)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}>
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {dsaClients.length > 0 && (
+                <div className="px-6 pt-4">
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-faint)' }} />
+                    <input value={dsaClientSearch} onChange={e => setDsaClientSearch(e.target.value)} placeholder="Search by name, code, phone, email, PAN..."
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm text-text-primary outline-none"
+                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }} />
+                  </div>
+                </div>
+              )}
+              <div className="px-6 py-4 overflow-auto flex-1">
+                {dsaClientsLoading ? (
+                  <div className="py-12 flex items-center justify-center"><LogoLoader size={40} /></div>
+                ) : rows.length === 0 ? (
+                  <p className="py-12 text-center text-sm" style={{ color: 'var(--text-faint)' }}>{dsaClients.length === 0 ? 'No clients mapped to this DSA yet' : 'No clients match your search'}</p>
+                ) : (
+                  <table className="w-full nw-table">
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                        {['Client', 'Code', 'PAN', 'Portfolio', 'Status', 'Date'].map(h => (
+                          <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map(c => (
+                        <tr key={c.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
+                          <td className="px-3 py-2.5">
+                            <p className="text-sm font-medium text-text-primary">{c.full_name}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{c.phone || c.email || '—'}</p>
+                          </td>
+                          <td className="px-3 py-2.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{c.client_code}</span></td>
+                          <td className="px-3 py-2.5 text-xs font-mono text-text-primary">{c.pan || '—'}</td>
+                          <td className="px-3 py-2.5 text-sm font-semibold text-text-primary">{fmt(c.portfolio_value || 0)}</td>
+                          <td className="px-3 py-2.5">
+                            <span className={`text-xs font-semibold px-2 py-1 rounded-lg border ${VERIFICATION_COLORS[c.verification_status]}`}>
+                              {VERIFICATION_LABELS[c.verification_status]}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(c.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Bank Accounts manager — 1 Primary + up to 4 Secondary */}
       {bankDSA && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
@@ -1276,7 +1378,8 @@ export default function DSAManagement({ employee }: Props) {
                 {/* DSA info */}
                 <div>
                   <div className="flex items-center gap-2 mb-0.5">
-                    <p className="text-sm font-semibold text-text-primary">{dsa.full_name}</p>
+                    <button onClick={() => openClients(dsa)} title="View this DSA's clients"
+                      className="text-sm font-semibold text-text-primary text-left hover:underline">{dsa.full_name}</button>
                     <span className={`text-xs px-1.5 py-0.5 rounded-md font-semibold ${dsa.status === 'active' ? '' : ''}`}
                       style={{
                         background: dsa.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(107,107,107,0.1)',
@@ -1307,6 +1410,9 @@ export default function DSAManagement({ employee }: Props) {
                   </div>
                   <p className="text-xs font-mono font-bold" style={{ color: 'var(--accent)' }}>{dsa.dsa_code}</p>
                   {dsa.employee && <p className="text-xs mt-0.5" style={{ color: 'var(--text-faint)' }}>by {dsa.employee.full_name}</p>}
+                  <button onClick={() => openClients(dsa)} className="mt-1 inline-flex items-center gap-1 text-xs font-semibold" style={{ color: 'var(--accent)' }}>
+                    <Users className="w-3 h-3" /> {clientCounts[dsa.id] || 0} client{clientCounts[dsa.id] === 1 ? '' : 's'}
+                  </button>
                 </div>
                 {/* Contact */}
                 <div>
@@ -1330,6 +1436,13 @@ export default function DSAManagement({ employee }: Props) {
                     onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
                     onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
                     <Eye className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => openClients(dsa)} title="View clients"
+                    className="p-2 rounded-lg transition-colors"
+                    style={{ background: 'var(--bg-raised)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
+                    <Users className="w-4 h-4" />
                   </button>
                   {/* Edit — stewardship: assigned employee or admin (matches the
                       nw_dsa UPDATE policy). */}

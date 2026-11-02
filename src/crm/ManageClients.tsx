@@ -6,12 +6,13 @@ import { fmt, fmtDate, VERIFICATION_LABELS, VERIFICATION_COLORS } from './utils'
 import { passwordChecks, isPasswordStrong } from '../lib/passwordPolicy';
 import { ProductAccessEditor } from './ProductAccess';
 import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
-import { Search, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog } from 'lucide-react';
+import { Search, Eye, Pencil, Trash2, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog } from 'lucide-react';
 import { mfSsoEnabled } from '../../shared/platform/env';
 
 interface Props { employee: NWEmployee; onNavigate: (page: any, params?: any) => void; }
 
-const PAGE_SIZE = 10;
+// Supabase caps one response at 1000 rows; the full list is read in batches.
+const FETCH_BATCH = 1000;
 
 // Progressive-onboarding funnel labels (see 20260725170000_onboarding_redesign.sql)
 const ONBOARDING_STATUS_LABELS: Record<string, string> = {
@@ -79,12 +80,12 @@ function missingForBse(c: NWClient): string[] {
 export default function ManageClients({ employee, onNavigate }: Props) {
   const [clients, setClients] = useState<NWClient[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   // Clients missing a field BSE StAR MF needs to register a UCC. Filtered
   // server-side so it stays correct across pages.
   const [bseReadyFilter, setBseReadyFilter] = useState<'all' | 'incomplete'>('all');
   const [employeeFilter, setEmployeeFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'direct' | 'dsa'>('all');
   const [employees, setEmployees] = useState<{ id: string; full_name: string; employee_code: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewClient, setViewClient] = useState<NWClient | null>(null);
@@ -139,37 +140,46 @@ export default function ManageClients({ employee, onNavigate }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    let query = supabase.from('nw_clients')
-      .select('*, employee:nw_employees(full_name, employee_code)', { count: 'exact' });
+    const buildQuery = () => {
+      let query = supabase.from('nw_clients')
+        .select('*, employee:nw_employees(full_name, employee_code), dsa:nw_dsa(full_name, dsa_code)');
 
-    if (search) query = query.or(`full_name.ilike.%${search}%,client_code.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,pan.ilike.%${search}%`);
+      if (search) query = query.or(`full_name.ilike.%${search}%,client_code.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,pan.ilike.%${search}%`);
 
-    if (bseReadyFilter === 'incomplete') {
-      // Any of these blank means BSE's add_ucc would be rejected.
-      query = query.or(
-        'gender.is.null,gender.eq.,pan.is.null,pan.eq.,dob.is.null,pincode.is.null,pincode.eq.,' +
-          'bank_account.is.null,bank_account.eq.,bank_ifsc.is.null,bank_ifsc.eq.',
-      );
+      if (bseReadyFilter === 'incomplete') {
+        // Any of these blank means BSE's add_ucc would be rejected.
+        query = query.or(
+          'gender.is.null,gender.eq.,pan.is.null,pan.eq.,dob.is.null,pincode.is.null,pincode.eq.,' +
+            'bank_account.is.null,bank_account.eq.,bank_ifsc.is.null,bank_ifsc.eq.',
+        );
+      }
+
+      if (!isAdmin) {
+        query = query.eq('employee_id', employee.id);
+      } else if (employeeFilter === 'unassigned') {
+        query = query.is('employee_id', null);
+      } else if (employeeFilter !== 'all') {
+        query = query.eq('employee_id', employeeFilter);
+      }
+
+      if (sourceFilter !== 'all') query = query.eq('sourced_via', sourceFilter);
+
+      // id breaks created_at ties so batch boundaries never skip or repeat a row.
+      return query.order('created_at', { ascending: false }).order('id');
+    };
+
+    const all: NWClient[] = [];
+    for (let from = 0; ; from += FETCH_BATCH) {
+      const { data } = await buildQuery().range(from, from + FETCH_BATCH - 1);
+      all.push(...((data as NWClient[]) || []));
+      if (!data || data.length < FETCH_BATCH) break;
     }
-
-    if (!isAdmin) {
-      query = query.eq('employee_id', employee.id);
-    } else if (employeeFilter === 'unassigned') {
-      query = query.is('employee_id', null);
-    } else if (employeeFilter !== 'all') {
-      query = query.eq('employee_id', employeeFilter);
-    }
-
-    query = query.order('created_at', { ascending: false }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
-    const { data, count } = await query;
-    setClients((data as NWClient[]) || []);
-    setTotal(count || 0);
+    setClients(all);
+    setTotal(all.length);
     setLoading(false);
-  }, [page, search, employeeFilter, isAdmin, employee.id]);
+  }, [search, employeeFilter, bseReadyFilter, sourceFilter, isAdmin, employee.id]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(0); }, [search, employeeFilter, bseReadyFilter]);
 
   const checkEditDuplicate = useCallback(async (field: 'pan' | 'phone' | 'email', value: string, excludeId: string) => {
     if (!value || value.length < 3) { setEditDupWarnings(w => ({ ...w, [field]: null })); return; }
@@ -548,13 +558,11 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   };
 
   const exportCSV = () => {
-    const headers = ['Code', 'Name', 'Email', 'Phone', 'PAN', 'Portfolio', 'Status', 'Date'];
-    const rows = clients.map(c => [c.client_code, c.full_name, c.email, c.phone, c.pan, c.portfolio_value, c.verification_status, fmtDate(c.created_at)]);
+    const headers = ['Code', 'Name', 'Email', 'Phone', 'PAN', 'Source', 'DSA', 'Portfolio', 'Status', 'Date'];
+    const rows = clients.map(c => [c.client_code, c.full_name, c.email, c.phone, c.pan, c.sourced_via === 'dsa' ? 'DSA' : 'Direct', c.dsa ? `${c.dsa.full_name} (${c.dsa.dsa_code})` : '', c.portfolio_value, c.verification_status, fmtDate(c.created_at)]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const a = document.createElement('a'); a.href = 'data:text/csv,' + encodeURIComponent(csv); a.download = 'clients.csv'; a.click();
   };
-
-  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   const inputStyle = { background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' };
   const EditDupWarn = ({ msg }: { msg: string | null }) => !msg ? null : (
@@ -592,6 +600,19 @@ export default function ManageClients({ employee, onNavigate }: Props) {
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
           />
         </div>
+        <div className="relative flex-shrink-0">
+          <select
+            value={sourceFilter}
+            onChange={e => setSourceFilter(e.target.value as 'all' | 'direct' | 'dsa')}
+            className="pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', minWidth: '160px' }}
+            title="Direct clients vs clients sourced through a DSA partner"
+          >
+            <option value="all">Direct + DSA</option>
+            <option value="direct">Direct clients</option>
+            <option value="dsa">DSA clients</option>
+          </select>
+        </div>
         {BSE_CHECKS && <div className="relative flex-shrink-0">
           <select
             value={bseReadyFilter}
@@ -625,20 +646,20 @@ export default function ManageClients({ employee, onNavigate }: Props) {
 
       {/* Table */}
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-        <div className="overflow-x-auto">
+        <div className="overflow-auto" style={{ maxHeight: '70vh' }}>
           <table className="w-full nw-table">
-            <thead>
+            <thead className="sticky top-0 z-10" style={{ background: 'var(--bg-elevated)' }}>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                {['Client', 'Code', ...(isAdmin ? ['Employee'] : []), 'Portfolio', 'Status', 'Date', 'Actions'].map(h => (
+                {['Client', 'Code', ...(isAdmin ? ['Employee'] : []), 'Source', 'Portfolio', 'Status', 'Date', 'Actions'].map(h => (
                   <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-12"><LogoLoader size={40} /></td></tr>
+                <tr><td colSpan={isAdmin ? 8 : 7} className="text-center py-12"><LogoLoader size={40} /></td></tr>
               ) : clients.length === 0 ? (
-                <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>No clients found</td></tr>
+                <tr><td colSpan={isAdmin ? 8 : 7} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>No clients found</td></tr>
               ) : clients.map(c => (
                 <tr key={c.id} className="transition-colors" style={{ borderBottom: '1px solid var(--bg-raised)' }}>
                   <td className="px-5 py-3.5">
@@ -659,6 +680,16 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                   </td>
                   <td className="px-5 py-3.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{c.client_code}</span></td>
                   {isAdmin && <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{(c.employee as any)?.full_name || 'Admin'}</td>}
+                  <td className="px-5 py-3.5">
+                    {c.sourced_via === 'dsa' ? (
+                      <>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-lg" style={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>DSA</span>
+                        {c.dsa && <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>{c.dsa.full_name} ({c.dsa.dsa_code})</p>}
+                      </>
+                    ) : (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-lg" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Direct</span>
+                    )}
+                  </td>
                   <td className="px-5 py-3.5 text-sm font-semibold text-text-primary">{fmt(c.portfolio_value || 0)}</td>
                   <td className="px-5 py-3.5">
                     <span className={`text-xs font-semibold px-2 py-1 rounded-lg border ${VERIFICATION_COLORS[c.verification_status]}`}>
@@ -687,14 +718,9 @@ export default function ManageClients({ employee, onNavigate }: Props) {
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-          <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}</p>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="p-1.5 rounded-lg disabled:opacity-30" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}><ChevronLeft className="w-4 h-4" /></button>
-            <span className="text-xs text-text-primary">{page + 1} / {totalPages || 1}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="p-1.5 rounded-lg disabled:opacity-30" style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}><ChevronRight className="w-4 h-4" /></button>
-          </div>
+        {/* Footer */}
+        <div className="px-5 py-3.5" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+          <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Showing all {total} client{total === 1 ? '' : 's'}</p>
         </div>
       </div>
 
