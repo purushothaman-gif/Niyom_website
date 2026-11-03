@@ -1,4 +1,4 @@
-import { ChevronRight, ExternalLink, Repeat, TrendingUp } from 'lucide-react';
+import { ChevronRight, Repeat, TrendingUp } from 'lucide-react';
 import { fmt } from '../../../../crm/utils';
 import { Card } from '../../../components/Card';
 import { SectionHeader } from '../../../components/SectionHeader';
@@ -17,11 +17,10 @@ import type { RtaMfData } from '../../../../../shared/mf/rtaMf';
 interface Props {
   data: RtaMfData | null;
   loading: boolean;
-  ssoOn: boolean;
   onOpen: () => void;
 }
 
-export function RegistrarMfCard({ data, loading, ssoOn, onOpen }: Props) {
+export function RegistrarMfCard({ data, loading, onOpen }: Props) {
   const hasData = !!data?.hasData;
   const activeSips = data?.sips.filter((s) => s.status === 'active') ?? [];
   const holdings = data?.holdings ?? [];
@@ -33,13 +32,13 @@ export function RegistrarMfCard({ data, loading, ssoOn, onOpen }: Props) {
       onClick={onOpen}
       className="flex items-center gap-0.5 text-xs font-semibold text-accent hover:text-accent-soft"
     >
-      {ssoOn ? (<><ExternalLink className="h-3.5 w-3.5" /> Open</>) : (<>View all <ChevronRight className="h-3.5 w-3.5" /></>)}
+      View all <ChevronRight className="h-3.5 w-3.5" />
     </button>
   );
 
   return (
     <Card className="animate-fadeInUp animate-delay-200">
-      <SectionHeader title="Mutual Funds" icon={TrendingUp} action={hasData || ssoOn ? openBtn : undefined} />
+      <SectionHeader title="Mutual Funds" icon={TrendingUp} action={hasData ? openBtn : undefined} />
 
       {loading && !data ? (
         <div className="space-y-2">
@@ -90,16 +89,6 @@ export function RegistrarMfCard({ data, loading, ssoOn, onOpen }: Props) {
             )}
           </div>
 
-          {ssoOn && (
-            <button
-              type="button"
-              onClick={onOpen}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-token-md px-4 py-2.5 text-sm font-bold text-on-accent"
-              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
-            >
-              <ExternalLink className="h-4 w-4" /> Open Mutual Funds
-            </button>
-          )}
         </>
       )}
     </Card>

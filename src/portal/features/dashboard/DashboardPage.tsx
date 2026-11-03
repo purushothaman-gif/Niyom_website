@@ -200,7 +200,6 @@ export function DashboardPage({
           <RegistrarMfCard
             data={rta.data}
             loading={rta.loading}
-            ssoOn
             onOpen={() => onNavigate('mutual-funds')}
           />
         ) : (

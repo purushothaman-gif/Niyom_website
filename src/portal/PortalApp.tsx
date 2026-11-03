@@ -86,7 +86,6 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
   const navigate = (v: PortalView) => {
     // A switched-off product is unreachable from every entry point, not just the nav.
     if (hiddenProducts.has(v)) return routeTo('dashboard');
-    if (mfSsoOn && v === 'mutual-funds') mf.launch();
     routeTo(v);
   };
   // ...including a bookmarked or back-button URL to it.
@@ -151,7 +150,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
   const renderView = () => {
     // Views that fetch their own data don't wait on the client snapshot.
     if (view === 'mutual-funds' && mfSsoOn)
-      return <MfLaunchPage state={mf.state} onLaunch={mf.launch} onNavigate={navigate} />;
+      return <MfLaunchPage clientId={clientId} state={mf.state} onLaunch={mf.launch} onNavigate={navigate} />;
     if (view === 'mutual-funds')
       return (
         <MutualFundsModule
