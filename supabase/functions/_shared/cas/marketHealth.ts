@@ -79,12 +79,18 @@ async function sendAlert(problems: Problem[], h: MarketHealthRow): Promise<strin
   return res.ok ? 'sent' : `failed-${res.status}`;
 }
 
-export async function runMarketHealth(cfg: SbConfig) {
+export async function runMarketHealth(cfg: SbConfig, opts: { test?: boolean } = {}) {
   const startedAt = new Date().toISOString();
   const [h] = await sbSelect<MarketHealthRow>(cfg, 'mf_market_data_health?select=*');
   const problems = h ? assessHealth(h) : [{ level: 'critical' as const, text: 'Health view returned nothing.' }];
   let alert = 'none';
   if (problems.length && h) alert = await sendAlert(problems, h).catch((e) => `failed-${(e as Error).message}`);
+  // {test:true}: prove the alert path end to end without waiting for a failure.
+  else if (opts.test && h)
+    alert = await sendAlert(
+      [{ level: 'warning', text: 'TEST — alerts are configured. No action needed; the pipeline is healthy.' }],
+      h,
+    ).catch((e) => `failed-${(e as Error).message}`);
   await sbInsert(cfg, 'nav_refresh_log', [{
     job: 'health', started_at: startedAt, finished_at: new Date().toISOString(),
     ok: !problems.some((p) => p.level === 'critical'),

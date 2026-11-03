@@ -2,6 +2,7 @@
 //
 //   { action: "master" }  AMFI scheme-data file -> mf_asset_class master columns
 //   { action: "health" }  check the pipeline; email MF_ALERT_EMAILS on problems
+//                          (add test:true to send a test alert regardless)
 //
 // NAV jobs stay where they were: nav-refresh (nightly NAVAll) and nav-backfill
 // (history). Market data only — client holdings, registrar feeds and Wylth SSO
@@ -27,8 +28,11 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   if (!authorised(req)) return json({ error: 'Unauthorized' }, 401);
   let action = '';
+  let test = false;
   try {
-    action = String((await req.json())?.action ?? '');
+    const body = await req.json();
+    action = String(body?.action ?? '');
+    test = body?.test === true;
   } catch {
     /* no body */
   }
@@ -36,6 +40,6 @@ Deno.serve(async (req) => {
     const r = await refreshSchemeMaster(envConfig());
     return json(r, r.ok ? 200 : 502);
   }
-  if (action === 'health') return json(await runMarketHealth(envConfig()));
+  if (action === 'health') return json(await runMarketHealth(envConfig(), { test }));
   return json({ error: 'Unknown action — use "master" or "health"' }, 400);
 });
