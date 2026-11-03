@@ -20,6 +20,7 @@ import UnlistedShares from './shares/UnlistedShares';
 import MarketingContent from './marketing/MarketingContent';
 import FundResearch from './marketing/funds/FundResearch';
 import { MfStaffPlaceholder } from '../components/MfStaffPlaceholder';
+import MfFeeds from './mf/MfFeeds';
 import ClientOnboarding from './ClientOnboarding';
 import ManageClients from './ManageClients';
 import Portfolio from './Portfolio';
@@ -92,6 +93,7 @@ export default function CRM() {
     'marketing_content',
     'marketing_funds',
     'mf_platform',
+    'mf_feeds',
     'mail_campaigns',
     'mis',
     'dsa_management',
@@ -250,6 +252,7 @@ export default function CRM() {
       // The sidebar entry is a new-tab link to the platform's dashboard; this
       // page only shows if someone types /crm/mf_platform directly.
       case 'mf_platform': return <MfStaffPlaceholder />;
+      case 'mf_feeds': return isAdmin ? <MfFeeds employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
       // Open to every employee: admins mail as the company, employees as themselves to their own book (enforced in the database).
       case 'mail_campaigns': return <Mail employee={employee} />;
       case 'documents': return <Documents employee={employee} initialClientId={pageParams.clientId} onBack={pageParams.clientId ? () => navigate('clients') : undefined} />;

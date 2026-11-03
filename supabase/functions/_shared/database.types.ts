@@ -5070,6 +5070,193 @@ export type Database = {
         }
         Relationships: []
       }
+      mf_rta_folios: {
+        Row: {
+          amc_code: string | null
+          arn: string | null
+          client_id: string | null
+          demat: string | null
+          email: string | null
+          first_seen_at: string
+          folio: string
+          folio_open_date: string | null
+          holder_name: string | null
+          id: string
+          joint_names: string[]
+          joint_pans: string[]
+          last_seen_at: string
+          matched_at: string | null
+          mobile: string | null
+          pan: string | null
+          registrar: string
+          sub_broker: string | null
+          tax_status: string | null
+        }
+        Insert: {
+          amc_code?: string | null
+          arn?: string | null
+          client_id?: string | null
+          demat?: string | null
+          email?: string | null
+          first_seen_at?: string
+          folio: string
+          folio_open_date?: string | null
+          holder_name?: string | null
+          id?: string
+          joint_names?: string[]
+          joint_pans?: string[]
+          last_seen_at?: string
+          matched_at?: string | null
+          mobile?: string | null
+          pan?: string | null
+          registrar: string
+          sub_broker?: string | null
+          tax_status?: string | null
+        }
+        Update: {
+          amc_code?: string | null
+          arn?: string | null
+          client_id?: string | null
+          demat?: string | null
+          email?: string | null
+          first_seen_at?: string
+          folio?: string
+          folio_open_date?: string | null
+          holder_name?: string | null
+          id?: string
+          joint_names?: string[]
+          joint_pans?: string[]
+          last_seen_at?: string
+          matched_at?: string | null
+          mobile?: string | null
+          pan?: string | null
+          registrar?: string
+          sub_broker?: string | null
+          tax_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mf_rta_folios_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mf_rta_holdings: {
+        Row: {
+          amc_code: string | null
+          folio: string
+          folio_id: string
+          id: string
+          nav: number | null
+          nav_value: number | null
+          registrar: string
+          rta_value: number | null
+          scheme_code: string
+          scheme_name: string | null
+          snapshot_date: string | null
+          units: number
+          updated_at: string
+        }
+        Insert: {
+          amc_code?: string | null
+          folio: string
+          folio_id: string
+          id?: string
+          nav?: number | null
+          nav_value?: number | null
+          registrar: string
+          rta_value?: number | null
+          scheme_code: string
+          scheme_name?: string | null
+          snapshot_date?: string | null
+          units?: number
+          updated_at?: string
+        }
+        Update: {
+          amc_code?: string | null
+          folio?: string
+          folio_id?: string
+          id?: string
+          nav?: number | null
+          nav_value?: number | null
+          registrar?: string
+          rta_value?: number | null
+          scheme_code?: string
+          scheme_name?: string | null
+          snapshot_date?: string | null
+          units?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mf_rta_holdings_folio_id_fkey"
+            columns: ["folio_id"]
+            isOneToOne: false
+            referencedRelation: "mf_rta_folios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mf_rta_import_log: {
+        Row: {
+          created_at: string
+          duration_ms: number | null
+          error: string | null
+          file_hash: string | null
+          folios_upserted: number
+          holdings_upserted: number
+          id: string
+          imported_by: string | null
+          matched: number
+          registrar: string | null
+          report: string | null
+          rows_total: number
+          snapshot_date: string | null
+          source_file: string | null
+          status: string
+          unmatched: number
+        }
+        Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          file_hash?: string | null
+          folios_upserted?: number
+          holdings_upserted?: number
+          id?: string
+          imported_by?: string | null
+          matched?: number
+          registrar?: string | null
+          report?: string | null
+          rows_total?: number
+          snapshot_date?: string | null
+          source_file?: string | null
+          status?: string
+          unmatched?: number
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          file_hash?: string | null
+          folios_upserted?: number
+          holdings_upserted?: number
+          id?: string
+          imported_by?: string | null
+          matched?: number
+          registrar?: string | null
+          report?: string | null
+          rows_total?: number
+          snapshot_date?: string | null
+          source_file?: string | null
+          status?: string
+          unmatched?: number
+        }
+        Relationships: []
+      }
       mf_scheme_cache: {
         Row: {
           amfi_category: string | null

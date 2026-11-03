@@ -333,6 +333,7 @@ export type ProductType = 'unlisted_share' | 'secondary_bond' | 'primary_bond' |
 export type CRMPage =
   | 'dashboard'
   | 'mf_platform'
+  | 'mf_feeds'
   | 'leads'
   | 'onboarding'
   | 'clients'
