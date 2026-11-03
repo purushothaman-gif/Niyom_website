@@ -2,12 +2,17 @@
  * Niyom — registrar mailback → MF feed sync (Google Apps Script).
  *
  * Runs on a daily time-driven trigger inside the Workspace account that RECEIVES
- * the CAMS/KFintech distributor mailback emails (ARN-362707). It finds each new
- * feed email, base64-encodes the encrypted ZIP attachment, and POSTs it to the
- * Supabase `mf-rta-ingest` edge function, which decrypts and imports it. No file
- * ever leaves Google except as an HTTPS POST to our own function; the ZIP stays
- * encrypted and the mailback password lives only as a Supabase server secret —
- * this script never holds it.
+ * the CAMS + KFintech distributor mailback emails (ARN-362707). It forwards each
+ * new feed to the Supabase `mf-rta-ingest` edge function, which decrypts and
+ * imports it. Two delivery styles are handled:
+ *
+ *   - CAMS (donotreply@camsonline.com): the encrypted ZIP is an ATTACHMENT.
+ *   - KFintech (distributorcare@kfintech.com): the email carries a download
+ *     LINK; the script follows it (it re-mints a fresh 1-hour S3 URL on each
+ *     click, so the run time doesn't matter) and forwards the bytes.
+ *
+ * The ZIP stays encrypted in flight; the mailback passwords live only as Supabase
+ * server secrets (RTA_CAMS_PASSWORD / RTA_KFINTECH_PASSWORD) — never here.
  *
  * ──────────────────────────────────────────────────────────────────────────
  * ONE-TIME SETUP
@@ -15,25 +20,24 @@
  * 2. Project Settings (gear) → Script properties → add:
  *       INGEST_SECRET   = the value printed by scripts/mf-rta-set-ingest-secret.sh
  *       SUPABASE_URL    = https://jlmwazuwjnhoqqloyeoj.supabase.co
- *       ANON_KEY        = (the project's publishable/anon key — public, optional)
  *       ALERT_EMAIL     = who to email if a run hits errors (optional)
  * 3. Run `setup` once (authorise Gmail + external-request scopes when asked).
- *    It installs the daily trigger and creates the "NiyomRTA/Done" label.
- * 4. Run `syncNow` once to backfill today and confirm it works (View → Logs).
+ * 4. Run `syncNow` once to backfill and confirm it works (View → Executions).
  * ──────────────────────────────────────────────────────────────────────────
  *
- * Idempotency: a processed message is tagged with the NiyomRTA/Done label and
- * excluded from the next search, and the ingest function also dedupes by file
- * content — so an overlap or a retry is a no-op, never a double import.
+ * Idempotency: a handled message gets the NiyomRTA/Done label and is excluded
+ * next run, and the ingest function also dedupes by file content — so an overlap
+ * or retry is a no-op, never a double import.
  */
 
-// Distributor senders and the registrar each maps to.
+// Feed sources. `mode`: 'attachment' (CAMS) or 'link' (KFintech). `subjectMatch`
+// (optional) limits which of a sender's emails we process.
 var SENDERS = [
-  { email: 'donotreply@camsonline.com', registrar: 'CAMS' },
-  // KFintech feeds (enable once KFintech-serviced funds appear, and set
-  // RTA_KFINTECH_PASSWORD on the server):
-  // { email: 'donotreply@kfintech.com', registrar: 'KFINTECH' },
-  // { email: 'WBR@kfintech.com',        registrar: 'KFINTECH' },
+  { email: 'donotreply@camsonline.com', registrar: 'CAMS', mode: 'attachment' },
+  // KFintech: only the SIP registration report is parsed today, so filter to it.
+  // (Investor-master / transaction reports are left for when their layouts land.)
+  { email: 'distributorcare@kfintech.com', registrar: 'KFINTECH', mode: 'link',
+    subjectMatch: /sip registration|subscribed sip/i },
 ];
 
 var DONE_LABEL = 'NiyomRTA/Done';
@@ -52,7 +56,7 @@ function setup() {
   GmailApp.getUserLabelByName(DONE_LABEL) || GmailApp.createLabel(DONE_LABEL);
   var have = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'syncNow'; });
   if (!have) {
-    ScriptApp.newTrigger('syncNow').timeBased().everyDays(1).atHour(18).create(); // ~18:00 local, after feeds land
+    ScriptApp.newTrigger('syncNow').timeBased().everyDays(1).atHour(18).create(); // ~18:00 local
   }
   Logger.log('Setup complete. Trigger installed: %s', !have);
 }
@@ -69,44 +73,36 @@ function syncNow() {
   var problems = [];
 
   SENDERS.forEach(function (sender) {
-    var query = 'from:' + sender.email + ' has:attachment ' + LOOKBACK + ' -label:' + DONE_LABEL.toLowerCase();
-    var threads = GmailApp.search(query, 0, 50);
-    threads.forEach(function (thread) {
+    var query = 'from:' + sender.email + ' ' + LOOKBACK + ' -label:' + DONE_LABEL.toLowerCase();
+    if (sender.mode === 'attachment') query += ' has:attachment';
+    GmailApp.search(query, 0, 50).forEach(function (thread) {
       var allHandled = true;
       thread.getMessages().forEach(function (msg) {
-        msg.getAttachments().forEach(function (att) {
-          var name = att.getName() || '';
-          if (!/\.zip$/i.test(name)) return;
+        if (sender.subjectMatch && !sender.subjectMatch.test(msg.getSubject() || '')) return;
+        var feeds = sender.mode === 'link' ? linkFeeds(msg) : attachmentFeeds(msg);
+        feeds.forEach(function (feed) {
           totals.files++;
           try {
             var res = postZip(url, secret, anon, {
-              fileName: name,
-              registrar: sender.registrar,
-              messageId: msg.getId(),
-              dataBase64: Utilities.base64Encode(att.getBytes()),
+              fileName: feed.name, registrar: sender.registrar,
+              messageId: msg.getId(), dataBase64: Utilities.base64Encode(feed.bytes),
             });
-            if (res.ok && res.skipped) { totals.skipped++; }
+            if (res.ok && res.skipped) totals.skipped++;
             else if (res.ok) {
               totals.ok++;
               totals.holdings += res.holdingsUpserted || 0;
               totals.sips += res.sipsUpserted || 0;
               totals.matched += res.matched || 0;
             } else if (res.permanent) {
-              // Unrecognised / "No Data" placeholder — nothing to import, but
-              // don't keep retrying it. Counted, not alerted.
-              totals.skipped++;
+              totals.skipped++; // unrecognised / empty — handled, don't retry
             } else {
-              totals.errors++; allHandled = false;
-              problems.push(name + ': ' + res.error);
+              totals.errors++; allHandled = false; problems.push(feed.name + ': ' + res.error);
             }
           } catch (e) {
-            totals.errors++; allHandled = false;
-            problems.push(name + ': ' + e);
+            totals.errors++; allHandled = false; problems.push(feed.name + ': ' + e);
           }
         });
       });
-      // Only mark the thread done when every attachment in it was handled, so a
-      // transient failure is retried on the next run.
       if (allHandled) thread.addLabel(label);
     });
   });
@@ -122,22 +118,55 @@ function syncNow() {
   }
 }
 
-/** POST one attachment to the ingest function; classify the response. */
+/** CAMS: each .zip attachment, as {name, bytes}. */
+function attachmentFeeds(msg) {
+  var out = [];
+  msg.getAttachments().forEach(function (att) {
+    if (/\.zip$/i.test(att.getName() || '')) out.push({ name: att.getName(), bytes: att.getBytes() });
+  });
+  return out;
+}
+
+/** KFintech: follow the email's download link(s) and return the fetched ZIP(s).
+    The body has several scdelivery links (report, product-codes, a tracking
+    pixel); we take the /c/ links that aren't the product-codes one and keep the
+    response only if it's actually a ZIP (starts with the "PK" magic). */
+function linkFeeds(msg) {
+  var html = msg.getBody() || '';
+  var hrefs = html.match(/https:\/\/scdelivery\.kfintech\.com\/c\/\?[^"'\s<>]+/g) || [];
+  var out = [];
+  for (var i = 0; i < hrefs.length; i++) {
+    var href = hrefs[i].replace(/&amp;/g, '&');
+    if (/GVODPEFT|QSPEDPEF|epxompbet/.test(href)) continue; // encoded "FUNCODES/PRODCODE/downloads"
+    var resp = UrlFetchApp.fetch(href, { followRedirects: true, muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) continue;
+    var bytes = resp.getContent();
+    if (bytes.length > 2 && bytes[0] === 80 && bytes[1] === 75) { // 'PK'
+      out.push({ name: reportName(msg, href), bytes: bytes });
+      break; // one report per email
+    }
+  }
+  return out;
+}
+
+/** A filename hint for the log (the pipeline reads the real member name inside). */
+function reportName(msg, href) {
+  var m = (msg.getSubject() || '').match(/W[A-Z]+\d+/);
+  return 'kfintech_' + (m ? m[0] : 'report') + '.zip';
+}
+
+/** POST one ZIP to the ingest function; classify the response. */
 function postZip(url, secret, anon, body) {
   var headers = { 'X-Ingest-Secret': secret };
-  if (anon) headers['apikey'] = anon; // satisfies the gateway; anon key is public
+  if (anon) headers['apikey'] = anon;
   var resp = UrlFetchApp.fetch(url, {
-    method: 'post',
-    contentType: 'application/json',
-    headers: headers,
-    payload: JSON.stringify(body),
-    muteHttpExceptions: true,
+    method: 'post', contentType: 'application/json', headers: headers,
+    payload: JSON.stringify(body), muteHttpExceptions: true,
   });
   var code = resp.getResponseCode();
   var json = {};
   try { json = JSON.parse(resp.getContentText()); } catch (e) { /* non-JSON */ }
-  if (code >= 200 && code < 300 && json.ok) return json;            // ok or {ok,skipped}
-  // 4xx (except 429) is permanent for this file: bad/empty/unrecognised.
+  if (code >= 200 && code < 300 && json.ok) return json;
   json.permanent = (code >= 400 && code < 500 && code !== 429);
   json.error = json.error || ('HTTP ' + code);
   json.ok = false;

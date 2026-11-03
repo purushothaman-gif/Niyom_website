@@ -47,8 +47,8 @@ interface AesEntry {
   csize: number;
 }
 
-/** Locate the first encrypted .dbf member via the ZIP central directory. */
-export function findAesDbfEntry(zip: Uint8Array): AesEntry {
+/** Locate the first encrypted member matching `extRe` via the central directory. */
+export function findAesEntry(zip: Uint8Array, extRe: RegExp = /\.dbf$/i): AesEntry {
   const eocd = lastIndexOf(zip, [0x50, 0x4b, 0x05, 0x06]);
   if (eocd < 0) throw new WinzipError('Not a ZIP file.');
   const cdOff = u32(zip, eocd + 16);
@@ -67,7 +67,7 @@ export function findAesDbfEntry(zip: Uint8Array): AesEntry {
     const name = asciiStr(zip, p + 46, nlen);
     const extra = zip.subarray(p + 46 + nlen, p + 46 + nlen + elen);
 
-    if ((flags & 1) && method === 99 && /\.dbf$/i.test(name)) {
+    if ((flags & 1) && method === 99 && extRe.test(name)) {
       let strength = 3;
       let realMethod = 8;
       let q = 0;
@@ -90,7 +90,12 @@ export function findAesDbfEntry(zip: Uint8Array): AesEntry {
     }
     p = p + 46 + nlen + elen + clen;
   }
-  throw new WinzipError('No encrypted .dbf file found in the ZIP.');
+  throw new WinzipError('No matching encrypted file found in the ZIP.');
+}
+
+/** Back-compat: the first encrypted .dbf member. */
+export function findAesDbfEntry(zip: Uint8Array): AesEntry {
+  return findAesEntry(zip, /\.dbf$/i);
 }
 
 /**
@@ -124,11 +129,12 @@ async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
  * with code-like messages: WRONG_PASSWORD (2-byte verifier failed) or
  * AUTH_FAILED (HMAC mismatch — wrong password or a corrupt file).
  */
-export async function unzipSingleDbf(
+export async function unzipMember(
   zip: Uint8Array,
   password: string,
+  extRe: RegExp = /\.(dbf|csv)$/i,
 ): Promise<{ name: string; bytes: Uint8Array }> {
-  const entry = findAesDbfEntry(zip);
+  const entry = findAesEntry(zip, extRe);
   const saltLen = SALT_LEN[entry.strength];
   const keyLen = KEY_LEN[entry.strength];
   if (!saltLen || !keyLen) throw new WinzipError('Unsupported AES strength in the ZIP.');
@@ -174,4 +180,12 @@ export async function unzipSingleDbf(
   else if (entry.method === 0) bytes = plain;
   else throw new WinzipError('Unsupported compression inside the ZIP.');
   return { name: entry.name, bytes };
+}
+
+/** Back-compat: decrypt and inflate the single encrypted DBF in the ZIP. */
+export async function unzipSingleDbf(
+  zip: Uint8Array,
+  password: string,
+): Promise<{ name: string; bytes: Uint8Array }> {
+  return unzipMember(zip, password, /\.dbf$/i);
 }

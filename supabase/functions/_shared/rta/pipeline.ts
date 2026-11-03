@@ -11,9 +11,11 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 import { parseDbf, type DbfTable } from './dbf.ts';
+import { parseCsv } from './csv.ts';
 import { parseWbr9 } from './wbr9.ts';
-import { parseWbr49 } from './wbr49.ts';
-import { unzipSingleDbf, WinzipError } from './winzip.ts';
+import { parseWbr49, type RtaSipStage } from './wbr49.ts';
+import { isKfSip, parseKfSip } from './kfintech.ts';
+import { unzipMember, WinzipError } from './winzip.ts';
 
 /** A base64 body inflates by a third; the ZIPs are a few KB, cap well above. */
 export const MAX_ZIP_BYTES = 8 * 1024 * 1024;
@@ -39,7 +41,7 @@ export function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-export type RtaReport = 'WBR9' | 'WBR49';
+export type RtaReport = 'WBR9' | 'WBR49' | 'WSREG';
 
 /** Which report is this? Matched by column presence, not file name. */
 export function detectReport(table: DbfTable): RtaReport | null {
@@ -58,10 +60,10 @@ export function snapshotFromName(name: string | null): string | null {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-/** Open the WinZip-AES ZIP, mapping decryption failures to a clear message. */
-async function unzipDbf(data: Uint8Array, password: string): Promise<{ name: string; bytes: Uint8Array }> {
+/** Open the WinZip-AES ZIP (DBF for CAMS, CSV for KFintech), mapping failures to a clear message. */
+async function unzipFeed(data: Uint8Array, password: string): Promise<{ name: string; bytes: Uint8Array }> {
   try {
-    return await unzipSingleDbf(data, password);
+    return await unzipMember(data, password, /\.(dbf|csv)$/i);
   } catch (e) {
     if (e instanceof WinzipError) {
       if (e.message === 'WRONG_PASSWORD' || e.message === 'AUTH_FAILED') {
@@ -184,22 +186,23 @@ async function importWbr9(sb: SupabaseClient, table: DbfTable, registrar: string
   };
 }
 
-async function importWbr49(
+// Shared SIP upsert for both CAMS WBR49 and KFintech WSREG: resolve each SIP's
+// folio + client, then upsert keyed by (registrar, sip_ref).
+async function importSips(
   sb: SupabaseClient,
-  table: DbfTable,
+  sips: RtaSipStage[],
   registrar: string,
   snapshotDate: string | null,
 ): Promise<ReportSummary> {
-  const parsed = parseWbr49(table, registrar, snapshotDate);
   const nowIso = new Date().toISOString();
-  if (!parsed.sips.length) {
+  if (!sips.length) {
     return { snapshotDate, rowsTotal: 0, foliosUpserted: 0, holdingsUpserted: 0, sipsUpserted: 0, matched: 0, unmatched: 0 };
   }
 
   // Resolve each SIP's folio (to link folio_id) and client. A WBR49 arriving
   // before its matching WBR9 may reference a folio we don't have yet — then
   // folio_id stays null and the PAN still carries the client match.
-  const folios = [...new Set(parsed.sips.map((s) => s.folio))];
+  const folios = [...new Set(sips.map((s) => s.folio))];
   const folioIdByFolio = new Map<string, string>();
   const clientByFolio = new Map<string, string | null>();
   {
@@ -213,11 +216,11 @@ async function importWbr49(
       clientByFolio.set(row.folio, row.client_id);
     }
   }
-  const byPan = await clientsByPan(sb, parsed.sips.map((s) => s.pan ?? ''));
+  const byPan = await clientsByPan(sb, sips.map((s) => s.pan ?? ''));
 
   let matched = 0;
   let unmatched = 0;
-  const rows = parsed.sips.map((s) => {
+  const rows = sips.map((s) => {
     const client = (s.pan ? byPan.get(s.pan) : undefined) ?? clientByFolio.get(s.folio) ?? null;
     if (client) matched++;
     else unmatched++;
@@ -267,13 +270,23 @@ async function importWbr49(
 
   return {
     snapshotDate,
-    rowsTotal: parsed.sips.length,
+    rowsTotal: sips.length,
     foliosUpserted: 0,
     holdingsUpserted: 0,
     sipsUpserted: rows.length,
     matched,
     unmatched,
   };
+}
+
+/** CAMS WBR49: parse the DBF, then share the SIP upsert. */
+async function importWbr49(
+  sb: SupabaseClient,
+  table: DbfTable,
+  registrar: string,
+  snapshotDate: string | null,
+): Promise<ReportSummary> {
+  return importSips(sb, parseWbr49(table, registrar, snapshotDate).sips, registrar, snapshotDate);
 }
 
 export interface RunImportOptions {
@@ -338,20 +351,34 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       }
     }
 
-    const { name, bytes } = await unzipDbf(zipBytes, password);
+    const { name, bytes } = await unzipFeed(zipBytes, password);
     if (!sourceFile) sourceFile = name;
-    const table = parseDbf(bytes);
-    report = detectReport(table);
-    if (!report) {
-      throw new RtaError('Unrecognised registrar feed (not a WBR9 holdings or WBR49 SIP file).', 422);
-    }
 
-    const summary = report === 'WBR9'
-      ? await importWbr9(sb, table, registrar)
-      // WBR49 has no snapshot column, so take the date from the inner DBF
-      // member name (CAMS names it DDMMYYYYhhmmss_...); the outer ZIP name the
-      // Apps Script sends carries no date, so fall back to it only if needed.
-      : await importWbr49(sb, table, registrar, snapshotFromName(name) ?? snapshotFromName(sourceFile));
+    // The snapshot date lives in the inner member name (CAMS DBF and KFintech
+    // CSV both name it ...DDMMYYYY...); the outer ZIP name is a fallback.
+    const snap = snapshotFromName(name) ?? snapshotFromName(sourceFile);
+
+    let summary: ReportSummary;
+    if (/\.csv$/i.test(name)) {
+      // KFintech feeds are CSV. Only the SIP registration report is mapped yet;
+      // the master/transaction reports log as unrecognised until their layouts
+      // are added, so the Apps Script marks them handled rather than retrying.
+      const csv = parseCsv(bytes);
+      if (!isKfSip(csv)) {
+        throw new RtaError('Unrecognised KFintech CSV feed (only the SIP registration report is supported yet).', 422);
+      }
+      report = 'WSREG';
+      summary = await importSips(sb, parseKfSip(csv, registrar, snap), registrar, snap);
+    } else {
+      const table = parseDbf(bytes);
+      report = detectReport(table);
+      if (!report) {
+        throw new RtaError('Unrecognised registrar feed (not a WBR9 holdings or WBR49 SIP file).', 422);
+      }
+      summary = report === 'WBR9'
+        ? await importWbr9(sb, table, registrar)
+        : await importWbr49(sb, table, registrar, snap);
+    }
     snapshotDate = summary.snapshotDate;
 
     await sb.from('mf_rta_import_log').insert({
