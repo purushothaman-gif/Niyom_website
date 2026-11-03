@@ -348,7 +348,10 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
 
     const summary = report === 'WBR9'
       ? await importWbr9(sb, table, registrar)
-      : await importWbr49(sb, table, registrar, snapshotFromName(sourceFile));
+      // WBR49 has no snapshot column, so take the date from the inner DBF
+      // member name (CAMS names it DDMMYYYYhhmmss_...); the outer ZIP name the
+      // Apps Script sends carries no date, so fall back to it only if needed.
+      : await importWbr49(sb, table, registrar, snapshotFromName(name) ?? snapshotFromName(sourceFile));
     snapshotDate = summary.snapshotDate;
 
     await sb.from('mf_rta_import_log').insert({

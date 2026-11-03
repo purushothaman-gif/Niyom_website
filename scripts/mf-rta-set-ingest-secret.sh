@@ -14,7 +14,7 @@ set -euo pipefail
 PROJECT_REF="jlmwazuwjnhoqqloyeoj"
 
 # 48 url-safe chars from the OS CSPRNG.
-SECRET="$(LC_ALL=C tr -dc 'A-Za-z0-9_-' </dev/urandom | head -c 48)"
+SECRET="$(openssl rand -hex 24)"
 if [[ ${#SECRET} -ne 48 ]]; then echo "Could not generate a secret." >&2; exit 1; fi
 
 read -rp "Generate a new ingest secret and store it on Supabase? [y/N] " ok
