@@ -272,6 +272,7 @@ const emptyForm = (): HoldingForm => ({
 
 export default function Portfolio({ employee, pageParams }: Props) {
   const [holdings, setHoldings] = useState<NWHolding[]>([]);
+  const [mfByClient, setMfByClient] = useState<Map<string, number>>(new Map()); // registrar MF AUM per client
   const [clients, setClients] = useState<NWClient[]>([]);
   const [empList, setEmpList] = useState<{ id: string; full_name: string; employee_code: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -362,6 +363,28 @@ export default function Portfolio({ employee, pageParams }: Props) {
     setHoldings(list);
     setLoading(false);
   }, [clientFilter, productFilter, empFilter, isAdmin, employee.id]);
+
+  // Registrar MF AUM per client (RLS-scoped: admins all, an RM their own).
+  // Drives both the per-client "MF" column and the scoped MF figure below.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const [{ data: fol }, { data: hold }] = await Promise.all([
+        supabase.from('mf_rta_folios').select('id, client_id'),
+        supabase.from('mf_rta_holdings').select('folio_id, rta_value, nav_value'),
+      ]);
+      const clientOf = new Map<string, string>();
+      for (const fr of (fol as { id: string; client_id: string | null }[]) ?? []) if (fr.client_id) clientOf.set(fr.id, fr.client_id);
+      const m = new Map<string, number>();
+      for (const h of (hold as { folio_id: string; rta_value: number | null; nav_value: number | null }[]) ?? []) {
+        const cid = clientOf.get(h.folio_id);
+        if (!cid) continue;
+        m.set(cid, (m.get(cid) ?? 0) + Number(h.rta_value ?? h.nav_value ?? 0));
+      }
+      if (alive) setMfByClient(m);
+    })();
+    return () => { alive = false; };
+  }, [isAdmin, employee.id]);
 
   useEffect(() => { loadHoldings(); }, [loadHoldings]);
 
@@ -576,6 +599,9 @@ export default function Portfolio({ employee, pageParams }: Props) {
   const totalValue = scopedHoldings.reduce((s, h) => s + (h.current_value || 0), 0);
   const totalInvested = scopedHoldings.reduce((s, h) => s + (h.invested_amount || 0), 0);
   const gainLoss = totalValue - totalInvested;
+  const mfAum = clientFilter !== 'all'
+    ? (mfByClient.get(clientFilter) ?? 0)
+    : [...mfByClient.values()].reduce((sm, v) => sm + v, 0);
   const annualInterest = scopedHoldings
     .filter(h => BOND_TYPES.includes(h.product_type))
     .reduce((s, h) => {
@@ -621,6 +647,15 @@ export default function Portfolio({ employee, pageParams }: Props) {
       else if (h.product_type === 'mutual_fund') row.mf += value;
     }
 
+    // Registrar MF reflects per client: add it to the MF column and AUM, and to
+    // invested too (no cost basis from the feed) so P/L isn't inflated.
+    if (MF_ON_PLATFORM) {
+      for (const row of buckets.values()) {
+        const m = mfByClient.get(row.id) ?? 0;
+        if (m) { row.mf += m; row.aum += m; row.invested += m; }
+      }
+    }
+
     const rows = [...buckets.values()].map(r => ({
       ...r,
       pl: r.aum - r.invested,
@@ -634,13 +669,13 @@ export default function Portfolio({ employee, pageParams }: Props) {
       return (a[sortKey] - b[sortKey]) * dir;
     });
     return rows;
-  }, [scopedHoldings, clients, clientMap, isAdmin, employee.id, empFilter, matchesSearch, sortKey, sortDir]);
+  }, [scopedHoldings, clients, clientMap, isAdmin, employee.id, empFilter, matchesSearch, sortKey, sortDir, mfByClient]);
 
   const exportClientsCsv = () => {
-    const headers = ['Client Name', 'Client Code', 'Employee', 'Total Invested', 'Current AUM', 'Unlisted', 'Bonds', ...(MF_ON_PLATFORM ? [] : ['Mutual Fund']), 'P&L', 'P&L %'];
+    const headers = ['Client Name', 'Client Code', 'Employee', 'Total Invested', 'Current AUM', 'Unlisted', 'Bonds', 'Mutual Fund', 'P&L', 'P&L %'];
     const rows = clientRows.map(r => [
       r.name, r.code, r.employeeName,
-      r.invested.toFixed(2), r.aum.toFixed(2), r.unlisted.toFixed(2), r.bonds.toFixed(2), ...(MF_ON_PLATFORM ? [] : [r.mf.toFixed(2)]),
+      r.invested.toFixed(2), r.aum.toFixed(2), r.unlisted.toFixed(2), r.bonds.toFixed(2), r.mf.toFixed(2),
       r.pl.toFixed(2), r.plPct.toFixed(2),
     ]);
     const csv = [headers, ...rows].map(r => r.map(v => `"${v ?? ''}"`).join(',')).join('\n');
@@ -1154,11 +1189,13 @@ export default function Portfolio({ employee, pageParams }: Props) {
           { label: 'Total Invested', value: fmt(totalInvested), color: 'var(--text-secondary)' },
           { label: 'Total AUM', value: fmt(totalValue), color: 'var(--chart-5)' },
           { label: gainLoss >= 0 ? 'Total Gain' : 'Total Loss', value: `${gainLoss >= 0 ? '+' : ''}${fmt(gainLoss)}`, color: gainLoss >= 0 ? 'var(--success)' : 'var(--danger)' },
+          { label: 'MF (registrar)', value: fmt(mfAum), color: 'var(--chart-4)' },
         ] : [
           { label: 'Total Value', value: fmt(totalValue), color: 'var(--accent)' },
           { label: 'Total Invested', value: fmt(totalInvested), color: 'var(--text-secondary)' },
           { label: gainLoss >= 0 ? 'Total Gain' : 'Total Loss', value: `${gainLoss >= 0 ? '+' : ''}${fmt(gainLoss)}`, color: gainLoss >= 0 ? 'var(--success)' : 'var(--danger)' },
           { label: 'Annual Interest Income', value: fmt(annualInterest), color: 'var(--chart-5)' },
+          { label: 'MF (registrar)', value: fmt(mfAum), color: 'var(--chart-4)' },
         ]).map(s => (
           <div key={s.label} className="rounded-2xl p-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
             <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-faint)' }}>{s.label}</p>
@@ -1255,7 +1292,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
                     { key: 'aum', label: 'Current AUM', align: 'right' },
                     { key: 'unlisted', label: 'Unlisted', align: 'right' },
                     { key: 'bonds', label: 'Bonds', align: 'right' },
-                    ...(MF_ON_PLATFORM ? [] : [{ key: 'mf', label: 'Mutual Fund', align: 'right' }]),
+                    { key: 'mf', label: 'Mutual Fund', align: 'right' },
                     { key: 'pl', label: 'P&L', align: 'right' },
                   ] as { key: ClientSortKey; label: string; align: 'left' | 'right' }[]).map(col => (
                     <th key={col.key} onClick={() => toggleSort(col.key)}
@@ -1288,7 +1325,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
                     <td className="px-5 py-3.5 text-right text-sm font-bold" style={{ color: r.aum > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{fmt(r.aum)}</td>
                     <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.unlisted > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.unlisted > 0 ? fmt(r.unlisted) : '—'}</td>
                     <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.bonds > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.bonds > 0 ? fmt(r.bonds) : '—'}</td>
-                    {!MF_ON_PLATFORM && <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.mf > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.mf > 0 ? fmt(r.mf) : '—'}</td>}
+                    <td className="px-5 py-3.5 text-right text-sm" style={{ color: r.mf > 0 ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.mf > 0 ? fmt(r.mf) : '—'}</td>
                     <td className="px-5 py-3.5 text-right">
                       {r.invested === 0 && r.aum === 0 ? (
                         <span className="text-sm" style={{ color: 'var(--text-faint)' }}>—</span>
