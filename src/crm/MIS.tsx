@@ -104,18 +104,24 @@ export default function MIS({ employee }: Props) {
     landing_cost: rows.filter(r => r.revenue_type === 'landing_cost').reduce((s, r) => s + r.revenue, 0),
     insurance: rows.filter(r => r.revenue_type === 'insurance').reduce((s, r) => s + r.revenue, 0),
     trail: rows.filter(r => r.revenue_type === 'trail').reduce((s, r) => s + r.revenue, 0),
+    mf_brokerage: rows.filter(r => r.revenue_type === 'mf_brokerage').reduce((s, r) => s + r.revenue, 0),
   };
+  // All mutual-fund revenue under one head: actual uploaded brokerage plus any
+  // legacy theoretical trail (usually nil now MF runs on the platform).
+  const mfRevenue = byType.trail + byType.mf_brokerage;
 
   const revenueTypeLabel: Record<string, string> = {
     landing_cost: 'Unlisted / Bonds',
     insurance: 'Insurance',
     trail: 'MF Trail',
+    mf_brokerage: 'MF Brokerage',
   };
   // RGB triplets so on-screen badges can composite tint + solid via rgba()/rgb().
   const revenueTypeColor: Record<string, string> = {
     landing_cost: 'var(--accent-rgb)',
     insurance: '249, 115, 22',
     trail: '236, 72, 153',
+    mf_brokerage: '236, 72, 153',
   };
 
   const printMIS = () => {
@@ -162,7 +168,7 @@ export default function MIS({ employee }: Props) {
   <div class="stats">
     <div class="stat" style="border-top-color:#d4af37"><div class="stat-label">Unlisted / Bonds</div><div class="stat-value" style="color:#d4af37">&#8377;${byType.landing_cost.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div></div>
     <div class="stat" style="border-top-color:#f97316"><div class="stat-label">Insurance</div><div class="stat-value" style="color:#f97316">&#8377;${byType.insurance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div></div>
-    <div class="stat" style="border-top-color:#ec4899"><div class="stat-label">MF Trail</div><div class="stat-value" style="color:#ec4899">&#8377;${byType.trail.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div></div>
+    <div class="stat" style="border-top-color:#ec4899"><div class="stat-label">Mutual Funds</div><div class="stat-value" style="color:#ec4899">&#8377;${mfRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div></div>
     <div class="stat" style="border-top-color:#059669"><div class="stat-label">Total Entries</div><div class="stat-value">${rows.length}</div></div>
   </div>
   <table>
@@ -259,7 +265,7 @@ export default function MIS({ employee }: Props) {
             { label: 'Total Revenue', value: fmt(totalRevenue), color: 'var(--success)' },
             { label: 'Unlisted / Bonds', value: fmt(byType.landing_cost), color: 'var(--accent)' },
             { label: 'Insurance', value: fmt(byType.insurance), color: 'var(--chart-6)' },
-            { label: 'MF Trail', value: fmt(byType.trail), color: 'var(--chart-4)' },
+            { label: 'Mutual Funds', value: fmt(mfRevenue), color: 'var(--chart-4)' },
           ].map(s => (
             <div key={s.label} className="rounded-2xl p-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
               <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-faint)' }}>{s.label}</p>

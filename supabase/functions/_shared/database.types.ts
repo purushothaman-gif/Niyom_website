@@ -5049,6 +5049,95 @@ export type Database = {
         }
         Relationships: []
       }
+      mf_brokerage: {
+        Row: {
+          brokerage: number
+          client_id: string | null
+          created_at: string
+          gst: number
+          id: string
+          imported_by: string | null
+          matched_at: string | null
+          period_label: string | null
+          period_month: string
+          raw_name: string
+          source_file: string | null
+          updated_at: string
+        }
+        Insert: {
+          brokerage?: number
+          client_id?: string | null
+          created_at?: string
+          gst?: number
+          id?: string
+          imported_by?: string | null
+          matched_at?: string | null
+          period_label?: string | null
+          period_month: string
+          raw_name: string
+          source_file?: string | null
+          updated_at?: string
+        }
+        Update: {
+          brokerage?: number
+          client_id?: string | null
+          created_at?: string
+          gst?: number
+          id?: string
+          imported_by?: string | null
+          matched_at?: string | null
+          period_label?: string | null
+          period_month?: string
+          raw_name?: string
+          source_file?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mf_brokerage_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mf_brokerage_imports: {
+        Row: {
+          amount_total: number
+          created_at: string
+          id: string
+          imported_by: string | null
+          matched: number
+          months_covered: string | null
+          rows_total: number
+          source_file: string | null
+          unmatched: number
+        }
+        Insert: {
+          amount_total?: number
+          created_at?: string
+          id?: string
+          imported_by?: string | null
+          matched?: number
+          months_covered?: string | null
+          rows_total?: number
+          source_file?: string | null
+          unmatched?: number
+        }
+        Update: {
+          amount_total?: number
+          created_at?: string
+          id?: string
+          imported_by?: string | null
+          matched?: number
+          months_covered?: string | null
+          rows_total?: number
+          source_file?: string | null
+          unmatched?: number
+        }
+        Relationships: []
+      }
       mf_detail_cache: {
         Row: {
           created_at: string

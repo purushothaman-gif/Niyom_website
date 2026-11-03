@@ -27,7 +27,7 @@ export interface MISRow {
   date: string;
   product_type: ProductType;
   product_name: string;
-  revenue_type: 'landing_cost' | 'insurance' | 'trail';
+  revenue_type: 'landing_cost' | 'insurance' | 'trail' | 'mf_brokerage';
   revenue: number;
   notes: string;
 }
@@ -412,6 +412,37 @@ export async function computeMisRows(
             });
           }
         }
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    // Actual MF brokerage (uploaded month-on-month, client-wise). This is the
+    // real mutual-fund revenue, ex-GST, credited to the client's RM in the
+    // month it was earned — it supersedes the theoretical trail above for MF.
+    // ---------------------------------------------------------------------
+    {
+      const { data: broks } = await supabase
+        .from('mf_brokerage')
+        .select('client_id, brokerage, period_label')
+        .in('client_id', clientIds)
+        .eq('period_month', startDate);
+      for (const b of (broks ?? []) as { client_id: string; brokerage: number | string; period_label: string | null }[]) {
+        const client = clientList.find(c => c.id === b.client_id);
+        if (!client) continue;
+        const rev = Number(b.brokerage) || 0;
+        if (rev === 0) continue;
+        computed.push({
+          client_id: b.client_id,
+          employee_id: client.employee_id ?? null,
+          client_name: client.full_name,
+          client_code: client.client_code,
+          date: startDate,
+          product_type: 'mutual_fund',
+          product_name: 'Mutual Fund brokerage',
+          revenue_type: 'mf_brokerage',
+          revenue: rev,
+          notes: `Actual MF brokerage (ex-GST)${b.period_label ? ` · ${b.period_label}` : ''}`,
+        });
       }
     }
 
