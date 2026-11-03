@@ -22,6 +22,10 @@ export interface RtaHoldingRow {
   nav: number | null;
   navValue: number | null;
   snapshotDate: string | null;
+  /** Net amount invested (purchases − redemptions) from the transaction feed, or null if we have no transactions for this holding yet. */
+  investedCost: number | null;
+  /** Earliest purchase trade date from the transaction feed, or null. */
+  firstInvestmentDate: string | null;
 }
 
 export interface RtaSipRow {
@@ -43,12 +47,31 @@ export interface RtaMfData {
   sips: RtaSipRow[];
   /** Registrar valuation (RUPEE_BAL) total; falls back to units*nav. */
   totalValue: number;
+  /** Net invested across holdings that have transaction history, or null when none do. */
+  totalInvested: number | null;
   /** Most recent holdings snapshot across the client's folios. */
   snapshotDate: string | null;
   hasData: boolean;
 }
 
-const EMPTY: RtaMfData = { holdings: [], sips: [], totalValue: 0, snapshotDate: null, hasData: false };
+const EMPTY: RtaMfData = { holdings: [], sips: [], totalValue: 0, totalInvested: null, snapshotDate: null, hasData: false };
+
+// Transaction directions that add to / subtract from invested cost.
+const INFLOW = new Set(['purchase', 'sip', 'switch_in']);
+const OUTFLOW = new Set(['redemption', 'switch_out']);
+
+interface TxnAgg { invested: number; first: string | null; seen: boolean }
+
+function foldTxn(agg: TxnAgg, kind: string, amount: number, tradeDate: string | null): void {
+  if (INFLOW.has(kind)) {
+    agg.invested += amount;
+    agg.seen = true;
+    if (tradeDate && (!agg.first || tradeDate < agg.first)) agg.first = tradeDate;
+  } else if (OUTFLOW.has(kind)) {
+    agg.invested -= amount;
+    agg.seen = true;
+  }
+}
 
 export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfData> {
   if (!clientId) return EMPTY;
@@ -63,7 +86,7 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
   if (fErr) throw new Error(fErr.message);
   const folioIds = (folios ?? []).map((f) => f.id);
 
-  const [holdingsRes, sipsRes] = await Promise.all([
+  const [holdingsRes, sipsRes, txnsRes] = await Promise.all([
     folioIds.length
       ? db
           .from('mf_rta_holdings')
@@ -74,23 +97,58 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
       .from('mf_rta_sips')
       .select('id, folio, scheme_name, scheme_code, txn_type, amount, frequency, sip_day, status, from_date, to_date')
       .eq('client_id', clientId),
+    db
+      .from('mf_rta_transactions')
+      .select('folio, scheme_code, txn_kind, amount, trade_date')
+      .eq('client_id', clientId),
   ]);
   if (holdingsRes.error) throw new Error(holdingsRes.error.message);
   if (sipsRes.error) throw new Error(sipsRes.error.message);
+  // Transactions are additive: if they can't be read (older DB, RLS), the view
+  // falls back to value-only exactly as before rather than failing.
+  const txnRows = (txnsRes.error ? [] : txnsRes.data) ?? [];
 
-  const holdings: RtaHoldingRow[] = (holdingsRes.data ?? [])
-    .map((h) => ({
-      id: h.id,
-      folio: h.folio,
-      schemeName: h.scheme_name,
-      schemeCode: h.scheme_code,
-      amcCode: h.amc_code,
-      units: Number(h.units ?? 0),
-      rtaValue: h.rta_value == null ? null : Number(h.rta_value),
-      nav: h.nav == null ? null : Number(h.nav),
-      navValue: h.nav_value == null ? null : Number(h.nav_value),
-      snapshotDate: h.snapshot_date,
-    }))
+  // Aggregate invested cost + first purchase date per (folio, scheme) and per
+  // folio. The scheme-level key is preferred; the folio-level one is a fallback
+  // for folios that hold a single scheme (where the transaction feed's product
+  // code may be formatted differently from the holdings feed's).
+  const byScheme = new Map<string, TxnAgg>();
+  const byFolio = new Map<string, TxnAgg>();
+  const schemeKey = (folio: string, code: string) => `${folio}\u0000${code}`;
+  for (const t of txnRows) {
+    const amount = Number(t.amount ?? 0);
+    const kind = (t.txn_kind ?? 'other') as string;
+    const sk = schemeKey(t.folio, t.scheme_code);
+    if (!byScheme.has(sk)) byScheme.set(sk, { invested: 0, first: null, seen: false });
+    if (!byFolio.has(t.folio)) byFolio.set(t.folio, { invested: 0, first: null, seen: false });
+    foldTxn(byScheme.get(sk)!, kind, amount, t.trade_date);
+    foldTxn(byFolio.get(t.folio)!, kind, amount, t.trade_date);
+  }
+
+  const rawHoldings = (holdingsRes.data ?? []);
+  const holdingsPerFolio = new Map<string, number>();
+  for (const h of rawHoldings) holdingsPerFolio.set(h.folio, (holdingsPerFolio.get(h.folio) ?? 0) + 1);
+
+  const holdings: RtaHoldingRow[] = rawHoldings
+    .map((h) => {
+      const exact = byScheme.get(schemeKey(h.folio, h.scheme_code));
+      const folioOnly = holdingsPerFolio.get(h.folio) === 1 ? byFolio.get(h.folio) : undefined;
+      const agg = exact?.seen ? exact : folioOnly?.seen ? folioOnly : null;
+      return {
+        id: h.id,
+        folio: h.folio,
+        schemeName: h.scheme_name,
+        schemeCode: h.scheme_code,
+        amcCode: h.amc_code,
+        units: Number(h.units ?? 0),
+        rtaValue: h.rta_value == null ? null : Number(h.rta_value),
+        nav: h.nav == null ? null : Number(h.nav),
+        navValue: h.nav_value == null ? null : Number(h.nav_value),
+        snapshotDate: h.snapshot_date,
+        investedCost: agg ? Math.max(0, Math.round(agg.invested * 100) / 100) : null,
+        firstInvestmentDate: agg ? agg.first : null,
+      };
+    })
     // Registrar value when present, else units*nav; biggest first.
     .sort((a, b) => valueOf(b) - valueOf(a));
 
@@ -112,12 +170,16 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
     .sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9) || (b.amount ?? 0) - (a.amount ?? 0));
 
   const totalValue = holdings.reduce((sum, h) => sum + valueOf(h), 0);
+  const anyCost = holdings.some((h) => h.investedCost != null);
+  const totalInvested = anyCost
+    ? holdings.reduce((sum, h) => sum + (h.investedCost ?? valueOf(h)), 0)
+    : null;
   const snapshotDate = holdings.reduce<string | null>(
     (m, h) => (h.snapshotDate && (!m || h.snapshotDate > m) ? h.snapshotDate : m),
     null,
   );
 
-  return { holdings, sips, totalValue, snapshotDate, hasData: holdings.length > 0 || sips.length > 0 };
+  return { holdings, sips, totalValue, totalInvested, snapshotDate, hasData: holdings.length > 0 || sips.length > 0 };
 }
 
 function valueOf(h: RtaHoldingRow): number {

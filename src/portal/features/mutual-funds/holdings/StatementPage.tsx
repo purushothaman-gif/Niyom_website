@@ -49,31 +49,68 @@ export function StatementPage({ clientId }: { clientId: string }) {
     <div className="space-y-5">
       <Card padding="md">
         <div className="flex items-baseline justify-between">
-          <div>
-            <p className="text-[11px] uppercase tracking-wider text-text-secondary">Total value</p>
-            <p className="mt-0.5 font-display text-xl font-bold text-text-primary">{fmt(data.totalValue)}</p>
-          </div>
+          <p className="text-[11px] uppercase tracking-wider text-text-secondary">Your mutual funds</p>
           <p className="text-[11px] text-text-secondary">
             From your registrar statement{data.snapshotDate ? ` · ${fmtDate(data.snapshotDate)}` : ''}
           </p>
         </div>
+        {data.totalInvested != null ? (
+          <div className="mt-2 grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-text-secondary">Value</p>
+              <p className="mt-0.5 font-display text-lg font-bold text-text-primary">{fmt(data.totalValue)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-text-secondary">Invested</p>
+              <p className="mt-0.5 font-display text-lg font-bold text-text-primary">{fmt(data.totalInvested)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-text-secondary">Returns</p>
+              <p
+                className="mt-0.5 font-display text-lg font-bold"
+                style={{ color: data.totalValue >= data.totalInvested ? 'var(--success)' : 'var(--danger)' }}
+              >
+                {data.totalValue >= data.totalInvested ? '+' : ''}
+                {data.totalInvested > 0 ? (((data.totalValue - data.totalInvested) / data.totalInvested) * 100).toFixed(1) : '0.0'}%
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-0.5 font-display text-xl font-bold text-text-primary">{fmt(data.totalValue)}</p>
+        )}
       </Card>
 
       {data.holdings.length > 0 && (
         <div className="space-y-3">
-          {data.holdings.map((h) => (
-            <Card key={h.id} padding="md">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-text-primary">{h.schemeName ?? h.schemeCode}</p>
-                  <p className="mt-0.5 text-[11px] text-text-secondary">
-                    Folio {h.folio} · {h.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units
-                  </p>
+          {data.holdings.map((h) => {
+            const value = h.rtaValue ?? h.navValue ?? 0;
+            const invested = h.investedCost;
+            const gain = invested != null ? value - invested : null;
+            const gainPct = invested != null && invested > 0 ? (gain! / invested) * 100 : null;
+            const up = (gain ?? 0) >= 0;
+            return (
+              <Card key={h.id} padding="md">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-text-primary">{h.schemeName ?? h.schemeCode}</p>
+                    <p className="mt-0.5 text-[11px] text-text-secondary">
+                      Folio {h.folio} · {h.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units
+                      {h.firstInvestmentDate ? ` · invested since ${fmtDate(h.firstInvestmentDate)}` : ''}
+                    </p>
+                  </div>
+                  <p className="flex-shrink-0 text-sm font-bold text-text-primary">{fmt(value)}</p>
                 </div>
-                <p className="flex-shrink-0 text-sm font-bold text-text-primary">{fmt(h.rtaValue ?? h.navValue ?? 0)}</p>
-              </div>
-            </Card>
-          ))}
+                {invested != null && (
+                  <div className="mt-3 flex items-center justify-between border-t border-border pt-2 text-[11px]">
+                    <span className="text-text-secondary">Invested {fmt(invested)}</span>
+                    <span className="font-semibold" style={{ color: up ? 'var(--success)' : 'var(--danger)' }}>
+                      {up ? '+' : ''}{fmt(gain!)}{gainPct != null ? ` · ${up ? '+' : ''}${gainPct.toFixed(1)}%` : ''}
+                    </span>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
         </div>
       )}
 

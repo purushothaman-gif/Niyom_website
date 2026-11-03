@@ -73,7 +73,9 @@ export function RtaMfPanel({ clientId }: { clientId: string }) {
               <tr style={{ color: 'var(--text-secondary)' }} className="text-left text-[11px] uppercase tracking-wider">
                 <th className="py-2 pr-3 font-medium">Scheme</th>
                 <th className="py-2 px-3 font-medium">Folio</th>
+                <th className="py-2 px-3 font-medium">Since</th>
                 <th className="py-2 px-3 font-medium text-right">Units</th>
+                <th className="py-2 px-3 font-medium text-right">Invested</th>
                 <th className="py-2 pl-3 font-medium text-right">Value</th>
               </tr>
             </thead>
@@ -82,7 +84,9 @@ export function RtaMfPanel({ clientId }: { clientId: string }) {
                 <tr key={h.id} style={{ borderTop: '1px solid var(--border)' }}>
                   <td className="py-2 pr-3 text-text-primary">{h.schemeName ?? h.schemeCode}</td>
                   <td className="py-2 px-3" style={{ color: 'var(--text-secondary)' }}>{h.folio}</td>
+                  <td className="py-2 px-3" style={{ color: 'var(--text-secondary)' }}>{h.firstInvestmentDate ? fmtDate(h.firstInvestmentDate) : '—'}</td>
                   <td className="py-2 px-3 text-right text-text-primary">{h.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
+                  <td className="py-2 px-3 text-right" style={{ color: 'var(--text-secondary)' }}>{h.investedCost != null ? fmt(h.investedCost) : '—'}</td>
                   <td className="py-2 pl-3 text-right text-text-primary">{fmt(h.rtaValue ?? h.navValue ?? 0)}</td>
                 </tr>
               ))}

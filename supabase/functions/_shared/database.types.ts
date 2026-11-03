@@ -5523,6 +5523,111 @@ export type Database = {
           },
         ]
       }
+      mf_rta_transactions: {
+        Row: {
+          amc_code: string | null
+          amount: number | null
+          arn: string | null
+          client_id: string | null
+          created_at: string
+          euin: string | null
+          first_seen_at: string
+          folio: string
+          folio_id: string | null
+          holder_name: string | null
+          id: string
+          last_seen_at: string
+          matched_at: string | null
+          nav: number | null
+          pan: string | null
+          post_date: string | null
+          registrar: string
+          scheme_code: string
+          scheme_name: string | null
+          snapshot_date: string | null
+          sub_broker: string | null
+          trade_date: string | null
+          txn_kind: string
+          txn_ref: string
+          txn_type_raw: string | null
+          units: number | null
+          updated_at: string
+        }
+        Insert: {
+          amc_code?: string | null
+          amount?: number | null
+          arn?: string | null
+          client_id?: string | null
+          created_at?: string
+          euin?: string | null
+          first_seen_at?: string
+          folio: string
+          folio_id?: string | null
+          holder_name?: string | null
+          id?: string
+          last_seen_at?: string
+          matched_at?: string | null
+          nav?: number | null
+          pan?: string | null
+          post_date?: string | null
+          registrar: string
+          scheme_code: string
+          scheme_name?: string | null
+          snapshot_date?: string | null
+          sub_broker?: string | null
+          trade_date?: string | null
+          txn_kind?: string
+          txn_ref: string
+          txn_type_raw?: string | null
+          units?: number | null
+          updated_at?: string
+        }
+        Update: {
+          amc_code?: string | null
+          amount?: number | null
+          arn?: string | null
+          client_id?: string | null
+          created_at?: string
+          euin?: string | null
+          first_seen_at?: string
+          folio?: string
+          folio_id?: string | null
+          holder_name?: string | null
+          id?: string
+          last_seen_at?: string
+          matched_at?: string | null
+          nav?: number | null
+          pan?: string | null
+          post_date?: string | null
+          registrar?: string
+          scheme_code?: string
+          scheme_name?: string | null
+          snapshot_date?: string | null
+          sub_broker?: string | null
+          trade_date?: string | null
+          txn_kind?: string
+          txn_ref?: string
+          txn_type_raw?: string | null
+          units?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mf_rta_transactions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mf_rta_transactions_folio_id_fkey"
+            columns: ["folio_id"]
+            isOneToOne: false
+            referencedRelation: "mf_rta_folios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mf_scheme_cache: {
         Row: {
           amfi_category: string | null
@@ -12808,6 +12913,10 @@ export type Database = {
       }
       trigger_bond_yield_refresh: { Args: never; Returns: undefined }
       trigger_commodity_price_update: { Args: never; Returns: undefined }
+      trigger_mf_market_data: {
+        Args: { p_body: Json; p_function: string }
+        Returns: undefined
+      }
       trigger_mf_returns_backfill: { Args: never; Returns: undefined }
       trigger_mf_universe_refresh: { Args: never; Returns: undefined }
       trigger_mkt_auto_generate: { Args: never; Returns: undefined }

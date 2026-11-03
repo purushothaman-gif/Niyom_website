@@ -192,13 +192,15 @@ export const HoldingService = {
 };
 
 /**
- * A registrar-fed mutual-fund holding as a PortalHolding. The registrar reports
- * a current value but no cost basis, so invested equals value — the fund shows
- * its real worth and no invented gain. Priced already (current_value set), so it
- * bypasses the NAV repricing that keys off ISIN.
+ * A registrar-fed mutual-fund holding as a PortalHolding. When the transaction
+ * feed has given us a cost basis (investedCost), invested and avg_cost reflect
+ * the real money put in, so gain is genuine. Without it we fall back to
+ * invested = value — the fund shows its real worth and no invented gain. Priced
+ * already (current_value set), so it bypasses the NAV repricing that keys off ISIN.
  */
 function toRegistrarMfHolding(clientId: string, h: RtaHoldingRow): PortalHolding {
   const value = h.rtaValue ?? h.navValue ?? (h.nav != null ? h.units * h.nav : 0);
+  const invested = h.investedCost != null ? h.investedCost : value;
   const now = new Date().toISOString();
   return {
     id: `rta-${h.id}`,
@@ -206,12 +208,14 @@ function toRegistrarMfHolding(clientId: string, h: RtaHoldingRow): PortalHolding
     product_type: 'mutual_fund',
     product_name: h.schemeName ?? h.schemeCode,
     quantity: h.units,
-    avg_cost: 0,
+    avg_cost: h.investedCost != null && h.units > 0 ? h.investedCost / h.units : 0,
     current_value: value,
-    invested_amount: value,
+    invested_amount: invested,
     maturity_date: '',
     notes: '',
-    created_at: now,
+    // Earliest purchase from the transaction feed, when known — the client's
+    // real "invested since" date; else the snapshot date.
+    created_at: h.firstInvestmentDate ? `${h.firstInvestmentDate}T00:00:00.000Z` : now,
     updated_at: now,
     folio_number: h.folio,
     fund_house: h.amcCode ?? undefined,
