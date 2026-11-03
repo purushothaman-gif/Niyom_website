@@ -55,14 +55,19 @@ Deno.serve(async (req: Request) => {
     if (!body?.dataBase64) throw new RtaError('No file was uploaded.', 400);
     const registrar = (body.registrar ?? 'CAMS').toUpperCase() === 'KFINTECH' ? 'KFINTECH' : 'CAMS';
 
-    const password = registrar === 'KFINTECH'
-      ? Deno.env.get('RTA_KFINTECH_PASSWORD')
-      : Deno.env.get('RTA_CAMS_PASSWORD');
-    if (!password) throw new RtaError(`The ${registrar} mailback password is not configured on the server.`, 500);
+    // Candidate passwords to try, in order. KFintech can use a different
+    // password per report (SIP subscription vs AUM report), so fall back to the
+    // CAMS password too; deduped, blanks dropped.
+    const cams = Deno.env.get('RTA_CAMS_PASSWORD') ?? '';
+    const kf = Deno.env.get('RTA_KFINTECH_PASSWORD') ?? '';
+    const kf2 = Deno.env.get('RTA_KFINTECH_PASSWORD_2') ?? '';
+    const passwords = (registrar === 'KFINTECH' ? [kf, kf2, cams] : [cams])
+      .filter((p, i, a) => p && a.indexOf(p) === i);
+    if (!passwords.length) throw new RtaError(`The ${registrar} mailback password is not configured on the server.`, 500);
 
     const result = await runImport(sb, {
       zipBytes: base64ToBytes(body.dataBase64),
-      password,
+      passwords,
       registrar,
       sourceFile: body.fileName ?? null,
       source: 'manual',

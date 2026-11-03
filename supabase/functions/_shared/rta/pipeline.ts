@@ -61,18 +61,24 @@ export function snapshotFromName(name: string | null): string | null {
 }
 
 /** Open the WinZip-AES ZIP (DBF for CAMS, CSV for KFintech), mapping failures to a clear message. */
-async function unzipFeed(data: Uint8Array, password: string): Promise<{ name: string; bytes: Uint8Array }> {
-  try {
-    return await unzipMember(data, password, /\.(dbf|csv)$/i);
-  } catch (e) {
-    if (e instanceof WinzipError) {
-      if (e.message === 'WRONG_PASSWORD' || e.message === 'AUTH_FAILED') {
-        throw new RtaError('Could not open the ZIP — the stored mailback password may be wrong.', 422);
+async function unzipFeed(data: Uint8Array, passwords: string[]): Promise<{ name: string; bytes: Uint8Array }> {
+  // Try each candidate password. A registrar can use different passwords for
+  // different reports (KFintech's SIP subscription vs its AUM report), so the
+  // caller passes the likely ones in order and the first that opens wins.
+  let pwFailed = false;
+  for (const password of passwords) {
+    try {
+      return await unzipMember(data, password, /\.(dbf|csv)$/i);
+    } catch (e) {
+      if (e instanceof WinzipError) {
+        if (e.message === 'WRONG_PASSWORD' || e.message === 'AUTH_FAILED') { pwFailed = true; continue; }
+        throw new RtaError(e.message, 422);
       }
-      throw new RtaError(e.message, 422);
+      throw e;
     }
-    throw e;
   }
+  if (pwFailed) throw new RtaError('Could not open the ZIP — none of the stored mailback passwords opened it.', 422);
+  throw new RtaError('No mailback password is configured on the server.', 500);
 }
 
 interface ReportSummary {
@@ -302,7 +308,7 @@ async function importWbr49(
 
 export interface RunImportOptions {
   zipBytes: Uint8Array;
-  password: string;
+  passwords: string[];
   registrar: 'CAMS' | 'KFINTECH';
   sourceFile?: string | null;
   messageId?: string | null;
@@ -330,7 +336,7 @@ export interface RunImportResult extends ReportSummary {
  */
 export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Promise<RunImportResult> {
   const started = Date.now();
-  const { zipBytes, password, registrar, source, importedBy } = opts;
+  const { zipBytes, passwords, registrar, source, importedBy } = opts;
   const messageId = opts.messageId ?? null;
   let sourceFile = opts.sourceFile ?? null;
   let report: RtaReport | null = null;
@@ -362,7 +368,7 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       }
     }
 
-    const { name, bytes } = await unzipFeed(zipBytes, password);
+    const { name, bytes } = await unzipFeed(zipBytes, passwords);
     if (!sourceFile) sourceFile = name;
 
     // The snapshot date lives in the inner member name (CAMS DBF and KFintech
