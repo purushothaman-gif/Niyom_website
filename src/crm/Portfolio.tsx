@@ -590,18 +590,26 @@ export default function Portfolio({ employee, pageParams }: Props) {
   }, [holdings, clientMap, searchQ, matchesSearch]);
 
   // Chart data
-  const chartData = PRODUCTS.map(p => ({
-    label: PRODUCT_LABELS[p],
-    value: scopedHoldings.filter(h => h.product_type === p).reduce((s, h) => s + (h.current_value || 0), 0),
-    color: PRODUCT_CHART_COLORS[p],
-  })).filter(d => d.value > 0);
+  // Registrar MF for the current scope — added to the allocation chart as its
+  // own slice since it lives outside nw_holdings.
+  const mfAum = clientFilter !== 'all'
+    ? (mfByClient.get(clientFilter) ?? 0)
+    : [...mfByClient.values()].reduce((sm, v) => sm + v, 0);
+  const chartData = [
+    ...PRODUCTS.map(p => ({
+      label: PRODUCT_LABELS[p],
+      value: scopedHoldings.filter(h => h.product_type === p).reduce((s, h) => s + (h.current_value || 0), 0),
+      color: PRODUCT_CHART_COLORS[p],
+    })),
+    ...(MF_ON_PLATFORM && mfAum > 0
+      ? [{ label: PRODUCT_LABELS.mutual_fund, value: mfAum, color: PRODUCT_CHART_COLORS.mutual_fund }]
+      : []),
+  ].filter(d => d.value > 0);
+  const chartTotal = chartData.reduce((s, d) => s + d.value, 0);
 
   const totalValue = scopedHoldings.reduce((s, h) => s + (h.current_value || 0), 0);
   const totalInvested = scopedHoldings.reduce((s, h) => s + (h.invested_amount || 0), 0);
   const gainLoss = totalValue - totalInvested;
-  const mfAum = clientFilter !== 'all'
-    ? (mfByClient.get(clientFilter) ?? 0)
-    : [...mfByClient.values()].reduce((sm, v) => sm + v, 0);
   const annualInterest = scopedHoldings
     .filter(h => BOND_TYPES.includes(h.product_type))
     .reduce((s, h) => {
@@ -1212,7 +1220,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
             <div className="flex-shrink-0"><PieChart data={chartData} /></div>
             <div className="flex-1 space-y-3 w-full">
               {chartData.map(d => {
-                const pct = totalValue > 0 ? ((d.value / totalValue) * 100).toFixed(1) : '0';
+                const pct = chartTotal > 0 ? ((d.value / chartTotal) * 100).toFixed(1) : '0';
                 return (
                   <div key={d.label} className="flex items-center gap-3">
                     <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: d.color }} />
