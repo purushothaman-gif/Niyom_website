@@ -159,16 +159,22 @@ export const PartnerService = {
   },
 
   async getClientPortfolio(clientId: string): Promise<PartnerHoldingRow[]> {
-    const rows = isDemoSession()
-      ? demoPortfolios[clientId] ?? []
-      : await (async () => {
-          const { data, error } = await supabase.rpc('nw_partner_client_portfolio', {
-            p_client_id: clientId,
-          });
-          if (error) throw error;
-          return (data ?? []) as PartnerHoldingRow[];
-        })();
-    return mfSsoEnabled() ? rows.filter((r) => r.product_type !== 'mutual_fund') : rows;
+    if (isDemoSession()) return demoPortfolios[clientId] ?? [];
+    const { data, error } = await supabase.rpc('nw_partner_client_portfolio', {
+      p_client_id: clientId,
+    });
+    if (error) throw error;
+    const base = (data ?? []) as PartnerHoldingRow[];
+    if (!mfSsoEnabled()) return base;
+    // On the platform, nw_holdings carries no MF — the client's funds come from
+    // the registrar feed via a dedicated, ownership-checked RPC. Drop any stray
+    // in-house MF rows and fold the registrar holdings in.
+    const nonMf = base.filter((r) => r.product_type !== 'mutual_fund');
+    const { data: mfData, error: mfErr } = await supabase.rpc('nw_partner_client_mf', {
+      p_client_id: clientId,
+    });
+    if (mfErr) throw mfErr;
+    return [...nonMf, ...((mfData ?? []) as PartnerHoldingRow[])];
   },
 
   async getClientTransactions(clientId: string): Promise<PartnerTransactionRow[]> {

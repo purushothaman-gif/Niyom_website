@@ -12352,6 +12352,19 @@ export type Database = {
           trustee: string
         }[]
       }
+      nw_partner_client_mf: {
+        Args: { p_client_id: string }
+        Returns: {
+          avg_price: number
+          current_value: number
+          gain_loss: number
+          holding_id: string
+          invested_amount: number
+          product_name: string
+          product_type: string
+          quantity: number
+        }[]
+      }
       nw_partner_client_portfolio: {
         Args: { p_client_id: string }
         Returns: {
