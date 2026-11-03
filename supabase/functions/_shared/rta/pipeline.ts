@@ -12,9 +12,9 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 import { parseDbf, type DbfTable } from './dbf.ts';
 import { parseCsv } from './csv.ts';
-import { parseWbr9 } from './wbr9.ts';
+import { parseWbr9, type RtaFolioStage, type RtaHoldingStage } from './wbr9.ts';
 import { parseWbr49, type RtaSipStage } from './wbr49.ts';
-import { isKfSip, parseKfSip } from './kfintech.ts';
+import { isKfAum, isKfSip, parseKfAum, parseKfSip } from './kfintech.ts';
 import { unzipMember, WinzipError } from './winzip.ts';
 
 /** A base64 body inflates by a third; the ZIPs are a few KB, cap well above. */
@@ -41,7 +41,7 @@ export function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-export type RtaReport = 'WBR9' | 'WBR49' | 'WSREG';
+export type RtaReport = 'WBR9' | 'WBR49' | 'WSREG' | 'WBCUM';
 
 /** Which report is this? Matched by column presence, not file name. */
 export function detectReport(table: DbfTable): RtaReport | null {
@@ -97,8 +97,12 @@ async function clientsByPan(sb: SupabaseClient, pans: string[]): Promise<Map<str
   return out;
 }
 
-async function importWbr9(sb: SupabaseClient, table: DbfTable, registrar: string): Promise<ReportSummary> {
-  const parsed = parseWbr9(table, registrar);
+// Shared holdings upsert for CAMS WBR9 and KFintech WBCUM: upsert the folio
+// master + per-scheme holdings, then match folios to clients by PAN.
+async function importHoldings(
+  sb: SupabaseClient,
+  parsed: { folios: Map<string, RtaFolioStage>; holdings: RtaHoldingStage[]; snapshotDate: string | null },
+): Promise<ReportSummary> {
   const nowIso = new Date().toISOString();
 
   // Folios: one master row per folio. client_id / matched_at / first_seen_at
@@ -146,6 +150,8 @@ async function importWbr9(sb: SupabaseClient, table: DbfTable, registrar: string
       amc_code: h.amc_code,
       units: h.units,
       rta_value: h.rta_value,
+      nav: h.nav ?? null,
+      nav_value: h.nav != null ? h.units * h.nav : null,
       snapshot_date: h.snapshot_date,
       updated_at: nowIso,
     }));
@@ -184,6 +190,11 @@ async function importWbr9(sb: SupabaseClient, table: DbfTable, registrar: string
     matched,
     unmatched,
   };
+}
+
+/** CAMS WBR9: parse the DBF, then share the holdings upsert. */
+async function importWbr9(sb: SupabaseClient, table: DbfTable, registrar: string): Promise<ReportSummary> {
+  return importHoldings(sb, parseWbr9(table, registrar));
 }
 
 // Shared SIP upsert for both CAMS WBR49 and KFintech WSREG: resolve each SIP's
@@ -364,11 +375,15 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       // the master/transaction reports log as unrecognised until their layouts
       // are added, so the Apps Script marks them handled rather than retrying.
       const csv = parseCsv(bytes);
-      if (!isKfSip(csv)) {
-        throw new RtaError('Unrecognised KFintech CSV feed (only the SIP registration report is supported yet).', 422);
+      if (isKfSip(csv)) {
+        report = 'WSREG';
+        summary = await importSips(sb, parseKfSip(csv, registrar, snap), registrar, snap);
+      } else if (isKfAum(csv)) {
+        report = 'WBCUM';
+        summary = await importHoldings(sb, parseKfAum(csv, registrar));
+      } else {
+        throw new RtaError('Unrecognised KFintech CSV feed (expected a SIP registration or Client-wise AUM report).', 422);
       }
-      report = 'WSREG';
-      summary = await importSips(sb, parseKfSip(csv, registrar, snap), registrar, snap);
     } else {
       const table = parseDbf(bytes);
       report = detectReport(table);

@@ -34,10 +34,10 @@
 // (optional) limits which of a sender's emails we process.
 var SENDERS = [
   { email: 'donotreply@camsonline.com', registrar: 'CAMS', mode: 'attachment' },
-  // KFintech: only the SIP registration report is parsed today, so filter to it.
-  // (Investor-master / transaction reports are left for when their layouts land.)
+  // KFintech: SIP registration (WSREG) + Client-wise AUM holdings (WBCUM) are
+  // parsed; filter to those. (Investor-master / transaction reports await layouts.)
   { email: 'distributorcare@kfintech.com', registrar: 'KFINTECH', mode: 'link',
-    subjectMatch: /sip registration|subscribed sip/i },
+    subjectMatch: /sip registration|subscribed sip|client-wise aum/i },
 ];
 
 var DONE_LABEL = 'NiyomRTA/Done';

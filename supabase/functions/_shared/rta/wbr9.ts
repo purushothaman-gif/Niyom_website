@@ -31,6 +31,7 @@ export interface RtaHoldingStage {
   amc_code: string | null;
   units: number;
   rta_value: number | null;
+  nav?: number | null;
   snapshot_date: string | null;
 }
 

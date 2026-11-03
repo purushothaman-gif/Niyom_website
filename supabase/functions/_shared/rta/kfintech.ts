@@ -127,3 +127,71 @@ export function parseKfSip(table: CsvTable, registrar = 'KFINTECH', snapshotDate
   }
   return out;
 }
+
+// --- Client-wise AUM report (WBCUM) → holdings + folio master ----------------
+// KFintech's holdings report, the equivalent of CAMS WBR9. It is a full
+// snapshot (Balance = units held, AUM = market value, NAV, Report Date), one
+// row per folio-scheme, and also carries the folio's investor static — so it
+// produces both the folio master and the holdings, matched to clients by PAN.
+
+import type { RtaFolioStage, RtaHoldingStage, Wbr9Parsed } from './wbr9.ts';
+
+const AUM_REQUIRED = ['Folio Number', 'Balance', 'AUM', 'NAV'];
+
+/** Does this CSV look like a KFintech Client-wise AUM report? */
+export function isKfAum(table: CsvTable): boolean {
+  const names = new Set(table.header);
+  return AUM_REQUIRED.every((r) => names.has(r));
+}
+
+export function parseKfAum(table: CsvTable, registrar = 'KFINTECH'): Wbr9Parsed {
+  if (!isKfAum(table)) {
+    throw new Error('This file is not a KFintech Client-wise AUM report (missing Folio Number/Balance/AUM/NAV).');
+  }
+  const folios = new Map<string, RtaFolioStage>();
+  const holdings: RtaHoldingStage[] = [];
+  let snapshotDate: string | null = null;
+
+  for (const row of table.rows) {
+    const folio = txt(row['Folio Number']);
+    if (!folio) continue;
+    const scheme_code = txt(row['Product Code']) ?? txt(row['Scheme Code']) ?? folio;
+    const snap = kfDate(row['Report Date']);
+    if (snap && !snapshotDate) snapshotDate = snap;
+
+    if (!folios.has(folio)) {
+      folios.set(folio, {
+        registrar,
+        folio,
+        amc_code: txt(row.Fund),
+        holder_name: txt(row['Investor Name']),
+        pan: pan(row.PAN),
+        joint_names: [],
+        joint_pans: [],
+        tax_status: null,
+        arn: txt(row['Broker Code']) ?? txt(row['Agent Code']),
+        sub_broker: txt(row['P-OUT Code']),
+        email: txt(row.Email),
+        mobile: txt(row['Mobile No']),
+        demat: txt(row.DPID),
+        folio_open_date: null,
+      });
+    }
+
+    const units = num(row.Balance) ?? 0;
+    const nav = num(row.NAV);
+    holdings.push({
+      registrar,
+      folio,
+      scheme_code,
+      scheme_name: txt(row['Fund Description']),
+      amc_code: txt(row.Fund),
+      units,
+      rta_value: num(row.AUM),
+      nav,
+      snapshot_date: snap,
+    });
+  }
+
+  return { snapshotDate, folios, holdings };
+}
