@@ -19,7 +19,6 @@ import { MutualFundSummaryCard } from './sections/MutualFundSummaryCard';
 import { RegistrarMfCard } from './sections/RegistrarMfCard';
 import { mfSsoEnabled } from '../../../../shared/platform/env';
 import { useRtaMf } from '../../hooks/useRtaMf';
-import { augmentSummaryWithMf } from '../../services/dashboardModel';
 import { RecentTransactionsCard } from './sections/RecentTransactionsCard';
 import { QuickActions } from './sections/QuickActions';
 import { SupportCard } from './sections/SupportCard';
@@ -69,13 +68,12 @@ export function DashboardPage({
   statementFrom = null,
 }: DashboardPageProps) {
   const firstName = client?.full_name?.split(' ')[0] || 'Investor';
+  const { summary } = data;
+  // MF holdings + SIPs for the dashboard card only. The headline totals already
+  // include the registrar MF (folded into the snapshot in HoldingService), so
+  // this must not be re-added to any total.
   const mfSsoOn = mfSsoEnabled();
-  // When MF runs on the platform, the in-house book carries no funds, so the
-  // client's real MF sits in the registrar feed — fold it into the headline.
   const rta = useRtaMf(clientId);
-  const summary = mfSsoOn && rta.data?.hasData
-    ? augmentSummaryWithMf(data.summary, rta.data.totalValue, rta.data.holdings.length)
-    : data.summary;
 
   return (
     <div className="space-y-5">

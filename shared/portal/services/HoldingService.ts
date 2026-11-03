@@ -41,6 +41,7 @@ import {
   type NavRow,
 } from './cas/model';
 import { isDemoClientSession, demoSnapshot } from '../demo/demoClient';
+import { fetchRtaMf, type RtaHoldingRow } from '../../mf/rtaMf';
 
 /**
  * How far back to look for a quote.
@@ -171,9 +172,53 @@ export const HoldingService = {
       dayChange: portfolioDayChange(holdings),
       valuedOn: valuationDate(holdings),
     };
-    return mfOnPlatform ? withoutMutualFunds(snapshot) : snapshot;
+    if (!mfOnPlatform) return snapshot;
+    // Mutual funds run on the platform: drop any in-house MF rows, then fold in
+    // the registrar feed (mf_rta_*) as the authoritative, daily-updated source,
+    // so every view built from this snapshot — dashboard, portfolio, allocation,
+    // reports — shows the client's real funds instead of nothing.
+    const stripped = withoutMutualFunds(snapshot);
+    const rta = await fetchRtaMf(supabase, clientId).catch(() => null);
+    if (!rta || !rta.holdings.length) return stripped;
+    const mf = rta.holdings.map((h) => toRegistrarMfHolding(clientId, h));
+    const merged = [...stripped.holdings, ...mf];
+    return {
+      ...stripped,
+      holdings: merged,
+      valuedOn: rta.snapshotDate ?? valuationDate(merged),
+      dayChange: portfolioDayChange(merged),
+    };
   },
 };
+
+/**
+ * A registrar-fed mutual-fund holding as a PortalHolding. The registrar reports
+ * a current value but no cost basis, so invested equals value — the fund shows
+ * its real worth and no invented gain. Priced already (current_value set), so it
+ * bypasses the NAV repricing that keys off ISIN.
+ */
+function toRegistrarMfHolding(clientId: string, h: RtaHoldingRow): PortalHolding {
+  const value = h.rtaValue ?? h.navValue ?? (h.nav != null ? h.units * h.nav : 0);
+  const now = new Date().toISOString();
+  return {
+    id: `rta-${h.id}`,
+    client_id: clientId,
+    product_type: 'mutual_fund',
+    product_name: h.schemeName ?? h.schemeCode,
+    quantity: h.units,
+    avg_cost: 0,
+    current_value: value,
+    invested_amount: value,
+    maturity_date: '',
+    notes: '',
+    created_at: now,
+    updated_at: now,
+    folio_number: h.folio,
+    fund_house: h.amcCode ?? undefined,
+    current_nav: h.nav ?? undefined,
+    nav_date: h.snapshotDate ?? undefined,
+  };
+}
 
 /**
  * The snapshot with every mutual fund trace removed. Once mutual funds run on
