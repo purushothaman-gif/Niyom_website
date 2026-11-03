@@ -5211,10 +5211,13 @@ export type Database = {
           id: string
           imported_by: string | null
           matched: number
+          message_id: string | null
           registrar: string | null
           report: string | null
           rows_total: number
+          sips_upserted: number
           snapshot_date: string | null
+          source: string | null
           source_file: string | null
           status: string
           unmatched: number
@@ -5229,10 +5232,13 @@ export type Database = {
           id?: string
           imported_by?: string | null
           matched?: number
+          message_id?: string | null
           registrar?: string | null
           report?: string | null
           rows_total?: number
+          sips_upserted?: number
           snapshot_date?: string | null
+          source?: string | null
           source_file?: string | null
           status?: string
           unmatched?: number
@@ -5247,15 +5253,156 @@ export type Database = {
           id?: string
           imported_by?: string | null
           matched?: number
+          message_id?: string | null
           registrar?: string | null
           report?: string | null
           rows_total?: number
+          sips_upserted?: number
           snapshot_date?: string | null
+          source?: string | null
           source_file?: string | null
           status?: string
           unmatched?: number
         }
         Relationships: []
+      }
+      mf_rta_sips: {
+        Row: {
+          ac_type: string | null
+          amc_code: string | null
+          amount: number | null
+          bank: string | null
+          branch: string | null
+          cease_date: string | null
+          client_id: string | null
+          euin: string | null
+          first_seen_at: string
+          folio: string
+          folio_id: string | null
+          frequency: string | null
+          from_date: string | null
+          holder_name: string | null
+          id: string
+          last_seen_at: string
+          matched_at: string | null
+          pan: string | null
+          pause_from: string | null
+          pause_to: string | null
+          payment_mode: string | null
+          reg_date: string | null
+          registrar: string
+          scheme_code: string
+          scheme_name: string | null
+          sip_day: string | null
+          sip_ref: string
+          snapshot_date: string | null
+          status: string
+          sub_arn: string | null
+          sub_broker: string | null
+          target_scheme_code: string | null
+          to_date: string | null
+          top_up_amount: number | null
+          top_up_frequency: string | null
+          top_up_percent: number | null
+          txn_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          ac_type?: string | null
+          amc_code?: string | null
+          amount?: number | null
+          bank?: string | null
+          branch?: string | null
+          cease_date?: string | null
+          client_id?: string | null
+          euin?: string | null
+          first_seen_at?: string
+          folio: string
+          folio_id?: string | null
+          frequency?: string | null
+          from_date?: string | null
+          holder_name?: string | null
+          id?: string
+          last_seen_at?: string
+          matched_at?: string | null
+          pan?: string | null
+          pause_from?: string | null
+          pause_to?: string | null
+          payment_mode?: string | null
+          reg_date?: string | null
+          registrar: string
+          scheme_code: string
+          scheme_name?: string | null
+          sip_day?: string | null
+          sip_ref: string
+          snapshot_date?: string | null
+          status?: string
+          sub_arn?: string | null
+          sub_broker?: string | null
+          target_scheme_code?: string | null
+          to_date?: string | null
+          top_up_amount?: number | null
+          top_up_frequency?: string | null
+          top_up_percent?: number | null
+          txn_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ac_type?: string | null
+          amc_code?: string | null
+          amount?: number | null
+          bank?: string | null
+          branch?: string | null
+          cease_date?: string | null
+          client_id?: string | null
+          euin?: string | null
+          first_seen_at?: string
+          folio?: string
+          folio_id?: string | null
+          frequency?: string | null
+          from_date?: string | null
+          holder_name?: string | null
+          id?: string
+          last_seen_at?: string
+          matched_at?: string | null
+          pan?: string | null
+          pause_from?: string | null
+          pause_to?: string | null
+          payment_mode?: string | null
+          reg_date?: string | null
+          registrar?: string
+          scheme_code?: string
+          scheme_name?: string | null
+          sip_day?: string | null
+          sip_ref?: string
+          snapshot_date?: string | null
+          status?: string
+          sub_arn?: string | null
+          sub_broker?: string | null
+          target_scheme_code?: string | null
+          to_date?: string | null
+          top_up_amount?: number | null
+          top_up_frequency?: string | null
+          top_up_percent?: number | null
+          txn_type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mf_rta_sips_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mf_rta_sips_folio_id_fkey"
+            columns: ["folio_id"]
+            isOneToOne: false
+            referencedRelation: "mf_rta_folios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       mf_scheme_cache: {
         Row: {
@@ -10739,6 +10886,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      mf_rta_feed_health: {
+        Row: {
+          hours_since_ok: number | null
+          last_attempt_at: string | null
+          last_ok_at: string | null
+          last_snapshot_date: string | null
+          last_status: string | null
+          registrar: string | null
+          report: string | null
+        }
+        Relationships: []
       }
       nw_deal_overall_stage: {
         Row: {

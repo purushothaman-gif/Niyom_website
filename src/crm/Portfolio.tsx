@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { CasHoldingsPanel } from './CasHoldingsPanel';
+import { RtaMfPanel } from './mf/RtaMfPanel';
 import { SchemePicker } from './SchemePicker';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWHolding, NWClient, ProductType } from './types';
@@ -1467,6 +1468,15 @@ export default function Portfolio({ employee, pageParams }: Props) {
       {view === 'detail' && clientFilter && !MF_ON_PLATFORM && (
         <div className="mt-6">
           <CasHoldingsPanel clientId={clientFilter} />
+        </div>
+      )}
+
+      {/* Mutual funds as the registrar reports them (CAMS/KFintech mailback,
+          imported daily). Independent of the in-house book and the MF platform
+          flag, so it shows whenever a client is selected. */}
+      {view === 'detail' && clientFilter && (
+        <div className="mt-6">
+          <RtaMfPanel clientId={clientFilter} />
         </div>
       )}
 

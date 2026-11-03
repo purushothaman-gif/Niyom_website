@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { supabase } from '../../lib/supabase';
 import { NWEmployee } from '../types';
 import { fmt, fmtDate } from '../utils';
-import { Database, Upload, RefreshCw, CheckCircle2, AlertTriangle, FileWarning } from 'lucide-react';
+import { Database, Upload, RefreshCw, CheckCircle2, AlertTriangle, FileWarning, Clock } from 'lucide-react';
 
 interface Props { employee: NWEmployee; }
 
@@ -15,6 +15,7 @@ interface ImportSummary {
   rowsTotal?: number;
   foliosUpserted?: number;
   holdingsUpserted?: number;
+  sipsUpserted?: number;
   matched?: number;
   unmatched?: number;
   error?: string;
@@ -43,7 +44,20 @@ interface UnmatchedFolio {
   amc_code: string | null;
 }
 
+interface FeedHealthRow {
+  registrar: string;
+  report: string;
+  last_ok_at: string | null;
+  last_snapshot_date: string | null;
+  hours_since_ok: number | null;
+  last_status: string | null;
+}
+
 const MAX_BYTES = 8 * 1024 * 1024;
+// A daily feed is considered stale once it has gone a day and a bit without a
+// successful import — long enough to clear a weekend-free business day, short
+// enough to catch a genuinely missed day.
+const STALE_HOURS = 30;
 
 export default function MfFeeds({ employee }: Props) {
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
@@ -54,19 +68,22 @@ export default function MfFeeds({ employee }: Props) {
   const [log, setLog] = useState<LogRow[]>([]);
   const [unmatched, setUnmatched] = useState<UnmatchedFolio[]>([]);
   const [stats, setStats] = useState({ folios: 0, matched: 0, value: 0 });
+  const [health, setHealth] = useState<FeedHealthRow[]>([]);
   const [loading, setLoading] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     setLoading(true);
-    const [logRes, unmatchedRes, folioCount, matchedCount, holdingsRes] = await Promise.all([
+    const [logRes, unmatchedRes, folioCount, matchedCount, holdingsRes, healthRes] = await Promise.all([
       supabase.from('mf_rta_import_log').select('*').order('created_at', { ascending: false }).limit(20),
       supabase.from('mf_rta_folios').select('id, registrar, folio, holder_name, pan, amc_code')
         .is('client_id', null).order('last_seen_at', { ascending: false }).limit(50),
       supabase.from('mf_rta_folios').select('id', { count: 'exact', head: true }),
       supabase.from('mf_rta_folios').select('id', { count: 'exact', head: true }).not('client_id', 'is', null),
       supabase.from('mf_rta_holdings').select('rta_value'),
+      supabase.from('mf_rta_feed_health').select('*'),
     ]);
+    setHealth((healthRes.data as FeedHealthRow[]) ?? []);
     setLog((logRes.data as LogRow[]) ?? []);
     setUnmatched((unmatchedRes.data as UnmatchedFolio[]) ?? []);
     const value = ((holdingsRes.data as { rta_value: number | null }[]) ?? [])
@@ -142,8 +159,9 @@ export default function MfFeeds({ employee }: Props) {
             <Database className="w-6 h-6" style={{ color: 'var(--accent)' }} /> MF Feeds
           </h1>
           <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-            Import the registrar mailback feed (CAMS WBR9 / CRMS) to populate client MF holdings.
-            Folios are matched to clients by PAN.
+            Client MF holdings (WBR9) and SIPs (WBR49) are pulled daily from the CAMS/KFintech
+            mailback feeds and matched to clients by PAN — no upload needed. Use the box below only
+            to import a feed by hand (a re-import or a backfill).
           </p>
         </div>
         <button
@@ -172,6 +190,49 @@ export default function MfFeeds({ employee }: Props) {
           <p className="text-2xl font-bold text-text-primary mt-1">{fmt(stats.value)}</p>
           <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Latest snapshot across all folios</p>
         </div>
+      </div>
+
+      {/* Feed health — is the daily automation actually running? The feeds
+          arrive without anyone watching, so a silent stall is the real risk;
+          this surfaces the age of the last successful import per feed. */}
+      <div className="rounded-2xl p-5" style={card}>
+        <div className="flex items-center gap-2 mb-3">
+          <Clock className="w-4 h-4" style={{ color: 'var(--accent)' }} />
+          <h2 className="text-sm font-bold text-text-primary">Feed health</h2>
+          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>— the daily automated pull</span>
+        </div>
+        {health.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            No successful import recorded yet. Once the daily sync runs, each feed shows its freshness here.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {health.map((h) => {
+              const stale = h.hours_since_ok == null || h.hours_since_ok > STALE_HOURS;
+              const dot = stale ? 'var(--c-red, #ef4444)' : 'var(--c-green, #16a34a)';
+              const label = h.report === 'WBR49' ? 'SIPs (WBR49)' : 'Holdings (WBR9)';
+              const age = h.hours_since_ok == null ? 'never'
+                : h.hours_since_ok < 1 ? 'just now'
+                : h.hours_since_ok < 48 ? `${Math.round(h.hours_since_ok)}h ago`
+                : `${Math.round(h.hours_since_ok / 24)}d ago`;
+              return (
+                <div key={`${h.registrar}-${h.report}`} className="rounded-xl p-3 flex items-center justify-between"
+                  style={{ background: 'var(--bg-raised)', border: `1px solid ${stale ? 'rgba(239,68,68,0.3)' : 'var(--border)'}` }}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: dot }} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-text-primary truncate">{h.registrar} · {label}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        Last OK {age}{h.last_snapshot_date ? ` · snapshot ${fmtDate(h.last_snapshot_date)}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  {stale && <span className="text-xs font-semibold text-c-red shrink-0">Stale</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Upload */}
@@ -228,8 +289,10 @@ export default function MfFeeds({ employee }: Props) {
               Imported {result.sourceFile ?? 'feed'}{result.snapshotDate ? ` · snapshot ${fmtDate(result.snapshotDate)}` : ''}
             </p>
             <p className="mt-1" style={{ color: 'var(--text-secondary)' }}>
-              {result.foliosUpserted ?? 0} folios · {result.holdingsUpserted ?? 0} holdings ·
-              {' '}{result.matched ?? 0} newly matched · {result.unmatched ?? 0} unmatched
+              {result.report === 'WBR49'
+                ? `${result.sipsUpserted ?? 0} SIP registrations`
+                : `${result.foliosUpserted ?? 0} folios · ${result.holdingsUpserted ?? 0} holdings`}
+              {' · '}{result.matched ?? 0} matched · {result.unmatched ?? 0} unmatched
             </p>
           </div>
         )}

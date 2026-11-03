@@ -20,6 +20,7 @@ import { collectionById } from './explore/collections';
 import { enrichSchemesWithUniverse } from './enrichSchemes';
 import { InvestFlow } from './invest/InvestFlow';
 import { MyFundsPage } from './holdings/MyFundsPage';
+import { StatementPage } from './holdings/StatementPage';
 import { RedeemFlow } from './redeem/RedeemFlow';
 import { SwitchFlow } from './switch/SwitchFlow';
 import { mapMfHoldings } from './mappers';
@@ -56,7 +57,7 @@ export type InvestGate =
   | 'bse_unavailable'
   | null;
 
-type Tab = 'explore' | 'all-funds' | 'my-funds';
+type Tab = 'explore' | 'all-funds' | 'my-funds' | 'statement';
 
 type Screen =
   | { name: 'list' }
@@ -311,6 +312,7 @@ export function MutualFundsModule({
           { value: 'explore', label: 'Explore' },
           { value: 'all-funds', label: 'All schemes' },
           { value: 'my-funds', label: 'My Funds', count: mfHoldings.length || undefined },
+          { value: 'statement', label: 'Statement' },
         ]}
         value={tab}
         onChange={setTab}
@@ -366,7 +368,7 @@ export function MutualFundsModule({
             }}
           />
         )
-      ) : (
+      ) : tab === 'my-funds' ? (
         <MyFundsPage
           holdings={mfHoldings}
           loading={holdingsLoading}
@@ -374,6 +376,8 @@ export function MutualFundsModule({
           onSwitch={(holdingId) => guardOrder(() => setScreen({ name: 'switch', holdingId }))}
           onExplore={() => setTab('explore')}
         />
+      ) : (
+        <StatementPage clientId={clientId} />
       )}
 
       {gatePrompt && (

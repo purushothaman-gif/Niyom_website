@@ -730,3 +730,11 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# --- Automated registrar mailback ingest, pushed by the Google Apps Script
+#     that watches the distributor mailbox. Public verify_jwt: the caller is the
+#     script (no user JWT); it authenticates with the RTA_INGEST_SECRET shared
+#     secret in X-Ingest-Secret. The admin manual upload (mf-rta-import) keeps
+#     the default verify_jwt = true. ---
+[functions.mf-rta-ingest]
+verify_jwt = false

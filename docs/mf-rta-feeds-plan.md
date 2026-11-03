@@ -144,3 +144,60 @@ Notes:
 5. Build the CRM views, then the portal and partner views (behind a switch,
    off until checked).
 6. Phase 2: automatic mailbox intake and feed-health alerts.
+
+---
+
+## Phase 2 — automated daily ingest (built 2026-11-03)
+
+No more manual uploads: the daily CAMS/KFintech mailback emails are pulled and
+imported on their own, and clients + staff see the result.
+
+**Feeds live:** CAMS **WBR9** (holdings, Phase 1) and **WBR49** (SIP / STP / SWP
+registrations). The importer now **auto-detects** which report a ZIP is by its
+DBF columns, so one path handles both. WBR2 (transactions) and all KFintech
+feeds stay deferred — they had no data on the all-CAMS book as of 2026-11-03;
+wire them in once a feed with data exists (and set `RTA_KFINTECH_PASSWORD`).
+
+**How it flows**
+
+1. `scripts/mf-rta-gmail-sync.gs` — a Google Apps Script on a daily time trigger,
+   running in the Workspace mailbox that receives the feeds. It finds each new
+   feed email, base64-encodes the encrypted ZIP, and POSTs it to the ingest
+   function. Processed threads get the `NiyomRTA/Done` label and are skipped next
+   run. The ZIP stays encrypted in flight; the script never holds the password.
+2. `mf-rta-ingest` edge function (verify_jwt = **false**) — authenticated by the
+   `RTA_INGEST_SECRET` shared secret in the `X-Ingest-Secret` header (the script
+   has no user JWT). Dedupes by file content hash, so retries/overlaps are
+   no-ops. Hands the ZIP to the shared pipeline.
+3. `_shared/rta/pipeline.ts` — decrypt → detect → parse → upsert → PAN-match →
+   one `mf_rta_import_log` row. Shared by `mf-rta-ingest` (auto) and
+   `mf-rta-import` (admin manual upload / backfill; no dedupe).
+4. Tables: SIPs land in **`mf_rta_sips`** (status derived from the dates, not
+   from a row's presence). Holdings/folios unchanged from Phase 1.
+
+**Who sees it**
+
+- **Client portal** — Mutual Funds → new **Statement** tab (`StatementPage`,
+  `useRtaMf`): the client's registrar holdings + running SIPs, read-only,
+  refreshed daily. Separate from Explore (research) and My Funds (BSE order rail)
+  so the numbers never blur.
+- **CRM** — a registrar-MF panel (`RtaMfPanel`) on a client's Portfolio page,
+  beside the CAS panel. RLS lets an RM see only their own clients.
+- **Admin** — the *MF Feeds* page gains a **Feed health** panel (reads the
+  `mf_rta_feed_health` view): age of the last successful import per feed, amber
+  past `STALE_HOURS`.
+
+**RLS** now lets a client read their own folios/holdings/SIPs via
+`nw_current_client_id()` (Phase 1 was staff-only).
+
+**Activation (one-time):**
+1. `bash scripts/mf-rta-set-ingest-secret.sh` — generates `RTA_INGEST_SECRET`,
+   sets it on Supabase, copies it to the clipboard (never printed/committed).
+2. Deploy the functions: `supabase functions deploy mf-rta-ingest mf-rta-import
+   --project-ref jlmwazuwjnhoqqloyeoj`.
+3. Paste `scripts/mf-rta-gmail-sync.gs` into a new Apps Script project, set its
+   script properties (INGEST_SECRET, SUPABASE_URL, ANON_KEY, ALERT_EMAIL), run
+   `setup`, then `syncNow` once to confirm.
+
+**Still open:** an email/push feed-health *alert* (the health panel is passive,
+like the NAV monitor gap). KFintech + WBR2 transactions, pending data.
