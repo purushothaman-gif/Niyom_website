@@ -1,6 +1,10 @@
-import { ChevronRight, Hourglass, Loader2, Plus, Repeat, ShieldCheck, TrendingUp } from 'lucide-react';
-import { fmt, fmtDate } from '../../../crm/utils';
-import { PortalButton, Tile } from '../../ui/kit';
+import { useMemo } from 'react';
+import { ChevronRight, Hourglass, Loader2, Plus, ShieldCheck, TrendingUp } from 'lucide-react';
+import { PortalButton } from '../../ui/kit';
+import { fromRtaHoldings } from '../../../../shared/portal/investments/model';
+import { InvestmentsBoard } from '../investments/InvestmentsBoard';
+import { useInvestmentRows } from '../investments/useInvestmentRows';
+import { SipsCard } from '../investments/SipsCard';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
 import { LogoLoader } from '../../../components/LogoLoader';
@@ -24,8 +28,8 @@ interface Props {
  */
 export function MfLaunchPage({ clientId, state, onLaunch, onNavigate }: Props) {
   const { data, loading } = useRtaMf(clientId);
-  const holdings = data?.holdings ?? [];
-  const activeSips = data?.sips.filter((s) => s.status === 'active') ?? [];
+  const baseRows = useMemo(() => fromRtaHoldings(data?.holdings ?? []), [data]);
+  const { rows, enriching } = useInvestmentRows('client', baseRows);
   const hasData = !!data?.hasData;
   const busy = state === 'opening';
 
@@ -58,36 +62,23 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate }: Props) {
 
   return (
     <div className="space-y-5">
-      {/* Value header + invest */}
-      <Tile>
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-[11px] uppercase tracking-wider text-text-secondary">Mutual Funds</p>
-            <p className="mt-1 font-display text-2xl font-bold text-text-primary">{fmt(data?.totalValue ?? 0)}</p>
-            <p className="mt-1 text-[11px] text-text-faint">
-              {data?.snapshotDate ? `Updated ${fmtDate(data.snapshotDate)}` : 'Your mutual fund holdings'}
-            </p>
-          </div>
-          <div className="hidden sm:block"><InvestCta /></div>
-        </div>
-        {statusNote && (
-          <p className={`mt-4 border-t border-border-subtle pt-3 text-xs ${statusNote.warn ? 'text-danger' : 'text-text-secondary'}`}>
-            {state === 'opening' && <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" />}
-            {statusNote.text}
-            {(state === 'opened' || state === 'blocked' || state === 'error') && (
-              <button type="button" onClick={onLaunch} className="ml-1 font-semibold text-accent underline underline-offset-2">
-                try again
-              </button>
-            )}
-          </p>
-        )}
-        <div className="mt-4 sm:hidden"><InvestCta full /></div>
-      </Tile>
+      {statusNote && (
+        <p className={`rounded-token-lg border border-border-subtle bg-bg-surface px-4 py-3 text-xs ${statusNote.warn ? 'text-danger' : 'text-text-secondary'}`}>
+          {state === 'opening' && <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" />}
+          {statusNote.text}
+          {(state === 'opened' || state === 'blocked' || state === 'error') && (
+            <button type="button" onClick={onLaunch} className="ml-1 font-semibold text-accent underline underline-offset-2">
+              try again
+            </button>
+          )}
+        </p>
+      )}
 
       {loading && !data ? (
         <div className="flex min-h-[30vh] items-center justify-center"><LogoLoader size={40} /></div>
       ) : !hasData ? (
         <Card>
+          <div className="flex justify-end px-5 pt-5"><InvestCta /></div>
           <EmptyState
             icon={TrendingUp}
             title="Start your mutual fund journey"
@@ -96,41 +87,16 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate }: Props) {
         </Card>
       ) : (
         <>
-          <div className="space-y-3">
-            {holdings.map((h) => (
-              <Card key={h.id} padding="md">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-text-primary">{h.schemeName ?? h.schemeCode}</p>
-                    <p className="mt-0.5 text-[11px] text-text-secondary">
-                      Folio {h.folio} · {h.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units
-                    </p>
-                  </div>
-                  <p className="flex-shrink-0 text-sm font-bold text-text-primary">{fmt(h.rtaValue ?? h.navValue ?? 0)}</p>
-                </div>
-              </Card>
-            ))}
-          </div>
+          <InvestmentsBoard
+            rows={rows}
+            enriching={enriching}
+            title="Mutual funds"
+            lockedAsset="mutual_fund"
+            actions={<InvestCta />}
+            detailAction={() => (gated ? null : <InvestCta full />)}
+          />
 
-          {activeSips.length > 0 && (
-            <Card padding="md">
-              <div className="mb-3 flex items-center gap-2">
-                <Repeat className="h-4 w-4 text-accent" />
-                <h3 className="text-sm font-bold text-text-primary">Running SIPs ({activeSips.length})</h3>
-              </div>
-              <div className="space-y-3">
-                {activeSips.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between gap-3 border-t border-border pt-3 first:border-0 first:pt-0">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-text-primary">{s.schemeName ?? s.schemeCode}</p>
-                      <p className="text-[11px] text-text-secondary">{(s.type ?? 'SIP')} · {s.frequency ?? '—'}</p>
-                    </div>
-                    <p className="flex-shrink-0 text-sm font-semibold text-text-primary">{s.amount != null ? fmt(s.amount) : '—'}</p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
+          <SipsCard sips={data?.sips ?? []} />
 
           {!gated && (
             <button

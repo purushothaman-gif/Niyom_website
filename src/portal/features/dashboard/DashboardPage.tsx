@@ -10,13 +10,15 @@
 import type { NWClient } from '../../../crm/types';
 import type { DashboardData } from '../../types';
 import type { PortalView } from '../../layout/navigation';
-import { inr, inrCompact, pct } from '../../../lib/money';
+import { useMemo } from 'react';
+import type { PortalHolding } from '../../types/cas';
+import { fromClientHoldings } from '../../../../shared/portal/investments/model';
+import { InvestmentsBoard } from '../investments/InvestmentsBoard';
+import { useInvestmentRows } from '../investments/useInvestmentRows';
+import { SipsCard } from '../investments/SipsCard';
 import { fmtDate } from '../../../crm/utils';
-import { Figure, MiniStat, Tile } from '../../ui/kit';
-import { AllocationCard } from './sections/AllocationCard';
 import { AccountSummaryCard } from './sections/AccountSummaryCard';
 import { MutualFundSummaryCard } from './sections/MutualFundSummaryCard';
-import { RegistrarMfCard } from './sections/RegistrarMfCard';
 import { mfSsoEnabled } from '../../../../shared/platform/env';
 import { useRtaMf } from '../../hooks/useRtaMf';
 import { RecentTransactionsCard } from './sections/RecentTransactionsCard';
@@ -32,6 +34,8 @@ interface DashboardPageProps {
   /** For reading the client's registrar-fed mutual funds. */
   clientId: string;
   data: DashboardData;
+  /** Every holding in the snapshot, for the portfolio board. */
+  holdings: PortalHolding[];
   refreshedAt: Date | null;
   onNavigate: (view: PortalView) => void;
   onActivateProducts: () => void;
@@ -58,12 +62,12 @@ export function DashboardPage({
   client,
   clientId,
   data,
+  holdings,
   refreshedAt,
   onNavigate,
   onActivateProducts,
   onImport,
   hasImportedStatement = false,
-  dayChange = null,
   historyComplete = true,
   statementFrom = null,
 }: DashboardPageProps) {
@@ -74,6 +78,12 @@ export function DashboardPage({
   // this must not be re-added to any total.
   const mfSsoOn = mfSsoEnabled();
   const rta = useRtaMf(clientId);
+  const baseRows = useMemo(() => fromClientHoldings(holdings), [holdings]);
+  const { rows, enriching } = useInvestmentRows('client', baseRows);
+  // Registrar funds arrive without their purchase flows, so a money-weighted
+  // return over the whole portfolio would be measured against missing cash —
+  // suppress it rather than show a misleading figure.
+  const xirr = rows.some((r) => r.source === 'registrar') ? null : data.xirrPercent;
 
   return (
     <div className="space-y-5">
@@ -98,89 +108,27 @@ export function DashboardPage({
         <ActivateProductsCard client={client} onActivate={onActivateProducts} />
       )}
 
-      {/* Net worth — the number they opened the app for. */}
-      <Tile>
-        <div className="grid gap-6 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] sm:items-end">
-          <Figure
-            label="Portfolio value"
-            value={inr(summary.netWorth)}
-            size="lg"
-            delta={summary.gain}
-            deltaLabel={`${inr(Math.abs(summary.gain))} · ${pct(summary.gainPercent)}`}
-          />
-          <div className="grid grid-cols-3 gap-4">
-            <MiniStat label="Invested" value={inrCompact(summary.invested)} />
-            <MiniStat
-              label="Returns"
-              value={pct(summary.gainPercent)}
-              tone={summary.gainPercent >= 0 ? 'positive' : 'negative'}
-            />
-            {/* Null means not enough history to compute — showing 0% here
-                would claim a flat return, which is a different statement. */}
-            <MiniStat
-              label="XIRR"
-              value={data.xirrPercent === null ? '—' : pct(data.xirrPercent)}
-              tone={
-                data.xirrPercent === null
-                  ? 'default'
-                  : data.xirrPercent >= 0
-                    ? 'positive'
-                    : 'negative'
-              }
-            />
-          </div>
-        </div>
-        {/*
-          Mutual fund NAVs are struck once a day after the close, so this is the
-          last published move rather than anything intraday. Shown only when a
-          move exists — a "0" here would claim a flat day, which is a different
-          statement from "not repriced yet".
-        */}
-        {dayChange !== null && (
-          <p className="mt-4 border-t border-border-subtle pt-3 text-xs text-text-faint">
-            Last NAV move{' '}
-            <span
-              className="font-semibold tabular-nums"
-              style={{ color: dayChange >= 0 ? 'var(--success)' : 'var(--danger)' }}
-            >
-              {dayChange >= 0 ? '+' : ''}{inr(dayChange)}
-            </span>
-          </p>
-        )}
-        {/*
-          Two different reasons for a blank return, and conflating them would
-          leave a client waiting for something that will never arrive. A
-          truncated statement is fixable by them today; too little history is
-          simply a matter of time.
-        */}
-        {data.xirrPercent === null && summary.netWorth > 0 && (
-          <p className="mt-4 border-t border-border-subtle pt-3 text-[11px] leading-relaxed text-text-faint">
-            {historyComplete ? (
-              'XIRR appears once there is enough transaction history to calculate a money-weighted return.'
-            ) : (
-              <>
-                Your return needs your full investing history. The statement you imported
-                {statementFrom ? ` begins on ${fmtDate(statementFrom)}` : ' begins part-way through'}, so
-                anything you bought before that is missing from it.{' '}
-                <button
-                  type="button"
-                  onClick={onImport}
-                  className="font-semibold text-accent underline underline-offset-2"
-                >
-                  Import one from the earliest available date
-                </button>{' '}
-                and it will appear.
-              </>
-            )}
-          </p>
-        )}
-      </Tile>
-
       {/*
-        Directly beneath the number the client came to see. They believe that
-        figure is their portfolio; if it is only the part we sold them, this is
-        the moment to say so.
+        The portfolio board — every holding across mutual funds, bonds and
+        unlisted shares, with returns, 1-day movement and allocation.
       */}
+      <InvestmentsBoard
+        rows={rows}
+        enriching={enriching}
+        xirrPercent={xirr}
+        maxRows={6}
+        onViewAll={() => onNavigate('portfolio')}
+        actions={
+          <button
+            type="button"
+            onClick={() => onNavigate('mutual-funds')}
+            className="hidden rounded-token-md bg-accent px-3.5 py-2 text-xs font-bold text-on-accent hover:bg-accent-strong sm:inline-flex"
+          >
+            Invest
+          </button>
+        }
+      />
+
       {/* No statement import once mutual funds run on the MF platform. */}
       {!hasImportedStatement && !mfSsoEnabled() && (
         <ImportPortfolioCard
@@ -190,18 +138,21 @@ export function DashboardPage({
         />
       )}
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <AllocationCard summary={summary} />
-        <AccountSummaryCard client={client} />
-      </div>
+      {!historyComplete && (
+        <p className="rounded-token-lg border border-border-subtle bg-bg-surface px-4 py-3 text-[11px] leading-relaxed text-text-secondary">
+          Your return needs your full investing history. The statement you imported
+          {statementFrom ? ` begins on ${fmtDate(statementFrom)}` : ' begins part-way through'}, so
+          anything you bought before that is missing from it.{' '}
+          <button type="button" onClick={onImport} className="font-semibold text-accent underline underline-offset-2">
+            Import one from the earliest available date
+          </button>
+          .
+        </p>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-2">
         {mfSsoOn ? (
-          <RegistrarMfCard
-            data={rta.data}
-            loading={rta.loading}
-            onOpen={() => onNavigate('mutual-funds')}
-          />
+          <SipsCard sips={rta.data?.sips ?? []} onOpen={() => onNavigate('mutual-funds')} />
         ) : (
           <MutualFundSummaryCard mf={data.mutualFunds} onViewAll={() => onNavigate('mutual-funds')} />
         )}
@@ -210,6 +161,8 @@ export function DashboardPage({
           onViewAll={() => onNavigate('transactions')}
         />
       </div>
+
+      <AccountSummaryCard client={client} />
 
       <QuickActions onNavigate={onNavigate} />
 

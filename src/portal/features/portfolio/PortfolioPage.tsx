@@ -1,35 +1,31 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Upload, Wallet } from 'lucide-react';
-import { fmt } from '../../../crm/utils';
-import type { ProductType } from '../../../crm/types';
 import { Card } from '../../components/Card';
-import { KpiStat } from '../../components/KpiStat';
-import { Segmented } from '../../components/Segmented';
 import { EmptyState } from '../../components/EmptyState';
 import { CasStatusNote } from '../../components/CasStatusNote';
 import type { PortfolioData } from '../../types';
-import type { CasFreshness } from '../../types/cas';
-import { HoldingsTable, type SortKey } from './HoldingsTable';
+import type { CasFreshness, PortalHolding } from '../../types/cas';
+import type { PortalView } from '../../layout/navigation';
 import { ImportPortfolioCard } from './ImportPortfolioCard';
 import { mfSsoEnabled } from '../../../../shared/platform/env';
-
-type Filter = ProductType | 'all';
-
-const SORTERS: Record<SortKey, (a: PortfolioData['rows'][number], b: PortfolioData['rows'][number]) => number> = {
-  value: (a, b) => a.value - b.value,
-  gain: (a, b) => a.gain - b.gain,
-  invested: (a, b) => a.invested - b.invested,
-  name: (a, b) => a.name.localeCompare(b.name),
-};
+import { fromClientHoldings } from '../../../../shared/portal/investments/model';
+import { InvestmentsBoard } from '../investments/InvestmentsBoard';
+import { useInvestmentRows } from '../investments/useInvestmentRows';
 
 export function PortfolioPage({
-  data,
+  holdings,
+  xirrPercent = null,
+  onNavigate,
   onImport,
   freshness,
   hasImportedStatement = false,
   valuedOn,
 }: {
+  /** Kept for prop compatibility; the board now renders from `holdings`. */
   data: PortfolioData;
+  holdings: PortalHolding[];
+  xirrPercent?: number | null;
+  onNavigate?: (view: PortalView) => void;
   /** Opens the import wizard, which PortalApp owns so both screens share one. */
   onImport: () => void;
   /** How current the imported mutual fund picture is; absent until one exists. */
@@ -38,35 +34,10 @@ export function PortfolioPage({
   /** NAV date the mutual fund figures are priced at, when newer than the statement. */
   valuedOn?: string | null;
 }) {
-  const { summary, rows } = data;
-  const [filter, setFilter] = useState<Filter>('all');
-  const [sortKey, setSortKey] = useState<SortKey>('value');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-
-  const filterOptions = useMemo(() => {
-    const opts: Array<{ value: Filter; label: string; count: number }> = [
-      { value: 'all', label: 'All', count: rows.length },
-    ];
-    for (const b of data.breakdowns.product.buckets) {
-      opts.push({ value: b.key as ProductType, label: b.label, count: b.count });
-    }
-    return opts;
-  }, [rows.length, data.breakdowns.product.buckets]);
-
-  const visibleRows = useMemo(() => {
-    const filtered = filter === 'all' ? rows : rows.filter((r) => r.productType === filter);
-    const sorted = [...filtered].sort(SORTERS[sortKey]);
-    return sortDir === 'desc' ? sorted.reverse() : sorted;
-  }, [rows, filter, sortKey, sortDir]);
-
-  const handleSort = (key: SortKey) => {
-    if (key === sortKey) {
-      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
-    } else {
-      setSortKey(key);
-      setSortDir(key === 'name' ? 'asc' : 'desc');
-    }
-  };
+  const baseRows = useMemo(() => fromClientHoldings(holdings), [holdings]);
+  const { rows, enriching } = useInvestmentRows('client', baseRows);
+  // See DashboardPage: no XIRR while registrar funds lack purchase flows.
+  const xirr = rows.some((r) => r.source === 'registrar') ? null : xirrPercent;
 
   /**
    * An investor with nothing here has almost always invested elsewhere — an
@@ -76,7 +47,7 @@ export function PortfolioPage({
    */
   // Statement imports retire once mutual funds run on the MF platform.
   const mfOnPlatform = mfSsoEnabled();
-  if (rows.length === 0) {
+  if (holdings.length === 0) {
     return (
       <div className="space-y-5">
         {/* The pitch does the work here; a bare "no holdings" card would not. */}
@@ -91,8 +62,6 @@ export function PortfolioPage({
       </div>
     );
   }
-
-  const gainUp = summary.gain >= 0;
 
   return (
     <div className="space-y-6">
@@ -110,7 +79,7 @@ export function PortfolioPage({
       {!hasImportedStatement && !mfOnPlatform && (
         <ImportPortfolioCard
           onImport={onImport}
-          visibleHoldings={rows.length}
+          visibleHoldings={holdings.length}
           returnsUnavailable={false}
         />
       )}
@@ -124,31 +93,23 @@ export function PortfolioPage({
         {hasImportedStatement && <ImportButton onClick={onImport} />}
       </div>
 
-      {/* Summary bar */}
-      <Card padding="lg">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
-          <KpiStat label="Current Value" value={fmt(summary.netWorth)} color="var(--accent)" />
-          <KpiStat label="Invested" value={fmt(summary.invested)} />
-          <KpiStat
-            label={gainUp ? 'Total Gain' : 'Total Loss'}
-            value={`${gainUp ? '+' : ''}${fmt(summary.gain)}`}
-            color={gainUp ? 'var(--success)' : 'var(--danger)'}
-            sub={`${gainUp ? '+' : ''}${summary.gainPercent.toFixed(2)}%`}
-            trend={gainUp ? 'up' : 'down'}
-          />
-          <KpiStat label="Holdings" value={String(summary.holdingsCount)} sub={`${summary.productCount} asset classes`} />
-        </div>
-      </Card>
-
-      {/* Filter + table */}
-      <div className="space-y-3">
-        <Segmented options={filterOptions} value={filter} onChange={setFilter} />
-        <HoldingsTable rows={visibleRows} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-        <p className="px-1 text-xs text-text-faint">
-          Showing {visibleRows.length} of {rows.length} holdings
-        </p>
-      </div>
-
+      <InvestmentsBoard
+        rows={rows}
+        enriching={enriching}
+        title="Holdings"
+        xirrPercent={xirr}
+        actions={
+          onNavigate && (
+            <button
+              type="button"
+              onClick={() => onNavigate('allocation')}
+              className="hidden rounded-token-md border border-border bg-bg-surface px-3.5 py-2 text-xs font-semibold text-text-primary hover:border-accent/40 sm:inline-flex"
+            >
+              Analyse
+            </button>
+          )
+        }
+      />
     </div>
   );
 }

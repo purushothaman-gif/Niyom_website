@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Wallet, FileSignature, TrendingUp, Phone, Mail, ArrowRight, BadgeCheck, UserPlus } from 'lucide-react';
+import { Loader2, Users, Wallet, FileSignature, TrendingUp, Phone, Mail, ArrowRight, BadgeCheck, UserPlus } from 'lucide-react';
 import { Card } from '../../../portal/components/Card';
 import { KpiStat } from '../../../portal/components/KpiStat';
 import { SectionHeader } from '../../../portal/components/SectionHeader';
@@ -9,6 +9,8 @@ import { fmt } from '../../../crm/utils';
 import { OnboardClientModal } from '../clients/OnboardClientModal';
 import type { PartnerSnapshot } from '../../hooks/usePartnerSnapshot';
 import type { PartnerView } from '../../layout/navigation';
+import { InvestmentsBoard } from '../../../portal/features/investments/InvestmentsBoard';
+import { usePartnerBook } from '../book/usePartnerBook';
 
 interface Props {
   snapshot: PartnerSnapshot;
@@ -29,6 +31,7 @@ interface Props {
 export function DashboardPage({ snapshot, onNavigate, onOnboarded }: Props) {
   const { profile, clients, payout, notes } = snapshot;
   const [showOnboard, setShowOnboard] = useState(false);
+  const book = usePartnerBook(clients);
 
   const totalInvested = clients.reduce((s, c) => s + Number(c.invested_amount || 0), 0);
   const totalValue = clients.reduce((s, c) => s + Number(c.current_value || 0), 0);
@@ -88,6 +91,25 @@ export function DashboardPage({ snapshot, onNavigate, onOnboarded }: Props) {
             </button>
           </div>
         </Card>
+      )}
+
+      {/* Client book — every sourced client's holdings, Groww-style. */}
+      {clients.length > 0 && (
+        book.loading ? (
+          <Card>
+            <div className="flex items-center justify-center gap-2 py-10 text-sm text-text-muted">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading your clients' portfolio…
+            </div>
+          </Card>
+        ) : (
+          <InvestmentsBoard
+            rows={book.rows}
+            enriching={book.enriching}
+            title="Client book"
+            maxRows={8}
+            onViewAll={() => onNavigate('clients')}
+          />
+        )
       )}
 
       {/* Earnings — frozen figures only. */}

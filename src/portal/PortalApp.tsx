@@ -200,6 +200,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
             clientId={clientId}
             client={client}
             data={dashboardData}
+            holdings={snapshot.holdings}
             refreshedAt={refreshedAt}
             onNavigate={navigate}
             onActivateProducts={() => setShowActivate(true)}
@@ -225,6 +226,9 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
         return portfolioData ? (
           <PortfolioPage
             data={portfolioData}
+            holdings={snapshot.holdings}
+            xirrPercent={dashboardData?.xirrPercent ?? null}
+            onNavigate={navigate}
             onImport={() => setShowImport(true)}
             freshness={snapshot.casFreshness}
             hasImportedStatement={hasImportedStatement}

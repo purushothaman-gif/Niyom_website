@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Users, ChevronDown, ChevronRight, Loader2, UserPlus } from 'lucide-react';
 import { Card } from '../../../portal/components/Card';
 import { EmptyState } from '../../../portal/components/EmptyState';
@@ -6,6 +6,10 @@ import { StatusPill } from '../../../portal/components/StatusPill';
 import { fmt, PRODUCT_LABELS } from '../../../crm/utils';
 import { PartnerService } from '../../services/PartnerService';
 import { OnboardClientModal } from './OnboardClientModal';
+import { mfSsoEnabled } from '../../../../shared/platform/env';
+import { fromPartnerHoldings } from '../../../../shared/portal/investments/model';
+import { InvestmentsBoard } from '../../../portal/features/investments/InvestmentsBoard';
+import { useInvestmentRows } from '../../../portal/features/investments/useInvestmentRows';
 import type { PartnerClientRow, PartnerHoldingRow, PartnerTransactionRow } from '../../types';
 import type { ProductType } from '../../../crm/types';
 
@@ -210,53 +214,8 @@ function ClientRow({
           ) : (
             <div className="space-y-6">
               <section>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Holdings
-                </p>
                 {holdings && holdings.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[560px] text-sm">
-                      <thead>
-                        <tr className="border-b border-border-subtle text-[11px] uppercase tracking-wider text-text-faint">
-                          <th className="pb-2 text-left font-semibold">Product</th>
-                          <th className="pb-2 text-right font-semibold">Qty</th>
-                          <th className="pb-2 text-right font-semibold">Invested</th>
-                          <th className="pb-2 text-right font-semibold">Value</th>
-                          <th className="pb-2 text-right font-semibold">Gain / Loss</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border-subtle">
-                        {holdings.map((h) => (
-                          <tr key={h.holding_id}>
-                            <td className="py-2.5 pr-3">
-                              <p className="font-medium text-text-primary">{h.product_name}</p>
-                              <p className="text-[11px] text-text-secondary">
-                                {productLabel(h.product_type)}
-                              </p>
-                            </td>
-                            <td className="py-2.5 text-right tabular-nums text-text-secondary">
-                              {Number(h.quantity).toLocaleString('en-IN')}
-                            </td>
-                            <td className="py-2.5 text-right tabular-nums text-text-secondary">
-                              {fmt(Number(h.invested_amount))}
-                            </td>
-                            <td className="py-2.5 text-right tabular-nums font-medium text-text-primary">
-                              {fmt(Number(h.current_value))}
-                            </td>
-                            <td
-                              className="py-2.5 text-right tabular-nums font-medium"
-                              style={{
-                                color: Number(h.gain_loss) >= 0 ? 'var(--success)' : 'var(--danger)',
-                              }}
-                            >
-                              {Number(h.gain_loss) >= 0 ? '+' : ''}
-                              {fmt(Number(h.gain_loss))}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ClientBoard holdings={holdings} />
                 ) : (
                   <EmptyState icon={Users} title="No holdings recorded" compact />
                 )}
@@ -314,4 +273,10 @@ function ClientRow({
       )}
     </Card>
   );
+}
+
+function ClientBoard({ holdings }: { holdings: PartnerHoldingRow[] }) {
+  const base = useMemo(() => fromPartnerHoldings(holdings, { registrarMf: mfSsoEnabled() }), [holdings]);
+  const { rows, enriching } = useInvestmentRows('partner', base);
+  return <InvestmentsBoard rows={rows} enriching={enriching} title="Holdings" compact />;
 }
