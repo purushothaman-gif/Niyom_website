@@ -3,7 +3,7 @@ import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWTransaction, NWActivityLog, NWClient } from './types';
 import { fmt, fmtDate, timeAgo, TXN_LABELS, TXN_COLORS, VERIFICATION_COLORS, VERIFICATION_LABELS } from './utils';
-import { Users, TrendingUp, ArrowLeftRight, UserCheck, ArrowRight, Activity, BarChart2, PieChart, BadgeIndianRupee } from 'lucide-react';
+import { Users, TrendingUp, ArrowLeftRight, UserCheck, ArrowRight, Activity, BarChart2, PieChart } from 'lucide-react';
 import { CRMPage } from './types';
 import { Counter } from '../components/Reveal';
 import { HeroBackground } from '../components/HeroBackground';
@@ -24,7 +24,6 @@ interface Stats {
   monthlyTxns: number;
   totalEmployees?: number;
   mfAum?: number;
-  mfBrokerage?: number;
 }
 
 interface EmployeeStat {
@@ -144,18 +143,13 @@ export default function Dashboard({ employee, onNavigate }: Props) {
         }
       }
 
-      // Registrar mutual-fund AUM + actual brokerage, RLS-scoped (admins see all,
-      // an RM sees only their own clients' rows).
-      const [mfHoldRes, mfBrokRes] = await Promise.all([
-        supabase.from('mf_rta_holdings').select('rta_value, nav_value'),
-        supabase.from('mf_brokerage').select('brokerage'),
-      ]);
-      const mfAum = ((mfHoldRes.data as { rta_value: number | null; nav_value: number | null }[]) ?? [])
+      // Registrar mutual-fund AUM, RLS-scoped (admins see all, an RM only their
+      // own clients' rows).
+      const { data: mfHold } = await supabase.from('mf_rta_holdings').select('rta_value, nav_value');
+      const mfAum = ((mfHold as { rta_value: number | null; nav_value: number | null }[]) ?? [])
         .reduce((sum, h) => sum + Number(h.rta_value ?? h.nav_value ?? 0), 0);
-      const mfBrokerage = ((mfBrokRes.data as { brokerage: number | null }[]) ?? [])
-        .reduce((sum, b) => sum + Number(b.brokerage ?? 0), 0);
 
-      setStats({ totalClients: clients.length, totalPortfolio, verifiedClients, monthlyTxns: monthTxns.length, totalEmployees: empCount, mfAum, mfBrokerage });
+      setStats({ totalClients: clients.length, totalPortfolio, verifiedClients, monthlyTxns: monthTxns.length, totalEmployees: empCount, mfAum });
       setRecentTxns(txns.slice(0, 5) as NWTransaction[]);
       /*
        * Two-step cast, deliberately. supabase-js cannot type an embedded
@@ -174,7 +168,6 @@ export default function Dashboard({ employee, onNavigate }: Props) {
     { label: isAdmin ? 'Total Clients' : 'My Clients', value: stats.totalClients.toString(), numeric: stats.totalClients, icon: Users, color: 'var(--info)', sub: 'Active clients' },
     { label: isAdmin ? 'Total Portfolio' : 'My Portfolio', value: fmt(stats.totalPortfolio), icon: TrendingUp, color: 'var(--accent)', sub: 'Under management' },
     { label: 'MF AUM', value: fmt(stats.mfAum ?? 0), icon: PieChart, color: 'var(--chart-4)', sub: 'Registrar feed' },
-    { label: 'MF Brokerage', value: fmt(stats.mfBrokerage ?? 0), icon: BadgeIndianRupee, color: 'var(--success)', sub: 'Ex-GST, uploaded' },
     { label: 'Verified Clients', value: stats.verifiedClients.toString(), numeric: stats.verifiedClients, icon: UserCheck, color: 'var(--success)', sub: `of ${stats.totalClients} total` },
     { label: 'Monthly Transactions', value: stats.monthlyTxns.toString(), numeric: stats.monthlyTxns, icon: ArrowLeftRight, color: 'var(--warning)', sub: 'This month' },
     ...(isAdmin && stats.totalEmployees !== undefined ? [{ label: 'Total Employees', value: stats.totalEmployees.toString(), numeric: stats.totalEmployees, icon: Users, color: 'var(--chart-4)', sub: 'Active staff' }] : []),
