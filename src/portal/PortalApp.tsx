@@ -198,6 +198,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
       case 'dashboard':
         return dashboardData ? (
           <DashboardPage
+            clientId={clientId}
             client={client}
             data={dashboardData}
             refreshedAt={refreshedAt}

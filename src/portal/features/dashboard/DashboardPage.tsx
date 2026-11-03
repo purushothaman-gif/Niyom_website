@@ -16,8 +16,10 @@ import { Figure, MiniStat, Tile } from '../../ui/kit';
 import { AllocationCard } from './sections/AllocationCard';
 import { AccountSummaryCard } from './sections/AccountSummaryCard';
 import { MutualFundSummaryCard } from './sections/MutualFundSummaryCard';
-import { MfPlatformCard } from './sections/MfPlatformCard';
+import { RegistrarMfCard } from './sections/RegistrarMfCard';
 import { mfSsoEnabled } from '../../../../shared/platform/env';
+import { useRtaMf } from '../../hooks/useRtaMf';
+import { augmentSummaryWithMf } from '../../services/dashboardModel';
 import { RecentTransactionsCard } from './sections/RecentTransactionsCard';
 import { QuickActions } from './sections/QuickActions';
 import { SupportCard } from './sections/SupportCard';
@@ -28,6 +30,8 @@ import { onboardingIncomplete, canActivateMoreProducts } from '../onboarding/onb
 
 interface DashboardPageProps {
   client: NWClient | null;
+  /** For reading the client's registrar-fed mutual funds. */
+  clientId: string;
   data: DashboardData;
   refreshedAt: Date | null;
   onNavigate: (view: PortalView) => void;
@@ -53,6 +57,7 @@ function greeting(): string {
 
 export function DashboardPage({
   client,
+  clientId,
   data,
   refreshedAt,
   onNavigate,
@@ -64,7 +69,13 @@ export function DashboardPage({
   statementFrom = null,
 }: DashboardPageProps) {
   const firstName = client?.full_name?.split(' ')[0] || 'Investor';
-  const { summary } = data;
+  const mfSsoOn = mfSsoEnabled();
+  // When MF runs on the platform, the in-house book carries no funds, so the
+  // client's real MF sits in the registrar feed — fold it into the headline.
+  const rta = useRtaMf(clientId);
+  const summary = mfSsoOn && rta.data?.hasData
+    ? augmentSummaryWithMf(data.summary, rta.data.totalValue, rta.data.holdings.length)
+    : data.summary;
 
   return (
     <div className="space-y-5">
@@ -187,8 +198,13 @@ export function DashboardPage({
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        {mfSsoEnabled() ? (
-          <MfPlatformCard onOpen={() => onNavigate('mutual-funds')} />
+        {mfSsoOn ? (
+          <RegistrarMfCard
+            data={rta.data}
+            loading={rta.loading}
+            ssoOn
+            onOpen={() => onNavigate('mutual-funds')}
+          />
         ) : (
           <MutualFundSummaryCard mf={data.mutualFunds} onViewAll={() => onNavigate('mutual-funds')} />
         )}
