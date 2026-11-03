@@ -26,7 +26,7 @@
 // rotate for no gain in isolation.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { computeAll, parseDate, isoDate, type NavPoint } from '../_shared/mfReturns.ts';
+import { computeAll, computeReturn, parseDate, isoDate, type NavPoint } from '../_shared/mfReturns.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -137,8 +137,30 @@ async function pooled<T, R>(items: T[], limit: number, fn: (item: T) => Promise<
   return out;
 }
 
+interface LocalHistory {
+  complete?: boolean;
+  first_date?: string;
+  points?: NavPoint[];
+}
+
+/** A scheme's history from nav_daily, or null (then mfapi.in is used). */
+async function loadLocalHistory(
+  supabase: ReturnType<typeof createSupabase>,
+  code: string,
+): Promise<LocalHistory | null> {
+  try {
+    const r = await supabase.rpc('mf_scheme_nav_history', { p_scheme_code: code });
+    return r.error ? null : ((r.data as unknown as LocalHistory) ?? null);
+  } catch {
+    return null;
+  }
+}
+
 interface Update {
   scheme_code: string;
+  return_1m?: number | null;
+  return_3m?: number | null;
+  returns_source?: 'nav_daily' | 'mfapi' | null;
   return_6m: number | null;
   return_1y: number | null;
   return_3y: number | null;
@@ -220,6 +242,9 @@ async function backfill(): Promise<Response> {
   const results = await pooled(codes, CONCURRENCY, async (code): Promise<Update | null> => {
     const blank: Update = {
       scheme_code: code,
+      return_1m: null,
+      return_3m: null,
+      returns_source: null,
       return_6m: null,
       return_1y: null,
       return_3y: null,
@@ -229,6 +254,34 @@ async function backfill(): Promise<Response> {
       returns_synced_at: now,
       returns_error: null,
     };
+
+    /*
+     * Our own history first. nav_daily is AMFI's own NAVs, backfilled to
+     * 2006; once it holds a scheme's ENTIRE history (`complete`) every period
+     * including since-inception can be computed locally, and mfapi.in is not
+     * consulted at all. Until the backfill reaches a scheme, it falls through
+     * to mfapi.in exactly as before — so nothing regresses mid-backfill.
+     */
+    const local = await loadLocalHistory(supabase, code);
+    if (local?.complete && local.points?.length) {
+      const m = computeAll(local.points);
+      if (m) {
+        const latest = m.current_nav;
+        const latestDate = parseDate(local.points[0].date);
+        return {
+          ...blank,
+          return_1m: computeReturn(local.points, latest, latestDate, 1 / 12),
+          return_3m: computeReturn(local.points, latest, latestDate, 3 / 12),
+          return_6m: m.return_6m,
+          return_1y: m.return_1y,
+          return_3y: m.return_3y,
+          return_5y: m.return_5y,
+          return_si: m.return_si,
+          launch_date: local.first_date ?? null,
+          returns_source: 'nav_daily',
+        };
+      }
+    }
 
     const fetched = await fetchJson<SchemeDetail>(`https://api.mfapi.in/mf/${code}`);
 
@@ -254,9 +307,13 @@ async function backfill(): Promise<Response> {
     if (!m) return { ...blank, returns_error: 'history present but no usable NAV' };
 
     const oldest = detail.data![detail.data!.length - 1];
+    const latestDate = parseDate(detail.data![0].date);
 
     return {
       ...blank,
+      return_1m: computeReturn(detail.data!, m.current_nav, latestDate, 1 / 12),
+      return_3m: computeReturn(detail.data!, m.current_nav, latestDate, 3 / 12),
+      returns_source: 'mfapi',
       return_6m: m.return_6m,
       return_1y: m.return_1y,
       return_3y: m.return_3y,

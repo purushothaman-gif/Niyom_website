@@ -52,7 +52,7 @@
  */
 import { classifyCategory, readCategoryHeading } from './assetClass.ts';
 import { COLUMN, columnIndex, composeSchemeName, readHeaderCells } from './amfiColumns.ts';
-import { sbInsert, sbSelect, type SbConfig } from './db.ts';
+import { sbInsert, sbRpc, sbSelect, type SbConfig } from './db.ts';
 
 const AMFI_URL = 'https://portal.amfiindia.com/spages/NAVAll.txt';
 
@@ -464,8 +464,21 @@ export async function refreshNavs(cfg: SbConfig): Promise<NavRefreshResult> {
       console.error('scheme-universe NAV write failed (nav_daily already written):', schemeErr);
     }
 
+    /*
+     * Validate against the previous trading day: ISINs that vanished and
+     * day-over-day moves above 20% (almost always a bad NAV, not a market
+     * move). Recorded, not enforced — AMFI is the source of truth and a real
+     * 20% move does happen; the daily health check alerts on a large count.
+     */
+    let validation: unknown = null;
+    try {
+      validation = await sbRpc(cfg, 'mf_nav_validate', { p_date: navDate });
+    } catch (vErr) {
+      console.error('NAV validation failed (refresh already written):', vErr);
+    }
+
     await sbInsert(cfg, 'nav_refresh_log', [
-      { started_at: startedAt, finished_at: new Date().toISOString(), ok: true, rows_parsed: parsed, rows_written: written, nav_date: navDate },
+      { job: 'daily', started_at: startedAt, finished_at: new Date().toISOString(), ok: true, rows_parsed: parsed, rows_written: written, nav_date: navDate, details: validation },
     ]);
     return { ok: true, parsed, written, navDate, classified, schemesWritten };
   } catch (err) {

@@ -5007,44 +5007,74 @@ export type Database = {
       mf_asset_class: {
         Row: {
           ambiguous: boolean
+          amc_name: string | null
           amfi_category: string | null
           amfi_code: string | null
           asset_class: string | null
+          closure_date: string | null
           effective_asset_class: string | null
           isin: string
+          launch_date: string | null
+          master_synced_at: string | null
+          min_amount: number | null
           override_asset_class: string | null
           override_at: string | null
           override_by: string | null
           override_note: string | null
+          plan: string | null
+          scheme_base_name: string | null
           scheme_name: string | null
+          scheme_option: string | null
+          scheme_type: string | null
+          sebi_category: string | null
           updated_at: string | null
         }
         Insert: {
           ambiguous?: boolean
+          amc_name?: string | null
           amfi_category?: string | null
           amfi_code?: string | null
           asset_class?: string | null
+          closure_date?: string | null
           effective_asset_class?: string | null
           isin: string
+          launch_date?: string | null
+          master_synced_at?: string | null
+          min_amount?: number | null
           override_asset_class?: string | null
           override_at?: string | null
           override_by?: string | null
           override_note?: string | null
+          plan?: string | null
+          scheme_base_name?: string | null
           scheme_name?: string | null
+          scheme_option?: string | null
+          scheme_type?: string | null
+          sebi_category?: string | null
           updated_at?: string | null
         }
         Update: {
           ambiguous?: boolean
+          amc_name?: string | null
           amfi_category?: string | null
           amfi_code?: string | null
           asset_class?: string | null
+          closure_date?: string | null
           effective_asset_class?: string | null
           isin?: string
+          launch_date?: string | null
+          master_synced_at?: string | null
+          min_amount?: number | null
           override_asset_class?: string | null
           override_at?: string | null
           override_by?: string | null
           override_note?: string | null
+          plan?: string | null
+          scheme_base_name?: string | null
           scheme_name?: string | null
+          scheme_option?: string | null
+          scheme_type?: string | null
+          sebi_category?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -5503,12 +5533,15 @@ export type Database = {
           last_synced_at: string
           launch_date: string | null
           nav_date: string | null
+          return_1m: number | null
           return_1y: number | null
+          return_3m: number | null
           return_3y: number | null
           return_5y: number | null
           return_6m: number | null
           return_si: number | null
           returns_error: string | null
+          returns_source: string | null
           returns_synced_at: string | null
           scheme_code: string
           scheme_name: string
@@ -5523,12 +5556,15 @@ export type Database = {
           last_synced_at?: string
           launch_date?: string | null
           nav_date?: string | null
+          return_1m?: number | null
           return_1y?: number | null
+          return_3m?: number | null
           return_3y?: number | null
           return_5y?: number | null
           return_6m?: number | null
           return_si?: number | null
           returns_error?: string | null
+          returns_source?: string | null
           returns_synced_at?: string | null
           scheme_code: string
           scheme_name?: string
@@ -5543,12 +5579,15 @@ export type Database = {
           last_synced_at?: string
           launch_date?: string | null
           nav_date?: string | null
+          return_1m?: number | null
           return_1y?: number | null
+          return_3m?: number | null
           return_3y?: number | null
           return_5y?: number | null
           return_6m?: number | null
           return_si?: number | null
           returns_error?: string | null
+          returns_source?: string | null
           returns_synced_at?: string | null
           scheme_code?: string
           scheme_name?: string
@@ -6489,34 +6528,46 @@ export type Database = {
       }
       nav_refresh_log: {
         Row: {
+          details: Json | null
           error: string | null
           finished_at: string | null
           id: string
+          job: string
           nav_date: string | null
           ok: boolean | null
           rows_parsed: number | null
           rows_written: number | null
           started_at: string | null
+          window_from: string | null
+          window_to: string | null
         }
         Insert: {
+          details?: Json | null
           error?: string | null
           finished_at?: string | null
           id?: string
+          job?: string
           nav_date?: string | null
           ok?: boolean | null
           rows_parsed?: number | null
           rows_written?: number | null
           started_at?: string | null
+          window_from?: string | null
+          window_to?: string | null
         }
         Update: {
+          details?: Json | null
           error?: string | null
           finished_at?: string | null
           id?: string
+          job?: string
           nav_date?: string | null
           ok?: boolean | null
           rows_parsed?: number | null
           rows_written?: number | null
           started_at?: string | null
+          window_from?: string | null
+          window_to?: string | null
         }
         Relationships: []
       }
@@ -10976,6 +11027,26 @@ export type Database = {
           },
         ]
       }
+      mf_market_data_health: {
+        Row: {
+          history_cursor: string | null
+          history_failures_24h: number | null
+          history_floor: string | null
+          history_windows_skipped: number | null
+          last_daily_error: string | null
+          last_daily_ok: boolean | null
+          last_daily_ok_at: string | null
+          last_daily_validation: Json | null
+          latest_nav_date: string | null
+          latest_nav_rows: number | null
+          master_synced_at: string | null
+          median_nav_rows_14d: number | null
+          nav_age_days: number | null
+          returns_from_nav_daily: number | null
+          returns_stale: number | null
+        }
+        Relationships: []
+      }
       mf_rta_feed_health: {
         Row: {
           hours_since_ok: number | null
@@ -11693,6 +11764,10 @@ export type Database = {
         }
       }
       mail_unsubscribe_by_token: { Args: { p_token: string }; Returns: boolean }
+      mf_nav_history_cursor: { Args: never; Returns: string }
+      mf_nav_history_floor: { Args: never; Returns: string }
+      mf_nav_validate: { Args: { p_date: string }; Returns: Json }
+      mf_scheme_nav_history: { Args: { p_scheme_code: string }; Returns: Json }
       mkt_auto_alert_admins: {
         Args: { p_message: string; p_title: string }
         Returns: number

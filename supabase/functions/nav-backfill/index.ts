@@ -12,13 +12,17 @@
 // columns wide since 19-Aug-2026, so each parser now checks the header names
 // rather than the column count.
 //
-// Not scheduled: a past NAV does not change. One run settles a date permanently
-// for every client, including ones who have not signed up yet.
+// Two modes:
+//   { date }            one past day (default 31-Jan-2018). A past NAV does not
+//                       change, so one run settles that date permanently.
+//   { mode: "history" } the full-history queue: settles the next week below the
+//                       oldest settled window, walking back to 01-Apr-2006.
+//                       Scheduled every minute by pg_cron until done.
 //
 // Auth matches nav-refresh: verify_jwt off so pg_cron can reach it, and a
 // NAV_REFRESH_SECRET header required so nobody else can.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
-import { backfillNavOn, GRANDFATHER_DATE } from '../_shared/cas/navHistory.ts';
+import { backfillNavOn, GRANDFATHER_DATE, runHistoryBackfill } from '../_shared/cas/navHistory.ts';
 import { envConfig } from '../_shared/cas/db.ts';
 
 const corsHeaders = {
@@ -47,11 +51,18 @@ Deno.serve(async (req) => {
   // Defaults to the grandfathering date precisely so the common case needs no
   // body at all.
   let date = GRANDFATHER_DATE;
+  let mode: string | null = null;
   try {
     const body = await req.json();
     if (typeof body?.date === 'string') date = body.date;
+    if (typeof body?.mode === 'string') mode = body.mode;
   } catch {
     // no body — take the default
+  }
+
+  if (mode === 'history') {
+    const run = await runHistoryBackfill(envConfig());
+    return json(run, run.ok ? 200 : 502);
   }
 
   const result = await backfillNavOn(envConfig(), date);

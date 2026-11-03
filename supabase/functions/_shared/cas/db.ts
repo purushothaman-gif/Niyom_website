@@ -126,3 +126,17 @@ export async function sbDelete(cfg: SbConfig, path: string): Promise<void> {
     headers: serviceHeaders(cfg),
   }).catch(() => undefined);
 }
+
+/** Call a Postgres function through PostgREST and return its JSON result. */
+export async function sbRpc<T>(cfg: SbConfig, fn: string, args: Record<string, unknown> = {}): Promise<T> {
+  const r = await fetch(`${cfg.supabaseUrl}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: serviceHeaders(cfg),
+    body: JSON.stringify(args),
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new CasError(`Database function ${fn} failed (${r.status}: ${body.slice(0, 200)}).`, 502);
+  }
+  return (await r.json()) as T;
+}

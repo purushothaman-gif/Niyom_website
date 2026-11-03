@@ -41,7 +41,7 @@
  * `Schemes(Income)`), which the shared heading reader normalises.
  */
 import { COLUMN, columnIndex, composeSchemeName, readHeaderCells } from './amfiColumns.ts';
-import { sbInsert, type SbConfig } from './db.ts';
+import { sbInsert, sbRpc, sbSelect, type SbConfig } from './db.ts';
 import type { NavRow } from './nav.ts';
 
 /** An ISIN as AMFI writes it. Both files use the same form. */
@@ -269,3 +269,133 @@ export async function backfillNavOn(cfg: SbConfig, isoDate: string): Promise<Nav
  * scheme that was open then.
  */
 export const GRANDFATHER_DATE = '2018-01-31';
+
+/* ===========================================================================
+ * Full NAV history backfill — a resumable queue over AMFI's historical report.
+ * ===========================================================================
+ *
+ * nav_daily is complete from HISTORY_START onward (the nightly feed). Below it,
+ * the backfill walks BACKWARDS one WINDOW_DAYS window at a time until AMFI's
+ * history begins (HISTORY_FLOOR). Newest-first, so the periods that matter most
+ * (1Y/3Y/5Y returns, recent charts) land first and the job can be stopped at
+ * any depth with everything above the cursor complete.
+ *
+ * State lives in nav_refresh_log (job='history', window_from/window_to), so
+ * there is no cursor to store or reset: the next window is always the one just
+ * below the oldest settled window. A window that keeps failing is retried
+ * MAX_ATTEMPTS times, then logged as skipped — the health view counts skips, so
+ * a gap is visible rather than silent — and the walk continues.
+ *
+ * Upserts on (isin, nav_date): re-running any window is harmless. The scheme
+ * name is NOT written on history rows — it lives once in the scheme master
+ * (mf_asset_class), which saves ~60 bytes on each of ~38M rows; omitting the
+ * column also leaves names on rows that already carry one untouched.
+ */
+export const HISTORY_FLOOR = '2006-04-01';
+export const HISTORY_START = '2026-08-01';
+export const WINDOW_DAYS = 7;
+export const MAX_ATTEMPTS = 4;
+
+export function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** The window just below `cursor`, or null once the floor is reached. */
+export function nextHistoryWindow(cursor: string | null): { from: string; to: string } | null {
+  const to = addDays(cursor ?? HISTORY_START, -1);
+  if (to < HISTORY_FLOOR) return null;
+  const from = addDays(to, -(WINDOW_DAYS - 1));
+  return { from: from < HISTORY_FLOOR ? HISTORY_FLOOR : from, to };
+}
+
+export interface HistoryRunResult {
+  ok: boolean;
+  done: boolean;
+  windows: Array<{ from: string; to: string; ok: boolean; parsed: number; written: number; skipped?: boolean; error?: string }>;
+  cursor: string | null;
+}
+
+async function fetchHistoryWindow(from: string, to: string): Promise<NavRow[]> {
+  const url = `${HISTORY_URL}?frmdt=${toAmfiDate(from)}&todt=${toAmfiDate(to)}`;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: ctl.signal });
+    if (!res.ok) throw new Error(`AMFI responded ${res.status}`);
+    return parseAmfiNavHistory(await res.text());
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Prior failed attempts at exactly this window since it was last settled. */
+async function attemptsAt(cfg: SbConfig, w: { from: string; to: string }): Promise<number> {
+  const rows = await sbSelect<{ id: string }>(
+    cfg,
+    `nav_refresh_log?select=id&job=eq.history&ok=eq.false&window_from=eq.${w.from}&window_to=eq.${w.to}`,
+  );
+  return rows.length;
+}
+
+/**
+ * Settle up to `maxWindows` windows inside `budgetMs`. Each window is logged
+ * individually so progress survives an invocation being killed.
+ */
+export async function runHistoryBackfill(
+  cfg: SbConfig,
+  opts: { budgetMs?: number; maxWindows?: number } = {},
+): Promise<HistoryRunResult> {
+  const budgetMs = opts.budgetMs ?? 100_000;
+  // One window per call by default: a week of all-scheme NAVs is ~40k rows,
+  // and an edge function has a 2s CPU budget per request.
+  const maxWindows = opts.maxWindows ?? 1;
+  const startedMs = Date.now();
+  const windows: HistoryRunResult['windows'] = [];
+  let cursor = await sbRpc<string | null>(cfg, 'mf_nav_history_cursor');
+
+  while (windows.length < maxWindows && Date.now() - startedMs < budgetMs) {
+    const w = nextHistoryWindow(cursor);
+    if (!w) return { ok: true, done: true, windows, cursor };
+
+    const startedAt = new Date().toISOString();
+    let parsed = 0;
+    let written = 0;
+    try {
+      const rows = await fetchHistoryWindow(w.from, w.to);
+      parsed = rows.length;
+      // A 7-day window always spans trading days, so an empty report means a
+      // fetch/layout problem — except right at the floor, before AMFI's data.
+      if (!parsed && w.from > HISTORY_FLOOR) throw new Error(`AMFI returned no rows for ${w.from}..${w.to}`);
+      const slim = rows.map(({ isin, nav_date, nav, amfi_code }) => ({ isin, nav_date, nav, amfi_code }));
+      for (let i = 0; i < slim.length; i += 2000) {
+        await sbInsert(cfg, 'nav_daily?on_conflict=isin,nav_date', slim.slice(i, i + 2000), {
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        });
+        written += Math.min(2000, slim.length - i);
+      }
+      const dates = new Set(rows.map((r) => r.nav_date));
+      await sbInsert(cfg, 'nav_refresh_log', [{
+        job: 'history', started_at: startedAt, finished_at: new Date().toISOString(), ok: true,
+        rows_parsed: parsed, rows_written: written, window_from: w.from, window_to: w.to,
+        details: { trading_days: dates.size, isins: new Set(rows.map((r) => r.isin)).size },
+      }]);
+      windows.push({ ...w, ok: true, parsed, written });
+      cursor = w.from;
+    } catch (err) {
+      const message = ((err as Error)?.message ?? 'unknown').slice(0, 500);
+      const prior = await attemptsAt(cfg, w).catch(() => 0);
+      const skipped = prior + 1 >= MAX_ATTEMPTS;
+      await sbInsert(cfg, 'nav_refresh_log', [{
+        job: 'history', started_at: startedAt, finished_at: new Date().toISOString(), ok: false,
+        rows_parsed: parsed, rows_written: written, window_from: w.from, window_to: w.to,
+        error: message, details: { attempt: prior + 1, skipped },
+      }]).catch(() => undefined);
+      windows.push({ ...w, ok: false, parsed, written, skipped, error: message });
+      if (!skipped) break; // retry this window on the next invocation
+      cursor = w.from;
+    }
+  }
+  return { ok: windows.every((w) => w.ok || w.skipped), done: false, windows, cursor };
+}

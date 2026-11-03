@@ -738,3 +738,6 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 #     the default verify_jwt = true. ---
 [functions.mf-rta-ingest]
 verify_jwt = false
+
+[functions.mf-market-data]
+verify_jwt = false
