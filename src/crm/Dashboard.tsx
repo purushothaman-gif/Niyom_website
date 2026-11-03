@@ -3,7 +3,7 @@ import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWTransaction, NWActivityLog, NWClient } from './types';
 import { fmt, fmtDate, timeAgo, TXN_LABELS, TXN_COLORS, VERIFICATION_COLORS, VERIFICATION_LABELS } from './utils';
-import { Users, TrendingUp, ArrowLeftRight, UserCheck, ArrowRight, Activity, BarChart2, PieChart } from 'lucide-react';
+import { Users, TrendingUp, ArrowLeftRight, ArrowRight, Activity, BarChart2, PieChart } from 'lucide-react';
 import { CRMPage } from './types';
 import { Counter } from '../components/Reveal';
 import { HeroBackground } from '../components/HeroBackground';
@@ -168,7 +168,6 @@ export default function Dashboard({ employee, onNavigate }: Props) {
     { label: isAdmin ? 'Total Clients' : 'My Clients', value: stats.totalClients.toString(), numeric: stats.totalClients, icon: Users, color: 'var(--info)', sub: 'Active clients' },
     { label: isAdmin ? 'Total Portfolio' : 'My Portfolio', value: fmt(stats.totalPortfolio), icon: TrendingUp, color: 'var(--accent)', sub: 'Under management' },
     { label: 'MF AUM', value: fmt(stats.mfAum ?? 0), icon: PieChart, color: 'var(--chart-4)', sub: 'Registrar feed' },
-    { label: 'Verified Clients', value: stats.verifiedClients.toString(), numeric: stats.verifiedClients, icon: UserCheck, color: 'var(--success)', sub: `of ${stats.totalClients} total` },
     { label: 'Monthly Transactions', value: stats.monthlyTxns.toString(), numeric: stats.monthlyTxns, icon: ArrowLeftRight, color: 'var(--warning)', sub: 'This month' },
     ...(isAdmin && stats.totalEmployees !== undefined ? [{ label: 'Total Employees', value: stats.totalEmployees.toString(), numeric: stats.totalEmployees, icon: Users, color: 'var(--chart-4)', sub: 'Active staff' }] : []),
   ];
