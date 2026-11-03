@@ -1195,13 +1195,10 @@ export default function Portfolio({ employee, pageParams }: Props) {
         {(view === 'clients' ? [
           { label: 'Total Clients', value: String(clientRows.length), color: 'var(--accent)' },
           { label: 'Total Invested', value: fmt(totalInvested), color: 'var(--text-secondary)' },
-          { label: 'Total AUM', value: fmt(totalValue), color: 'var(--chart-5)' },
-          { label: gainLoss >= 0 ? 'Total Gain' : 'Total Loss', value: `${gainLoss >= 0 ? '+' : ''}${fmt(gainLoss)}`, color: gainLoss >= 0 ? 'var(--success)' : 'var(--danger)' },
           { label: 'MF (registrar)', value: fmt(mfAum), color: 'var(--chart-4)' },
         ] : [
           { label: 'Total Value', value: fmt(totalValue), color: 'var(--accent)' },
           { label: 'Total Invested', value: fmt(totalInvested), color: 'var(--text-secondary)' },
-          { label: gainLoss >= 0 ? 'Total Gain' : 'Total Loss', value: `${gainLoss >= 0 ? '+' : ''}${fmt(gainLoss)}`, color: gainLoss >= 0 ? 'var(--success)' : 'var(--danger)' },
           { label: 'Annual Interest Income', value: fmt(annualInterest), color: 'var(--chart-5)' },
           { label: 'MF (registrar)', value: fmt(mfAum), color: 'var(--chart-4)' },
         ]).map(s => (
