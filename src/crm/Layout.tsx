@@ -218,9 +218,17 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
     };
     load();
     // Light polling so new admin alerts (lead dropped / ready to assign) surface
-    // without a full page refresh.
-    const t = setInterval(load, 60_000);
-    return () => { cancelled = true; clearInterval(t); };
+    // without a full page refresh. Skipped while the tab is in the background
+    // (staff leave the CRM open all day — those polls were the single busiest
+    // read on the database), and refreshed the moment the tab is shown again.
+    const t = setInterval(() => { if (!document.hidden) load(); }, 60_000);
+    const onVisible = () => { if (!document.hidden) load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [employee.id]);
 
   const markAllRead = async () => {

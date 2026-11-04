@@ -11874,6 +11874,7 @@ export type Database = {
       mail_unsubscribe_by_token: { Args: { p_token: string }; Returns: boolean }
       mf_nav_history_cursor: { Args: never; Returns: string }
       mf_nav_history_floor: { Args: never; Returns: string }
+      mf_nav_history_tick: { Args: never; Returns: undefined }
       mf_nav_validate: { Args: { p_date: string }; Returns: Json }
       mf_scheme_nav_history: { Args: { p_scheme_code: string }; Returns: Json }
       mkt_auto_alert_admins: {
