@@ -442,6 +442,7 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
   let report: RtaReport | null = null;
   let fileHash: string | null = null;
   let snapshotDate: string | null = null;
+  let warning: string | null = null;
 
   try {
     if (!zipBytes?.length) throw new RtaError('The uploaded file is empty.', 400);
@@ -500,6 +501,12 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       if (!report) {
         throw new RtaError('Unrecognised registrar feed (not a WBR9 holdings, WBR49 SIP, or WBR2 transaction file).', 422);
       }
+      if (table.truncated) {
+        // The DBF ended before its declared record count — the feed is short
+        // (seen with oversized CAMS files). We still import the rows we got, but
+        // flag it so the import is not trusted as complete and can be re-pulled.
+        warning = `TRUNCATED: feed declared ${table.declaredCount} records but ended early at ${table.rows.length}; imported partial data — re-pull for the full feed.`;
+      }
       summary = report === 'WBR9'
         ? await importWbr9(sb, table, registrar)
         : report === 'WBR2'
@@ -514,7 +521,7 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       folios_upserted: summary.foliosUpserted, holdings_upserted: summary.holdingsUpserted,
       sips_upserted: summary.sipsUpserted, txns_upserted: summary.txnsUpserted,
       matched: summary.matched, unmatched: summary.unmatched,
-      status: 'ok', duration_ms: Date.now() - started, imported_by: importedBy,
+      status: 'ok', error: warning, duration_ms: Date.now() - started, imported_by: importedBy,
     });
 
     return {

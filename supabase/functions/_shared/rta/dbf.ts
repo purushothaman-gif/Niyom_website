@@ -16,6 +16,17 @@ export interface DbfTable {
   /** One object per live (non-deleted) record: column name -> trimmed text. */
   rows: Record<string, string>[];
   deletedCount: number;
+  /**
+   * True when the file ended before the header's record count was reached — i.e.
+   * the data was cut short (a corrupt/truncated feed). The rows read before the
+   * cut are still returned, but the caller should treat the import as INCOMPLETE
+   * rather than authoritative. (Seen with oversized CAMS WBR2 DBFs whose deflate
+   * payload decompresses short of the header's usize.) Always set by parseDbf;
+   * optional only so hand-built tables in tests need not specify it.
+   */
+  truncated?: boolean;
+  /** Records the header declared — set by parseDbf alongside `truncated`. */
+  declaredCount?: number;
 }
 
 const ascii = (bytes: Uint8Array): string => {
@@ -46,9 +57,13 @@ export function parseDbf(data: Uint8Array): DbfTable {
 
   const rows: Record<string, string>[] = [];
   let deletedCount = 0;
+  let truncated = false;
   let pos = headerLen;
   for (let r = 0; r < recordCount; r++) {
-    if (pos + recordLen > data.length) break; // truncated tail
+    if (pos + recordLen > data.length) {
+      truncated = true; // the file ended before recordCount records were read
+      break;
+    }
     const flag = data[pos];
     if (flag === 0x2a) {
       // '*' = deleted record
@@ -65,7 +80,7 @@ export function parseDbf(data: Uint8Array): DbfTable {
     rows.push(row);
     pos += recordLen;
   }
-  return { fields, rows, deletedCount };
+  return { fields, rows, deletedCount, truncated, declaredCount: recordCount };
 }
 
 /** dBASE 'N' cell -> number, or null when blank/non-numeric. */

@@ -63,6 +63,26 @@ describe('parseWbr2', () => {
     const kinds = parseWbr2(table(rows)).txns.map((t) => t.txn_kind);
     expect(kinds).toEqual(['switch_out', 'switch_in', 'dividend', 'purchase']);
   });
+
+  it('skips a row with no date, amount or units (pending instalment / truncated partial)', () => {
+    // CAMS emits these for a registered-but-unrun systematic instalment, and a
+    // truncated feed leaves a partial record whose date/amount/units are blank;
+    // either way it must not land as an 'other' with null values (which also
+    // broke holding-vs-transaction unit reconciliation).
+    const rows = [
+      { ...base, TRXNNO: '10' }, // a real purchase, kept
+      { ...base, TRXNTYPE: 'P6LTVFS', TRXN_TYPE_: '', TRADDATE: '', POSTDATE: '', AMOUNT: '', UNITS: '', PURPRICE: '', TRXNNO: '11' },
+    ];
+    const { txns } = parseWbr2(table(rows));
+    expect(txns).toHaveLength(1);
+    expect(txns[0].txn_ref).toBe('34268297 / 74|H02|10');
+  });
+
+  it('keeps a row that has units even with no amount (e.g. a bonus/transfer)', () => {
+    const { txns } = parseWbr2(table([{ ...base, AMOUNT: '', UNITS: '5.000', TRADDATE: '', TRXNNO: '12' }]));
+    expect(txns).toHaveLength(1);
+    expect(txns[0].units).toBe(5);
+  });
 });
 
 describe('classifyTxn', () => {

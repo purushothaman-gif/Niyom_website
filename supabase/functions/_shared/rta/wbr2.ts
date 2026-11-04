@@ -47,6 +47,16 @@ export function parseWbr2(table: DbfTable, registrar = 'CAMS'): Wbr2Parsed {
     const snap = dbfDate(row.REP_DATE);
     if (snap && !snapshotDate) snapshotDate = snap;
 
+    const amount = absNum(row.AMOUNT);
+    const units = absNum(row.UNITS);
+    // Skip rows that carry no financial substance at all — no trade date, no
+    // amount and no units. CAMS emits these for a registered-but-not-yet-run
+    // systematic instalment, and a truncated feed can leave a partial record
+    // whose later (date/amount/units) fields are blank; either way such a row is
+    // not a real transaction and must not land as an 'other' with null values
+    // (which also made holdings fail to reconcile against the registrar units).
+    if (!trade_date && amount == null && units == null) continue;
+
     // A stable per-registrar key: the AMC transaction number (unique within a
     // folio/scheme), else a user/trade fallback so a re-import overwrites rather
     // than duplicates.
@@ -69,8 +79,8 @@ export function parseWbr2(table: DbfTable, registrar = 'CAMS'): Wbr2Parsed {
       txn_type_raw: txt(row.TRXN_TYPE_) ?? txt(row.TRXNTYPE),
       trade_date,
       post_date: dbfDate(row.POSTDATE),
-      amount: absNum(row.AMOUNT),
-      units: absNum(row.UNITS),
+      amount,
+      units,
       nav: dbfNumber(row.PURPRICE),
       euin: txt(row.EUIN),
       sub_broker: txt(row.SUBBROK),

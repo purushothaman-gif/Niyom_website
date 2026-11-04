@@ -85,6 +85,24 @@ describe('parseDbf', () => {
     expect(t.rows[0].FOLIOCHK).toBe('12345/67');
     expect(t.rows[0].SCH_NAME).toBe('HDFC Top 100');
     expect(t.rows[0].CLOS_BAL).toBe('1000.500');
+    expect(t.truncated).toBe(false);
+    expect(t.declaredCount).toBe(3);
+  });
+
+  it('flags a file cut short of its declared record count as truncated', () => {
+    const full = buildDbf(WBR9_FIELDS, [
+      { cells: cell('1/1', 'A', 'A1', '001', 'X', 'ABCPR1234A', '1.000', '10.00', '20261102', '20240110') },
+      { cells: cell('2/2', 'B', 'B1', '002', 'Y', 'ABCPR1234A', '2.000', '20.00', '20261102', '20240110') },
+      { cells: cell('3/3', 'C', 'C1', '003', 'Z', 'ABCPR1234A', '3.000', '30.00', '20261102', '20240110') },
+    ]);
+    // Header still claims 3 records, but the bytes stop partway through record 2.
+    const recLen = 1 + WBR9_FIELDS.reduce((n, f) => n + f.length, 0);
+    const headerLen = 32 + WBR9_FIELDS.length * 32 + 1;
+    const cut = full.subarray(0, headerLen + recLen + Math.floor(recLen / 2));
+    const t = parseDbf(cut);
+    expect(t.declaredCount).toBe(3);
+    expect(t.rows).toHaveLength(1); // only the first complete record survived
+    expect(t.truncated).toBe(true);
   });
 });
 
