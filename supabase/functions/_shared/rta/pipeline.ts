@@ -16,6 +16,7 @@ import { parseWbr9, type RtaFolioStage, type RtaHoldingStage } from './wbr9.ts';
 import { parseWbr49, type RtaSipStage } from './wbr49.ts';
 import { isWbr2, parseWbr2 } from './wbr2.ts';
 import { isKfAum, isKfSip, parseKfAum, parseKfSip } from './kfintech.ts';
+import { isWbtrn, parseWbtrn } from './wbtrn.ts';
 import type { RtaTxnStage } from './txns.ts';
 import { unzipMember, WinzipError } from './winzip.ts';
 
@@ -478,8 +479,12 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       } else if (isKfAum(csv)) {
         report = 'WBCUM';
         summary = await importHoldings(sb, parseKfAum(csv, registrar));
+      } else if (isWbtrn(csv)) {
+        report = 'WBTRN';
+        const parsed = parseWbtrn(csv, registrar);
+        summary = await importTransactions(sb, parsed.txns, registrar, parsed.snapshotDate ?? snap);
       } else {
-        throw new RtaError('Unrecognised KFintech CSV feed (expected a SIP registration or Client-wise AUM report).', 422);
+        throw new RtaError('Unrecognised KFintech CSV feed (expected a SIP registration, Client-wise AUM, or Transaction Feeds report).', 422);
       }
     } else {
       const table = parseDbf(bytes);

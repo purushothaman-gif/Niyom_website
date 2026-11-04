@@ -34,10 +34,11 @@
 // (optional) limits which of a sender's emails we process.
 var SENDERS = [
   { email: 'donotreply@camsonline.com', registrar: 'CAMS', mode: 'attachment' },
-  // KFintech: SIP registration (WSREG) + Client-wise AUM holdings (WBCUM) are
-  // parsed; filter to those. (Investor-master / transaction reports await layouts.)
+  // KFintech: SIP registration (WSREG), Client-wise AUM holdings (WBCUM) and
+  // Transaction Feeds (WBTRN) are parsed; filter to those. A "no data" WBTRN
+  // email carries no download link, so it yields no feed and is just marked Done.
   { email: 'distributorcare@kfintech.com', registrar: 'KFINTECH', mode: 'link',
-    subjectMatch: /sip registration|subscribed sip|client-wise aum/i },
+    subjectMatch: /sip registration|subscribed sip|client-wise aum|transaction feeds/i },
 ];
 
 var DONE_LABEL = 'NiyomRTA/Done';
@@ -69,7 +70,7 @@ function syncNow() {
   if (!secret) throw new Error('Set the INGEST_SECRET script property.');
   var anon = prop('ANON_KEY');
 
-  var totals = { files: 0, ok: 0, skipped: 0, errors: 0, holdings: 0, sips: 0, matched: 0 };
+  var totals = { files: 0, ok: 0, skipped: 0, errors: 0, holdings: 0, sips: 0, txns: 0, matched: 0 };
   var problems = [];
 
   SENDERS.forEach(function (sender) {
@@ -92,6 +93,7 @@ function syncNow() {
               totals.ok++;
               totals.holdings += res.holdingsUpserted || 0;
               totals.sips += res.sipsUpserted || 0;
+              totals.txns += res.txnsUpserted || 0;
               totals.matched += res.matched || 0;
             } else if (res.permanent) {
               totals.skipped++; // unrecognised / empty — handled, don't retry

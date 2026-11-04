@@ -48,7 +48,9 @@ export function classifyTxn(
   reinvestFlag: string | null,
 ): RtaTxnKind {
   const s = `${desc ?? ''} ${subtype ?? ''} ${code ?? ''}`.toUpperCase();
-  const reinvest = (reinvestFlag ?? '').toUpperCase().startsWith('Y');
+  // CAMS ships an explicit Y/N reinvest flag; KFintech instead spells it out in
+  // the description ("Dividend Reinvestment"), so treat either as a reinvest.
+  const reinvest = (reinvestFlag ?? '').toUpperCase().startsWith('Y') || /REINVEST/.test(s);
 
   // A switch / systematic-transfer leg: OUT reduces this scheme, otherwise it's
   // the IN leg. (SWP = systematic WITHDRAWAL, handled as a redemption below.)
