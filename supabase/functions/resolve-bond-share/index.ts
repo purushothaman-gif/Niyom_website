@@ -63,18 +63,16 @@ Deno.serve(async (req: Request) => {
     const priceFactor = (1 + Number(rate) / 100) * (1 + Number(share.margin_percent) / 100);
     const pricePer100 = round4(Number(bond.latest_price) * priceFactor);
 
-    // Strip the price-revealing analytics keys (they carry the base latest_price),
-    // and recompute YTM at the shown (marked-up) price so the yield matches it
-    // (first-order via modified duration; +X% price ⇒ YTM −X/ModDur pts).
-    const analytics = (bond.analytics ?? null) as Record<string, unknown> | null;
-    if (analytics) {
-      delete analytics.clean_price; delete analytics.dirty_price; delete analytics.current_yield;
-      const md = Number(analytics.modified_duration);
-      const baseYtm = Number(analytics.ytm);
-      if (Number.isFinite(md) && md > 0 && Number.isFinite(baseYtm)) {
-        analytics.ytm = Math.round((baseYtm - ((priceFactor - 1) * 100) / md) * 10000) / 10000;
-      }
-    }
+    // Analytics as the viewer may see them: bm_viewer_analytics strips every key computed at
+    // the base latest_price (clean/dirty price, current yield, accrued_check, ytm, durations)
+    // and re-solves YTM + durations exactly at THIS offer's price. Never fall back to the raw
+    // bond.analytics — its ytm/durations would let the viewer back out the base price.
+    const { data: viewerAnalytics, error: vaErr } = await db.rpc("bm_viewer_analytics", {
+      p_bond_id: bond.id,
+      p_clean: pricePer100,
+    });
+    if (vaErr) console.error("resolve-bond-share analytics error:", vaErr.message);
+    const analytics = vaErr ? null : ((viewerAnalytics ?? null) as Record<string, unknown> | null);
 
     return json({
       partner_name: dsa.full_name || "Your advisor",

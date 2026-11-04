@@ -11334,7 +11334,6 @@ export type Database = {
       }
     }
     Functions: {
-      bm_adjust_ytm: { Args: { a: Json; price_factor: number }; Returns: Json }
       bm_approve_markup: { Args: { p_id: string }; Returns: undefined }
       bm_import_prices: { Args: { p_rows: Json }; Returns: Json }
       bm_overlay_from_import_raw: {
@@ -11457,6 +11456,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      bm_viewer_analytics: {
+        Args: { p_bond_id: string; p_clean: number }
+        Returns: Json
       }
       delete_old_news: { Args: never; Returns: number }
       hr_accrue_leave: { Args: { p_date?: string }; Returns: number }
