@@ -24,7 +24,11 @@ function env(name: string): string | undefined {
 }
 const apiKey = () => env('HARMONEY_API_KEY')?.trim() || '';
 const apiBase = () => (env('HARMONEY_API_BASE')?.trim() || 'https://api.harmoney.in').replace(/\/+$/, '');
-export const harmoneyEnabled = () => apiKey().length > 0;
+// Set when the API rejects the key (401/403). Stops every further call in this invocation —
+// a bad or expired key must not turn the 10-minute sweep into a stream of failed requests.
+let authRejected = false;
+export const harmoneyAuthRejected = () => authRejected;
+export const harmoneyEnabled = () => apiKey().length > 0 && !authRejected;
 
 async function call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: unknown; error?: string }> {
   const ctrl = new AbortController();
@@ -36,6 +40,7 @@ async function call(method: 'GET' | 'POST', path: string, body?: unknown): Promi
       body: body ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
+    if (res.status === 401 || res.status === 403) authRejected = true;
     const text = await res.text();
     let json: unknown = null; try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON error page */ }
     return { ok: res.ok, status: res.status, json, error: res.ok ? undefined : `HTTP ${res.status} ${text.slice(0, 200)}` };

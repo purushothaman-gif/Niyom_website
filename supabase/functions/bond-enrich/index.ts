@@ -41,7 +41,8 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
   const merged: Record<string, { value: unknown; source: string; confidence: number; score: number }> = {};
   let redemption: { date: string; pct: number }[] | undefined;
   let freshSource: SourceCashflows | null = null;
-  if (!skipProviders) for (const provider of providerRegistry.filter((p) => p.enabled)) {
+  // Background source refresh consults ONLY licensed feeds — never the public scraper.
+  if (!skipProviders) for (const provider of providerRegistry.filter((p) => p.enabled && (!background || p.tier === "licensed"))) {
     const t0 = Date.now();
     let r; try { r = await provider.fetchByISIN(isin); } catch (e) { r = { ok: false, fields: {} as Record<string, Field>, error: String(e) }; }
     await supabase.from("bm_provider_log").insert({
@@ -339,12 +340,18 @@ Deno.serve(async (req) => {
       // SOURCE_REFRESH_PER_RUN per invocation — so even this anon-callable sweep can spend at
       // most one provider fetch per bond per week. No-op while the provider has no key.
       let refreshed = 0;
-      if (harmoneyEnabled()) {
+      // Back off for an hour after the provider rejected our key, so a wrong/expired key
+      // costs one request per hour rather than 20 every 10 minutes.
+      const { data: rejected } = await supabase.from("bm_provider_log").select("id")
+        .eq("provider_id", "harmoney-inferedge").in("http_status", [401, 403])
+        .gte("created_at", new Date(Date.now() - 3600000).toISOString()).limit(1);
+      if (harmoneyEnabled() && !(rejected ?? []).length) {
         const cutoff = new Date(Date.now() - SOURCE_MAX_AGE_DAYS * 86400000).toISOString();
         const { data: due } = await supabase.from("bm_bonds").select("*").eq("active_status", "active")
           .or(`source_cashflows.is.null,source_cashflows->>fetched_at.lt.${cutoff}`)
           .not("maturity_date", "is", null).limit(SOURCE_REFRESH_PER_RUN);
         for (const rec of (due ?? []) as Record<string, unknown>[]) {
+          if (!harmoneyEnabled()) break;   // key rejected mid-run → stop
           try { await enrichOne(supabase, rec, holidays, false, true); refreshed++; }
           catch (e) { results.push({ isin: String(rec.isin), status: "source-refresh-failed", error: String(e) }); }
         }
