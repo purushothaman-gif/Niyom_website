@@ -35,10 +35,15 @@
 var SENDERS = [
   { email: 'donotreply@camsonline.com', registrar: 'CAMS', mode: 'attachment' },
   // KFintech: SIP registration (WSREG), Client-wise AUM holdings (WBCUM) and
-  // Transaction Feeds (WBTRN) are parsed; filter to those. A "no data" WBTRN
-  // email carries no download link, so it yields no feed and is just marked Done.
+  // transaction feeds are parsed; filter to those. Two flavours of the
+  // transaction feed arrive, both WBTRN members in the same CSV layout:
+  //   - the daily subscription  -> "Subscribed Transaction Feeds Report ..."
+  //   - the on-demand Mail Back  -> "Transaction Report for Ref.no. ..." (used
+  //     for the since-inception backfill of first-investment date + cost).
+  // A "no data" feed email carries no download link, so it yields no feed and
+  // is just marked Done.
   { email: 'distributorcare@kfintech.com', registrar: 'KFINTECH', mode: 'link',
-    subjectMatch: /sip registration|subscribed sip|client-wise aum|transaction feeds/i },
+    subjectMatch: /sip registration|subscribed sip|client-wise aum|transaction feeds|transaction report/i },
 ];
 
 var DONE_LABEL = 'NiyomRTA/Done';
