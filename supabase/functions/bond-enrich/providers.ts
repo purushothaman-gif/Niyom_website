@@ -3,6 +3,9 @@
 // file here; business logic is untouched. Concrete adapters are isolated so a
 // licensed feed, an exchange API, or a different aggregator can slot in.
 
+import type { ProviderFlow } from './analytics.ts';
+import { harmoneyProvider } from './harmoney.ts';
+
 export type Tier = 'official' | 'licensed' | 'public' | 'manual';
 
 export interface Field { value: unknown; confidence: number }
@@ -10,6 +13,8 @@ export interface ProviderResult {
   ok: boolean;
   fields: Record<string, Field>;          // normalized bm_bonds field → value + confidence
   redemption_schedule?: { date: string; pct: number }[]; // contractual principal repayment
+  cashflows?: ProviderFlow[];               // AUTHORITATIVE full schedule incl. record dates (licensed feeds only)
+  source_ref?: Record<string, unknown>;     // provider's own ids, kept for later calls (e.g. instrument_id)
   error?: string;
   http?: number;
 }
@@ -156,4 +161,5 @@ function parseDateLoose(t: string): string | null {
 }
 
 // The registry the orchestrator iterates. Order/priority independent of code.
-export const providerRegistry: BondDataProvider[] = [aggregatorProvider];
+// Highest priority first, so the authoritative feed (when enabled) is consulted first.
+export const providerRegistry: BondDataProvider[] = [harmoneyProvider, aggregatorProvider];

@@ -29,6 +29,18 @@ export interface AnalyticsInput {
   recordDateISO?: string | null;         // actual record date (register-closure) — informational
   exInterestDateISO?: string | null;     // actual ex-interest date — the real cum/ex cutoff
   couponEntitlementRule?: string | null; // explicit rule: 'ex_on_record_date' | 'always_cum' | ''
+  // AUTHORITATIVE cash-flow schedule from a licensed provider (issuer-filed dates + record
+  // dates). When present it REPLACES the calendar inferred from the IP-date text, and its
+  // record dates decide coupon entitlement. Amounts are per ₹100 of ORIGINAL face.
+  providerFlows?: ProviderFlow[] | null;
+}
+
+export interface ProviderFlow {
+  date: string;                 // payment (transaction) date, ISO
+  record_date: string | null;   // entitlement cutoff for this payment, ISO
+  type: 'coupon' | 'principal' | 'other';
+  amount_per_100: number;
+  interest_days: number | null;
 }
 
 export interface CashflowRow { seq: number; date: string; interest_per_100: number; principal_per_100: number; total_per_100: number; remark: string }
@@ -61,7 +73,7 @@ export interface AnalyticsResult {
   last_coupon_date: string | null;
   coupons_per_year: number | null;
   day_count_used: DayCount;
-  calendar_source: 'seed' | 'maturity' | 'none';
+  calendar_source: 'provider' | 'seed' | 'maturity' | 'none';
   frequency_assumed: boolean;   // no frequency stated and one IP date → annual was ASSUMED
   frequency_conflict: boolean;  // stated frequency disagreed with the listed IP dates (dates won)
   // Annual bond whose listed IP month is not its maturity month. Usually a real feature of
@@ -318,6 +330,15 @@ function xirr(flows: { date: Date; amount: number }[], settlement: Date, dirty: 
   return (lo + hi) / 2;
 }
 
+/** Coupons per year from a provider schedule: median gap between coupon payments. */
+function inferPerYear(flows: ProviderFlow[]): number {
+  const ds = flows.filter((f) => f.type === 'coupon').map((f) => toDate(f.date).getTime()).sort((a, b) => a - b);
+  if (ds.length < 2) return 1;
+  const gaps = ds.slice(1).map((t, i) => (t - ds[i]) / 86400000).sort((a, b) => a - b);
+  const g = gaps[Math.floor(gaps.length / 2)];
+  return g < 45 ? 12 : g < 135 ? 4 : g < 270 ? 2 : 1;
+}
+
 export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
   const coupon = input.couponRate ?? null;
   const settlement = input.settlementISO ? toDate(input.settlementISO) : settlementFrom(todayIST(), input.holidays);
@@ -339,86 +360,135 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
   if (dtm <= 0) return { ...empty, reason: 'Bond has matured' };
   const zero = input.frequency === 'zero' || coupon === null || coupon <= 0;
 
-  // ---- coupon calendar (scheduled dates) ----
   const pattern = buildCouponPattern(input.ipDatesSeed, input.frequency, maturity);
-  const step = zero ? 12 : 12 / pattern.perYear;
-  const dcf = makeDcf(input.dayCount, maturity, zero ? 1 : pattern.perYear);
-  const issue = input.issueDateISO ? toDate(input.issueDateISO) : null;
-  const validIssue = issue && !Number.isNaN(issue.getTime()) && issue < settlement ? issue : null;
-  const scheduled: Date[] = [];
-  let lastCoupon: Date;
-  if (!zero) {
-    const all = patternDates(pattern, settlement.getUTCFullYear() - 1, maturity.getUTCFullYear());
-    for (const d of all) if (d > settlement && d < maturity) scheduled.push(d);
-    scheduled.push(maturity);                                   // final (possibly broken) period ends at maturity
-    const past = all.filter((d) => d <= settlement);
-    lastCoupon = past.length ? past[past.length - 1] : addMonths(scheduled[0], -step);
-    if (validIssue && validIssue > lastCoupon) lastCoupon = validIssue;   // first coupon period starts at allotment
-  } else {
-    scheduled.push(maturity);
-    lastCoupon = validIssue ?? addMonths(maturity, -12);
-  }
-
-  // ---- redemption plan ----
-  let events = input.redemptionSchedule && input.redemptionSchedule.length ? input.redemptionSchedule
-             : parseRedemptionText(input.redemptionText, maturity, settlement) ?? [];
-  events = events.filter(e => { const d = toDate(e.date); return d > settlement && d <= maturity; });
-  const assumed_bullet = events.length === 0;
-
-  // Merge redemption dates onto the nearest scheduled coupon within half a period.
-  const schedISO = scheduled.map(toISO);
-  const schedSet = new Set(schedISO);
-  const redMap: Record<string, number> = {};
-  const extra: string[] = [];
-  const half = (step * 30) / 2 + 5;
-  for (const e of events) {
-    const ed = toDate(e.date);
-    let best = ''; let bestDiff = Infinity;
-    for (const s of schedISO) { const diff = Math.abs(days(toDate(s), ed)); if (diff < bestDiff) { bestDiff = diff; best = s; } }
-    const key = best && bestDiff <= half ? best : e.date;
-    if (!schedSet.has(key)) extra.push(key);
-    redMap[key] = (redMap[key] ?? 0) + e.pct;
-  }
-  const timeline = Array.from(new Set([...schedISO, ...extra])).sort();
+  const pf = (input.providerFlows ?? []).filter((f) => f && f.date && Number.isFinite(f.amount_per_100));
+  const useProvider = !zero && pf.length > 0;
+  const perYear = useProvider ? inferPerYear(pf) : pattern.perYear;
+  const step = zero ? 12 : 12 / perYear;
+  const dcf = makeDcf(input.dayCount, maturity, zero ? 1 : perYear);
   const maturityISO = toISO(maturity);
-
-  // ---- walk timeline: interest on reducing balance (per 100) ----
-  const cashflow: CashflowRow[] = [];
-  const couponSched: CouponRow[] = [];
-  let outstanding = 100;
-  let prev = lastCoupon;
-  let accum = 0;
-  let seq = 0; let cseq = 0;
+  let scheduled: Date[] = [];
+  let lastCoupon: Date;
+  let cashflow: CashflowRow[] = [];
+  let couponSched: CouponRow[] = [];
   let totInt = 0, totPrin = 0;
-  for (let i = 0; i < timeline.length; i++) {
-    const iso = timeline[i];
-    const scheduledD = toDate(iso);
-    const isMaturity = iso === maturityISO || i === timeline.length - 1;
-    // SEBI (CIR/IMD/DF-1/122/2016): a coupon falling on a holiday is paid the NEXT working
-    // day with no extra interest; a REDEMPTION falling on a holiday is paid the PREVIOUS
-    // working day with interest only up to that day.
-    const payD = isMaturity && input.bizConv !== 'none' && input.bizConv !== ''
-      ? adjustPreceding(scheduledD, input.holidays)
-      : adjustBiz(scheduledD, input.bizConv, input.holidays);
-    const isCoupon = schedSet.has(iso) || isMaturity;
-    const accrueTo = isMaturity ? payD : scheduledD;
-    accum += outstanding * ((coupon ?? 0) / 100) * dcf(prev, accrueTo, accrueTo);
-    let interest = 0;
-    if (isCoupon) { interest = +accum.toFixed(4); accum = 0; }
-    let principal = (redMap[iso] ?? 0);        // pct of face
-    if (isMaturity) principal = outstanding;   // remaining
-    principal = +Math.min(principal, outstanding).toFixed(4);
-    if (isCoupon && !zero) {
-      couponSched.push({ seq: ++cseq, period_start: toISO(prev), period_end: iso, scheduled_date: iso, pay_date: toISO(payD), coupon_per_100: interest, outstanding_per_100: +outstanding.toFixed(4) });
+  let assumed_bullet = true;
+  let outstandingAtSettlement = 100;
+  let providerRecordDate: Date | null = null;
+
+  if (useProvider) {
+    // ---- authoritative schedule: take the provider's own dates and amounts ----
+    const flows = [...pf].sort((a, b) => a.date.localeCompare(b.date));
+    const coupons = flows.filter((f) => f.type === 'coupon');
+    const principals = flows.filter((f) => f.type === 'principal');
+    outstandingAtSettlement = +(100 - principals.filter((f) => toDate(f.date) <= settlement)
+      .reduce((t, f) => t + f.amount_per_100, 0)).toFixed(4);
+    const pastC = coupons.filter((f) => toDate(f.date) <= settlement);
+    const futureC = coupons.filter((f) => toDate(f.date) > settlement);
+    const issue = input.issueDateISO ? toDate(input.issueDateISO) : null;
+    lastCoupon = pastC.length ? toDate(pastC[pastC.length - 1].date)
+      : (issue && !Number.isNaN(issue.getTime()) && issue < settlement ? issue
+        : futureC.length ? addMonths(toDate(futureC[0].date), -step) : addMonths(maturity, -12));
+    scheduled = futureC.map((f) => toDate(f.date));
+    if (!scheduled.length) scheduled = [maturity];
+    const nextRec = futureC[0]?.record_date ? toDate(futureC[0].record_date) : null;
+    providerRecordDate = nextRec && !Number.isNaN(nextRec.getTime()) ? nextRec : null;
+
+    // Future cash-flow rows straight from the provider, grouped by payment date.
+    const byDate = new Map<string, { i: number; p: number }>();
+    for (const f of flows) {
+      if (toDate(f.date) <= settlement || f.type === 'other') continue;
+      const r = byDate.get(f.date) ?? { i: 0, p: 0 };
+      if (f.type === 'coupon') r.i += f.amount_per_100; else r.p += f.amount_per_100;
+      byDate.set(f.date, r);
     }
-    const total = +(interest + principal).toFixed(4);
-    let remark = '';
-    if (isMaturity) remark = totPrin > 0 ? 'Final redemption' : 'Maturity redemption';
-    else if (principal > 0) remark = 'Part redemption';
-    cashflow.push({ seq: ++seq, date: toISO(payD), interest_per_100: interest, principal_per_100: principal, total_per_100: total, remark });
-    totInt += interest; totPrin += principal;
-    outstanding = +(outstanding - principal).toFixed(4);
-    prev = scheduledD;
+    const dates = [...byDate.keys()].sort();
+    let seq = 0; let cseq = 0; let outstanding = outstandingAtSettlement; let prev = lastCoupon;
+    const anyPartial = dates.some((d, k) => k < dates.length - 1 && (byDate.get(d)!.p > 0));
+    assumed_bullet = !anyPartial;
+    for (let k = 0; k < dates.length; k++) {
+      const d = dates[k]; const r = byDate.get(d)!;
+      const interest = +r.i.toFixed(4); const principal = +Math.min(r.p, outstanding).toFixed(4);
+      const isLast = k === dates.length - 1;
+      if (interest > 0) couponSched.push({ seq: ++cseq, period_start: toISO(prev), period_end: d, scheduled_date: d, pay_date: d, coupon_per_100: interest, outstanding_per_100: +outstanding.toFixed(4) });
+      const remark = isLast ? (totPrin > 0 ? 'Final redemption' : 'Maturity redemption') : principal > 0 ? 'Part redemption' : '';
+      cashflow.push({ seq: ++seq, date: d, interest_per_100: interest, principal_per_100: principal, total_per_100: +(interest + principal).toFixed(4), remark });
+      totInt += interest; totPrin += principal; outstanding = +(outstanding - principal).toFixed(4);
+      if (interest > 0) prev = toDate(d);
+    }
+  } else {
+    // ---- coupon calendar (scheduled dates) ----
+    const issue = input.issueDateISO ? toDate(input.issueDateISO) : null;
+    const validIssue = issue && !Number.isNaN(issue.getTime()) && issue < settlement ? issue : null;
+    if (!zero) {
+      const all = patternDates(pattern, settlement.getUTCFullYear() - 1, maturity.getUTCFullYear());
+      for (const d of all) if (d > settlement && d < maturity) scheduled.push(d);
+      scheduled.push(maturity);                                   // final (possibly broken) period ends at maturity
+      const past = all.filter((d) => d <= settlement);
+      lastCoupon = past.length ? past[past.length - 1] : addMonths(scheduled[0], -step);
+      if (validIssue && validIssue > lastCoupon) lastCoupon = validIssue;   // first coupon period starts at allotment
+    } else {
+      scheduled.push(maturity);
+      lastCoupon = validIssue ?? addMonths(maturity, -12);
+    }
+
+    // ---- redemption plan ----
+    let events = input.redemptionSchedule && input.redemptionSchedule.length ? input.redemptionSchedule
+               : parseRedemptionText(input.redemptionText, maturity, settlement) ?? [];
+    events = events.filter(e => { const d = toDate(e.date); return d > settlement && d <= maturity; });
+    assumed_bullet = events.length === 0;
+
+    // Merge redemption dates onto the nearest scheduled coupon within half a period.
+    const schedISO = scheduled.map(toISO);
+    const schedSet = new Set(schedISO);
+    const redMap: Record<string, number> = {};
+    const extra: string[] = [];
+    const half = (step * 30) / 2 + 5;
+    for (const e of events) {
+      const ed = toDate(e.date);
+      let best = ''; let bestDiff = Infinity;
+      for (const s of schedISO) { const diff = Math.abs(days(toDate(s), ed)); if (diff < bestDiff) { bestDiff = diff; best = s; } }
+      const key = best && bestDiff <= half ? best : e.date;
+      if (!schedSet.has(key)) extra.push(key);
+      redMap[key] = (redMap[key] ?? 0) + e.pct;
+    }
+    const timeline = Array.from(new Set([...schedISO, ...extra])).sort();
+
+    // ---- walk timeline: interest on reducing balance (per 100) ----
+    let outstanding = 100;
+    let prev = lastCoupon;
+    let accum = 0;
+    let seq = 0; let cseq = 0;
+    for (let i = 0; i < timeline.length; i++) {
+      const iso = timeline[i];
+      const scheduledD = toDate(iso);
+      const isMaturity = iso === maturityISO || i === timeline.length - 1;
+      // SEBI (CIR/IMD/DF-1/122/2016): a coupon falling on a holiday is paid the NEXT working
+      // day with no extra interest; a REDEMPTION falling on a holiday is paid the PREVIOUS
+      // working day with interest only up to that day.
+      const payD = isMaturity && input.bizConv !== 'none' && input.bizConv !== ''
+        ? adjustPreceding(scheduledD, input.holidays)
+        : adjustBiz(scheduledD, input.bizConv, input.holidays);
+      const isCoupon = schedSet.has(iso) || isMaturity;
+      const accrueTo = isMaturity ? payD : scheduledD;
+      accum += outstanding * ((coupon ?? 0) / 100) * dcf(prev, accrueTo, accrueTo);
+      let interest = 0;
+      if (isCoupon) { interest = +accum.toFixed(4); accum = 0; }
+      let principal = (redMap[iso] ?? 0);        // pct of face
+      if (isMaturity) principal = outstanding;   // remaining
+      principal = +Math.min(principal, outstanding).toFixed(4);
+      if (isCoupon && !zero) {
+        couponSched.push({ seq: ++cseq, period_start: toISO(prev), period_end: iso, scheduled_date: iso, pay_date: toISO(payD), coupon_per_100: interest, outstanding_per_100: +outstanding.toFixed(4) });
+      }
+      const total = +(interest + principal).toFixed(4);
+      let remark = '';
+      if (isMaturity) remark = totPrin > 0 ? 'Final redemption' : 'Maturity redemption';
+      else if (principal > 0) remark = 'Part redemption';
+      cashflow.push({ seq: ++seq, date: toISO(payD), interest_per_100: interest, principal_per_100: principal, total_per_100: total, remark });
+      totInt += interest; totPrin += principal;
+      outstanding = +(outstanding - principal).toFixed(4);
+      prev = scheduledD;
+    }
   }
 
   // ---- coupon entitlement, THEN accrued interest (cum / ex / unknown) ----
@@ -432,7 +502,13 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
   const rule = (input.couponEntitlementRule ?? '').trim().toLowerCase();
   const inPeriod = (d: Date) => d > lastCoupon && d <= nextCoupon;   // the ex-date must belong to THIS coupon
   let exDate: Date | null = null;
-  if (input.exInterestDateISO) {
+  if (providerRecordDate && inPeriod(providerRecordDate)) {
+    // Provider record date (issuer-filed). In the Indian depository system the coupon goes to
+    // the beneficial owner as of END of the record date, so a trade that SETTLES on the record
+    // date is still cum-interest and one settling the day after is ex-interest.
+    exDate = addDays(providerRecordDate, 1);
+    if (!(exDate <= nextCoupon)) exDate = null;
+  } else if (input.exInterestDateISO) {
     const d = toDate(input.exInterestDateISO);
     if (!Number.isNaN(d.getTime()) && inPeriod(d)) exDate = d;
   } else if (rule === 'ex_on_record_date' && input.recordDateISO) {
@@ -442,7 +518,7 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
 
   // Accrued uses the same convention as the coupon itself, with the interest year chosen by
   // the coupon period the settlement falls in (period end = next coupon).
-  const cumInterest = () => +(100 * ((coupon ?? 0) / 100) * dcf(lastCoupon, settlement, nextCoupon)).toFixed(4);
+  const cumInterest = () => +(outstandingAtSettlement * ((coupon ?? 0) / 100) * dcf(lastCoupon, settlement, nextCoupon)).toFixed(4);
   const accruedDays = () => input.dayCount === '30_360' ? days30E360(lastCoupon, settlement) : days(lastCoupon, settlement);
   let accrued: number, accrued_days: number;
   let accrual_convention: 'cum' | 'ex' | 'none';
@@ -455,7 +531,7 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
     // buyer holds to the coupon date without receiving it → standard convention is a
     // NEGATIVE adjustment for the remaining interest (settlement → coupon date).
     accrued_days = -days(settlement, nextCoupon);
-    accrued = +(100 * ((coupon ?? 0) / 100) * dcf(settlement, nextCoupon, nextCoupon) * -1).toFixed(4);
+    accrued = +(outstandingAtSettlement * ((coupon ?? 0) / 100) * dcf(settlement, nextCoupon, nextCoupon) * -1).toFixed(4);
     accrual_convention = 'ex'; coupon_to_seller = 'seller';
   } else if (exDate !== null) {
     // Entitlement is known (an ex-date exists) and settlement is before it → cum-interest,
@@ -497,7 +573,7 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
     ok: true, settlement_date: settlementISO, coupon_schedule: couponSched, cashflow_schedule: cashflow,
     accrued_per_100: accrued, accrued_days, accrual_convention, coupon_to_seller,
     next_coupon_for_accrual: zero ? null : toISO(nextCoupon),
-    record_date: input.recordDateISO ?? null,
+    record_date: providerRecordDate ? toISO(providerRecordDate) : (input.recordDateISO ?? null),
     ex_interest_date: exDate ? toISO(exDate) : (input.exInterestDateISO ?? null),
     clean_price: clean, dirty_price: dirty, current_yield,
     ytm, macaulay_duration: mac, modified_duration: mod,
@@ -505,12 +581,12 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
     total_future_interest_per_100: +totInt.toFixed(4), total_future_principal_per_100: +totPrin.toFixed(4),
     assumed_bullet,
     last_coupon_date: zero ? null : toISO(lastCoupon),
-    coupons_per_year: zero ? null : pattern.perYear,
+    coupons_per_year: zero ? null : perYear,
     day_count_used: input.dayCount,
-    calendar_source: zero ? 'none' : pattern.source,
-    frequency_assumed: !zero && pattern.frequencyAssumed,
-    frequency_conflict: !zero && pattern.frequencyConflict,
-    calendar_needs_check: !zero && (pattern.frequencyAssumed || (pattern.source === 'seed' && pattern.perYear === 1
+    calendar_source: zero ? 'none' : useProvider ? 'provider' : pattern.source,
+    frequency_assumed: !zero && !useProvider && pattern.frequencyAssumed,
+    frequency_conflict: !zero && !useProvider && pattern.frequencyConflict,
+    calendar_needs_check: !zero && !useProvider && (pattern.frequencyAssumed || (pattern.source === 'seed' && pattern.perYear === 1
       && !pattern.pairs.some((p) => p.month === maturity.getUTCMonth()))),
   };
 }

@@ -1,7 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { providerRegistry, Field } from "./providers.ts";
-import { computeAnalytics, Frequency, DayCount, BizConv } from "./analytics.ts";
+import { computeAnalytics, Frequency, DayCount, BizConv, ProviderFlow } from "./analytics.ts";
+import { harmoneyEnabled, harmoneyAccruedCheck } from "./harmoney.ts";
 
 // Enrichment orchestrator. For each target bond: query every enabled provider via
 // the registry (never naming one), merge fields by priority×confidence while
@@ -26,10 +27,10 @@ const QUALITY_FIELDS = [
 
 type Client = ReturnType<typeof createClient>;
 
-async function enrichOne(supabase: Client, bond: Record<string, unknown>, holidays: Set<string>, skipProviders = false) {
+async function enrichOne(supabase: Client, bond: Record<string, unknown>, holidays: Set<string>, skipProviders = false, background = false) {
   const isin = String(bond.isin);
   const bondId = String(bond.id);
-  if (!skipProviders) await supabase.from("bm_bonds").update({ verification_status: "enriching" }).eq("id", bondId);
+  if (!skipProviders && !background) await supabase.from("bm_bonds").update({ verification_status: "enriching" }).eq("id", bondId);
 
   // Locked fields must never be overwritten.
   const { data: prov } = await supabase.from("bm_field_provenance").select("field_name,is_locked").eq("bond_id", bondId);
@@ -39,6 +40,7 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
   // mode, where we re-merge the sheet over the already-stored master (no fetches).
   const merged: Record<string, { value: unknown; source: string; confidence: number; score: number }> = {};
   let redemption: { date: string; pct: number }[] | undefined;
+  let freshSource: SourceCashflows | null = null;
   if (!skipProviders) for (const provider of providerRegistry.filter((p) => p.enabled)) {
     const t0 = Date.now();
     let r; try { r = await provider.fetchByISIN(isin); } catch (e) { r = { ok: false, fields: {} as Record<string, Field>, error: String(e) }; }
@@ -54,6 +56,9 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
       if (!merged[field] || score > merged[field].score) merged[field] = { value: fv.value, source: provider.id, confidence: fv.confidence ?? 0, score };
     }
     if (r.redemption_schedule && r.redemption_schedule.length && !redemption && !locked.has("redemption_schedule")) redemption = r.redemption_schedule;
+    if (!freshSource && r.cashflows && r.cashflows.length) {
+      freshSource = { provider: provider.id, fetched_at: new Date().toISOString(), ref: r.source_ref ?? {}, flows: r.cashflows };
+    }
   }
 
   // The uploaded SMC dealer sheet is the PRIMARY source: its per-bond fields win
@@ -72,7 +77,12 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
     if (!merged[field] || score > merged[field].score) merged[field] = { value: v, source: "excel", confidence: 90, score };
   }
   // Redemption schedule: prefer the sheet's when it carries one; else keep the scraper's.
-  if (Array.isArray(raw.redemption_schedule) && (raw.redemption_schedule as unknown[]).length && !locked.has("redemption_schedule")) {
+  // An authoritative provider schedule beats both.
+  const source = freshSource ?? storedSource(bond);
+  if (source && !locked.has("redemption_schedule")) {
+    const red = source.flows.filter((f) => f.type === "principal").map((f) => ({ date: f.date, pct: f.amount_per_100 }));
+    if (red.length > 1) redemption = red;
+  } else if (Array.isArray(raw.redemption_schedule) && (raw.redemption_schedule as unknown[]).length && !locked.has("redemption_schedule")) {
     redemption = raw.redemption_schedule as { date: string; pct: number }[];
   }
 
@@ -105,7 +115,9 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
     recordDateISO: (val("record_date") as string) ?? null,
     exInterestDateISO: (val("ex_interest_date") as string) ?? null,
     couponEntitlementRule: (val("coupon_entitlement_rule") as string) ?? null,
+    providerFlows: source?.flows ?? null,
   });
+  const accruedCheck = await accruedCheckFor(source, a, numOrNull(bond.latest_price));
 
   // Persist schedules (replace).
   await supabase.from("bm_coupon_schedule").delete().eq("bond_id", bondId);
@@ -140,9 +152,10 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
   Object.assign(upd, {
     issuer_id: issuerId,
     redemption_schedule: redemption ?? bond.redemption_schedule ?? [],
-    analytics: analyticsJson(a),
+    analytics: analyticsJson(a, accruedCheck),
     analytics_computed_at: new Date().toISOString(),
     next_coupon_date: nextCoupon,
+    ...(freshSource ? { source_cashflows: freshSource } : {}),
     data_quality_score: quality,
     verification_status: status,
     perpetual: /perp/i.test(String(val("bond_name") ?? "")) || undefined,
@@ -192,7 +205,9 @@ async function recomputeOne(supabase: Client, bond: Record<string, unknown>, hol
     recordDateISO: (bond.record_date as string) ?? null,
     exInterestDateISO: (bond.ex_interest_date as string) ?? null,
     couponEntitlementRule: (bond.coupon_entitlement_rule as string) ?? null,
+    providerFlows: storedSource(bond)?.flows ?? null,
   });
+  const accruedCheck = await accruedCheckFor(storedSource(bond), a, numOrNull(bond.latest_price));
   await supabase.from("bm_coupon_schedule").delete().eq("bond_id", bondId);
   await supabase.from("bm_cashflow_schedule").delete().eq("bond_id", bondId);
   if (a.ok) {
@@ -212,15 +227,16 @@ async function recomputeOne(supabase: Client, bond: Record<string, unknown>, hol
   }
   const nextCoupon = a.ok && a.coupon_schedule[0] ? a.coupon_schedule[0].pay_date : null;
   await supabase.from("bm_bonds").update({
-    analytics: analyticsJson(a),
+    analytics: analyticsJson(a, accruedCheck),
     analytics_computed_at: new Date().toISOString(),
     next_coupon_date: nextCoupon,
   }).eq("id", bondId);
   return { isin: String(bond.isin), status: "recomputed", ytm: a.ytm, cashflows: a.cashflow_schedule.length };
 }
 
-function analyticsJson(a: ReturnType<typeof computeAnalytics>) {
+function analyticsJson(a: ReturnType<typeof computeAnalytics>, accruedCheck: AccruedCheck | null = null) {
   return {
+    accrued_check: accruedCheck,
     accrued_per_100: a.accrued_per_100, accrued_days: a.accrued_days, accrual_convention: a.accrual_convention,
     coupon_to_seller: a.coupon_to_seller, next_coupon_for_accrual: a.next_coupon_for_accrual,
     record_date: a.record_date, ex_interest_date: a.ex_interest_date,
@@ -247,6 +263,31 @@ function resolveDayCount(isin: string, stored: unknown): DayCount {
   if (/^IN\d/.test(isin.toUpperCase())) return "30_360";
   return String(stored ?? "") === "30_360" ? "30_360" : "actual_actual";
 }
+
+interface SourceCashflows { provider: string; fetched_at: string; ref: Record<string, unknown>; flows: ProviderFlow[] }
+type AccruedCheck = Awaited<ReturnType<typeof harmoneyAccruedCheck>> & { ours_per_100: number; diff_per_100: number | null; ours_days: number; match: boolean | null };
+
+/** The authoritative schedule stored on the bond by a previous provider fetch, if any. */
+function storedSource(bond: Record<string, unknown>): SourceCashflows | null {
+  const s = bond.source_cashflows as SourceCashflows | null | undefined;
+  return s && Array.isArray(s.flows) && s.flows.length ? s : null;
+}
+
+/**
+ * Ask the provider for ITS accrued at our settlement date and record the difference. This is
+ * a check, never the displayed figure: a non-zero diff flags a data or convention problem for
+ * review (match = within 1 paisa per ₹100). Only runs for bonds the provider has mastered.
+ */
+async function accruedCheckFor(source: SourceCashflows | null, a: ReturnType<typeof computeAnalytics>, price: number | null): Promise<AccruedCheck | null> {
+  const id = numOrNull(source?.ref?.instrument_id);
+  if (!a.ok || id === null || !harmoneyEnabled() || source?.provider !== "harmoney-inferedge") return null;
+  const c = await harmoneyAccruedCheck(id, a.settlement_date, price ?? 100);
+  const diff = c.provider_accrued_per_100 === null ? null : +(a.accrued_per_100 - c.provider_accrued_per_100).toFixed(4);
+  return { ...c, ours_per_100: a.accrued_per_100, ours_days: a.accrued_days, diff_per_100: diff, match: diff === null ? null : Math.abs(diff) <= 0.01 };
+}
+
+const SOURCE_MAX_AGE_DAYS = 7;
+const SOURCE_REFRESH_PER_RUN = 20;
 
 function numOrNull(v: unknown): number | null { const n = typeof v === "number" ? v : parseFloat(String(v ?? "")); return Number.isFinite(n) ? n : null; }
 function clean(o: Record<string, unknown>): Record<string, unknown> { const out: Record<string, unknown> = {}; for (const [k, v] of Object.entries(o)) if (v !== undefined) out[k] = v; return out; }
@@ -294,6 +335,20 @@ Deno.serve(async (req) => {
     if (recompute && stale && !(Array.isArray(body.bond_ids) && body.bond_ids.length) && !body.isin) {
       const batch = Math.min(Number(body.limit) || 100, 200);
       const results = [];
+      // Licensed-source refresh, bounded: only bonds never fetched or older than a week, at most
+      // SOURCE_REFRESH_PER_RUN per invocation — so even this anon-callable sweep can spend at
+      // most one provider fetch per bond per week. No-op while the provider has no key.
+      let refreshed = 0;
+      if (harmoneyEnabled()) {
+        const cutoff = new Date(Date.now() - SOURCE_MAX_AGE_DAYS * 86400000).toISOString();
+        const { data: due } = await supabase.from("bm_bonds").select("*").eq("active_status", "active")
+          .or(`source_cashflows.is.null,source_cashflows->>fetched_at.lt.${cutoff}`)
+          .not("maturity_date", "is", null).limit(SOURCE_REFRESH_PER_RUN);
+        for (const rec of (due ?? []) as Record<string, unknown>[]) {
+          try { await enrichOne(supabase, rec, holidays, false, true); refreshed++; }
+          catch (e) { results.push({ isin: String(rec.isin), status: "source-refresh-failed", error: String(e) }); }
+        }
+      }
       const seen = new Set<string>();   // guarantees forward progress even if a bond keeps failing
       for (let iter = 0; iter < 200; iter++) {
         // Column-to-column staleness (price newer than analytics) lives in a SQL function,
@@ -308,7 +363,7 @@ Deno.serve(async (req) => {
           catch (e) { results.push({ isin: String(rec.isin), status: "failed", error: String(e) }); }
         }
       }
-      return new Response(JSON.stringify({ recomputed: results.length, results }), { headers: { ...cors, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ recomputed: results.length, sources_refreshed: refreshed, results }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
     let query = supabase.from("bm_bonds").select("*");

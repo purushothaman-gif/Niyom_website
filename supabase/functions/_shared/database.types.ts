@@ -93,6 +93,7 @@ export type Database = {
           selling_price: number | null
           seniority: string
           series: string
+          source_cashflows: Json | null
           source_summary: Json
           tax_status: string
           trustee: string
@@ -163,6 +164,7 @@ export type Database = {
           selling_price?: number | null
           seniority?: string
           series?: string
+          source_cashflows?: Json | null
           source_summary?: Json
           tax_status?: string
           trustee?: string
@@ -233,6 +235,7 @@ export type Database = {
           selling_price?: number | null
           seniority?: string
           series?: string
+          source_cashflows?: Json | null
           source_summary?: Json
           tax_status?: string
           trustee?: string
@@ -11441,6 +11444,7 @@ export type Database = {
           selling_price: number | null
           seniority: string
           series: string
+          source_cashflows: Json | null
           source_summary: Json
           tax_status: string
           trustee: string
