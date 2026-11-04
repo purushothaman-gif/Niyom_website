@@ -51,6 +51,9 @@ export default defineConfig({
        * nothing. Check the test COUNT after moving files, not just the colour.
        */
       'supabase/functions/_shared/**/*.test.ts',
+      // The bond analytics engine decides every accrued/YTM figure on a deal; it shipped
+      // the wrong coupon months for months because nothing exercised it.
+      'supabase/functions/bond-enrich/**/*.test.ts',
     ],
     // Explicit imports of describe/it/expect rather than globals, so the test
     // files typecheck under the app's existing tsconfig with no extra `types`

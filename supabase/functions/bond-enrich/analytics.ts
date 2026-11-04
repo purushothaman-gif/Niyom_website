@@ -57,19 +57,40 @@ export interface AnalyticsResult {
   total_future_interest_per_100: number;
   total_future_principal_per_100: number;
   assumed_bullet: boolean;
+  // What the calendar was actually built from — shown in the CRM so a mismatch can be traced.
+  last_coupon_date: string | null;
+  coupons_per_year: number | null;
+  day_count_used: DayCount;
+  calendar_source: 'seed' | 'maturity' | 'none';
+  frequency_assumed: boolean;   // no frequency stated and one IP date → annual was ASSUMED
+  frequency_conflict: boolean;  // stated frequency disagreed with the listed IP dates (dates won)
+  // Annual bond whose listed IP month is not its maturity month. Usually a real feature of
+  // the bond, but it is also what a mis-keyed IP date looks like, and the two calendars give
+  // very different accrued — verify against the issuer's cash-flow schedule.
+  calendar_needs_check: boolean;
 }
 
-const SETTLEMENT_LAG_DAYS = 2;
+// Indian corporate bonds (NSE/BSE RFQ) and G-secs settle T+1 BUSINESS day. This used to
+// be today + 2 CALENDAR days, which put every accrued figure 1-3 days ahead of the
+// value date a dealer quotes (more over weekends).
+const SETTLEMENT_LAG_BUSINESS_DAYS = 1;
 
 function toDate(iso: string): Date { return new Date(iso + 'T00:00:00Z'); }
 function toISO(d: Date): string { return d.toISOString().slice(0, 10); }
-function addMonths(d: Date, m: number): Date { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + m, d.getUTCDate())); }
+function daysInMonth(y: number, m: number): number { return new Date(Date.UTC(y, m + 1, 0)).getUTCDate(); }
+// Month arithmetic CLAMPED to the target month's length. The old version let JS overflow
+// (31 Jan + 1 month = 3 Mar), and because the calendar stepped month-by-month from the
+// previous result, a 30th/31st coupon drifted to the 1st/2nd forever after the first
+// February — the "next coupon 2026-12-02" seen on every 30th-of-month NCD.
+function addMonths(d: Date, m: number): Date {
+  const t = d.getUTCMonth() + m;
+  const y = d.getUTCFullYear() + Math.floor(t / 12);
+  const mo = ((t % 12) + 12) % 12;
+  return new Date(Date.UTC(y, mo, Math.min(d.getUTCDate(), daysInMonth(y, mo))));
+}
 function addDays(d: Date, n: number): Date { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + n)); }
 function days(a: Date, b: Date): number { return Math.round((b.getTime() - a.getTime()) / 86400000); }
 
-function freqMonths(f: Frequency): number {
-  return f === 'monthly' ? 1 : f === 'quarterly' ? 3 : f === 'half_yearly' ? 6 : f === 'annual' ? 12 : 12;
-}
 
 function isWeekend(d: Date): boolean { const g = d.getUTCDay(); return g === 0 || g === 6; }
 
@@ -88,38 +109,167 @@ function adjustBiz(d: Date, conv: BizConv, holidays: Set<string>): Date {
   return cur;
 }
 
-// Day-count fraction between two dates.
-function dcf(a: Date, b: Date, conv: DayCount): number {
-  const d = Math.max(0, days(a, b));
-  if (conv === '30_360') {
-    let d1 = a.getUTCDate(), d2 = b.getUTCDate();
-    if (d1 === 31) d1 = 30;
-    if (d2 === 31 && d1 === 30) d2 = 30;
-    const n = (b.getUTCFullYear() - a.getUTCFullYear()) * 360 + (b.getUTCMonth() - a.getUTCMonth()) * 30 + (d2 - d1);
-    return n / 360;
-  }
-  if (conv === 'actual_actual') {
-    // simple ISDA-ish: actual days / 365 or 366 based on the period's year
-    const yr = a.getUTCFullYear();
-    const leap = (yr % 4 === 0 && yr % 100 !== 0) || yr % 400 === 0;
-    return d / (leap ? 366 : 365);
-  }
-  return d / 365; // actual/365 (fixed) — default
+function adjustPreceding(d: Date, holidays: Set<string>): Date {
+  let cur = new Date(d.getTime()); let guard = 0;
+  while ((isWeekend(cur) || holidays.has(toISO(cur))) && guard < 10) { cur = addDays(cur, -1); guard++; }
+  return cur;
 }
 
-// Anchor day-of-month from the IP-date seed (else the maturity day).
-// The seed may be ISO ("2026-02-27,…"), DD-MM-YYYY, DD-Mon-YYYY or a bare
-// day-month ("27-02"). Parse the first token properly so we take the actual
-// day-of-month — never the leading two digits of an ISO year.
-function anchorDay(seed: string | undefined, maturity: Date): number {
-  const first = (seed ?? '').split(/[,;|]/)[0]?.trim();
-  if (first) {
-    const iso = parseLooseDate(first);            // handles ISO / DD-MM-YYYY / DD-Mon-YYYY
-    if (iso) { const day = parseInt(iso.slice(8, 10), 10); if (day >= 1 && day <= 31) return day; }
-    const m = first.match(/^(\d{1,2})\b/);        // bare "27-02" style → leading day
-    if (m) { const day = parseInt(m[1], 10); if (day >= 1 && day <= 31) return day; }
+function isLeap(y: number): boolean { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
+
+/** Number of days in a 30E/360 count between two dates (RBI convention for G-secs/SDLs). */
+function days30E360(a: Date, b: Date): number {
+  const d1 = Math.min(a.getUTCDate(), 30), d2 = Math.min(b.getUTCDate(), 30);
+  return (b.getUTCFullYear() - a.getUTCFullYear()) * 360 + (b.getUTCMonth() - a.getUTCMonth()) * 30 + (d2 - d1);
+}
+
+/**
+ * Day-count fraction from `a` to `b`, for an accrual period that ENDS on `periodEnd`.
+ *
+ * - '30_360'        → 30E/360. RBI's convention for Government securities and SDLs.
+ * - 'actual_actual' → SEBI's convention for listed corporate debt (circulars of 13-Apr-2007
+ *   and CIR/IMD/DF-1/122/2016): actual days over 365, or over 366 for EVERY period in an
+ *   interest year that contains 29 February — "for a whole one year period, irrespective of
+ *   whether the interest is payable annually, half yearly, quarterly or monthly". The
+ *   interest year is anchored on the bond's maturity anniversary (for annual coupons, the
+ *   coupon period itself). The old code instead
+ *   asked whether the period's START year was a leap year, which is a different rule.
+ * - 'actual_365'    → actual days / 365 fixed.
+ */
+function makeDcf(conv: DayCount, maturity: Date, perYear: number) {
+  const leapYearCache = new Map<string, boolean>();
+  // Does the anniversary-year (A-1y, A] that contains `end` include a 29 February?
+  const interestYearHasFeb29 = (end: Date): boolean => {
+    // Annual coupons: the interest year IS the coupon period ending on `end` (the coupon
+    // date can differ from the maturity day — e.g. coupon 23-Jun, maturity 04-Jun).
+    let a = perYear === 1 ? end : new Date(Date.UTC(end.getUTCFullYear(), maturity.getUTCMonth(),
+      Math.min(maturity.getUTCDate(), daysInMonth(end.getUTCFullYear(), maturity.getUTCMonth()))));
+    if (a < end) a = addMonths(a, 12);
+    const key = toISO(a);
+    const hit = leapYearCache.get(key);
+    if (hit !== undefined) return hit;
+    const start = addMonths(a, -12);
+    let has = false;
+    for (let y = start.getUTCFullYear(); y <= a.getUTCFullYear(); y++) {
+      if (!isLeap(y)) continue;
+      const f = new Date(Date.UTC(y, 1, 29));
+      if (f > start && f <= a) { has = true; break; }
+    }
+    leapYearCache.set(key, has);
+    return has;
+  };
+  return (a: Date, b: Date, periodEnd: Date): number => {
+    if (b <= a) return 0;
+    if (conv === '30_360') return days30E360(a, b) / 360;
+    const d = days(a, b);
+    if (conv === 'actual_actual') return d / (interestYearHasFeb29(periodEnd) ? 366 : 365);
+    return d / 365;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Coupon calendar from the IP-date text.
+//
+// The old engine took ONLY the day-of-month from the seed and borrowed the MONTHS from
+// the maturity date, stepping backwards. Any bond whose coupon months differ from its
+// maturity month got the wrong coupon dates and therefore the wrong accrued — e.g. a
+// quarterly "30-01, 30-04, 30-07, 30-10" NCD maturing 30-Jun was put on Mar/Jun/Sep/Dec.
+// It also could not read ordinals ("01ST OF EVERY MONTH", "27TH OF EVERY MONTH") or
+// "LAST DAY OF EVERY MONTH", and silently fell back to the maturity day for them.
+// Now the seed's own (day, month) pairs define the calendar.
+// ---------------------------------------------------------------------------
+type DayRule = number | 'eom';
+interface CouponPattern { pairs: { month: number; day: DayRule }[]; perYear: number; source: 'seed' | 'maturity'; frequencyAssumed: boolean; frequencyConflict: boolean }
+
+const MON3: Record<string, number> = { JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11 };
+
+/** Every (day, month) the IP-date text names, in order, one per month. */
+export function parseSeedPairs(seed: string | undefined): { month: number; day: number }[] {
+  let s = ` ${(seed ?? '').toUpperCase()} `;
+  const out: { month: number; day: number }[] = [];
+  const push = (d: number, m: number) => { if (d >= 1 && d <= 31 && m >= 0 && m <= 11) out.push({ month: m, day: d }); };
+  // ISO yyyy-mm-dd
+  s = s.replace(/(\d{4})-(\d{1,2})-(\d{1,2})/g, (_x, _y, m, d) => { push(+d, +m - 1); return ' '; });
+  // dd Mon / dd-Mon / ddMon (optional year)
+  s = s.replace(/(\d{1,2})\s*(?:ST|ND|RD|TH)?\s*[-/ ]?\s*(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\.?(?:\s*[-/ ]\s*(?:\d{4}|\d{2}(?![\d\s]*[A-Z])))?/g,
+    (_x, d, mon) => { push(+d, MON3[mon]); return ' '; });
+  // Mon dd (e.g. "Jan 15")
+  s = s.replace(/(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\.?\s+(\d{1,2})(?!\d)/g,
+    (_x, mon, d) => { push(+d, MON3[mon]); return ' '; });
+  // dd-mm / dd/mm / dd.mm (optional year)
+  s.replace(/(\d{1,2})\s*[-/.]\s*(\d{1,2})(?:\s*[-/.]\s*\d{2,4})?/g, (_x, d, m) => { push(+d, +m - 1); return ' '; });
+  const seen = new Set<number>();
+  return out.filter((p) => (seen.has(p.month) ? false : (seen.add(p.month), true)));
+}
+
+/** "01ST OF EVERY MONTH" → 1, "LAST DAY OF EVERY MONTH" → 'eom', else null. */
+export function parseMonthlyRule(seed: string | undefined): DayRule | null {
+  const s = (seed ?? '').toUpperCase();
+  if (!/(EVERY|EACH)\s+MONTH|MONTHLY/.test(s)) return null;
+  if (/LAST\s+(WORKING\s+|BUSINESS\s+)?DAY|MONTH[\s-]*END|END\s+OF/.test(s)) return 'eom';
+  const m = s.match(/(\d{1,2})\s*(ST|ND|RD|TH)?\b/) ?? s.match(/(\d{1,2})(ST|ND|RD|TH)/);
+  if (m) { const d = parseInt(m[1], 10); if (d >= 1 && d <= 31) return d; }
+  return null;
+}
+
+function perYearOf(f: Frequency): number | null {
+  return f === 'monthly' ? 12 : f === 'quarterly' ? 4 : f === 'half_yearly' ? 2 : f === 'annual' ? 1 : null;
+}
+
+export function buildCouponPattern(seed: string | undefined, freq: Frequency, maturity: Date): CouponPattern {
+  const declared = perYearOf(freq);
+  const monthly = parseMonthlyRule(seed);
+  if (monthly !== null) {
+    return { pairs: Array.from({ length: 12 }, (_v, m) => ({ month: m, day: monthly })), perYear: 12, source: 'seed', frequencyAssumed: false, frequencyConflict: declared !== null && declared !== 12 };
   }
-  return maturity.getUTCDate();
+  let pairs: { month: number; day: DayRule }[] = parseSeedPairs(seed);
+  let source: 'seed' | 'maturity' = 'seed';
+  if (!pairs.length) { pairs = [{ month: maturity.getUTCMonth(), day: maturity.getUTCDate() }]; source = 'maturity'; }
+  const n = pairs.length;
+  const seedPerYear = n >= 12 ? 12 : n >= 4 ? 4 : n >= 2 ? 2 : 1;
+  let perYear: number; let frequencyAssumed = false; let frequencyConflict = false;
+  if (declared === null) {
+    perYear = seedPerYear;
+    frequencyAssumed = n === 1;            // a single date with no stated frequency → annual is a guess
+  } else if (n > 1 && seedPerYear !== declared) {
+    perYear = seedPerYear;                 // the listed dates are more specific than the label
+    frequencyConflict = true;
+  } else {
+    perYear = declared;
+  }
+  if (pairs.length < perYear) {
+    // Expand one listed date to the full calendar by stepping 12/perYear months.
+    const base = pairs[0]; const stepM = 12 / perYear;
+    pairs = Array.from({ length: perYear }, (_v, k) => ({ month: (base.month + k * stepM) % 12, day: base.day }));
+  } else if (pairs.length > perYear) {
+    pairs = pairs.slice(0, perYear);
+  }
+  return { pairs, perYear, source, frequencyAssumed, frequencyConflict };
+}
+
+function dateFor(y: number, m: number, day: DayRule): Date {
+  const dim = daysInMonth(y, m);
+  return new Date(Date.UTC(y, m, day === 'eom' ? dim : Math.min(day, dim)));
+}
+
+/** All pattern dates in [fromYear, toYear], sorted. */
+function patternDates(p: CouponPattern, fromYear: number, toYear: number): Date[] {
+  const out: Date[] = [];
+  for (let y = fromYear; y <= toYear; y++) for (const pr of p.pairs) out.push(dateFor(y, pr.month, pr.day));
+  return out.sort((a, b) => a.getTime() - b.getTime());
+}
+
+/** T+n business days from `from` (weekends + holiday set skipped). */
+export function settlementFrom(from: Date, holidays: Set<string>, lag = SETTLEMENT_LAG_BUSINESS_DAYS): Date {
+  let d = new Date(from.getTime()); let n = 0; let guard = 0;
+  while (n < lag && guard < 30) { d = addDays(d, 1); if (!isWeekend(d) && !holidays.has(toISO(d))) n++; guard++; }
+  return d;
+}
+
+/** Today's date in India (the market's calendar day), as a UTC-midnight Date. */
+function todayIST(): Date {
+  const ist = new Date(Date.now() + 5.5 * 3600 * 1000);
+  return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()));
 }
 
 function parseRedemptionText(text: string | undefined, maturity: Date, settlement: Date): RedemptionEvent[] | null {
@@ -134,11 +284,12 @@ function parseRedemptionText(text: string | undefined, maturity: Date, settlemen
   if (!startISO) return null;
   const step = /month/i.test(t) ? 1 : /quart|quater|qtr/i.test(t) ? 3 : /half|semi/i.test(t) ? 6 : 12;
   const events: RedemptionEvent[] = [];
-  let cursor = toDate(startISO); let cum = 0; let guard = 0;
+  const start = toDate(startISO);
+  let cursor = start; let cum = 0; let guard = 0;
   while (cursor <= maturity && cum < 100 - 0.01 && guard < 400) {
     const p = Math.min(pct, 100 - cum);
     if (cursor > settlement) events.push({ date: toISO(cursor), pct: p });
-    cum += p; cursor = addMonths(cursor, step); guard++;
+    cum += p; guard++; cursor = addMonths(start, step * guard);   // from the origin: no day drift
   }
   return events.length ? events : null;
 }
@@ -169,7 +320,7 @@ function xirr(flows: { date: Date; amount: number }[], settlement: Date, dirty: 
 
 export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
   const coupon = input.couponRate ?? null;
-  const settlement = input.settlementISO ? toDate(input.settlementISO) : addDays(new Date(), SETTLEMENT_LAG_DAYS);
+  const settlement = input.settlementISO ? toDate(input.settlementISO) : settlementFrom(todayIST(), input.holidays);
   const settlementISO = toISO(settlement);
   const empty: AnalyticsResult = {
     ok: false, settlement_date: settlementISO, coupon_schedule: [], cashflow_schedule: [],
@@ -178,6 +329,8 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
     clean_price: input.cleanPricePer100 ?? null, dirty_price: null, current_yield: null,
     ytm: null, macaulay_duration: null, modified_duration: null, days_to_maturity: null, years_to_maturity: null,
     total_future_interest_per_100: 0, total_future_principal_per_100: 0, assumed_bullet: true,
+    last_coupon_date: null, coupons_per_year: null, day_count_used: input.dayCount, calendar_source: 'none',
+    frequency_assumed: false, frequency_conflict: false, calendar_needs_check: false,
   };
   if (!input.maturityISO) return { ...empty, reason: 'Maturity unknown' };
   const maturity = toDate(input.maturityISO);
@@ -187,20 +340,24 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
   const zero = input.frequency === 'zero' || coupon === null || coupon <= 0;
 
   // ---- coupon calendar (scheduled dates) ----
-  const step = freqMonths(input.frequency || 'annual');
-  const day = anchorDay(input.ipDatesSeed, maturity);
+  const pattern = buildCouponPattern(input.ipDatesSeed, input.frequency, maturity);
+  const step = zero ? 12 : 12 / pattern.perYear;
+  const dcf = makeDcf(input.dayCount, maturity, zero ? 1 : pattern.perYear);
+  const issue = input.issueDateISO ? toDate(input.issueDateISO) : null;
+  const validIssue = issue && !Number.isNaN(issue.getTime()) && issue < settlement ? issue : null;
   const scheduled: Date[] = [];
+  let lastCoupon: Date;
   if (!zero) {
-    let d = new Date(Date.UTC(maturity.getUTCFullYear(), maturity.getUTCMonth(), day));
-    if (d > maturity) d = addMonths(d, -step);
-    let guard = 0;
-    while (d > settlement && guard < 1200) { scheduled.unshift(new Date(d.getTime())); d = addMonths(d, -step); guard++; }
-    if (!scheduled.length || toISO(scheduled[scheduled.length - 1]) !== toISO(maturity)) scheduled.push(maturity);
+    const all = patternDates(pattern, settlement.getUTCFullYear() - 1, maturity.getUTCFullYear());
+    for (const d of all) if (d > settlement && d < maturity) scheduled.push(d);
+    scheduled.push(maturity);                                   // final (possibly broken) period ends at maturity
+    const past = all.filter((d) => d <= settlement);
+    lastCoupon = past.length ? past[past.length - 1] : addMonths(scheduled[0], -step);
+    if (validIssue && validIssue > lastCoupon) lastCoupon = validIssue;   // first coupon period starts at allotment
   } else {
     scheduled.push(maturity);
+    lastCoupon = validIssue ?? addMonths(maturity, -12);
   }
-  const lastCoupon = zero ? (input.issueDateISO ? toDate(input.issueDateISO) : addMonths(scheduled[0], -12))
-                          : addMonths(scheduled[0], -step);
 
   // ---- redemption plan ----
   let events = input.redemptionSchedule && input.redemptionSchedule.length ? input.redemptionSchedule
@@ -236,10 +393,16 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
   for (let i = 0; i < timeline.length; i++) {
     const iso = timeline[i];
     const scheduledD = toDate(iso);
-    const payD = adjustBiz(scheduledD, input.bizConv, input.holidays);
     const isMaturity = iso === maturityISO || i === timeline.length - 1;
+    // SEBI (CIR/IMD/DF-1/122/2016): a coupon falling on a holiday is paid the NEXT working
+    // day with no extra interest; a REDEMPTION falling on a holiday is paid the PREVIOUS
+    // working day with interest only up to that day.
+    const payD = isMaturity && input.bizConv !== 'none' && input.bizConv !== ''
+      ? adjustPreceding(scheduledD, input.holidays)
+      : adjustBiz(scheduledD, input.bizConv, input.holidays);
     const isCoupon = schedSet.has(iso) || isMaturity;
-    accum += outstanding * ((coupon ?? 0) / 100) * dcf(prev, scheduledD, input.dayCount);
+    const accrueTo = isMaturity ? payD : scheduledD;
+    accum += outstanding * ((coupon ?? 0) / 100) * dcf(prev, accrueTo, accrueTo);
     let interest = 0;
     if (isCoupon) { interest = +accum.toFixed(4); accum = 0; }
     let principal = (redMap[iso] ?? 0);        // pct of face
@@ -277,7 +440,10 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
     if (!Number.isNaN(d.getTime()) && inPeriod(d)) exDate = d;
   }
 
-  const cumInterest = () => +(100 * ((coupon ?? 0) / 100) * dcf(lastCoupon, settlement, input.dayCount)).toFixed(4);
+  // Accrued uses the same convention as the coupon itself, with the interest year chosen by
+  // the coupon period the settlement falls in (period end = next coupon).
+  const cumInterest = () => +(100 * ((coupon ?? 0) / 100) * dcf(lastCoupon, settlement, nextCoupon)).toFixed(4);
+  const accruedDays = () => input.dayCount === '30_360' ? days30E360(lastCoupon, settlement) : days(lastCoupon, settlement);
   let accrued: number, accrued_days: number;
   let accrual_convention: 'cum' | 'ex' | 'none';
   let coupon_to_seller: 'seller' | 'buyer' | 'unknown';
@@ -289,20 +455,20 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
     // buyer holds to the coupon date without receiving it → standard convention is a
     // NEGATIVE adjustment for the remaining interest (settlement → coupon date).
     accrued_days = -days(settlement, nextCoupon);
-    accrued = +(100 * ((coupon ?? 0) / 100) * dcf(settlement, nextCoupon, input.dayCount) * -1).toFixed(4);
+    accrued = +(100 * ((coupon ?? 0) / 100) * dcf(settlement, nextCoupon, nextCoupon) * -1).toFixed(4);
     accrual_convention = 'ex'; coupon_to_seller = 'seller';
   } else if (exDate !== null) {
     // Entitlement is known (an ex-date exists) and settlement is before it → cum-interest,
     // buyer becomes holder of record, seller is paid normal positive accrued.
-    accrued_days = days(lastCoupon, settlement); accrued = cumInterest();
+    accrued_days = accruedDays(); accrued = cumInterest();
     accrual_convention = 'cum'; coupon_to_seller = 'buyer';
   } else if (rule === 'always_cum') {
-    accrued_days = days(lastCoupon, settlement); accrued = cumInterest();
+    accrued_days = accruedDays(); accrued = cumInterest();
     accrual_convention = 'cum'; coupon_to_seller = 'buyer';
   } else {
     // No actual ex-interest date and no usable rule → entitlement cannot be established.
     // Preserve the EXISTING positive cum-interest calculation exactly; flag 'unknown'.
-    accrued_days = days(lastCoupon, settlement); accrued = cumInterest();
+    accrued_days = accruedDays(); accrued = cumInterest();
     accrual_convention = 'cum'; coupon_to_seller = 'unknown';
   }
   const clean = input.cleanPricePer100 ?? null;
@@ -338,5 +504,13 @@ export function computeAnalytics(input: AnalyticsInput): AnalyticsResult {
     days_to_maturity: dtm, years_to_maturity: +(dtm / 365).toFixed(3),
     total_future_interest_per_100: +totInt.toFixed(4), total_future_principal_per_100: +totPrin.toFixed(4),
     assumed_bullet,
+    last_coupon_date: zero ? null : toISO(lastCoupon),
+    coupons_per_year: zero ? null : pattern.perYear,
+    day_count_used: input.dayCount,
+    calendar_source: zero ? 'none' : pattern.source,
+    frequency_assumed: !zero && pattern.frequencyAssumed,
+    frequency_conflict: !zero && pattern.frequencyConflict,
+    calendar_needs_check: !zero && (pattern.frequencyAssumed || (pattern.source === 'seed' && pattern.perYear === 1
+      && !pattern.pairs.some((p) => p.month === maturity.getUTCMonth()))),
   };
 }

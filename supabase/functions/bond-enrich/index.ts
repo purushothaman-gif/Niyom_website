@@ -96,7 +96,7 @@ async function enrichOne(supabase: Client, bond: Record<string, unknown>, holida
     issueDateISO: (val("issue_date") as string) ?? null,
     ipDatesSeed: String(val("interest_payment_dates") ?? ""),
     redemptionSchedule: redemption,
-    dayCount: (String(val("day_count_convention") ?? "actual_365") as DayCount),
+    dayCount: resolveDayCount(isin, val("day_count_convention")),
     bizConv: (String(val("business_day_convention") ?? "following") as BizConv),
     holidays,
     cleanPricePer100: numOrNull(bond.latest_price),
@@ -185,7 +185,7 @@ async function recomputeOne(supabase: Client, bond: Record<string, unknown>, hol
     issueDateISO: (bond.issue_date as string) ?? null,
     ipDatesSeed: String(bond.interest_payment_dates ?? ""),
     redemptionSchedule: redemption,
-    dayCount: (String(bond.day_count_convention ?? "actual_365") as DayCount),
+    dayCount: resolveDayCount(String(bond.isin), bond.day_count_convention),
     bizConv: (String(bond.business_day_convention ?? "following") as BizConv),
     holidays,
     cleanPricePer100: numOrNull(bond.latest_price),
@@ -230,7 +230,22 @@ function analyticsJson(a: ReturnType<typeof computeAnalytics>) {
     years_to_maturity: a.years_to_maturity, total_future_interest_per_100: a.total_future_interest_per_100,
     total_future_principal_per_100: a.total_future_principal_per_100, assumed_bullet: a.assumed_bullet,
     settlement_date: a.settlement_date, ok: a.ok, reason: a.reason ?? null,
+    last_coupon_date: a.last_coupon_date, coupons_per_year: a.coupons_per_year, day_count_used: a.day_count_used,
+    calendar_source: a.calendar_source, frequency_assumed: a.frequency_assumed, frequency_conflict: a.frequency_conflict, calendar_needs_check: a.calendar_needs_check,
   };
+}
+
+/**
+ * The day-count convention the market actually uses for this ISIN.
+ *  - Government securities, SDLs and T-bills (ISIN "IN" + digit) → 30/360 (RBI).
+ *  - Listed corporate debt (INE…)                                 → Actual/Actual (SEBI).
+ * `day_count_convention` was column-defaulted to 'actual_365' on EVERY bond rather than set
+ * per security, so a stored 'actual_365' carries no information and is not trusted; only an
+ * explicit '30_360' on a corporate is honoured.
+ */
+function resolveDayCount(isin: string, stored: unknown): DayCount {
+  if (/^IN\d/.test(isin.toUpperCase())) return "30_360";
+  return String(stored ?? "") === "30_360" ? "30_360" : "actual_actual";
 }
 
 function numOrNull(v: unknown): number | null { const n = typeof v === "number" ? v : parseFloat(String(v ?? "")); return Number.isFinite(n) ? n : null; }
