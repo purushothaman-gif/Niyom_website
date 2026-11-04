@@ -367,8 +367,16 @@ async function importTransactions(
     };
   });
 
-  const { error } = await sb.from('mf_rta_transactions').upsert(rows, { onConflict: 'registrar,txn_ref' });
-  if (error) throw new RtaError(`Could not save transactions: ${error.message}`, 500);
+  // A since-inception transaction feed can carry thousands of rows; upserting
+  // them in one statement trips Postgres's statement_timeout. Chunk it so each
+  // upsert stays small and fast (and a retry re-applies idempotently by txn_ref).
+  const TXN_BATCH = 200;
+  for (let i = 0; i < rows.length; i += TXN_BATCH) {
+    const { error } = await sb
+      .from('mf_rta_transactions')
+      .upsert(rows.slice(i, i + TXN_BATCH), { onConflict: 'registrar,txn_ref' });
+    if (error) throw new RtaError(`Could not save transactions: ${error.message}`, 500);
+  }
 
   return {
     snapshotDate,
