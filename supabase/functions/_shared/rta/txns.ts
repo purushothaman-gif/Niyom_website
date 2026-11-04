@@ -52,6 +52,15 @@ export function classifyTxn(
   // the description ("Dividend Reinvestment"), so treat either as a reinvest.
   const reinvest = (reinvestFlag ?? '').toUpperCase().startsWith('Y') || /REINVEST/.test(s);
 
+  // CAMS "Transfer In/Out on Change of Broker" (TICOB / TOCOB; type codes TI/TO).
+  // When a client moves a folio to our ARN its units are transferred in (or out
+  // when they leave), carrying value but no fresh purchase — so count it as a
+  // switch leg rather than letting it fall through to 'other'. A bare "change of
+  // broker" defaults to the IN leg (clients moving TO us is the common case).
+  if (/\bTICOB\b/.test(s)) return 'switch_in';
+  if (/\bTOCOB\b/.test(s)) return 'switch_out';
+  if (/CHANGE OF BROKER|\bCOB\b/.test(s)) return /\bOUT\b/.test(s) ? 'switch_out' : 'switch_in';
+
   // A switch / systematic-transfer leg: OUT reduces this scheme, otherwise it's
   // the IN leg. (SWP = systematic WITHDRAWAL, handled as a redemption below.)
   if (/SWITCH|\bSTP\b|TRANSFER/.test(s)) return /OUT/.test(s) ? 'switch_out' : 'switch_in';
@@ -66,6 +75,7 @@ export function classifyTxn(
     R: 'redemption', RED: 'redemption', SWP: 'redemption',
     SO: 'switch_out', SWOUT: 'switch_out', SWO: 'switch_out',
     SI: 'switch_in', SWIN: 'switch_in', SWI: 'switch_in',
+    TI: 'switch_in', TICOB: 'switch_in', TO: 'switch_out', TOCOB: 'switch_out',
     DP: 'dividend', DIVP: 'dividend',
     DR: reinvest ? 'purchase' : 'dividend', DIVR: 'purchase',
   };
