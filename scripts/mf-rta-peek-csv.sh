@@ -20,7 +20,12 @@ fi
 unset PW
 
 csv=$(find "$tmp" -type f -iname '*.csv' | head -1)
-[ -z "$csv" ] && { echo "No .csv inside the ZIP. Files: $(find "$tmp" -type f -printf '%f ')"; exit 1; }
+if [ -z "$csv" ]; then
+  echo "No .csv inside the ZIP. Members:"
+  find "$tmp" -type f -exec basename {} ';'
+  echo "(If these are .dbf, peek them with mf-rta-peek.sh instead.)"
+  exit 1
+fi
 
 echo "member: $(basename "$csv")"
 total=$(wc -l < "$csv" | tr -d ' ')

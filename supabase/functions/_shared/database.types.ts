@@ -5339,6 +5339,7 @@ export type Database = {
           source: string | null
           source_file: string | null
           status: string
+          txns_upserted: number | null
           unmatched: number
         }
         Insert: {
@@ -5360,6 +5361,7 @@ export type Database = {
           source?: string | null
           source_file?: string | null
           status?: string
+          txns_upserted?: number | null
           unmatched?: number
         }
         Update: {
@@ -5381,6 +5383,7 @@ export type Database = {
           source?: string | null
           source_file?: string | null
           status?: string
+          txns_upserted?: number | null
           unmatched?: number
         }
         Relationships: []

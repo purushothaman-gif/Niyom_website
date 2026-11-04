@@ -14,7 +14,9 @@ import { parseDbf, type DbfTable } from './dbf.ts';
 import { parseCsv } from './csv.ts';
 import { parseWbr9, type RtaFolioStage, type RtaHoldingStage } from './wbr9.ts';
 import { parseWbr49, type RtaSipStage } from './wbr49.ts';
+import { isWbr2, parseWbr2 } from './wbr2.ts';
 import { isKfAum, isKfSip, parseKfAum, parseKfSip } from './kfintech.ts';
+import type { RtaTxnStage } from './txns.ts';
 import { unzipMember, WinzipError } from './winzip.ts';
 
 /** A base64 body inflates by a third; the ZIPs are a few KB, cap well above. */
@@ -41,13 +43,14 @@ export function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-export type RtaReport = 'WBR9' | 'WBR49' | 'WSREG' | 'WBCUM';
+export type RtaReport = 'WBR9' | 'WBR49' | 'WSREG' | 'WBCUM' | 'WBR2' | 'WBTRN';
 
 /** Which report is this? Matched by column presence, not file name. */
 export function detectReport(table: DbfTable): RtaReport | null {
   const names = new Set(table.fields.map((f) => f.name));
   if (['FOLIOCHK', 'CLOS_BAL', 'SCH_NAME'].every((n) => names.has(n))) return 'WBR9';
   if (['FOLIO_NO', 'AUT_TRNTYP', 'AUTO_AMOUN'].every((n) => names.has(n))) return 'WBR49';
+  if (isWbr2(table)) return 'WBR2';
   return null;
 }
 
@@ -87,6 +90,7 @@ interface ReportSummary {
   foliosUpserted: number;
   holdingsUpserted: number;
   sipsUpserted: number;
+  txnsUpserted: number;
   matched: number;
   unmatched: number;
 }
@@ -193,6 +197,7 @@ async function importHoldings(
     foliosUpserted: folioList.length,
     holdingsUpserted: holdingList.length,
     sipsUpserted: 0,
+    txnsUpserted: 0,
     matched,
     unmatched,
   };
@@ -213,7 +218,7 @@ async function importSips(
 ): Promise<ReportSummary> {
   const nowIso = new Date().toISOString();
   if (!sips.length) {
-    return { snapshotDate, rowsTotal: 0, foliosUpserted: 0, holdingsUpserted: 0, sipsUpserted: 0, matched: 0, unmatched: 0 };
+    return { snapshotDate, rowsTotal: 0, foliosUpserted: 0, holdingsUpserted: 0, sipsUpserted: 0, txnsUpserted: 0, matched: 0, unmatched: 0 };
   }
 
   // Resolve each SIP's folio (to link folio_id) and client. A WBR49 arriving
@@ -291,9 +296,95 @@ async function importSips(
     foliosUpserted: 0,
     holdingsUpserted: 0,
     sipsUpserted: rows.length,
+    txnsUpserted: 0,
     matched,
     unmatched,
   };
+}
+
+// Shared transaction upsert for CAMS WBR2/WBR2A and (later) KFintech WBTRN:
+// resolve each transaction's folio + client, then upsert keyed by
+// (registrar, txn_ref) so a re-import of the same transaction overwrites it.
+async function importTransactions(
+  sb: SupabaseClient,
+  txns: RtaTxnStage[],
+  registrar: string,
+  snapshotDate: string | null,
+): Promise<ReportSummary> {
+  const nowIso = new Date().toISOString();
+  if (!txns.length) {
+    return { snapshotDate, rowsTotal: 0, foliosUpserted: 0, holdingsUpserted: 0, sipsUpserted: 0, txnsUpserted: 0, matched: 0, unmatched: 0 };
+  }
+
+  // Resolve folio_id + an existing folio→client link from the folio master.
+  const folios = [...new Set(txns.map((t) => t.folio))];
+  const folioIdByFolio = new Map<string, string>();
+  const clientByFolio = new Map<string, string | null>();
+  {
+    const { data } = await sb
+      .from('mf_rta_folios')
+      .select('id, folio, client_id')
+      .eq('registrar', registrar)
+      .in('folio', folios);
+    for (const row of (data ?? []) as { id: string; folio: string; client_id: string | null }[]) {
+      folioIdByFolio.set(row.folio, row.id);
+      clientByFolio.set(row.folio, row.client_id);
+    }
+  }
+  const byPan = await clientsByPan(sb, txns.map((t) => t.pan ?? ''));
+
+  let matched = 0;
+  let unmatched = 0;
+  const rows = txns.map((t) => {
+    const client = (t.pan ? byPan.get(t.pan) : undefined) ?? clientByFolio.get(t.folio) ?? null;
+    if (client) matched++;
+    else unmatched++;
+    return {
+      registrar: t.registrar,
+      txn_ref: t.txn_ref,
+      folio: t.folio,
+      scheme_code: t.scheme_code,
+      folio_id: folioIdByFolio.get(t.folio) ?? null,
+      scheme_name: t.scheme_name,
+      amc_code: t.amc_code,
+      holder_name: t.holder_name,
+      pan: t.pan,
+      txn_kind: t.txn_kind,
+      txn_type_raw: t.txn_type_raw,
+      trade_date: t.trade_date,
+      post_date: t.post_date,
+      amount: t.amount,
+      units: t.units,
+      nav: t.nav,
+      euin: t.euin,
+      sub_broker: t.sub_broker,
+      arn: t.arn,
+      snapshot_date: t.snapshot_date ?? snapshotDate,
+      ...(client ? { client_id: client, matched_at: nowIso } : {}),
+      last_seen_at: nowIso,
+      updated_at: nowIso,
+    };
+  });
+
+  const { error } = await sb.from('mf_rta_transactions').upsert(rows, { onConflict: 'registrar,txn_ref' });
+  if (error) throw new RtaError(`Could not save transactions: ${error.message}`, 500);
+
+  return {
+    snapshotDate,
+    rowsTotal: txns.length,
+    foliosUpserted: 0,
+    holdingsUpserted: 0,
+    sipsUpserted: 0,
+    txnsUpserted: rows.length,
+    matched,
+    unmatched,
+  };
+}
+
+/** CAMS WBR2 / WBR2A: parse the DBF, then share the transaction upsert. */
+async function importWbr2(sb: SupabaseClient, table: DbfTable, registrar: string): Promise<ReportSummary> {
+  const parsed = parseWbr2(table, registrar);
+  return importTransactions(sb, parsed.txns, registrar, parsed.snapshotDate);
 }
 
 /** CAMS WBR49: parse the DBF, then share the SIP upsert. */
@@ -362,7 +453,7 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
           ok: true, skipped: true, reason: 'duplicate',
           registrar, report: d.report, sourceFile, messageId, fileHash,
           snapshotDate: d.snapshot_date, rowsTotal: 0, foliosUpserted: 0,
-          holdingsUpserted: 0, sipsUpserted: 0, matched: 0, unmatched: 0,
+          holdingsUpserted: 0, sipsUpserted: 0, txnsUpserted: 0, matched: 0, unmatched: 0,
           durationMs: Date.now() - started,
         };
       }
@@ -394,11 +485,13 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       const table = parseDbf(bytes);
       report = detectReport(table);
       if (!report) {
-        throw new RtaError('Unrecognised registrar feed (not a WBR9 holdings or WBR49 SIP file).', 422);
+        throw new RtaError('Unrecognised registrar feed (not a WBR9 holdings, WBR49 SIP, or WBR2 transaction file).', 422);
       }
       summary = report === 'WBR9'
         ? await importWbr9(sb, table, registrar)
-        : await importWbr49(sb, table, registrar, snap);
+        : report === 'WBR2'
+          ? await importWbr2(sb, table, registrar)
+          : await importWbr49(sb, table, registrar, snap);
     }
     snapshotDate = summary.snapshotDate;
 
@@ -406,7 +499,8 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       registrar, report, source_file: sourceFile, file_hash: fileHash, message_id: messageId, source,
       snapshot_date: snapshotDate, rows_total: summary.rowsTotal,
       folios_upserted: summary.foliosUpserted, holdings_upserted: summary.holdingsUpserted,
-      sips_upserted: summary.sipsUpserted, matched: summary.matched, unmatched: summary.unmatched,
+      sips_upserted: summary.sipsUpserted, txns_upserted: summary.txnsUpserted,
+      matched: summary.matched, unmatched: summary.unmatched,
       status: 'ok', duration_ms: Date.now() - started, imported_by: importedBy,
     });
 
