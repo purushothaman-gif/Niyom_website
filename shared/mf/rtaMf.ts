@@ -22,7 +22,7 @@ export interface RtaHoldingRow {
   nav: number | null;
   navValue: number | null;
   snapshotDate: string | null;
-  /** Net amount invested (purchases − redemptions) from the transaction feed, or null if we have no transactions for this holding yet. */
+  /** Cost of acquisition: the registrar's own valuation cost (WBR53) when we have it — authoritative, and the only source that covers units transferred in from a prior broker — else net purchases−redemptions from the transaction feed, else null. */
   investedCost: number | null;
   /** Earliest purchase trade date from the transaction feed, or null. */
   firstInvestmentDate: string | null;
@@ -90,7 +90,7 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
     folioIds.length
       ? db
           .from('mf_rta_holdings')
-          .select('id, folio, scheme_name, scheme_code, amc_code, units, rta_value, nav, nav_value, snapshot_date')
+          .select('id, folio, scheme_name, scheme_code, amc_code, units, rta_value, nav, nav_value, snapshot_date, invested_cost')
           .in('folio_id', folioIds)
       : Promise.resolve({ data: [], error: null }),
     db
@@ -134,6 +134,12 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
       const exact = byScheme.get(schemeKey(h.folio, h.scheme_code));
       const folioOnly = holdingsPerFolio.get(h.folio) === 1 ? byFolio.get(h.folio) : undefined;
       const agg = exact?.seen ? exact : folioOnly?.seen ? folioOnly : null;
+      // Prefer the registrar's own valuation cost (WBR53) when present: it is the
+      // authoritative cost of acquisition and the only source that covers units
+      // transferred in from a prior broker, which the transaction feed misses.
+      // Fall back to the transaction-derived net investment otherwise.
+      const registrarCost = h.invested_cost == null ? null : Number(h.invested_cost);
+      const txnCost = agg ? Math.max(0, Math.round(agg.invested * 100) / 100) : null;
       return {
         id: h.id,
         folio: h.folio,
@@ -145,7 +151,7 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
         nav: h.nav == null ? null : Number(h.nav),
         navValue: h.nav_value == null ? null : Number(h.nav_value),
         snapshotDate: h.snapshot_date,
-        investedCost: agg ? Math.max(0, Math.round(agg.invested * 100) / 100) : null,
+        investedCost: registrarCost != null ? registrarCost : txnCost,
         firstInvestmentDate: agg ? agg.first : null,
       };
     })

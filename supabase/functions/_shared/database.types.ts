@@ -5269,9 +5269,11 @@ export type Database = {
       mf_rta_holdings: {
         Row: {
           amc_code: string | null
+          cost_date: string | null
           folio: string
           folio_id: string
           id: string
+          invested_cost: number | null
           nav: number | null
           nav_value: number | null
           registrar: string
@@ -5284,9 +5286,11 @@ export type Database = {
         }
         Insert: {
           amc_code?: string | null
+          cost_date?: string | null
           folio: string
           folio_id: string
           id?: string
+          invested_cost?: number | null
           nav?: number | null
           nav_value?: number | null
           registrar: string
@@ -5299,9 +5303,11 @@ export type Database = {
         }
         Update: {
           amc_code?: string | null
+          cost_date?: string | null
           folio?: string
           folio_id?: string
           id?: string
+          invested_cost?: number | null
           nav?: number | null
           nav_value?: number | null
           registrar?: string
