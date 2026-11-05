@@ -14,7 +14,7 @@ import { PortfolioPage } from './features/portfolio/PortfolioPage';
 import { AllocationPage } from './features/allocation/AllocationPage';
 import { MutualFundsModule } from './features/mutual-funds/MutualFundsModule';
 import { MfLaunchPage } from './features/mutual-funds/MfLaunchPage';
-import { ExploreHub } from './features/explore/ExploreHub';
+import { ExploreHub, type ExploreScreen } from './features/explore/ExploreHub';
 import { useMfLaunch } from './features/mutual-funds/useMfLaunch';
 import { BondsModule } from './features/bonds/BondsModule';
 import { SharesModule } from './features/shares/SharesModule';
@@ -105,6 +105,12 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
   /** A bond/share picked on Explore, opened straight to its detail page. */
   const [openBondId, setOpenBondId] = useState<string | null>(null);
   const [openShareId, setOpenShareId] = useState<string | null>(null);
+  /** A fund/collection picked on the dashboard rails, opened on Explore. */
+  const [exploreScreen, setExploreScreen] = useState<ExploreScreen | null>(null);
+  // Used once on arrival; leaving Explore forgets it so the nav opens Explore home.
+  useEffect(() => {
+    if (view !== 'explore') setExploreScreen(null);
+  }, [view]);
 
   /*
    * Five minutes of nothing signs the client out. This is what makes a 4-digit
@@ -151,6 +157,28 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
     [hasData, snapshot.holdings],
   );
 
+  const fundInvestButton = (
+            <button
+              type="button"
+              onClick={() =>
+                !mfSsoOn
+                  ? navigate('mutual-funds')
+                  : mf.state === 'kyc_incomplete'
+                    ? navigate('onboarding')
+                    : mf.launch()
+              }
+              disabled={mf.state === 'opening'}
+              className="w-full rounded-token-md py-3 text-sm font-bold text-on-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+            >
+              {mfSsoOn && mf.state === 'kyc_incomplete'
+                ? 'Complete KYC to invest'
+                : mf.state === 'opening'
+                  ? 'Opening…'
+                  : 'Invest now'}
+            </button>
+  );
+
   const renderView = () => {
     // Views that fetch their own data don't wait on the client snapshot.
     if (view === 'mutual-funds' && mfSsoOn)
@@ -178,27 +206,8 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
             setOpenShareId(id);
             navigate('unlisted-shares');
           }}
-          fundInvest={
-            <button
-              type="button"
-              onClick={() =>
-                !mfSsoOn
-                  ? navigate('mutual-funds')
-                  : mf.state === 'kyc_incomplete'
-                    ? navigate('onboarding')
-                    : mf.launch()
-              }
-              disabled={mf.state === 'opening'}
-              className="w-full rounded-token-md py-3 text-sm font-bold text-on-accent transition-opacity hover:opacity-90 disabled:opacity-60"
-              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
-            >
-              {mfSsoOn && mf.state === 'kyc_incomplete'
-                ? 'Complete KYC to invest'
-                : mf.state === 'opening'
-                  ? 'Opening…'
-                  : 'Invest now'}
-            </button>
-          }
+          fundInvest={fundInvestButton}
+          initialScreen={exploreScreen}
         />
       );
     if (view === 'mutual-funds')
@@ -251,6 +260,28 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
       case 'dashboard':
         return dashboardData ? (
           <DashboardPage
+            explore={
+              <ExploreHub
+                embedded
+                holdings={snapshot.holdings}
+                xirrPercent={dashboardData?.xirrPercent ?? null}
+                hidden={hiddenProducts}
+                onNavigate={navigate}
+                onOpenBond={(id) => {
+                  setOpenBondId(id);
+                  navigate('bonds');
+                }}
+                onOpenShare={(id) => {
+                  setOpenShareId(id);
+                  navigate('unlisted-shares');
+                }}
+                onOpenScreen={(sc) => {
+                  setExploreScreen(sc);
+                  navigate('explore');
+                }}
+                fundInvest={fundInvestButton}
+              />
+            }
             clientId={clientId}
             client={client}
             data={dashboardData}

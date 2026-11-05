@@ -91,11 +91,16 @@ function monthsTo(iso: string | null): number | null {
   return Math.max(0, (d.getFullYear() - now.getFullYear()) * 12 + d.getMonth() - now.getMonth());
 }
 
-export function bondYield(b: ClientBond): number | null {
+/** The bond fields a card needs — satisfied by both ClientBond and PartnerBond. */
+export type BondLike = Pick<ClientBond, 'id' | 'isin' | 'bond_name' | 'issuer_name' | 'coupon_rate' | 'maturity_date' | 'rating'> & {
+  analytics?: { ytm?: number | null } | null;
+};
+
+export function bondYield(b: BondLike): number | null {
   return b.analytics?.ytm ?? b.coupon_rate ?? null;
 }
 
-export function BondCard({ bond, onOpen }: { bond: ClientBond; onOpen: () => void }) {
+export function BondCard({ bond, onOpen }: { bond: BondLike; onOpen: () => void }) {
   const name = bond.issuer_name || bond.bond_name || bond.isin;
   const y = bondYield(bond);
   const months = monthsTo(bond.maturity_date);
@@ -163,7 +168,19 @@ export function CollectionTile({ collection, count, onOpen }: { collection: Fund
 
 /* ---------------------------------------------------------------- Shares */
 
-export function ShareCard({ share, onOpen }: { share: ClientShare; onOpen: () => void }) {
+/** The share fields a card needs — client and partner views differ only in price. */
+export type ShareLike = Pick<ClientShare, 'id' | 'company_name' | 'short_name' | 'logo_url' | 'sector'>;
+
+export function ShareCard({
+  share,
+  price,
+  onOpen,
+}: {
+  share: ShareLike;
+  /** Price shown to this viewer (client price or the partner's own price). */
+  price: number | null;
+  onOpen: () => void;
+}) {
   const name = share.short_name || share.company_name;
   return (
     <button type="button" onClick={onOpen} className={cardCls}>
@@ -180,7 +197,7 @@ export function ShareCard({ share, onOpen }: { share: ClientShare; onOpen: () =>
       <p className="mt-3 line-clamp-2 text-sm font-semibold leading-snug text-text-primary">{name}</p>
       <div className="mt-auto pt-4">
         <p className="font-display text-lg font-bold tabular-nums text-text-primary">
-          {share.client_price != null ? inr(share.client_price, share.client_price < 1000) : '—'}
+          {price != null ? inr(price, price < 1000) : '—'}
         </p>
         <p className="mt-0.5 truncate text-[11px] text-text-secondary">{share.sector || 'Unlisted'}</p>
       </div>

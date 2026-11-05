@@ -44,6 +44,7 @@ import {
   RailSkeleton,
   ShareCard,
   bondYield,
+  type BondLike,
   type ToolItem,
 } from './cards';
 import { YourInvestmentsCard } from './YourInvestmentsCard';
@@ -64,8 +65,8 @@ export function popularFunds(funds: CatalogFund[], picks: string[]): CatalogFund
 }
 
 /** Popular bonds: investment-grade first (AA and above), then by yield. */
-export function popularBonds(bonds: ClientBond[], n = 4): ClientBond[] {
-  const gradeRank = (b: ClientBond) => {
+export function popularBonds<T extends BondLike & { maturity_date: string | null }>(bonds: T[], n = 4): T[] {
+  const gradeRank = (b: T) => {
     const g = ratingGrade(b.rating) ?? '';
     return g.startsWith('AAA') ? 0 : g.startsWith('AA') ? 1 : g.startsWith('A') ? 2 : 3;
   };
@@ -78,11 +79,12 @@ export function popularBonds(bonds: ClientBond[], n = 4): ClientBond[] {
 /** Rows rendered in the all-funds list; search narrows the rest. */
 const ALL_CAP = 100;
 
-type Screen =
+export type ExploreScreen =
   | { name: 'home' }
   | { name: 'all' }
   | { name: 'fund'; amfiCode: string }
   | { name: 'collection'; id: string };
+type Screen = ExploreScreen;
 
 interface Props {
   holdings: PortalHolding[];
@@ -96,9 +98,30 @@ interface Props {
   fundInvest: ReactNode;
   /** Mutual Funds page variant: no self-link to Mutual Funds in the tools list. */
   fundsOnly?: boolean;
+  /**
+   * Dashboard variant: just the discovery rails, full width — no right column
+   * (the dashboard has its own summary) and no fund search. Fund screens open
+   * on the Explore page via onOpenScreen instead of replacing the dashboard.
+   */
+  embedded?: boolean;
+  onOpenScreen?: (screen: ExploreScreen) => void;
+  /** Screen to open on arrival (a fund picked on the dashboard). */
+  initialScreen?: ExploreScreen | null;
 }
 
-export function ExploreHub({ holdings, xirrPercent, hidden, onNavigate, onOpenBond, onOpenShare, fundInvest, fundsOnly = false }: Props) {
+export function ExploreHub({
+  holdings,
+  xirrPercent,
+  hidden,
+  onNavigate,
+  onOpenBond,
+  onOpenShare,
+  fundInvest,
+  fundsOnly = false,
+  embedded = false,
+  onOpenScreen,
+  initialScreen = null,
+}: Props) {
   const showFunds = !hidden.has('mutual-funds');
   const showBonds = !hidden.has('bonds');
   const showShares = !hidden.has('unlisted-shares');
@@ -106,10 +129,18 @@ export function ExploreHub({ holdings, xirrPercent, hidden, onNavigate, onOpenBo
   const catalog = useMfCatalog();
   const [bonds, setBonds] = useState<ClientBond[] | null>(null);
   const [shares, setShares] = useState<ClientShare[] | null>(null);
-  const [screen, setScreen] = useState<Screen>({ name: 'home' });
+  const [screen, setLocalScreen] = useState<Screen>(initialScreen ?? { name: 'home' });
+  // Embedded on the dashboard, any deeper screen opens on the Explore page.
+  const setScreen = (next: Screen) =>
+    embedded && next.name !== 'home' && onOpenScreen ? onOpenScreen(next) : setLocalScreen(next);
   const [query, setQuery] = useState('');
   const [allQuery, setAllQuery] = useState('');
   const [allSort, setAllSort] = useState<ReturnKey>('3Y');
+
+  // A new screen starts at the top, not wherever the previous page was scrolled.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [screen]);
 
   useEffect(() => {
     let alive = true;
@@ -226,7 +257,7 @@ export function ExploreHub({ holdings, xirrPercent, hidden, onNavigate, onOpenBo
   ];
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <div className={embedded ? '' : 'grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]'}>
       {/* ------------------------------------------------ left column */}
       <div className="min-w-0 space-y-10">
         {showBonds && (
@@ -276,7 +307,7 @@ export function ExploreHub({ holdings, xirrPercent, hidden, onNavigate, onOpenBo
             ) : shares.length ? (
               <CardGrid>
                 {shares.slice(0, 4).map((s) => (
-                  <ShareCard key={s.id} share={s} onOpen={() => onOpenShare(s.id)} />
+                  <ShareCard key={s.id} share={s} price={s.client_price} onOpen={() => onOpenShare(s.id)} />
                 ))}
               </CardGrid>
             ) : (
@@ -285,7 +316,7 @@ export function ExploreHub({ holdings, xirrPercent, hidden, onNavigate, onOpenBo
           </Rail>
         )}
 
-        {showFunds && !catalog.loading && funds.length > 0 && (
+        {!embedded && showFunds && !catalog.loading && funds.length > 0 && (
           <Rail title="Find a fund" icon={Search}>
             <label className="flex items-center gap-2 rounded-token-xl border border-border bg-bg-elevated px-4 py-3 shadow-token-card focus-within:border-accent">
               <Search className="h-4 w-4 text-text-faint" />
@@ -306,6 +337,7 @@ export function ExploreHub({ holdings, xirrPercent, hidden, onNavigate, onOpenBo
       </div>
 
       {/* ------------------------------------------------ right column */}
+      {!embedded && (
       <aside className="space-y-8">
         <YourInvestmentsCard summary={summary} xirr={xirr} onOpen={() => onNavigate('portfolio')} />
         <ProductsTools items={tools} />
@@ -315,6 +347,7 @@ export function ExploreHub({ holdings, xirrPercent, hidden, onNavigate, onOpenBo
           at today&rsquo;s offer price.
         </p>
       </aside>
+      )}
     </div>
   );
 }

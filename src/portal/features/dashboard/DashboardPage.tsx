@@ -10,7 +10,7 @@
 import type { NWClient } from '../../../crm/types';
 import type { DashboardData } from '../../types';
 import type { PortalView } from '../../layout/navigation';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { PortalHolding } from '../../types/cas';
 import { fromClientHoldings } from '../../../../shared/portal/investments/model';
 import { InvestmentsBoard } from '../investments/InvestmentsBoard';
@@ -30,6 +30,8 @@ import { ImportPortfolioCard } from '../portfolio/ImportPortfolioCard';
 import { onboardingIncomplete, canActivateMoreProducts } from '../onboarding/onboardingSteps';
 
 interface DashboardPageProps {
+  /** The Explore rails (popular bonds, funds, collections, shares), Groww-style. */
+  explore?: ReactNode;
   client: NWClient | null;
   /** For reading the client's registrar-fed mutual funds. */
   clientId: string;
@@ -59,6 +61,7 @@ function greeting(): string {
 }
 
 export function DashboardPage({
+  explore,
   client,
   clientId,
   data,
@@ -84,6 +87,29 @@ export function DashboardPage({
   // return over the whole portfolio would be measured against missing cash —
   // suppress it rather than show a misleading figure.
   const xirr = rows.some((r) => r.source === 'registrar') ? null : data.xirrPercent;
+
+  const exploreBlockNode = (
+    <>
+      {explore && (
+        <section className="space-y-2">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <h2 className="font-display text-2xl font-bold tracking-tight text-text-primary">Explore</h2>
+              <p className="mt-0.5 text-sm text-text-secondary">Popular bonds, funds and unlisted shares — picked for you.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('explore')}
+              className="shrink-0 text-xs font-semibold text-accent hover:text-accent-soft"
+            >
+              Open Explore →
+            </button>
+          </div>
+          <div className="pt-4">{explore}</div>
+        </section>
+      )}
+    </>
+  );
 
   return (
     <div className="space-y-5">
@@ -112,6 +138,7 @@ export function DashboardPage({
         The portfolio board — every holding across mutual funds, bonds and
         unlisted shares, with returns, 1-day movement and allocation.
       */}
+      {rows.length === 0 && exploreBlockNode}
       <InvestmentsBoard
         rows={rows}
         enriching={enriching}
@@ -121,13 +148,15 @@ export function DashboardPage({
         actions={
           <button
             type="button"
-            onClick={() => onNavigate('mutual-funds')}
+            onClick={() => onNavigate('explore')}
             className="hidden rounded-token-md bg-accent px-3.5 py-2 text-xs font-bold text-on-accent hover:bg-accent-strong sm:inline-flex"
           >
             Invest
           </button>
         }
       />
+
+      {rows.length > 0 && exploreBlockNode}
 
       {/* No statement import once mutual funds run on the MF platform. */}
       {!hasImportedStatement && !mfSsoEnabled() && (
