@@ -466,6 +466,27 @@ export default function ManageClients({ employee, onNavigate }: Props) {
     }
   };
 
+  /** Approve or reject a bank account the client added in the portal. */
+  const reviewBank = async (a: NWClientBankAccount, approve: boolean) => {
+    if (!bankClient) return;
+    let note: string | null = null;
+    if (!approve) {
+      note = window.prompt('Reason for rejecting (shown to the client):', 'Account details could not be confirmed');
+      if (note === null) return;
+    }
+    setBankBusy(true);
+    try {
+      const { error } = await supabase.rpc('nw_review_client_bank', { p_id: a.id, p_approve: approve, p_note: note ?? undefined });
+      if (error) throw error;
+      showToast(approve ? 'Bank account approved.' : 'Bank account rejected.');
+      await loadBankAccounts(bankClient.id);
+    } catch (e: any) {
+      showToast(e?.message || 'Could not review this account.', false);
+    } finally {
+      setBankBusy(false);
+    }
+  };
+
   const makePrimary = async (a: NWClientBankAccount) => {
     if (!bankClient || a.is_primary) return;
     setBankBusy(true);
@@ -1133,16 +1154,38 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                           </span>
                         )}
                         {a.label && <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)' }}>{a.label}</span>}
+                        {(a as { verification_status?: string }).verification_status === 'pending' && (
+                          <span className="text-xs px-2 py-0.5 rounded-lg font-bold" style={{ background: 'rgba(var(--warning-rgb),0.15)', color: 'var(--warning)' }}>
+                            Awaiting your approval · added by client{(a as { requested_primary?: boolean }).requested_primary ? ' · wants primary' : ''}
+                          </span>
+                        )}
+                        {(a as { verification_status?: string }).verification_status === 'rejected' && (
+                          <span className="text-xs px-2 py-0.5 rounded-lg font-semibold" style={{ background: 'rgba(var(--danger-rgb),0.12)', color: 'var(--danger)' }} title={(a as { review_note?: string }).review_note ?? ''}>
+                            Rejected
+                          </span>
+                        )}
                         {(a as { verification_status?: string }).verification_status === 'verified' && (
-                          <span className="text-xs px-2 py-0.5 rounded-lg font-semibold" style={{ background: 'rgba(var(--success-rgb),0.12)', color: 'var(--success)' }} title={`Name at bank: ${(a as { name_at_bank?: string }).name_at_bank ?? '—'}`}>
-                            Bank-verified{(a as { added_via?: string }).added_via === 'client_portal' ? ' · added by client' : ''}
+                          <span className="text-xs px-2 py-0.5 rounded-lg font-semibold" style={{ background: 'rgba(var(--success-rgb),0.12)', color: 'var(--success)' }}>
+                            Approved{(a as { added_via?: string }).added_via === 'client_portal' ? ' · added by client' : ''}
                           </span>
                         )}
                       </div>
                       <p className="text-xs font-mono mt-0.5" style={{ color: 'var(--text-faint)' }}>{a.account_number}{a.ifsc ? ` · ${a.ifsc}` : ''}</p>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      {!a.is_primary && (
+                      {(a as { verification_status?: string }).verification_status === 'pending' && (
+                        <>
+                          <button onClick={() => reviewBank(a, true)} disabled={bankBusy} title="Approve this account"
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50" style={{ background: 'var(--success)', color: '#fff' }}>
+                            Approve
+                          </button>
+                          <button onClick={() => reviewBank(a, false)} disabled={bankBusy} title="Reject this account"
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50" style={{ background: 'var(--bg-base)', color: 'var(--danger)', border: '1px solid var(--border)' }}>
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      {!a.is_primary && !['pending', 'rejected'].includes(String((a as { verification_status?: string }).verification_status)) && (
                         <button onClick={() => makePrimary(a)} disabled={bankBusy} title="Make Primary"
                           className="px-2.5 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
                           Make Primary

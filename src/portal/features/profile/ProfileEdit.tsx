@@ -362,8 +362,8 @@ export function EditNomineesModal({ current, onClose, onSaved }: { current: Nomi
 
 /* ---------------------------------------------------------------- bank */
 
-export function AddBankModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState({ account_number: '', confirm: '', ifsc: '', make_primary: false });
+export function AddBankModal({ holderName, onClose, onSaved }: { holderName: string; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState({ account_number: '', confirm: '', ifsc: '', holder_name: holderName, make_primary: false });
   const [step, setStep] = useState<'form' | 'otp'>('form');
   const [error, setError] = useState<string | null>(null);
 
@@ -372,6 +372,7 @@ export function AddBankModal({ onClose, onSaved }: { onClose: () => void; onSave
     if (!/^[A-Za-z0-9]{6,40}$/.test(acc)) return setError('Enter a valid account number.');
     if (acc !== form.confirm.replace(/\s+/g, '')) return setError('The two account numbers don’t match.');
     if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifsc.trim().toUpperCase())) return setError('Enter a valid 11-character IFSC (e.g. HDFC0001234).');
+    if (form.holder_name.trim().length < 2) return setError('Enter the account holder’s name as printed on your cheque book.');
     setError(null);
     setStep('otp');
   };
@@ -386,16 +387,21 @@ export function AddBankModal({ onClose, onSaved }: { onClose: () => void; onSave
           <Field label="Re-enter account number">
             <input className={inputCls} value={form.confirm} onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))} inputMode="numeric" autoComplete="off" onPaste={(e) => e.preventDefault()} />
           </Field>
-          <Field label="IFSC">
-            <input className={`${inputCls} uppercase`} value={form.ifsc} onChange={(e) => setForm((f) => ({ ...f, ifsc: e.target.value.toUpperCase() }))} maxLength={11} />
-          </Field>
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <Field label="IFSC">
+              <input className={`${inputCls} uppercase`} value={form.ifsc} onChange={(e) => setForm((f) => ({ ...f, ifsc: e.target.value.toUpperCase() }))} maxLength={11} />
+            </Field>
+            <Field label="Account holder name">
+              <input className={inputCls} value={form.holder_name} onChange={(e) => setForm((f) => ({ ...f, holder_name: e.target.value }))} />
+            </Field>
+          </div>
           <label className="flex items-center gap-2 text-sm text-text-secondary">
             <input type="checkbox" checked={form.make_primary} onChange={(e) => setForm((f) => ({ ...f, make_primary: e.target.checked }))} />
             Make this my primary account
           </label>
           <p className="flex items-start gap-2 rounded-token-md bg-bg-surface p-3 text-[11px] leading-relaxed text-text-secondary">
             <ShieldCheck className="mt-px h-3.5 w-3.5 shrink-0 text-accent" />
-            We verify the account with your bank (a ₹1 penny-drop check) and confirm it is in your name before adding it.
+            Your relationship manager reviews and approves new bank accounts — usually within one working day. Until then the account shows as “Awaiting approval” and isn’t used for payouts.
           </p>
           <ErrorBox text={error} />
           <div className="flex justify-end gap-2">
@@ -413,14 +419,14 @@ export function AddBankModal({ onClose, onSaved }: { onClose: () => void; onSave
             kind: 'bank_add',
             account_number: form.account_number.replace(/\s+/g, ''),
             ifsc: form.ifsc.trim().toUpperCase(),
+            holder_name: form.holder_name.trim(),
             make_primary: form.make_primary,
           }}
-          busyLabel="Verifying with your bank…"
           summary={
             <>
               Add account ending <b className="text-text-primary">{form.account_number.slice(-4)}</b> · IFSC{' '}
               <b className="text-text-primary">{form.ifsc.toUpperCase()}</b>
-              {form.make_primary ? ' · as primary' : ''}
+              {form.make_primary ? ' · as primary' : ''} — sent to your RM for approval
             </>
           }
           onBack={() => setStep('form')}

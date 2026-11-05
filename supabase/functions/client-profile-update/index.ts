@@ -10,8 +10,8 @@
 //   "contact"       { phone?, email?, address?, city?, state?, pincode? }
 //   "nominees"      { nominees: [...] }  full replacement; shares total 100%
 //   "bank_add"      { account_number, ifsc, holder_name?, label?, make_primary? }
-//                   verified by Cashfree penny-drop via the droplet relay
-//                   (/verify/bank) — billed per call, so only after OTP
+//                   saved as 'pending' — usable only after the client's RM
+//                   (or an admin) approves it in the CRM (nw_review_client_bank)
 //   "bank_delete"   { id }   at least one account must remain
 //   "bank_primary"  { id }
 //
@@ -26,7 +26,6 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { decideOtp, generateOtp, hashOtp } from '../_shared/otp.ts';
 import {
-  bankNameAcceptable,
   maskAccount,
   validateBank,
   validateContact,
@@ -92,41 +91,29 @@ async function sendOtpEmail(to: string, name: string, code: string): Promise<boo
   return !!res?.ok;
 }
 
-/** Cashfree penny-drop through the droplet relay (static IP Cashfree whitelists). */
-async function verifyBank(acc: string, ifsc: string, name: string) {
-  const url = Deno.env.get('PAN_RELAY_URL')?.trim();
-  const secret = Deno.env.get('PAN_RELAY_SECRET')?.trim();
-  if (!url || !secret) throw new Error('Bank verification is not configured.');
-  let res: Response;
+/** Bank name for an IFSC (Razorpay's free public IFSC directory), best-effort. */
+async function bankNameForIfsc(ifsc: string): Promise<string | null> {
   try {
-    res = await fetch(`${url.replace(/\/$/, '')}/verify/bank`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-relay-secret': secret },
-      body: JSON.stringify({ bank_account: acc, ifsc, name }),
-    });
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 4000);
+    const res = await fetch(`https://ifsc.razorpay.com/${encodeURIComponent(ifsc)}`, { signal: ctl.signal });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    const d = (await res.json()) as { BANK?: string; BRANCH?: string };
+    return d.BANK ? `${d.BANK}` : null;
   } catch {
-    throw new Error('Bank verification is unavailable right now. Please try again shortly.');
+    return null;
   }
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!res.ok) {
-    // The relay route missing (old droplet build) falls through to its JWT gate.
-    if (res.status === 401 || res.status === 403) throw new Error('Bank verification is unavailable right now. Please try again later.');
-    const msg = String(data.error ?? '').trim();
-    return { valid: false, error: msg || 'The bank could not verify this account.' } as const;
-  }
-  return {
-    valid: data.valid === true,
-    name_at_bank: (data.name_at_bank as string | null) ?? null,
-    name_match_result: (data.name_match_result as string | null) ?? null,
-    bank_name: (data.bank_name as string | null) ?? null,
-    reference_id: data.reference_id != null ? String(data.reference_id) : null,
-  } as const;
 }
+
+/** Accounts that are in use: not awaiting approval and not rejected. */
+const usable = (status: string | null | undefined) => !['pending', 'rejected', 'failed'].includes(String(status ?? ''));
 
 async function logAndAlert(
   db: SupabaseClient,
   client: ClientRow,
   changes: Array<{ field: string; old_value: string | null; new_value: string | null }>,
+  alert?: { title: string; message: string },
 ) {
   if (!changes.length) return;
   await db.from('nw_client_profile_changes').insert(changes.map((c) => ({ ...c, client_id: client.id })));
@@ -135,8 +122,8 @@ async function logAndAlert(
     const fields = [...new Set(changes.map((c) => c.field))].join(', ');
     await db.from('nw_alerts').insert({
       employee_id: client.employee_id,
-      title: 'Client updated their profile',
-      message: `${client.full_name} (${client.client_code}) changed: ${fields}. Verified by email OTP.`,
+      title: alert?.title ?? 'Client updated their profile',
+      message: alert?.message ?? `${client.full_name} (${client.client_code}) changed: ${fields}. Verified by email OTP.`,
       category: 'client_profile',
     });
   }
@@ -257,50 +244,47 @@ Deno.serve(async (req) => {
       const v = validateBank(change as never);
       if (!v.ok) return json({ error: v.error }, 400);
       const b = v.value;
-      const { data: existing } = await db.from('nw_client_bank_accounts').select('id, account_number, ifsc').eq('client_id', client.id);
+      const { data: existing } = await db
+        .from('nw_client_bank_accounts')
+        .select('id, account_number, ifsc, verification_status')
+        .eq('client_id', client.id);
+      const live = (existing ?? []).filter((e) => e.verification_status !== 'rejected');
       // Same cap the CRM's bank manager enforces.
-      if ((existing ?? []).length >= 5) return json({ error: 'You can keep up to 5 bank accounts. Remove one first.' }, 400);
-      if ((existing ?? []).some((e) => e.account_number === b.account_number && e.ifsc === b.ifsc)) {
+      if (live.length >= 5) return json({ error: 'You can keep up to 5 bank accounts. Remove one first.' }, 400);
+      if (live.some((e) => e.account_number === b.account_number && e.ifsc === b.ifsc)) {
         return json({ error: 'This bank account is already on your profile.' }, 400);
       }
-      const nameForCheck = client.pan_name || client.full_name;
-      const r = await verifyBank(b.account_number, b.ifsc, nameForCheck);
-      if (!r.valid) return json({ error: 'error' in r ? r.error : 'The bank reported this account as invalid. Please check the number and IFSC.' }, 400);
-      if (!bankNameAcceptable(r.name_match_result)) {
-        return json({
-          error: `The name on this account (${r.name_at_bank ?? 'not returned'}) does not match your name. Only your own bank account can be added.`,
-        }, 400);
-      }
-      const makePrimary = b.make_primary || !(existing ?? []).length;
-      if (makePrimary) await db.from('nw_client_bank_accounts').update({ is_primary: false }).eq('client_id', client.id);
+      const bankName = await bankNameForIfsc(b.ifsc);
+      // With no usable account yet, the first approved one becomes primary.
+      const requestedPrimary = !!b.make_primary || !(existing ?? []).some((e) => usable(e.verification_status));
       const { data: ins, error } = await db
         .from('nw_client_bank_accounts')
         .insert({
           client_id: client.id,
           account_number: b.account_number,
           ifsc: b.ifsc,
-          bank_name: r.bank_name ?? '',
-          holder_name: r.name_at_bank ?? b.holder_name ?? client.full_name,
+          bank_name: bankName ?? '',
+          holder_name: b.holder_name ?? client.full_name,
           label: b.label ?? '',
-          is_primary: makePrimary,
-          verification_status: 'verified',
-          verified_at: new Date().toISOString(),
-          name_at_bank: r.name_at_bank ?? undefined,
-          name_match: r.name_match_result ?? undefined,
-          verification_ref: r.reference_id ?? undefined,
+          is_primary: false,
+          requested_primary: requestedPrimary,
+          verification_status: 'pending',
           added_via: 'client_portal',
         })
         .select('id')
         .single();
       if (error) throw error;
-      if (makePrimary) {
-        // Keep the nw_clients mirror (read across the CRM) on the primary account.
-        await db.from('nw_clients').update({ bank_account: b.account_number, bank_ifsc: b.ifsc, bank_name: r.bank_name, bank_verified: true }).eq('id', client.id);
-      }
-      await logAndAlert(db, client, [
-        { field: 'bank_account_added', old_value: null, new_value: `${r.bank_name ?? 'Bank'} ${maskAccount(b.account_number)} ${b.ifsc}${makePrimary ? ' (primary)' : ''}` },
-      ]);
-      return json({ ok: true, id: ins?.id, bank_name: r.bank_name, name_at_bank: r.name_at_bank });
+      const label = `${bankName ?? 'Bank'} ${maskAccount(b.account_number)} ${b.ifsc}`;
+      await logAndAlert(
+        db,
+        client,
+        [{ field: 'bank_account_added', old_value: null, new_value: `${label} — awaiting RM approval${requestedPrimary ? ' (as primary)' : ''}` }],
+        {
+          title: 'Bank account awaiting your approval',
+          message: `${client.full_name} (${client.client_code}) added ${label}${requestedPrimary ? ' as primary' : ''}. Approve or reject it in Manage Clients → Bank Accounts.`,
+        },
+      );
+      return json({ ok: true, id: ins?.id, status: 'pending', bank_name: bankName });
     }
 
     // ---------------------------------------------------- bank delete/primary
@@ -308,19 +292,24 @@ Deno.serve(async (req) => {
       const id = String(change.id ?? '');
       const { data: all } = await db
         .from('nw_client_bank_accounts')
-        .select('id, account_number, ifsc, bank_name, is_primary')
+        .select('id, account_number, ifsc, bank_name, is_primary, verification_status')
         .eq('client_id', client.id)
         .order('created_at');
       const target = (all ?? []).find((a) => a.id === id);
       if (!target) return json({ error: 'Bank account not found.' }, 404);
 
       if (kind === 'bank_delete') {
-        if ((all ?? []).length <= 1) return json({ error: 'You need at least one bank account on your profile.' }, 400);
+        // Pending or rejected accounts can always be withdrawn; an account in
+        // use can go only while another approved account remains.
+        const others = (all ?? []).filter((a) => a.id !== id && usable(a.verification_status));
+        if (usable(target.verification_status) && others.length === 0) {
+          return json({ error: 'You need at least one approved bank account on your profile.' }, 400);
+        }
         const { error } = await db.from('nw_client_bank_accounts').delete().eq('id', id).eq('client_id', client.id);
         if (error) throw error;
         let promoted: { id: string; account_number: string; ifsc: string; bank_name: string | null } | undefined;
         if (target.is_primary) {
-          promoted = (all ?? []).find((a) => a.id !== id);
+          promoted = others[0];
           if (promoted) {
             await db.from('nw_client_bank_accounts').update({ is_primary: true }).eq('id', promoted.id);
             await db.from('nw_clients').update({ bank_account: promoted.account_number, bank_ifsc: promoted.ifsc, bank_name: promoted.bank_name }).eq('id', client.id);
@@ -332,6 +321,7 @@ Deno.serve(async (req) => {
         return json({ ok: true });
       }
 
+      if (!usable(target.verification_status)) return json({ error: 'This account is still awaiting approval.' }, 400);
       if (target.is_primary) return json({ ok: true });
       await db.from('nw_client_bank_accounts').update({ is_primary: false }).eq('client_id', client.id);
       await db.from('nw_client_bank_accounts').update({ is_primary: true }).eq('id', id);

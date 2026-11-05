@@ -7037,6 +7037,10 @@ export type Database = {
           label: string
           name_at_bank: string | null
           name_match: string | null
+          requested_primary: boolean
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           updated_at: string
           verification_ref: string | null
           verification_status: string
@@ -7055,6 +7059,10 @@ export type Database = {
           label?: string
           name_at_bank?: string | null
           name_match?: string | null
+          requested_primary?: boolean
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           updated_at?: string
           verification_ref?: string | null
           verification_status?: string
@@ -7073,6 +7081,10 @@ export type Database = {
           label?: string
           name_at_bank?: string | null
           name_match?: string | null
+          requested_primary?: boolean
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           updated_at?: string
           verification_ref?: string | null
           verification_status?: string
@@ -7084,6 +7096,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_client_bank_accounts_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
             referencedColumns: ["id"]
           },
         ]
@@ -13100,6 +13119,10 @@ export type Database = {
       }
       nw_reverse_transfer: {
         Args: { p_deal_id: string; p_reason: string }
+        Returns: Json
+      }
+      nw_review_client_bank: {
+        Args: { p_approve: boolean; p_id: string; p_note?: string }
         Returns: Json
       }
       nw_revoke_auth_sessions: { Args: { p_user_id: string }; Returns: number }

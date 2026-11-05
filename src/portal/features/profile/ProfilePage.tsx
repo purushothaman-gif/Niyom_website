@@ -288,6 +288,10 @@ export function ProfilePage({
   );
 }
 
+const statusOf = (a: unknown) => String((a as { verification_status?: string }).verification_status ?? '');
+/** In use: not awaiting approval and not rejected. */
+const isUsable = (a: unknown) => !['pending', 'rejected', 'failed'].includes(statusOf(a));
+
 function NomineesSection({ clientId, onSaved }: { clientId: string; onSaved: () => void }) {
   const [list, setList] = useState<Nominee[] | null>(null);
   const [editing, setEditing] = useState(false);
@@ -368,6 +372,7 @@ function BankSection({ clientId, client, onSaved }: { clientId: string; client: 
       : [];
 
   const list = accounts.length > 0 ? accounts : fallback;
+  const usableCount = list.filter(isUsable).length;
 
   return (
     <SectionCard
@@ -375,7 +380,7 @@ function BankSection({ clientId, client, onSaved }: { clientId: string; client: 
       icon={Banknote}
       footer={
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[11px] text-text-faint">At least one bank account must stay on your profile.</p>
+          <p className="text-[11px] text-text-faint">New accounts are approved by your relationship manager. At least one approved account must stay.</p>
           <button
             type="button"
             onClick={() => setAdding(true)}
@@ -401,7 +406,9 @@ function BankSection({ clientId, client, onSaved }: { clientId: string; client: 
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-bold text-text-primary">{a.bank_name || 'Bank'}</p>
                 <div className="flex items-center gap-1.5">
-                  {(a as { verification_status?: string }).verification_status === 'verified' && <StatusPill tone="success">Verified</StatusPill>}
+                  {statusOf(a) === 'pending' && <StatusPill tone="warning">Awaiting RM approval</StatusPill>}
+                  {statusOf(a) === 'rejected' && <StatusPill tone="danger">Not approved</StatusPill>}
+                  {statusOf(a) === 'verified' && <StatusPill tone="success">Approved</StatusPill>}
                   {a.is_primary && <StatusPill tone="accent">Primary</StatusPill>}
                 </div>
               </div>
@@ -413,9 +420,12 @@ function BankSection({ clientId, client, onSaved }: { clientId: string; client: 
                 <p className="text-text-secondary">Holder</p>
                 <p className="text-right font-semibold text-text-primary">{a.holder_name || client?.full_name || '—'}</p>
               </div>
+              {statusOf(a) === 'rejected' && (a as { review_note?: string | null }).review_note && (
+                <p className="mt-2 text-[11px] text-danger-soft">Reason: {(a as { review_note?: string | null }).review_note}</p>
+              )}
               {a.id !== 'primary' && (
                 <div className="mt-2.5 flex justify-end gap-2 border-t border-border-subtle pt-2.5">
-                  {!a.is_primary && (
+                  {!a.is_primary && isUsable(a) && (
                     <button
                       type="button"
                       onClick={() => setAction({ kind: 'bank_primary', id: a.id, label: `${a.bank_name || 'Bank'} ${maskAccount(a.account_number)}` })}
@@ -426,12 +436,12 @@ function BankSection({ clientId, client, onSaved }: { clientId: string; client: 
                   )}
                   <button
                     type="button"
-                    disabled={list.length <= 1}
-                    title={list.length <= 1 ? 'At least one bank account must stay on your profile' : undefined}
+                    disabled={isUsable(a) && usableCount <= 1}
+                    title={isUsable(a) && usableCount <= 1 ? 'At least one approved bank account must stay on your profile' : undefined}
                     onClick={() => setAction({ kind: 'bank_delete', id: a.id, label: `${a.bank_name || 'Bank'} ${maskAccount(a.account_number)}` })}
                     className="rounded-token-md border border-border px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Remove
+                    {statusOf(a) === 'pending' ? 'Withdraw' : 'Remove'}
                   </button>
                 </div>
               )}
@@ -441,6 +451,7 @@ function BankSection({ clientId, client, onSaved }: { clientId: string; client: 
       )}
       {adding && (
         <AddBankModal
+          holderName={client?.full_name ?? ''}
           onClose={() => setAdding(false)}
           onSaved={() => {
             setAdding(false);
