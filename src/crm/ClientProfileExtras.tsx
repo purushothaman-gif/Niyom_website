@@ -36,7 +36,15 @@ const LABEL: Record<string, string> = {
   nominees: 'Nominees',
   bank_account_added: 'Bank account added',
   bank_account_removed: 'Bank account removed',
+  bank_account_approved: 'Bank account approved',
+  bank_account_rejected: 'Bank account rejected',
   primary_bank: 'Primary bank changed',
+};
+
+/** Who made the change: the client in the portal, or staff reviewing it in the CRM. */
+const SOURCE: Record<string, string> = {
+  client_portal: 'Client · email OTP',
+  crm: 'CRM review',
 };
 
 const when = (d: string) =>
@@ -115,19 +123,21 @@ export function ClientProfileExtrasModal({ clientId, clientName, onClose }: { cl
 
           <section>
             <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-              <History className="h-4 w-4" style={{ color: 'var(--accent)' }} /> Changes made by the client (portal, email-OTP verified)
+              <History className="h-4 w-4" style={{ color: 'var(--accent)' }} /> Profile change history
             </h4>
             {changes === null ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : changes.length === 0 ? (
-              <p className="text-sm" style={{ color: 'var(--text-faint)' }}>No self-service changes yet.</p>
+              <p className="text-sm" style={{ color: 'var(--text-faint)' }}>No profile changes yet.</p>
             ) : (
               <ul className="space-y-2">
                 {changes.map((c) => (
                   <li key={c.id} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: 'var(--border)' }}>
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{LABEL[c.field] ?? c.field}</span>
-                      <span className="text-xs" style={{ color: 'var(--text-faint)' }}>{when(c.created_at)}</span>
+                      <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                        {SOURCE[c.source] ?? c.source} · {when(c.created_at)}
+                      </span>
                     </div>
                     <div className="mt-0.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
                       {c.old_value ?? '—'} → <b style={{ color: 'var(--text-primary)' }}>{c.new_value ?? '—'}</b>
