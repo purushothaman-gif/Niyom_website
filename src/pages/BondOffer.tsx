@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Landmark, ShieldCheck, CheckCircle2, Loader2, Minus, Plus } from 'lucide-react';
 import { inr, pct, shortDate } from '../lib/money';
+import { IssuerLogo } from '../components/BrandLogo';
 
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -146,9 +147,12 @@ export default function BondOffer() {
           <div className="relative rounded-token-xl border border-border bg-bg-elevated p-6 shadow-token-card">
             <span aria-hidden className="absolute left-0 top-5 bottom-5 w-1 rounded-full bg-accent" />
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h1 className="font-display text-lg font-bold leading-tight text-text-primary">{bond.bond_name || bond.issuer_name || bond.isin}</h1>
-                <p className="mt-0.5 text-xs text-text-faint">{bond.issuer_name || ''} · {bond.isin}</p>
+              <div className="flex min-w-0 items-center gap-3">
+                <IssuerLogo issuer={bond.issuer_name} size={44} variant="icon" icon={<Landmark className="h-5 w-5 text-accent" />} />
+                <div className="min-w-0">
+                  <h1 className="font-display text-lg font-bold leading-tight text-text-primary">{bond.bond_name || bond.issuer_name || bond.isin}</h1>
+                  <p className="mt-0.5 text-xs text-text-faint">{bond.issuer_name || ''} · {bond.isin}</p>
+                </div>
               </div>
               {bond.rating && <span className="rounded-token-sm border border-accent/20 bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent">{bond.rating}</span>}
             </div>

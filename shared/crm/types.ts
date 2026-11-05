@@ -344,6 +344,7 @@ export type CRMPage =
   | 'bonds'
   | 'bond_pricing'
   | 'unlisted_shares'
+  | 'brand_logos'
   | 'share_pricing'
   | 'share_orders'
   | 'marketing_content'

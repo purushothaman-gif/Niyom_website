@@ -11,6 +11,7 @@ import { StatusPill } from '../../components/StatusPill';
 import { Figure } from '../../ui/kit';
 import type { ClientBond } from '../../../../shared/portal/services/BondOrderService';
 import { breakdown, minUnits, stepUnits, tenureLabel } from './bondMath';
+import { IssuerLogo } from '../../../components/BrandLogo';
 
 type Section = 'summary' | 'details';
 
@@ -75,9 +76,7 @@ export function BondDetailPage({
       <Card accent padding="lg">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-token-lg bg-accent/10">
-              <Landmark className="h-5 w-5 text-accent" />
-            </span>
+            <IssuerLogo issuer={bond.issuer_name} size={44} variant="icon" icon={<Landmark className="h-5 w-5 text-accent" />} />
             <div className="min-w-0">
               <h1 className="font-display text-lg font-bold leading-tight text-text-primary">
                 {bond.bond_name || bond.issuer_name || bond.isin}

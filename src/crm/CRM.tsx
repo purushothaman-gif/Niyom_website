@@ -17,6 +17,7 @@ import Bonds from './bonds/Bonds';
 import BondPricing from './pricing/BondPricing';
 import SharePricing from './pricing/SharePricing';
 import UnlistedShares from './shares/UnlistedShares';
+import BrandLogos from './BrandLogos';
 import MarketingContent from './marketing/MarketingContent';
 import FundResearch from './marketing/funds/FundResearch';
 import { MfStaffPlaceholder } from '../components/MfStaffPlaceholder';
@@ -89,6 +90,7 @@ export default function CRM() {
     'bonds',
     'bond_pricing',
     'unlisted_shares',
+    'brand_logos',
     'share_pricing',
     'share_orders',
     'marketing_content',
@@ -246,6 +248,7 @@ export default function CRM() {
       case 'bonds': return <Bonds employee={employee} onNavigate={navigate} pageParams={pageParams} />;
       case 'bond_pricing': return <BondPricing employee={employee} />;
       case 'unlisted_shares': return <UnlistedShares employee={employee} />;
+      case 'brand_logos': return isAdmin ? <BrandLogos employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
       case 'share_pricing': return <SharePricing employee={employee} />;
       // Content Creation is visible to everyone — admins get the full studio,
       // employees get the read-only approved-content gallery (branched inside).

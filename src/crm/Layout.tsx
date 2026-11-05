@@ -8,6 +8,7 @@ import {
   Send, Target, Landmark, LifeBuoy, Sparkles, LineChart, BadgePercent, Gem,
   CalendarCheck, CalendarClock, CalendarDays, Coins, Receipt, Fingerprint,
   BadgeIndianRupee, SlidersHorizontal, Mail, Trophy, ExternalLink, Database,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
@@ -98,6 +99,7 @@ const NAV: NavSection[] = [
       { key: 'bond_pricing' as CRMPage,      label: 'Bond Pricing',      icon: BadgePercent },
       { key: 'unlisted_shares' as CRMPage,   label: 'Unlisted Shares',   icon: Gem },
       { key: 'share_pricing' as CRMPage,     label: 'Share Pricing',     icon: BadgePercent },
+      { key: 'brand_logos' as CRMPage,       label: 'Brand Logos',       icon: ImageIcon, adminOnly: true },
       { key: 'marketing_content' as CRMPage, label: 'Content Creation',  icon: Sparkles },
       { key: 'mail_campaigns' as CRMPage,    label: 'Email Campaigns',  icon: Mail },
     ],

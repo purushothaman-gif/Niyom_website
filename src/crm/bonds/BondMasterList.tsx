@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Search, UploadCloud, Loader2, ShieldCheck, ShieldAlert, Clock, Landmark, Sparkles, SlidersHorizontal, X, ArrowUp, ArrowDown, ArrowUpDown, Download, FileDown } from 'lucide-react';
 import { useBonds, enrichPendingLoop } from './bondClient';
 import { BondPublic } from './bondTypes';
+import { IssuerLogo } from '../../components/BrandLogo';
 
 // Sortable columns (order matches the table body cells).
 type SortType = 'text' | 'num' | 'date';
@@ -357,8 +358,13 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
                 {sorted.map((b: BondPublic) => (
                   <tr key={b.id} onClick={() => onOpen(b.id)} className="crm-row-hover cursor-pointer" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                     <td className="px-3 py-2.5 max-w-[280px]">
-                      <p className="font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{b.bond_name || b.issuer_name || '—'}</p>
-                      {b.issuer_name && b.bond_name && <p className="text-xs truncate" style={{ color: 'var(--text-faint)' }}>{b.issuer_name}</p>}
+                      <div className="flex items-center gap-2.5">
+                        <IssuerLogo issuer={b.issuer_name} label={b.bond_name} size={30} />
+                        <div className="min-w-0">
+                          <p className="font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{b.bond_name || b.issuer_name || '—'}</p>
+                          {b.issuer_name && b.bond_name && <p className="text-xs truncate" style={{ color: 'var(--text-faint)' }}>{b.issuer_name}</p>}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-3 py-2.5 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>{b.isin}</td>
                     <td className="px-3 py-2.5" style={{ color: 'var(--text-secondary)' }}>{fmtPct(b.coupon_rate)}</td>

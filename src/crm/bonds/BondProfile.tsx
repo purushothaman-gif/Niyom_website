@@ -11,6 +11,7 @@ import { bondKeys, useEnrichOne, useSaveMargin, useSetFields } from './bondClien
 import { BondPublic, CashflowScheduleRow } from './bondTypes';
 import { EmployeeContact } from './bondConstants';
 import { generateCashflowPdf, generateMarketingImage, generatePromoImage } from './bondOutputs';
+import { IssuerLogo } from '../../components/BrandLogo';
 
 interface Props { bondId: string; isAdmin: boolean; employee: NWEmployee; onBack: () => void; }
 
@@ -169,6 +170,7 @@ export default function BondProfile({ bondId, isAdmin, employee, onBack }: Props
             <ArrowLeft className="w-4 h-4" /> Bond master
           </button>
           <div className="flex items-center gap-3 flex-wrap">
+            <IssuerLogo issuer={b.issuer_name} label={b.bond_name} size={44} />
             <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{b.bond_name || b.issuer_name || b.isin}</h1>
             <span className="text-[11px] px-2 py-0.5 rounded-lg font-bold" style={{ background: `rgba(${qrgb},0.12)`, color: `rgb(${qrgb})` }}>Data quality {q}%</span>
             <span className="text-[11px] px-2 py-0.5 rounded-lg font-semibold capitalize" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>{b.verification_status.replace('_', ' ')}</span>

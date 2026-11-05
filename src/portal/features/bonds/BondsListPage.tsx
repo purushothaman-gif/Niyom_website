@@ -17,6 +17,7 @@ import {
   EMPTY_FILTERS, countFilters, matchesFilters, filterChips, removeFilter,
   type BondFilters,
 } from '../../../../shared/portal/bonds/bondFilters';
+import { IssuerLogo } from '../../../components/BrandLogo';
 
 /** A short marketing tag derived from the bond's own numbers. */
 function derivedTag(b: ClientBond): { label: string; tone: 'accent' | 'success' } | null {
@@ -152,9 +153,7 @@ export function BondsListPage({
                 <button type="button" onClick={() => onOpen(b)} className="flex flex-1 flex-col gap-4 text-left">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2.5">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-token-lg bg-accent/10 font-display text-sm font-bold text-accent">
-                        {(b.issuer_name || b.bond_name || '?').trim().charAt(0).toUpperCase()}
-                      </span>
+                      <IssuerLogo issuer={b.issuer_name} label={b.bond_name} size={36} />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold leading-snug text-text-primary">
                           {b.issuer_name || b.bond_name || b.isin}

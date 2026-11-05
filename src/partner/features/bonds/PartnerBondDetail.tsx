@@ -9,6 +9,7 @@ import { ArrowLeft, Landmark, ShieldCheck, UserPlus, Share2, ImageDown } from 'l
 import { inr, pct, shortDate } from '../../../lib/money';
 import { tenureLabel } from '../../../portal/features/bonds/bondMath';
 import type { PartnerBond } from '../../services/PartnerService';
+import { IssuerLogo } from '../../../components/BrandLogo';
 
 type Section = 'summary' | 'details';
 
@@ -69,9 +70,7 @@ export function PartnerBondDetail({
         <span aria-hidden className="absolute left-0 top-5 bottom-5 w-1 rounded-full bg-accent" />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-token-lg bg-accent/10">
-              <Landmark className="h-5 w-5 text-accent" />
-            </span>
+            <IssuerLogo issuer={bond.issuer_name} size={44} variant="icon" icon={<Landmark className="h-5 w-5 text-accent" />} />
             <div className="min-w-0">
               <h1 className="font-display text-lg font-bold leading-tight text-text-primary">{bond.bond_name || bond.issuer_name || bond.isin}</h1>
               <p className="mt-0.5 text-xs text-text-faint">{bond.issuer_name || ''} · {bond.isin}</p>

@@ -14,6 +14,7 @@ import {
 import { bondMatchesQuery } from '../../../../shared/portal/bonds/bondSearch';
 import { tenureLabel } from '../../../portal/features/bonds/bondMath';
 import type { PartnerBond } from '../../services/PartnerService';
+import { IssuerLogo } from '../../../components/BrandLogo';
 
 function freqLabel(f: string | null): string {
   const v = (f || '').toLowerCase().replace(/_/g, '-');
@@ -157,9 +158,7 @@ export function PartnerBondsList({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-token-lg bg-accent/10 font-display text-sm font-bold text-accent">
-                    {(b.issuer_name || b.bond_name || '?').trim().charAt(0).toUpperCase()}
-                  </span>
+                  <IssuerLogo issuer={b.issuer_name} label={b.bond_name} size={36} />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold leading-snug text-text-primary">{b.issuer_name || b.bond_name || b.isin}</p>
                     <p className="truncate text-[11px] text-text-faint">{b.isin}</p>

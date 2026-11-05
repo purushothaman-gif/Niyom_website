@@ -6996,9 +6996,37 @@ export type Database = {
           },
         ]
       }
+      nw_brand_logos: {
+        Row: {
+          kind: string
+          logo_url: string
+          name: string
+          name_key: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          kind: string
+          logo_url: string
+          name: string
+          name_key?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          kind?: string
+          logo_url?: string
+          name?: string
+          name_key?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       nw_client_bank_accounts: {
         Row: {
           account_number: string
+          added_via: string
           bank_name: string
           client_id: string
           created_at: string
@@ -7007,10 +7035,16 @@ export type Database = {
           ifsc: string
           is_primary: boolean
           label: string
+          name_at_bank: string | null
+          name_match: string | null
           updated_at: string
+          verification_ref: string | null
+          verification_status: string
+          verified_at: string | null
         }
         Insert: {
           account_number: string
+          added_via?: string
           bank_name?: string
           client_id: string
           created_at?: string
@@ -7019,10 +7053,16 @@ export type Database = {
           ifsc?: string
           is_primary?: boolean
           label?: string
+          name_at_bank?: string | null
+          name_match?: string | null
           updated_at?: string
+          verification_ref?: string | null
+          verification_status?: string
+          verified_at?: string | null
         }
         Update: {
           account_number?: string
+          added_via?: string
           bank_name?: string
           client_id?: string
           created_at?: string
@@ -7031,7 +7071,12 @@ export type Database = {
           ifsc?: string
           is_primary?: boolean
           label?: string
+          name_at_bank?: string | null
+          name_match?: string | null
           updated_at?: string
+          verification_ref?: string | null
+          verification_status?: string
+          verified_at?: string | null
         }
         Relationships: [
           {
@@ -7179,6 +7224,62 @@ export type Database = {
           },
         ]
       }
+      nw_client_nominees: {
+        Row: {
+          added_via: string
+          address: string | null
+          client_id: string
+          created_at: string
+          dob: string | null
+          email: string | null
+          full_name: string
+          guardian_name: string | null
+          id: string
+          mobile: string | null
+          relationship: string
+          share_percent: number
+          updated_at: string
+        }
+        Insert: {
+          added_via?: string
+          address?: string | null
+          client_id: string
+          created_at?: string
+          dob?: string | null
+          email?: string | null
+          full_name: string
+          guardian_name?: string | null
+          id?: string
+          mobile?: string | null
+          relationship: string
+          share_percent: number
+          updated_at?: string
+        }
+        Update: {
+          added_via?: string
+          address?: string | null
+          client_id?: string
+          created_at?: string
+          dob?: string | null
+          email?: string | null
+          full_name?: string
+          guardian_name?: string | null
+          id?: string
+          mobile?: string | null
+          relationship?: string
+          share_percent?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_client_nominees_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nw_client_password_reset_otps: {
         Row: {
           attempts: number
@@ -7215,6 +7316,76 @@ export type Database = {
             foreignKeyName: "nw_client_password_reset_otps_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nw_client_profile_changes: {
+        Row: {
+          client_id: string
+          created_at: string
+          field: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          source: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          field: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          source?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          field?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_client_profile_changes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nw_client_profile_otps: {
+        Row: {
+          attempts: number
+          client_id: string
+          created_at: string
+          expires_at: string
+          otp_hash: string
+        }
+        Insert: {
+          attempts?: number
+          client_id: string
+          created_at?: string
+          expires_at: string
+          otp_hash: string
+        }
+        Update: {
+          attempts?: number
+          client_id?: string
+          created_at?: string
+          expires_at?: string
+          otp_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_client_profile_otps_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
             referencedRelation: "nw_clients"
             referencedColumns: ["id"]
           },
@@ -12263,6 +12434,14 @@ export type Database = {
       nw_assign_leads: {
         Args: { p_lead_ids: string[]; p_reason?: string; p_to_employee: string }
         Returns: number
+      }
+      nw_brand_logo_candidates: {
+        Args: never
+        Returns: {
+          kind: string
+          name: string
+          uses: number
+        }[]
       }
       nw_can_see_lead: { Args: { p_lead_id: string }; Returns: boolean }
       nw_cancel_deal: {

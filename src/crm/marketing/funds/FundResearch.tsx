@@ -42,6 +42,7 @@ import {
   MARKET_RISK_LINE, PAST_PERFORMANCE_LINE, downloadFactsheet, renderComparison,
   renderFactsheet, type RenderedFactsheet,
 } from './fundFactsheet';
+import { AmcAvatar } from '../../../portal/features/mutual-funds/components/AmcAvatar';
 
 /** At most three: a fourth column stops being readable on a laptop. */
 const MAX_COMPARE = 3;
@@ -339,12 +340,17 @@ function FundRow({ fund, onOpen, selected, disabled, onToggle }: {
       </button>
 
       <button onClick={onOpen} className="text-left w-full">
-        <p className="text-sm font-bold leading-snug pr-8" style={{ color: 'var(--text-primary)' }}>
-          {fund.name}
-        </p>
-        <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>
-          {fund.amc}{fund.subCategory ? ` · ${fund.subCategory}` : ''}
-        </p>
+        <div className="flex items-start gap-2.5 pr-8">
+          <AmcAvatar amc={fund.amc} size={34} />
+          <div className="min-w-0">
+            <p className="text-sm font-bold leading-snug" style={{ color: 'var(--text-primary)' }}>
+              {fund.name}
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>
+              {fund.amc}{fund.subCategory ? ` · ${fund.subCategory}` : ''}
+            </p>
+          </div>
+        </div>
         <div className="flex items-end justify-between mt-3">
           <div>
             <p className="text-lg font-bold flex items-center gap-1" style={{ color: tone.colour }}>
@@ -732,10 +738,15 @@ function FundDetail({ fund, onBack }: { fund: CatalogFund; onBack: () => void })
         <ArrowLeft className="w-3.5 h-3.5" /> Back to funds
       </button>
 
-      <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{fund.name}</h1>
-      <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-        {fund.amc}{fund.subCategory ? ` · ${fund.subCategory}` : ''}
-      </p>
+      <div className="flex items-center gap-3">
+        <AmcAvatar amc={fund.amc} size={48} />
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{fund.name}</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+            {fund.amc}{fund.subCategory ? ` · ${fund.subCategory}` : ''}
+          </p>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-5">
         {periods.map(p => {
