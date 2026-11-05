@@ -34,6 +34,8 @@ interface Props {
   onboardingComplete: boolean;
   /** Portal navigation — used to send un-onboarded clients to the KYC wizard. */
   onNavigate: (view: PortalView) => void;
+  /** Opens the Smart CAS importer (owned by PortalApp) from the Statement tab. */
+  onImport?: () => void;
 }
 
 /**
@@ -97,6 +99,7 @@ export function MutualFundsModule({
   holdingsLoading,
   onboardingComplete,
   onNavigate,
+  onImport,
 }: Props) {
   const { schemes, facets, loading, error } = useFundCatalog();
   const catalog = useMfCatalog();
@@ -377,7 +380,7 @@ export function MutualFundsModule({
           onExplore={() => setTab('explore')}
         />
       ) : (
-        <StatementPage clientId={clientId} />
+        <StatementPage clientId={clientId} onAddExternal={onImport} />
       )}
 
       {gatePrompt && (

@@ -4,6 +4,7 @@ import { Card } from '../../../components/Card';
 import { EmptyState } from '../../../components/EmptyState';
 import { LogoLoader } from '../../../../components/LogoLoader';
 import { useRtaMf } from '../../../hooks/useRtaMf';
+import { AddExternalFundsCta } from '../AddExternalFundsCta';
 
 /**
  * "Statement" tab — the client's mutual funds exactly as the registrar
@@ -12,7 +13,14 @@ import { useRtaMf } from '../../../hooks/useRtaMf';
  * Explore (research) and My Funds (the in-house/BSE order rail) so the numbers
  * never blur. Read-only: it mirrors the statement, it is not a place to trade.
  */
-export function StatementPage({ clientId }: { clientId: string }) {
+export function StatementPage({
+  clientId,
+  onAddExternal,
+}: {
+  clientId: string;
+  /** Opens the Smart CAS importer (owned by the portal shell). */
+  onAddExternal?: () => void;
+}) {
   const { data, loading, error } = useRtaMf(clientId);
 
   if (loading && !data) {
@@ -33,13 +41,16 @@ export function StatementPage({ clientId }: { clientId: string }) {
 
   if (!data || !data.hasData) {
     return (
-      <Card>
-        <EmptyState
-          icon={Wallet}
-          title="No mutual fund holdings on record yet"
-          hint="Funds you hold through us appear here automatically, updated daily from the registrar. Investments made elsewhere show up once your folios are linked."
-        />
-      </Card>
+      <div className="space-y-5">
+        <Card>
+          <EmptyState
+            icon={Wallet}
+            title="No mutual fund holdings on record yet"
+            hint="Funds you hold through us appear here automatically, updated daily from the registrar. Already investing elsewhere? Bring it all in with Smart CAS below."
+          />
+        </Card>
+        <AddExternalFundsCta onAdd={onAddExternal} />
+      </div>
     );
   }
 
@@ -113,6 +124,8 @@ export function StatementPage({ clientId }: { clientId: string }) {
           })}
         </div>
       )}
+
+      <AddExternalFundsCta onAdd={onAddExternal} />
 
       {active.length > 0 && (
         <Card padding="md">

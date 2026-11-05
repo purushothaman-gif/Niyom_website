@@ -14,6 +14,7 @@ import type { MfLaunchState } from './useMfLaunch';
 import type { PortalHolding } from '../../types/cas';
 import { ExploreHub } from '../explore/ExploreHub';
 import { MfWatchlist } from './MfWatchlist';
+import { AddExternalFundsCta } from './AddExternalFundsCta';
 
 type MfTab = 'explore' | 'dashboard' | 'sips' | 'watchlist';
 
@@ -24,6 +25,8 @@ interface Props {
   onNavigate: (view: PortalView) => void;
   /** The client's holdings — mutual-fund rows feed the Explore "Your investments" card. */
   holdings?: PortalHolding[];
+  /** Opens the Smart CAS importer (owned by PortalApp). */
+  onImport?: () => void;
 }
 
 /** Bonds/shares rails are hidden on the MF Explore tab — this page is funds only. */
@@ -36,7 +39,7 @@ const FUNDS_ONLY: ReadonlySet<string> = new Set<PortalView>(['bonds', 'unlisted-
  * feed) are shown here, and investing is a single in-place action that opens
  * the platform, pre-signed, only at the moment they choose to transact.
  */
-export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings = [] }: Props) {
+export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings = [], onImport }: Props) {
   const [tab, setTab] = useState<MfTab>('explore');
   const mfHoldings = useMemo(() => holdings.filter((h) => h.product_type === 'mutual_fund'), [holdings]);
   const { data, loading } = useRtaMf(clientId);
@@ -133,14 +136,17 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
       ) : loading && !data ? (
         <div className="flex min-h-[30vh] items-center justify-center"><LogoLoader size={40} /></div>
       ) : !hasData ? (
-        <Card>
-          <div className="flex justify-end px-5 pt-5"><InvestCta /></div>
-          <EmptyState
-            icon={TrendingUp}
-            title="Start your mutual fund journey"
-            hint={gated ? 'Your holdings will appear here once you invest.' : 'Invest in handpicked funds and start a SIP — your holdings then appear here, updated daily.'}
-          />
-        </Card>
+        <>
+          <Card>
+            <div className="flex justify-end px-5 pt-5"><InvestCta /></div>
+            <EmptyState
+              icon={TrendingUp}
+              title="Start your mutual fund journey"
+              hint={gated ? 'Your holdings will appear here once you invest.' : 'Invest in handpicked funds and start a SIP — your holdings then appear here, updated daily.'}
+            />
+          </Card>
+          <AddExternalFundsCta onAdd={onImport} />
+        </>
       ) : (
         <>
           <InvestmentsBoard
@@ -150,6 +156,8 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
             lockedAsset="mutual_fund"
             detailAction={() => (gated ? null : <InvestCta full />)}
           />
+
+          <AddExternalFundsCta onAdd={onImport} />
 
           {!gated && (
             <button

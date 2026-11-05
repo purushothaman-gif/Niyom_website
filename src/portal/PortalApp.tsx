@@ -190,6 +190,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
           onLaunch={mf.launch}
           onNavigate={navigate}
           holdings={snapshot.holdings}
+          onImport={() => setShowImport(true)}
         />
       );
     if (view === 'explore')
@@ -219,6 +220,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
           holdingsLoading={loading && !hasData}
           onboardingComplete={client?.onboarding_status === 'active'}
           onNavigate={navigate}
+          onImport={() => setShowImport(true)}
         />
       );
     if (view === 'bonds')

@@ -37,7 +37,8 @@ import {
   readInvestorPans,
   readStatementPeriod,
 } from '../_shared/cas/parse.ts';
-import { parseDetailedSchemes } from '../_shared/cas/detailed.ts';
+import { parseDetailedSchemes, type CasDetailedScheme } from '../_shared/cas/detailed.ts';
+import { bridgeRegistrarCost } from '../_shared/cas/registrarCostBridge.ts';
 import {
   reconcileDetailed,
   reconcileSummary,
@@ -278,9 +279,13 @@ Deno.serve(async (req) => {
     let build: (importId: string) => ImportRows;
     // A summary statement states a single "As on" date rather than a period.
     let statementTo = period?.to ?? null;
+    // Kept for the registrar-cost bridge, which runs only on a reconciled
+    // detailed statement (a summary carries no per-scheme cost).
+    let detailedSchemes: CasDetailedScheme[] | null = null;
 
     if (isDetailed) {
       const schemes = parseDetailedSchemes(text);
+      detailedSchemes = schemes;
       recon = reconcileDetailed(schemes, lines);
       build = (id) => rowsFromSchemes(schemes, id, clientId);
     } else {
@@ -361,6 +366,26 @@ Deno.serve(async (req) => {
         detail: `A statement was imported but did not reconcile, so it is not being shown. ${recon.failures.join(' ')}`,
       });
     } else {
+      /*
+       * Carry the detailed CAS's true cost of acquisition onto this client's
+       * registrar-fed holdings so the MF Statement tab shows real returns —
+       * including change-of-broker transfer-ins the daily mailback can never
+       * cost. Best-effort: a reconciled import stands whether or not any holding
+       * matched, and the bridge never guesses (see registrarCostBridge.ts).
+       */
+      if (detailedSchemes) {
+        try {
+          const bridged = await bridgeRegistrarCost(cfg, clientId, detailedSchemes, statementTo);
+          if (bridged.matched) {
+            console.log(
+              `[cas] bridged cost onto ${bridged.matched} registrar holding(s) for ${clientId} (${bridged.skipped} unmatched)`,
+            );
+          }
+        } catch (err) {
+          console.warn('[cas] registrar cost bridge failed (import stands)', err);
+        }
+      }
+
       /*
        * Held-away value is read back from the database rather than recomputed
        * here: `cas_schemes.is_ours` is a GENERATED column, so asking Postgres
