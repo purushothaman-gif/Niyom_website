@@ -70,7 +70,7 @@ export function PartnerBondDetail({
         <span aria-hidden className="absolute left-0 top-5 bottom-5 w-1 rounded-full bg-accent" />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <IssuerLogo issuer={bond.issuer_name} size={44} variant="icon" icon={<Landmark className="h-5 w-5 text-accent" />} />
+            <IssuerLogo issuer={bond.issuer_name} label={bond.bond_name} size={44} variant="icon" icon={<Landmark className="h-5 w-5 text-accent" />} />
             <div className="min-w-0">
               <h1 className="font-display text-lg font-bold leading-tight text-text-primary">{bond.bond_name || bond.issuer_name || bond.isin}</h1>
               <p className="mt-0.5 text-xs text-text-faint">{bond.issuer_name || ''} · {bond.isin}</p>

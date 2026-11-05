@@ -10,12 +10,11 @@ import { useSyncExternalStore } from 'react';
 
 export type BrandKind = 'amc' | 'bond_issuer';
 
-/** Must match the generated name_key column: lower-case, alphanumerics only. */
-export function brandKey(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
+import { coreKey, lookupKeys } from './brandMatch';
 
-type LogoMap = Map<string, string>; // `${kind}:${name_key}` → url
+export { brandKey, issuerFromBondName } from './brandMatch';
+
+type LogoMap = Map<string, string>; // `${kind}:${name_key}` and `${kind}:${core key}` → url
 
 let map: LogoMap = new Map();
 let loading: Promise<void> | null = null;
@@ -35,7 +34,13 @@ export function loadBrandLogos(force = false): Promise<void> {
     .then((r) => (r.ok ? r.json() : []))
     .then((rows: { kind: string; name_key: string; logo_url: string }[]) => {
       const next: LogoMap = new Map();
-      for (const r of rows) if (r.logo_url) next.set(`${r.kind}:${r.name_key}`, r.logo_url);
+      for (const r of rows) {
+        if (!r.logo_url) continue;
+        next.set(`${r.kind}:${r.name_key}`, r.logo_url);
+        // Also index by core key so "PAISALO DIGITAL LTD" finds "...LIMITED".
+        const core = `${r.kind}:${coreKey(r.name_key)}`;
+        if (!next.has(core)) next.set(core, r.logo_url);
+      }
       map = next;
       emit();
     })
@@ -53,8 +58,17 @@ function subscribe(l: () => void) {
 /** The logo URL for a fund house / issuer, or null while loading or if none. */
 export function useBrandLogo(kind: BrandKind, name: string | null | undefined): string | null {
   const m = useSyncExternalStore(subscribe, () => map);
+  return findLogo(m, kind, name);
+}
+
+/** Exact name, then suffix-insensitive, then known short forms (REC, PFC, …). */
+export function findLogo(m: LogoMap, kind: BrandKind, name: string | null | undefined): string | null {
   if (!name) return null;
-  return m.get(`${kind}:${brandKey(name)}`) ?? null;
+  for (const k of lookupKeys(name)) {
+    const url = m.get(`${kind}:${k}`);
+    if (url) return url;
+  }
+  return null;
 }
 
 /** Whole map, for the admin page. */

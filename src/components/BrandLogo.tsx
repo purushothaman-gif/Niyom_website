@@ -3,7 +3,7 @@
 // ShareLogo for unlisted shares; logos are uploaded in CRM → Brand Logos.
 
 import type { ReactNode } from 'react';
-import { useBrandLogo, type BrandKind } from './brandLogos';
+import { issuerFromBondName, useBrandLogo, type BrandKind } from './brandLogos';
 
 interface Props {
   kind: BrandKind;
@@ -37,13 +37,16 @@ export function IssuerLogo({
   issuer, label, size = 36, variant = 'initial', icon,
 }: {
   issuer: string | null | undefined;
-  /** Text the monogram is taken from when the issuer is blank. */
+  /** The bond name — the issuer is read from it when `issuer` is blank. */
   label?: string | null;
   size?: number;
   variant?: 'initial' | 'icon';
   /** Rendered inside the fallback tile when variant="icon". */
   icon?: ReactNode;
 }) {
+  // Bonds imported without an issuer link carry it only in the name
+  // ("10.25% MUTHOOT MERCANTILE LIMITED 2029"), so derive it from there.
+  const name = issuer?.trim() || issuerFromBondName(label) || null;
   const box = { width: size, height: size, minWidth: size };
   const fallback = variant === 'icon' ? (
     <span style={box} className="flex shrink-0 items-center justify-center rounded-token-lg bg-accent/10">{icon}</span>
@@ -52,8 +55,8 @@ export function IssuerLogo({
       style={{ ...box, fontSize: Math.round(size * 0.38) }}
       className="flex shrink-0 items-center justify-center rounded-token-lg bg-accent/10 font-display font-bold text-accent"
     >
-      {(issuer || label || '?').trim().charAt(0).toUpperCase()}
+      {(name || '?').charAt(0).toUpperCase()}
     </span>
   );
-  return <BrandLogo kind="bond_issuer" name={issuer} size={size} fallback={fallback} />;
+  return <BrandLogo kind="bond_issuer" name={name} size={size} fallback={fallback} />;
 }

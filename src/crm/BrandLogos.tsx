@@ -10,9 +10,31 @@ import { Image as ImageIcon, Loader2, Search, Trash2, Upload } from 'lucide-reac
 import { supabase } from '../lib/supabase';
 import { NWEmployee } from './types';
 import { ShareLogo } from '../components/ShareLogo';
-import { brandKey, loadBrandLogos, useBrandLogoMap, type BrandKind } from '../components/brandLogos';
+import { brandKey, findLogo, issuerFromBondName, loadBrandLogos, useBrandLogoMap, type BrandKind } from '../components/brandLogos';
+import { lookupKeys } from '../components/brandMatch';
 
 interface Candidate { kind: BrandKind; name: string; uses: number }
+
+/**
+ * RPC rows → one row per company. 'bond_name' rows are bonds with no issuer
+ * link: the issuer is read from the name, and spelling variants ("… LTD" /
+ * "… LIMITED", "REC LTD") fold into one row, preferring the issuer-master name.
+ */
+function toCandidates(raw: { kind: string; name: string; uses: number }[]): Candidate[] {
+  const byKey = new Map<string, Candidate>();
+  const ordered = [...raw].sort((a, b) => Number(a.kind === 'bond_name') - Number(b.kind === 'bond_name'));
+  for (const r of ordered) {
+    const kind: BrandKind = r.kind === 'amc' ? 'amc' : 'bond_issuer';
+    const name = r.kind === 'bond_name' ? issuerFromBondName(r.name) : r.name;
+    if (!name || name.length < 2) continue;
+    const keys = lookupKeys(name);
+    const id = `${kind}:${keys[keys.length - 1]}`;
+    const hit = byKey.get(id);
+    if (hit) hit.uses += Number(r.uses);
+    else byKey.set(id, { kind, name, uses: Number(r.uses) });
+  }
+  return [...byKey.values()];
+}
 
 const TABS: { kind: BrandKind; label: string }[] = [
   { kind: 'amc', label: 'Mutual fund houses' },
@@ -51,7 +73,7 @@ export default function BrandLogos({ employee }: { employee: NWEmployee }) {
   useEffect(() => {
     supabase.rpc('nw_brand_logo_candidates').then(({ data, error }) => {
       if (error) setErr(error.message);
-      else setRows((data ?? []) as Candidate[]);
+      else setRows(toCandidates((data ?? []) as { kind: string; name: string; uses: number }[]));
       setLoading(false);
     });
   }, []);
@@ -67,7 +89,7 @@ export default function BrandLogos({ employee }: { employee: NWEmployee }) {
     const c: Record<BrandKind, [number, number]> = { amc: [0, 0], bond_issuer: [0, 0] };
     for (const r of rows) {
       c[r.kind][1]++;
-      if (logos.has(`${r.kind}:${brandKey(r.name)}`)) c[r.kind][0]++;
+      if (findLogo(logos, r.kind, r.name)) c[r.kind][0]++;
     }
     return c;
   }, [rows, logos]);
@@ -112,7 +134,7 @@ export default function BrandLogos({ employee }: { employee: NWEmployee }) {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {list.map((r) => (
-            <LogoRow key={r.name} row={r} url={logos.get(`${r.kind}:${brandKey(r.name)}`) ?? null} empId={employee.id} />
+            <LogoRow key={r.name} row={r} url={findLogo(logos, r.kind, r.name)} empId={employee.id} />
           ))}
           {list.length === 0 && <p className="text-sm" style={{ color: 'var(--text-faint)' }}>Nothing matches.</p>}
         </div>
