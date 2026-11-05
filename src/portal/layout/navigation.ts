@@ -68,13 +68,29 @@ export interface NavGroup {
 
 export const NAV_GROUPS: NavGroup[] = [
   {
+    // The header's plain links: Home, then one link per product (Groww-style).
     items: [
       {
         view: 'dashboard',
         key: 'dashboard',
-        label: 'Dashboard',
+        label: 'Home',
         description: 'Your money at a glance',
         icon: LayoutDashboard,
+      },
+      { view: 'bonds', key: 'bonds', label: 'Bonds', description: 'Fixed income', icon: Landmark },
+      {
+        view: 'mutual-funds',
+        key: 'mutual-funds',
+        label: 'Mutual Funds',
+        description: 'Holdings, investments and SIPs',
+        icon: TrendingUp,
+      },
+      {
+        view: 'unlisted-shares',
+        key: 'unlisted-shares',
+        label: 'Unlisted Shares',
+        description: 'Pre-IPO and unlisted companies',
+        icon: Gem,
       },
     ],
   },
@@ -112,7 +128,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    heading: 'Invest',
+    heading: 'Discover',
     items: [
       {
         view: 'explore',
@@ -120,21 +136,6 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Explore',
         description: 'Popular bonds, funds and shares',
         icon: Compass,
-      },
-      {
-        view: 'mutual-funds',
-        key: 'mutual-funds',
-        label: 'Mutual Funds',
-        description: 'Holdings, investments and SIPs',
-        icon: TrendingUp,
-      },
-      { view: 'bonds', key: 'bonds', label: 'Bonds', description: 'Fixed income', icon: Landmark },
-      {
-        view: 'unlisted-shares',
-        key: 'unlisted-shares',
-        label: 'Unlisted Shares',
-        description: 'Pre-IPO and unlisted companies',
-        icon: Gem,
       },
       {
         key: 'fixed-deposits',
@@ -208,7 +209,9 @@ export const NAV_GROUPS: NavGroup[] = [
 
 /** Groups the desktop header renders as menus — Account lives under the avatar,
  *  and the first (heading-less) group is a plain link. */
-export const HEADER_MENUS = NAV_GROUPS.filter((g) => g.heading && g.heading !== 'Account');
+export const HEADER_MENUS = NAV_GROUPS.filter((g) => g.heading === 'Portfolio');
+/** Groups shown inside the account menu on desktop (Activity, Discover). */
+export const ACCOUNT_MENU_GROUPS = NAV_GROUPS.filter((g) => g.heading && !['Portfolio', 'Account'].includes(g.heading));
 export const HEADER_LINKS = NAV_GROUPS.filter((g) => !g.heading).flatMap((g) => g.items);
 export const ACCOUNT_ITEMS = NAV_GROUPS.find((g) => g.heading === 'Account')?.items ?? [];
 
@@ -221,9 +224,9 @@ export const ACCOUNT_ITEMS = NAV_GROUPS.find((g) => g.heading === 'Account')?.it
  */
 export const PRIMARY_VIEWS: { view: PortalView; label: string; icon: LucideIcon }[] = [
   { view: 'dashboard', label: 'Home', icon: LayoutDashboard },
-  { view: 'portfolio', label: 'Portfolio', icon: Wallet },
-  { view: 'explore', label: 'Invest', icon: TrendingUp },
-  { view: 'sip', label: 'SIP', icon: CalendarClock },
+  { view: 'bonds', label: 'Bonds', icon: Landmark },
+  { view: 'mutual-funds', label: 'Funds', icon: TrendingUp },
+  { view: 'unlisted-shares', label: 'Shares', icon: Gem },
 ];
 
 /** Human-readable titles for the page header. */

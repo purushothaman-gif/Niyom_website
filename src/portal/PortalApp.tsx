@@ -225,6 +225,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
         <BondsModule
           clientId={clientId}
           onboardingComplete={client?.onboarding_status === 'active'}
+          holdings={snapshot.holdings}
           initialBondId={openBondId}
           onInitialConsumed={() => setOpenBondId(null)}
         />
@@ -234,6 +235,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
         <SharesModule
           clientId={clientId}
           onboardingComplete={client?.onboarding_status === 'active'}
+          holdings={snapshot.holdings}
           initialShareId={openShareId}
           onInitialConsumed={() => setOpenShareId(null)}
         />

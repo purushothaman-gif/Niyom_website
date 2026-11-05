@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { LogoLoader } from '../../../components/LogoLoader';
-import { Segmented } from '../../components/Segmented';
+import { ProductHoldings, ProductTabs } from '../../components/ProductTabs';
+import type { PortalHolding } from '../../types/cas';
 import {
   ShareOrderService,
   type ShareOrder,
@@ -18,7 +19,7 @@ import { ShareDetailPage } from './ShareDetailPage';
 import { ShareOrderFlow } from './ShareOrderFlow';
 import { MyShareOrdersPage } from './MyShareOrdersPage';
 
-type Tab = 'explore' | 'orders';
+type Tab = 'explore' | 'holdings' | 'orders';
 
 type Screen =
   | { name: 'list' }
@@ -30,8 +31,11 @@ export function SharesModule({
   onboardingComplete,
   initialShareId = null,
   onInitialConsumed,
+  holdings = [],
 }: {
   clientId: string;
+  /** The client's holdings — this product's rows feed the Holdings tab. */
+  holdings?: PortalHolding[];
   /** Open this share's detail page once the list has loaded (from Explore). */
   initialShareId?: string | null;
   onInitialConsumed?: () => void;
@@ -130,10 +134,11 @@ export function SharesModule({
 
   return (
     <div className="space-y-5">
-      <Segmented<Tab>
-        options={[
-          { value: 'explore', label: 'Explore shares', count: shares.length || undefined },
-          { value: 'orders', label: 'My Orders', count: orders.length || undefined },
+      <ProductTabs<Tab>
+        tabs={[
+          { key: 'explore', label: 'Explore', count: shares.length || undefined },
+          { key: 'holdings', label: 'Holdings' },
+          { key: 'orders', label: 'Orders', count: orders.length || undefined },
         ]}
         value={tab}
         onChange={setTab}
@@ -141,6 +146,8 @@ export function SharesModule({
 
       {tab === 'explore' ? (
         <SharesListPage shares={shares} onOpen={(share) => setScreen({ name: 'detail', share })} />
+      ) : tab === 'holdings' ? (
+        <ProductHoldings holdings={holdings} asset="unlisted_share" title="Unlisted shares" onExplore={() => setTab('explore')} />
       ) : (
         <MyShareOrdersPage orders={orders} onExplore={() => setTab('explore')} />
       )}

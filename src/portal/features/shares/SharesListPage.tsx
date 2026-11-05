@@ -68,7 +68,7 @@ export function SharesListPage({
           {shown.map((s) => {
             const min = minQty(s);
             return (
-              <Card key={s.id} padding="md" className="flex flex-col">
+              <Card key={s.id} padding="md" className="flex min-w-0 flex-col">
                 <div className="flex items-start gap-3">
                   <ShareLogo name={s.short_name || s.company_name} url={s.logo_url} size={44} />
                   <div className="min-w-0 flex-1">
@@ -77,7 +77,12 @@ export function SharesListPage({
                     </h3>
                     <p className="mt-0.5 truncate text-[11px] text-text-faint">{s.isin}</p>
                   </div>
-                  {s.sector && <StatusPill tone="accent">{s.sector}</StatusPill>}
+                  {/* Capped so a long sector ("Aerospace & Defence") can't push the card off-screen on a phone. */}
+                  {s.sector && (
+                    <span className="max-w-[45%] shrink-0 truncate">
+                      <StatusPill tone="accent">{s.sector}</StatusPill>
+                    </span>
+                  )}
                 </div>
 
                 {s.short_name && s.company_name !== s.short_name && (

@@ -20,6 +20,7 @@ import { ThemeToggle } from '../../theme/ThemeToggle';
 import { ClientAvatar } from '../components/ClientAvatar';
 import {
   ACCOUNT_ITEMS,
+  ACCOUNT_MENU_GROUPS,
   HEADER_LINKS,
   HEADER_MENUS,
   NAV_GROUPS,
@@ -101,7 +102,7 @@ export function PortalShell({
   const primaryTabs = PRIMARY_VIEWS.filter((p) => !hiddenProducts.has(p.view));
   const primaryViews = primaryTabs.map((p) => p.view);
   const subtitle = VIEW_SUBTITLES[view];
-  const accountActive = ACCOUNT_ITEMS.some((i) => i.view === view);
+  const accountActive = [...ACCOUNT_ITEMS, ...ACCOUNT_MENU_GROUPS.flatMap((g) => g.items)].some((i) => i.view === view);
 
   return (
     <div className="min-h-screen bg-bg-base text-text-primary">
@@ -123,7 +124,7 @@ export function PortalShell({
 
           {/* Desktop navigation: one link + three menus. */}
           <div ref={navRef} className="hidden min-w-0 flex-1 items-center gap-1 lg:flex">
-            {HEADER_LINKS.filter((i) => i.view).map((i) => (
+            {HEADER_LINKS.filter((i) => i.view && !hiddenProducts.has(i.key)).map((i) => (
               <TopButton key={i.key} active={i.view === view} onClick={() => go(i.view!)}>
                 {i.label}
               </TopButton>
@@ -204,7 +205,7 @@ export function PortalShell({
                 {openMenu === 'account' && (
                   <div
                     role="menu"
-                    className="absolute right-0 top-[calc(100%+10px)] z-40 w-[300px] overflow-hidden rounded-token-xl border border-border bg-bg-elevated p-1.5 shadow-token-lg"
+                    className="absolute right-0 top-[calc(100%+10px)] z-40 max-h-[80vh] w-[300px] overflow-y-auto rounded-token-xl border border-border bg-bg-elevated p-1.5 shadow-token-lg"
                   >
                       <div className="flex items-center gap-3 px-2.5 py-2.5">
                         <ClientAvatar name={client.full_name} url={client.avatar_url} size={38} />
@@ -217,6 +218,22 @@ export function PortalShell({
                           </p>
                         </div>
                       </div>
+                      {withoutProducts(ACCOUNT_MENU_GROUPS, hiddenProducts).map((g) => (
+                        <div key={g.heading} className="hidden lg:block">
+                          <div className="my-1 border-t border-border-subtle" />
+                          <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-faint">
+                            {g.heading}
+                          </p>
+                          {g.items.map((item) => (
+                            <MenuRow
+                              key={item.key}
+                              item={item}
+                              active={item.view === view}
+                              onClick={() => item.view && go(item.view)}
+                            />
+                          ))}
+                        </div>
+                      ))}
                       <div className="my-1 border-t border-border-subtle" />
                       {ACCOUNT_ITEMS.map((item) => (
                         <MenuRow

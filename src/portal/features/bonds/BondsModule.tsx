@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { LogoLoader } from '../../../components/LogoLoader';
-import { Segmented } from '../../components/Segmented';
+import { ProductHoldings, ProductTabs } from '../../components/ProductTabs';
+import type { PortalHolding } from '../../types/cas';
 import {
   BondOrderService,
   type BondOrder,
@@ -18,7 +19,7 @@ import { BondDetailPage } from './BondDetailPage';
 import { BondOrderFlow } from './BondOrderFlow';
 import { MyOrdersPage } from './MyOrdersPage';
 
-type Tab = 'explore' | 'orders';
+type Tab = 'explore' | 'holdings' | 'orders';
 
 type Screen =
   | { name: 'list' }
@@ -30,8 +31,11 @@ export function BondsModule({
   onboardingComplete,
   initialBondId = null,
   onInitialConsumed,
+  holdings = [],
 }: {
   clientId: string;
+  /** The client's holdings — this product's rows feed the Holdings tab. */
+  holdings?: PortalHolding[];
   /** Open this bond's detail page once the list has loaded (from Explore). */
   initialBondId?: string | null;
   onInitialConsumed?: () => void;
@@ -132,10 +136,11 @@ export function BondsModule({
   // --- List view: Explore / My Orders --------------------------------------
   return (
     <div className="space-y-5">
-      <Segmented<Tab>
-        options={[
-          { value: 'explore', label: 'Explore bonds', count: bonds.length || undefined },
-          { value: 'orders', label: 'My Orders', count: orders.length || undefined },
+      <ProductTabs<Tab>
+        tabs={[
+          { key: 'explore', label: 'Explore', count: bonds.length || undefined },
+          { key: 'holdings', label: 'Holdings' },
+          { key: 'orders', label: 'Orders', count: orders.length || undefined },
         ]}
         value={tab}
         onChange={setTab}
@@ -143,6 +148,8 @@ export function BondsModule({
 
       {tab === 'explore' ? (
         <BondsListPage bonds={bonds} onOpen={(bond) => setScreen({ name: 'detail', bond })} />
+      ) : tab === 'holdings' ? (
+        <ProductHoldings holdings={holdings} asset="bond" title="Bonds" onExplore={() => setTab('explore')} />
       ) : (
         <MyOrdersPage orders={orders} onExplore={() => setTab('explore')} />
       )}
