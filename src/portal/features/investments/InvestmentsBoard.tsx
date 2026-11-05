@@ -46,6 +46,11 @@ const nameCol = (label: string, showAsset: boolean): Column => ({
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         {showAsset && <AssetChip asset={r.asset} />}
         {r.sub && <span className="truncate text-[11px] text-text-secondary">{r.sub}</span>}
+        {r.distributor === 'other' && (
+          <span className="rounded border border-border px-1.5 py-px text-[10px] font-medium text-text-secondary" title="Held with another distributor (from your CAS)">
+            Other ARN
+          </span>
+        )}
         {r.source === 'registrar' && (
           <span className="rounded border border-border px-1.5 py-px text-[10px] font-medium text-text-secondary">
             Registrar

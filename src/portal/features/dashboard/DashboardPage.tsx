@@ -12,8 +12,9 @@ import type { DashboardData } from '../../types';
 import type { PortalView } from '../../layout/navigation';
 import { useMemo, type ReactNode } from 'react';
 import type { PortalHolding } from '../../types/cas';
-import { fromClientHoldings } from '../../../../shared/portal/investments/model';
-import { InvestmentsBoard } from '../investments/InvestmentsBoard';
+import { fromClientHoldings, summarise } from '../../../../shared/portal/investments/model';
+import { YourInvestmentsCard } from '../explore/YourInvestmentsCard';
+import { TopHoldingsCard } from '../investments/TopHoldingsCard';
 import { useInvestmentRows } from '../investments/useInvestmentRows';
 import { SipsCard } from '../investments/SipsCard';
 import { fmtDate } from '../../../crm/utils';
@@ -82,7 +83,7 @@ export function DashboardPage({
   const mfSsoOn = mfSsoEnabled();
   const rta = useRtaMf(clientId);
   const baseRows = useMemo(() => fromClientHoldings(holdings), [holdings]);
-  const { rows, enriching } = useInvestmentRows('client', baseRows);
+  const { rows } = useInvestmentRows('client', baseRows);
   // Registrar funds arrive without their purchase flows, so a money-weighted
   // return over the whole portfolio would be measured against missing cash —
   // suppress it rather than show a misleading figure.
@@ -135,28 +136,25 @@ export function DashboardPage({
       )}
 
       {/*
-        The portfolio board — every holding across mutual funds, bonds and
-        unlisted shares, with returns, 1-day movement and allocation.
+        Groww-style: discovery on the left (bonds, then mutual funds, then
+        unlisted shares), the client's own money in the right-hand column.
       */}
-      {rows.length === 0 && exploreBlockNode}
-      <InvestmentsBoard
-        rows={rows}
-        enriching={enriching}
-        xirrPercent={xirr}
-        maxRows={6}
-        onViewAll={() => onNavigate('portfolio')}
-        actions={
-          <button
-            type="button"
-            onClick={() => onNavigate('explore')}
-            className="hidden rounded-token-md bg-accent px-3.5 py-2 text-xs font-bold text-on-accent hover:bg-accent-strong sm:inline-flex"
-          >
-            Invest
-          </button>
-        }
-      />
-
-      {rows.length > 0 && exploreBlockNode}
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0">{exploreBlockNode}</div>
+        <aside className="space-y-8">
+          <YourInvestmentsCard summary={rows.length ? summarise(rows) : null} xirr={xirr} onOpen={() => onNavigate('portfolio')} />
+          <TopHoldingsCard rows={rows} onOpen={() => onNavigate('portfolio')} />
+          {mfSsoOn ? (
+            <SipsCard sips={rta.data?.sips ?? []} onOpen={() => onNavigate('mutual-funds')} />
+          ) : (
+            <MutualFundSummaryCard mf={data.mutualFunds} onViewAll={() => onNavigate('mutual-funds')} />
+          )}
+          <RecentTransactionsCard
+            transactions={data.recentTransactions}
+            onViewAll={() => onNavigate('transactions')}
+          />
+        </aside>
+      </div>
 
       {/* No statement import once mutual funds run on the MF platform. */}
       {!hasImportedStatement && !mfSsoEnabled() && (
@@ -179,17 +177,6 @@ export function DashboardPage({
         </p>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        {mfSsoOn ? (
-          <SipsCard sips={rta.data?.sips ?? []} onOpen={() => onNavigate('mutual-funds')} />
-        ) : (
-          <MutualFundSummaryCard mf={data.mutualFunds} onViewAll={() => onNavigate('mutual-funds')} />
-        )}
-        <RecentTransactionsCard
-          transactions={data.recentTransactions}
-          onViewAll={() => onNavigate('transactions')}
-        />
-      </div>
 
       <AccountSummaryCard client={client} />
 

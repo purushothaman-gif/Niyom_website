@@ -315,6 +315,8 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
       case 'portfolio':
         return portfolioData ? (
           <PortfolioPage
+            clientId={clientId}
+            client={client}
             data={portfolioData}
             holdings={snapshot.holdings}
             xirrPercent={dashboardData?.xirrPercent ?? null}

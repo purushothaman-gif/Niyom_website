@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Banknote,
   KeyRound,
@@ -6,6 +6,9 @@ import {
   Lock,
   ShieldCheck,
   UserRound,
+  Pencil,
+  Plus,
+  Users,
 } from 'lucide-react';
 import { fmtDate } from '../../../crm/utils';
 import { LogoLoader } from '../../../components/LogoLoader';
@@ -21,8 +24,10 @@ import { useBankAccounts } from '../../hooks/useBankAccounts';
 import { maskAccount } from '../../services/ProfileService';
 import { canActivateMoreProducts } from '../onboarding/onboardingSteps';
 import { PinSection } from './PinSection';
+import { AddBankModal, BankActionModal, EditContactModal, EditNomineesModal } from './ProfileEdit';
+import { ProfileEditService, type Nominee } from '../../../../shared/portal/services/ProfileEditService';
 
-type Tab = 'personal' | 'bank' | 'demat' | 'kyc' | 'settings';
+type Tab = 'personal' | 'nominees' | 'bank' | 'demat' | 'kyc' | 'settings';
 
 const KYC_TONE = {
   verified: 'success',
@@ -80,6 +85,9 @@ export function ProfilePage({
   onRefresh,
 }: Props) {
   const [tab, setTab] = useState<Tab>('personal');
+  const [editContact, setEditContact] = useState(false);
+  /** Bumped after a bank/nominee change so those sections reload. */
+  const [version, setVersion] = useState(0);
   const status = client?.verification_status ?? 'pending';
   const canActivate = canActivateMoreProducts(client);
 
@@ -104,6 +112,7 @@ export function ProfilePage({
       <Segmented<Tab>
         options={[
           { value: 'personal', label: 'Personal' },
+          { value: 'nominees', label: 'Nominees' },
           { value: 'bank', label: 'Bank' },
           { value: 'demat', label: 'Demat' },
           { value: 'kyc', label: 'KYC & FATCA' },
@@ -114,7 +123,26 @@ export function ProfilePage({
       />
 
       {tab === 'personal' && (
-        <SectionCard title="Personal Details" icon={UserRound} footer={ADVISOR_NOTE}>
+        <SectionCard
+          title="Personal Details"
+          icon={UserRound}
+          footer={
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[11px] text-text-faint">
+                Name, PAN and date of birth come from your KYC — contact your relationship manager to change them.
+              </p>
+              {client && (
+                <button
+                  type="button"
+                  onClick={() => setEditContact(true)}
+                  className="inline-flex items-center gap-1.5 rounded-token-md border border-accent/30 bg-accent/5 px-3.5 py-2 text-xs font-semibold text-accent hover:bg-accent/10"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Edit mobile, email & address
+                </button>
+              )}
+            </div>
+          }
+        >
           <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <InfoRow label="Full Name" value={client?.full_name} />
             <InfoRow label="PAN" value={client?.pan} mono />
@@ -129,7 +157,20 @@ export function ProfilePage({
         </SectionCard>
       )}
 
-      {tab === 'bank' && <BankSection clientId={clientId} client={client} />}
+      {tab === 'nominees' && <NomineesSection key={`n${version}`} clientId={clientId} onSaved={() => setVersion((v) => v + 1)} />}
+
+      {tab === 'bank' && <BankSection key={`b${version}`} clientId={clientId} client={client} onSaved={() => { setVersion((v) => v + 1); onRefresh(); }} />}
+
+      {editContact && client && (
+        <EditContactModal
+          client={client}
+          onClose={() => setEditContact(false)}
+          onSaved={() => {
+            setEditContact(false);
+            onRefresh();
+          }}
+        />
+      )}
 
       {tab === 'demat' && (
         <SectionCard title="Demat Account" icon={Landmark} footer={client?.demat_account ? ADVISOR_NOTE : undefined}>
@@ -247,7 +288,69 @@ export function ProfilePage({
   );
 }
 
-function BankSection({ clientId, client }: { clientId: string; client: NWClient | null }) {
+function NomineesSection({ clientId, onSaved }: { clientId: string; onSaved: () => void }) {
+  const [list, setList] = useState<Nominee[] | null>(null);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    ProfileEditService.getNominees(clientId).then(setList).catch(() => setList([]));
+  }, [clientId]);
+
+  return (
+    <SectionCard
+      title="Nominees"
+      icon={Users}
+      footer={
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="inline-flex items-center gap-1.5 rounded-token-md border border-accent/30 bg-accent/5 px-3.5 py-2 text-xs font-semibold text-accent hover:bg-accent/10"
+          >
+            <Pencil className="h-3.5 w-3.5" /> {list?.length ? 'Edit nominees' : 'Add nominees'}
+          </button>
+        </div>
+      }
+    >
+      {list === null ? (
+        <div className="flex justify-center py-8">
+          <LogoLoader size={40} />
+        </div>
+      ) : list.length === 0 ? (
+        <EmptyState icon={Users} title="No nominees yet." hint="Add who should receive your investments — it takes a minute." compact />
+      ) : (
+        <div className="space-y-2">
+          {list.map((n) => (
+            <div key={n.id ?? n.full_name} className="flex items-center justify-between gap-3 rounded-token-md bg-bg-surface px-3.5 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-text-primary">{n.full_name}</p>
+                <p className="text-xs text-text-secondary">
+                  {n.relationship}
+                  {n.dob ? ` · born ${fmtDate(n.dob)}` : ''}
+                  {n.guardian_name ? ` · guardian ${n.guardian_name}` : ''}
+                </p>
+              </div>
+              <StatusPill tone="accent">{n.share_percent}%</StatusPill>
+            </div>
+          ))}
+        </div>
+      )}
+      {editing && list && (
+        <EditNomineesModal
+          current={list}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            onSaved();
+          }}
+        />
+      )}
+    </SectionCard>
+  );
+}
+
+function BankSection({ clientId, client, onSaved }: { clientId: string; client: NWClient | null; onSaved: () => void }) {
+  const [adding, setAdding] = useState(false);
+  const [action, setAction] = useState<{ kind: 'bank_delete' | 'bank_primary'; id: string; label: string } | null>(null);
   const { accounts, loading, error } = useBankAccounts(clientId);
 
   // Fall back to the primary bank mirror on nw_clients if the table is empty.
@@ -267,7 +370,22 @@ function BankSection({ clientId, client }: { clientId: string; client: NWClient 
   const list = accounts.length > 0 ? accounts : fallback;
 
   return (
-    <SectionCard title="Bank Accounts" icon={Banknote} footer={ADVISOR_NOTE}>
+    <SectionCard
+      title="Bank Accounts"
+      icon={Banknote}
+      footer={
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[11px] text-text-faint">At least one bank account must stay on your profile.</p>
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="inline-flex items-center gap-1.5 rounded-token-md border border-accent/30 bg-accent/5 px-3.5 py-2 text-xs font-semibold text-accent hover:bg-accent/10"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add bank account
+          </button>
+        </div>
+      }
+    >
       {loading ? (
         <div className="flex justify-center py-8">
           <LogoLoader size={40} />
@@ -280,9 +398,12 @@ function BankSection({ clientId, client }: { clientId: string; client: NWClient 
         <div className="space-y-2">
           {list.map((a) => (
             <div key={a.id} className="rounded-token-md bg-bg-surface px-3.5 py-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-bold text-text-primary">{a.bank_name || 'Bank'}</p>
-                {a.is_primary && <StatusPill tone="accent">Primary</StatusPill>}
+                <div className="flex items-center gap-1.5">
+                  {(a as { verification_status?: string }).verification_status === 'verified' && <StatusPill tone="success">Verified</StatusPill>}
+                  {a.is_primary && <StatusPill tone="accent">Primary</StatusPill>}
+                </div>
               </div>
               <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                 <p className="text-text-secondary">A/C No.</p>
@@ -292,9 +413,51 @@ function BankSection({ clientId, client }: { clientId: string; client: NWClient 
                 <p className="text-text-secondary">Holder</p>
                 <p className="text-right font-semibold text-text-primary">{a.holder_name || client?.full_name || '—'}</p>
               </div>
+              {a.id !== 'primary' && (
+                <div className="mt-2.5 flex justify-end gap-2 border-t border-border-subtle pt-2.5">
+                  {!a.is_primary && (
+                    <button
+                      type="button"
+                      onClick={() => setAction({ kind: 'bank_primary', id: a.id, label: `${a.bank_name || 'Bank'} ${maskAccount(a.account_number)}` })}
+                      className="rounded-token-md border border-border px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:text-accent"
+                    >
+                      Make primary
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={list.length <= 1}
+                    title={list.length <= 1 ? 'At least one bank account must stay on your profile' : undefined}
+                    onClick={() => setAction({ kind: 'bank_delete', id: a.id, label: `${a.bank_name || 'Bank'} ${maskAccount(a.account_number)}` })}
+                    className="rounded-token-md border border-border px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
+      )}
+      {adding && (
+        <AddBankModal
+          onClose={() => setAdding(false)}
+          onSaved={() => {
+            setAdding(false);
+            onSaved();
+          }}
+        />
+      )}
+      {action && (
+        <BankActionModal
+          action={{ kind: action.kind, id: action.id }}
+          label={action.label}
+          onClose={() => setAction(null)}
+          onSaved={() => {
+            setAction(null);
+            onSaved();
+          }}
+        />
       )}
     </SectionCard>
   );

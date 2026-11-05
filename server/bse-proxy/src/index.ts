@@ -348,6 +348,57 @@ app.post('/verify/pan', async (req: Request, res: Response) => {
 });
 
 /**
+ * Verify a bank account with Cashfree (penny-drop, BAV v2 sync) and return
+ * what the bank says: account status, the name it holds, and how well that
+ * name matches the one we sent. Same relay secret, same Cashfree Verification
+ * keys and same whitelisted IP as /verify/pan. Each call is billed by Cashfree,
+ * so the edge function only calls this once a client has confirmed with OTP.
+ */
+app.post('/verify/bank', async (req: Request, res: Response) => {
+  if (!cfg.panRelaySecret || req.header('x-relay-secret') !== cfg.panRelaySecret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!cfg.cashfreeVerifyClientId || !cfg.cashfreeVerifySecret) {
+    return res.status(503).json({ error: 'Cashfree verification not configured' });
+  }
+  const account = String(req.body?.bank_account ?? '').replace(/\s+/g, '');
+  const ifsc = String(req.body?.ifsc ?? '').trim().toUpperCase();
+  const name = req.body?.name ? String(req.body.name).trim().slice(0, 100) : undefined;
+  if (!/^[A-Za-z0-9]{6,40}$/.test(account)) return res.status(400).json({ error: 'Invalid account number' });
+  if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) return res.status(400).json({ error: 'Invalid IFSC' });
+  const base = cfg.cashfreeVerifyEnv === 'sandbox'
+    ? 'https://sandbox.cashfree.com'
+    : 'https://api.cashfree.com';
+  try {
+    const cf = await fetch(`${base}/verification/bank-account/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-client-id': cfg.cashfreeVerifyClientId,
+        'x-client-secret': cfg.cashfreeVerifySecret,
+      },
+      body: JSON.stringify(name ? { bank_account: account, ifsc, name } : { bank_account: account, ifsc }),
+    });
+    const data = (await cf.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!cf.ok) {
+      return res.status(cf.status).json({ valid: false, code: data.code ?? null, error: (data.message as string) || 'Bank verification failed' });
+    }
+    res.json({
+      valid: String(data.account_status ?? '').toUpperCase() === 'VALID',
+      account_status_code: data.account_status_code ?? null,
+      name_at_bank: data.name_at_bank ?? null,
+      name_match_result: data.name_match_result ?? null,
+      name_match_score: data.name_match_score ?? null,
+      bank_name: data.bank_name ?? (data.ifsc_details as Record<string, unknown> | undefined)?.bank ?? null,
+      reference_id: data.reference_id ?? null,
+    });
+  } catch (e) {
+    console.error('[verify/bank] error', (e as Error)?.message);
+    res.status(502).json({ error: 'Bank verification service unavailable' });
+  }
+});
+
+/**
  * Cashfree Payment Link relay. Exactly the same shape as /verify/pan above, and
  * for exactly the same reason: Cashfree whitelists this droplet's static IP,
  * and Supabase Edge Functions run on Deno Deploy with no stable egress address,

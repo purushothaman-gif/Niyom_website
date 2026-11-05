@@ -1,5 +1,8 @@
-import { useMemo } from 'react';
-import { Upload, Wallet } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Download, Loader2, Upload, Wallet } from 'lucide-react';
+import type { NWClient } from '../../../crm/types';
+import { useMfScope } from '../statement/useMfScope';
+import { useRtaMf } from '../../hooks/useRtaMf';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
 import { CasStatusNote } from '../../components/CasStatusNote';
@@ -13,6 +16,8 @@ import { InvestmentsBoard } from '../investments/InvestmentsBoard';
 import { useInvestmentRows } from '../investments/useInvestmentRows';
 
 export function PortfolioPage({
+  clientId,
+  client,
   holdings,
   xirrPercent = null,
   onNavigate,
@@ -21,6 +26,9 @@ export function PortfolioPage({
   hasImportedStatement = false,
   valuedOn,
 }: {
+  clientId: string;
+  /** For the statement header. */
+  client: NWClient | null;
   /** Kept for prop compatibility; the board now renders from `holdings`. */
   data: PortfolioData;
   holdings: PortalHolding[];
@@ -34,10 +42,39 @@ export function PortfolioPage({
   /** NAV date the mutual fund figures are priced at, when newer than the statement. */
   valuedOn?: string | null;
 }) {
-  const baseRows = useMemo(() => fromClientHoldings(holdings), [holdings]);
+  const mf = useMfScope(clientId, holdings);
+  const rta = useRtaMf(clientId);
+  const baseRows = useMemo(() => fromClientHoldings(mf.holdings), [mf.holdings]);
   const { rows, enriching } = useInvestmentRows('client', baseRows);
-  // See DashboardPage: no XIRR while registrar funds lack purchase flows.
-  const xirr = rows.some((r) => r.source === 'registrar') ? null : xirrPercent;
+  // See DashboardPage: no XIRR while registrar funds lack purchase flows, nor
+  // in all-distributor mode (statement funds' flows aren't in our ledger).
+  const xirr = rows.some((r) => r.source !== 'niyom') ? null : xirrPercent;
+  const [downloading, setDownloading] = useState(false);
+  const download = async () => {
+    if (!client) return;
+    setDownloading(true);
+    try {
+      const { generatePortfolioStatement } = await import('../statement/portfolioStatementPdf');
+      await generatePortfolioStatement({
+        client: {
+          full_name: client.full_name,
+          client_code: client.client_code,
+          pan: client.pan,
+          email: client.email,
+          phone: client.phone,
+          city: client.city,
+          state: client.state,
+        },
+        rows,
+        sips: rta.data?.sips ?? [],
+        mfScope: mf.scope,
+        casStatementTo: mf.casStatementTo,
+        valuedOn: valuedOn ?? rta.data?.snapshotDate ?? null,
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   /**
    * An investor with nothing here has almost always invested elsewhere — an
@@ -91,6 +128,54 @@ export function PortfolioPage({
           )}
         </div>
         {hasImportedStatement && <ImportButton onClick={onImport} />}
+      </div>
+
+      {/* Mutual fund scope + statement download */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-token-xl border border-border bg-bg-elevated px-4 py-3 shadow-token-card">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-text-secondary">Mutual funds:</span>
+          <div className="inline-flex rounded-full border border-border bg-bg-surface p-0.5">
+            {(
+              [
+                { key: 'niyom', label: 'Through Niyom' },
+                { key: 'all', label: 'All distributors' },
+              ] as const
+            ).map((o) => {
+              const on = mf.scope === o.key;
+              const disabled = o.key === 'all' && !mf.casAvailable;
+              return (
+                <button
+                  key={o.key}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => mf.setScope(o.key)}
+                  title={disabled ? 'Upload your CAS (Consolidated Account Statement) to include funds held with other distributors' : undefined}
+                  className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    on ? 'bg-accent text-on-accent' : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+          <span className="text-[11px] text-text-faint">
+            {mf.scope === 'all'
+              ? `From your CAS${mf.casStatementTo ? ` (to ${new Date(mf.casStatementTo).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}`
+              : mf.casAvailable
+                ? 'Registrar data, updated daily'
+                : 'Upload your CAS to see funds held with other distributors'}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => void download()}
+          disabled={downloading || !client}
+          className="inline-flex items-center gap-2 rounded-token-md bg-accent px-4 py-2 text-xs font-bold text-on-accent transition-colors hover:bg-accent-strong disabled:opacity-60"
+        >
+          {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          {downloading ? 'Preparing…' : 'Download statement (PDF)'}
+        </button>
       </div>
 
       <InvestmentsBoard

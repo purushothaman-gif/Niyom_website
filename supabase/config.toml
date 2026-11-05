@@ -741,3 +741,6 @@ verify_jwt = false
 
 [functions.mf-market-data]
 verify_jwt = false
+
+[functions.client-profile-update]
+verify_jwt = true

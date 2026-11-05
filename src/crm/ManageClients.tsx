@@ -6,7 +6,8 @@ import { fmt, fmtDate, VERIFICATION_LABELS, VERIFICATION_COLORS } from './utils'
 import { passwordChecks, isPasswordStrong } from '../lib/passwordPolicy';
 import { ProductAccessEditor } from './ProductAccess';
 import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
-import { Search, Eye, Pencil, Trash2, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog } from 'lucide-react';
+import { Search, Eye, Pencil, Trash2, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog, Users } from 'lucide-react';
+import { ClientProfileExtrasModal } from './ClientProfileExtras';
 import { mfSsoEnabled } from '../../shared/platform/env';
 
 interface Props { employee: NWEmployee; onNavigate: (page: any, params?: any) => void; }
@@ -119,6 +120,8 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   const [mapSaving, setMapSaving] = useState(false);
   // Bank Accounts manager (Sprint 5): up to 5 accounts, exactly one primary
   const [bankClient, setBankClient] = useState<NWClient | null>(null);
+  /** Nominees + client self-service change log (portal edits). */
+  const [extrasClient, setExtrasClient] = useState<NWClient | null>(null);
   const [bankAccounts, setBankAccounts] = useState<NWClientBankAccount[]>([]);
   const [bankBusy, setBankBusy] = useState(false);
   const [bankFormOpen, setBankFormOpen] = useState<'new' | string | null>(null); // 'new' | account id | null
@@ -703,6 +706,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                       <button onClick={() => onNavigate('documents', { clientId: c.id })} className="p-1.5 rounded-lg transition-colors" title="View Documents" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--success)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><FolderOpen className="w-4 h-4" /></button>
                       <button onClick={() => handleEdit(c)} className="p-1.5 rounded-lg transition-colors" title="Edit" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'rgb(var(--info-soft-rgb))')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Pencil className="w-4 h-4" /></button>
                       <button onClick={() => openBankManager(c)} className="p-1.5 rounded-lg transition-colors" title="Bank Accounts" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Landmark className="w-4 h-4" /></button>
+                      <button onClick={() => setExtrasClient(c)} className="p-1.5 rounded-lg transition-colors" title="Nominees & profile changes" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Users className="w-4 h-4" /></button>
                       {c.client_login_enabled
                         ? <button onClick={() => handleResetClientPassword(c)} className="p-1.5 rounded-lg transition-colors" title="Send Password Reset Email" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--success)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><ShieldCheck className="w-4 h-4" /></button>
                         : <button onClick={() => { setLoginClient(c); setLoginPassword(''); setShowLoginPw(false); }} className="p-1.5 rounded-lg transition-colors" title="Enable Client Login" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--warning)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><KeyRound className="w-4 h-4" /></button>
@@ -1057,6 +1061,10 @@ export default function ManageClients({ employee, onNavigate }: Props) {
         </Modal>
       )}
 
+      {extrasClient && (
+        <ClientProfileExtrasModal clientId={extrasClient.id} clientName={extrasClient.full_name} onClose={() => setExtrasClient(null)} />
+      )}
+
       {/* Bank Accounts Manager (Sprint 5) */}
       {bankClient && (
         <Modal title={`Bank Accounts — ${bankClient.full_name}`} onClose={closeBankManager}>
@@ -1125,6 +1133,11 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                           </span>
                         )}
                         {a.label && <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)' }}>{a.label}</span>}
+                        {(a as { verification_status?: string }).verification_status === 'verified' && (
+                          <span className="text-xs px-2 py-0.5 rounded-lg font-semibold" style={{ background: 'rgba(var(--success-rgb),0.12)', color: 'var(--success)' }} title={`Name at bank: ${(a as { name_at_bank?: string }).name_at_bank ?? '—'}`}>
+                            Bank-verified{(a as { added_via?: string }).added_via === 'client_portal' ? ' · added by client' : ''}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs font-mono mt-0.5" style={{ color: 'var(--text-faint)' }}>{a.account_number}{a.ifsc ? ` · ${a.ifsc}` : ''}</p>
                     </div>

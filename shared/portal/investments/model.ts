@@ -54,7 +54,12 @@ export interface InvestmentRow {
   dayChange: number | null;
   dayChangePct: number | null;
   /** Where the figure comes from — shown on the detail panel. */
-  source: 'registrar' | 'niyom';
+  source: 'registrar' | 'niyom' | 'statement';
+  /**
+   * Mutual funds read from a CAS: which distributor the holding sits with.
+   * Absent for everything else (we sold it, so it is ours).
+   */
+  distributor?: 'niyom' | 'other' | 'unknown';
 
   /* Mutual funds */
   amc?: string | null;
@@ -185,10 +190,20 @@ export function nextPayoutDate(
  * basis; HoldingService sets invested = value for them, which must NOT be read
  * as "0% return".
  */
-export function fromClientHoldings(holdings: NWHolding[]): InvestmentRow[] {
+export function fromClientHoldings(
+  holdings: Array<NWHolding & { cas?: { ownership?: string } | null }>,
+): InvestmentRow[] {
   return holdings
     .map((h) => {
       const registrar = h.product_type === 'mutual_fund' && String(h.id).startsWith('rta-');
+      const own = h.cas?.ownership;
+      const distributor: InvestmentRow['distributor'] = !h.cas
+        ? undefined
+        : own === 'held_with_niyom'
+          ? 'niyom'
+          : own === 'held_away'
+            ? 'other'
+            : 'unknown';
       const value = n(h.current_value);
       const invested = registrar ? null : n(h.invested_amount);
       const units = h.quantity ? n(h.quantity) : null;
@@ -217,7 +232,8 @@ export function fromClientHoldings(holdings: NWHolding[]): InvestmentRow[] {
         ...gainOf(invested, value),
         dayChange: null,
         dayChangePct: null,
-        source: registrar ? 'registrar' : 'niyom',
+        source: registrar ? 'registrar' : h.cas ? 'statement' : 'niyom',
+        distributor,
         amc: h.fund_house || null,
         category: h.scheme_type || null,
         navDate: h.nav_date || null,
