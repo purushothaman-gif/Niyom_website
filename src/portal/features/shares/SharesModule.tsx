@@ -28,8 +28,13 @@ type Screen =
 export function SharesModule({
   clientId,
   onboardingComplete,
+  initialShareId = null,
+  onInitialConsumed,
 }: {
   clientId: string;
+  /** Open this share's detail page once the list has loaded (from Explore). */
+  initialShareId?: string | null;
+  onInitialConsumed?: () => void;
   /** True once KYC is verified — gates placing an order (not browsing). */
   onboardingComplete: boolean;
 }) {
@@ -60,6 +65,15 @@ export function SharesModule({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Deep link from Explore: open the picked share once, then forget it.
+  useEffect(() => {
+    if (loading || !initialShareId) return;
+    const hit = shares.find((x) => x.id === initialShareId);
+    if (hit) setScreen({ name: 'detail', share: hit });
+    onInitialConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, initialShareId, shares]);
 
   const goList = () => setScreen({ name: 'list' });
 

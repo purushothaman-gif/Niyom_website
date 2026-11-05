@@ -10,6 +10,7 @@
  * product instead of just listing it.
  */
 import {
+  Compass,
   LayoutDashboard,
   PieChart,
   Wallet,
@@ -32,6 +33,7 @@ import {
 /** Every routable view in the portal. */
 export type PortalView =
   | 'dashboard'
+  | 'explore'
   | 'onboarding'
   | 'portfolio'
   | 'allocation'
@@ -112,6 +114,13 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     heading: 'Invest',
     items: [
+      {
+        view: 'explore',
+        key: 'explore',
+        label: 'Explore',
+        description: 'Popular bonds, funds and shares',
+        icon: Compass,
+      },
       {
         view: 'mutual-funds',
         key: 'mutual-funds',
@@ -213,13 +222,14 @@ export const ACCOUNT_ITEMS = NAV_GROUPS.find((g) => g.heading === 'Account')?.it
 export const PRIMARY_VIEWS: { view: PortalView; label: string; icon: LucideIcon }[] = [
   { view: 'dashboard', label: 'Home', icon: LayoutDashboard },
   { view: 'portfolio', label: 'Portfolio', icon: Wallet },
-  { view: 'mutual-funds', label: 'Invest', icon: TrendingUp },
+  { view: 'explore', label: 'Invest', icon: TrendingUp },
   { view: 'sip', label: 'SIP', icon: CalendarClock },
 ];
 
 /** Human-readable titles for the page header. */
 export const VIEW_TITLES: Record<PortalView, string> = {
   dashboard: 'Wealth Dashboard',
+  explore: 'Explore',
   onboarding: 'Complete Your KYC',
   portfolio: 'My Portfolio',
   allocation: 'Asset Allocation',
@@ -244,6 +254,7 @@ export const VIEW_TITLES: Record<PortalView, string> = {
  * greeting, and two stacked headers are exactly the clutter this replaces.
  */
 export const VIEW_SUBTITLES: Partial<Record<PortalView, string>> = {
+  explore: 'Popular bonds, mutual funds and unlisted shares — picked for you.',
   portfolio: 'Every holding you have with us, valued at the latest published NAV.',
   allocation: 'How your money is spread across asset classes, products and fund houses.',
   'mutual-funds': 'Your mutual fund holdings, investments and SIPs.',

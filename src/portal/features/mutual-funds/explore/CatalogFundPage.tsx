@@ -6,7 +6,7 @@
  * codes — so the invest box has to RESOLVE this fund in the scheme master
  * before it can offer anything, and says plainly when it cannot.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, ArrowLeft, CalendarClock, Clock, LineChart, Lock } from 'lucide-react';
 import { fmt } from '../../../../crm/utils';
 // The public MF Research page already renders NAV history as a hand-rolled SVG
@@ -46,9 +46,14 @@ interface Props {
   gate: InvestGate;
   onBack: () => void;
   onInvest: (scheme: FundScheme, orderType: OrderType) => void;
+  /**
+   * When mutual funds are transacted on the MF platform, this replaces the BSE
+   * plan picker: a single invest action that opens the platform, signed in.
+   */
+  platformInvest?: ReactNode;
 }
 
-export function CatalogFundPage({ fund, schemes, gate, onBack, onInvest }: Props) {
+export function CatalogFundPage({ fund, schemes, gate, onBack, onInvest, platformInvest }: Props) {
   const [detail, setDetail] = useState<CatalogFundDetail | null>(null);
   const [detailError, setDetailError] = useState(false);
   const [detailLoading, setDetailLoading] = useState(true);
@@ -195,7 +200,23 @@ export function CatalogFundPage({ fund, schemes, gate, onBack, onInvest }: Props
         </div>
 
         <aside className="xl:sticky xl:top-4 xl:self-start">
-          <InvestBox fund={fund} schemes={schemes} gate={gate} onInvest={onInvest} />
+          {platformInvest ? (
+            <Card padding="md">
+              <p className="text-[10px] uppercase tracking-wide text-text-faint">Invest in</p>
+              <p className="mt-0.5 line-clamp-2 text-sm font-bold text-text-primary">{fund.name}</p>
+              {fund.minInvestment !== null && (
+                <p className="mt-2 text-[11px] text-text-secondary">
+                  Minimum from {fmt(fund.minInvestment)} · SIP or one-time
+                </p>
+              )}
+              <div className="mt-4">{platformInvest}</div>
+              <p className="mt-3 text-[11px] leading-relaxed text-text-faint">
+                Opens your investing account, already signed in — choose SIP or one-time there.
+              </p>
+            </Card>
+          ) : (
+            <InvestBox fund={fund} schemes={schemes} gate={gate} onInvest={onInvest} />
+          )}
         </aside>
       </div>
     </div>

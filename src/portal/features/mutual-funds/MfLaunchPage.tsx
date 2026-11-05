@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronRight, Hourglass, Loader2, Plus, ShieldCheck, TrendingUp } from 'lucide-react';
 import { PortalButton } from '../../ui/kit';
 import { fromRtaHoldings } from '../../../../shared/portal/investments/model';
@@ -11,13 +11,22 @@ import { LogoLoader } from '../../../components/LogoLoader';
 import type { PortalView } from '../../layout/navigation';
 import { useRtaMf } from '../../hooks/useRtaMf';
 import type { MfLaunchState } from './useMfLaunch';
+import type { PortalHolding } from '../../types/cas';
+import { ExploreHub } from '../explore/ExploreHub';
+
+type MfTab = 'explore' | 'dashboard' | 'sips';
 
 interface Props {
   clientId: string;
   state: MfLaunchState;
   onLaunch: () => void;
   onNavigate: (view: PortalView) => void;
+  /** The client's holdings — mutual-fund rows feed the Explore "Your investments" card. */
+  holdings?: PortalHolding[];
 }
+
+/** Bonds/shares rails are hidden on the MF Explore tab — this page is funds only. */
+const FUNDS_ONLY: ReadonlySet<string> = new Set<PortalView>(['bonds', 'unlisted-shares']);
 
 /**
  * The Mutual Funds home. Funds are transacted on our MF platform, but the
@@ -26,7 +35,9 @@ interface Props {
  * feed) are shown here, and investing is a single in-place action that opens
  * the platform, pre-signed, only at the moment they choose to transact.
  */
-export function MfLaunchPage({ clientId, state, onLaunch, onNavigate }: Props) {
+export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings = [] }: Props) {
+  const [tab, setTab] = useState<MfTab>('explore');
+  const mfHoldings = useMemo(() => holdings.filter((h) => h.product_type === 'mutual_fund'), [holdings]);
   const { data, loading } = useRtaMf(clientId);
   const baseRows = useMemo(() => fromRtaHoldings(data?.holdings ?? []), [data]);
   const { rows, enriching } = useInvestmentRows('client', baseRows);
@@ -60,8 +71,36 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate }: Props) {
     );
   };
 
+  const tabs: Array<{ key: MfTab; label: string }> = [
+    { key: 'explore', label: 'Explore' },
+    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'sips', label: 'SIPs' },
+  ];
+
   return (
     <div className="space-y-5">
+      {/* Groww-style sub-navigation */}
+      <div className="-mt-1 flex items-center justify-between gap-3 border-b border-border">
+        <nav className="flex gap-1">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`relative px-4 pb-3 pt-1 text-[15px] font-semibold transition-colors ${
+                tab === t.key ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              {t.label}
+              {tab === t.key && <span className="absolute inset-x-2 -bottom-px h-[3px] rounded-full bg-accent" />}
+            </button>
+          ))}
+        </nav>
+        <div className="hidden pb-2 sm:block">
+          <InvestCta />
+        </div>
+      </div>
+
       {statusNote && (
         <p className={`rounded-token-lg border border-border-subtle bg-bg-surface px-4 py-3 text-xs ${statusNote.warn ? 'text-danger' : 'text-text-secondary'}`}>
           {state === 'opening' && <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" />}
@@ -74,7 +113,20 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate }: Props) {
         </p>
       )}
 
-      {loading && !data ? (
+      {tab === 'explore' ? (
+        <ExploreHub
+          holdings={mfHoldings}
+          xirrPercent={null}
+          hidden={FUNDS_ONLY}
+          onNavigate={onNavigate}
+          onOpenBond={() => onNavigate('bonds')}
+          onOpenShare={() => onNavigate('unlisted-shares')}
+          fundInvest={<InvestCta full />}
+          fundsOnly
+        />
+      ) : tab === 'sips' ? (
+        <SipsCard sips={data?.sips ?? []} />
+      ) : loading && !data ? (
         <div className="flex min-h-[30vh] items-center justify-center"><LogoLoader size={40} /></div>
       ) : !hasData ? (
         <Card>
@@ -92,11 +144,8 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate }: Props) {
             enriching={enriching}
             title="Mutual funds"
             lockedAsset="mutual_fund"
-            actions={<InvestCta />}
             detailAction={() => (gated ? null : <InvestCta full />)}
           />
-
-          <SipsCard sips={data?.sips ?? []} />
 
           {!gated && (
             <button

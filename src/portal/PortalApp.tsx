@@ -14,6 +14,7 @@ import { PortfolioPage } from './features/portfolio/PortfolioPage';
 import { AllocationPage } from './features/allocation/AllocationPage';
 import { MutualFundsModule } from './features/mutual-funds/MutualFundsModule';
 import { MfLaunchPage } from './features/mutual-funds/MfLaunchPage';
+import { ExploreHub } from './features/explore/ExploreHub';
 import { useMfLaunch } from './features/mutual-funds/useMfLaunch';
 import { BondsModule } from './features/bonds/BondsModule';
 import { SharesModule } from './features/shares/SharesModule';
@@ -101,6 +102,9 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
    * the wizard is two places for its state to drift.
    */
   const [showImport, setShowImport] = useState(false);
+  /** A bond/share picked on Explore, opened straight to its detail page. */
+  const [openBondId, setOpenBondId] = useState<string | null>(null);
+  const [openShareId, setOpenShareId] = useState<string | null>(null);
 
   /*
    * Five minutes of nothing signs the client out. This is what makes a 4-digit
@@ -150,7 +154,53 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
   const renderView = () => {
     // Views that fetch their own data don't wait on the client snapshot.
     if (view === 'mutual-funds' && mfSsoOn)
-      return <MfLaunchPage clientId={clientId} state={mf.state} onLaunch={mf.launch} onNavigate={navigate} />;
+      return (
+        <MfLaunchPage
+          clientId={clientId}
+          state={mf.state}
+          onLaunch={mf.launch}
+          onNavigate={navigate}
+          holdings={snapshot.holdings}
+        />
+      );
+    if (view === 'explore')
+      return (
+        <ExploreHub
+          holdings={snapshot.holdings}
+          xirrPercent={dashboardData?.xirrPercent ?? null}
+          hidden={hiddenProducts}
+          onNavigate={navigate}
+          onOpenBond={(id) => {
+            setOpenBondId(id);
+            navigate('bonds');
+          }}
+          onOpenShare={(id) => {
+            setOpenShareId(id);
+            navigate('unlisted-shares');
+          }}
+          fundInvest={
+            <button
+              type="button"
+              onClick={() =>
+                !mfSsoOn
+                  ? navigate('mutual-funds')
+                  : mf.state === 'kyc_incomplete'
+                    ? navigate('onboarding')
+                    : mf.launch()
+              }
+              disabled={mf.state === 'opening'}
+              className="w-full rounded-token-md py-3 text-sm font-bold text-on-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+            >
+              {mfSsoOn && mf.state === 'kyc_incomplete'
+                ? 'Complete KYC to invest'
+                : mf.state === 'opening'
+                  ? 'Opening…'
+                  : 'Invest now'}
+            </button>
+          }
+        />
+      );
     if (view === 'mutual-funds')
       return (
         <MutualFundsModule
@@ -166,6 +216,8 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
         <BondsModule
           clientId={clientId}
           onboardingComplete={client?.onboarding_status === 'active'}
+          initialBondId={openBondId}
+          onInitialConsumed={() => setOpenBondId(null)}
         />
       );
     if (view === 'unlisted-shares')
@@ -173,6 +225,8 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
         <SharesModule
           clientId={clientId}
           onboardingComplete={client?.onboarding_status === 'active'}
+          initialShareId={openShareId}
+          onInitialConsumed={() => setOpenShareId(null)}
         />
       );
     if (view === 'transactions') return <TransactionsPage clientId={clientId} client={client} />;

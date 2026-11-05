@@ -28,8 +28,13 @@ type Screen =
 export function BondsModule({
   clientId,
   onboardingComplete,
+  initialBondId = null,
+  onInitialConsumed,
 }: {
   clientId: string;
+  /** Open this bond's detail page once the list has loaded (from Explore). */
+  initialBondId?: string | null;
+  onInitialConsumed?: () => void;
   /** True once KYC is verified — gates placing an order (not browsing). */
   onboardingComplete: boolean;
 }) {
@@ -60,6 +65,15 @@ export function BondsModule({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Deep link from Explore: open the picked bond once, then forget it.
+  useEffect(() => {
+    if (loading || !initialBondId) return;
+    const hit = bonds.find((x) => x.id === initialBondId);
+    if (hit) setScreen({ name: 'detail', bond: hit });
+    onInitialConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, initialBondId, bonds]);
 
   const goList = () => setScreen({ name: 'list' });
 
