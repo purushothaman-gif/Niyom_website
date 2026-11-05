@@ -1,45 +1,98 @@
-import { useState } from 'react';
-import { Loader2, Users, Wallet, FileSignature, TrendingUp, Phone, Mail, ArrowRight, BadgeCheck, UserPlus } from 'lucide-react';
+/**
+ * Partner home — built around "what do I sell today, and what does my book
+ * look like", Groww-style but focused on the partner's job rather than an
+ * investor's.
+ *
+ *   left   Sell today: popular bonds and unlisted shares, each with the
+ *          client-facing yield/price, the partner's spread per ₹1 lakh, and
+ *          Order / Link / Image shortcuts; then the client book board.
+ *   right  Earnings (frozen debit-note figures only), the RM card, and tools.
+ *
+ * Every monetary tile is labelled by what it actually is — "Raised this FY",
+ * "Paid", "Awaiting payment" — never "payout MTD/YTD": debit notes are keyed
+ * (dsa_id, month, year), so no accrual exists until the month's note is raised.
+ */
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowRight,
+  BadgeCheck,
+  ClipboardList,
+  FileSignature,
+  Gem,
+  Landmark,
+  Loader2,
+  Mail,
+  Phone,
+  Share2,
+  UserPlus,
+  Users,
+  Wallet,
+} from 'lucide-react';
+import { inr } from '../../../lib/money';
 import { Card } from '../../../portal/components/Card';
-import { KpiStat } from '../../../portal/components/KpiStat';
-import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { StatusPill } from '../../../portal/components/StatusPill';
-import { EmptyState } from '../../../portal/components/EmptyState';
-import { fmt } from '../../../crm/utils';
 import { OnboardClientModal } from '../clients/OnboardClientModal';
 import type { PartnerSnapshot } from '../../hooks/usePartnerSnapshot';
 import type { PartnerView } from '../../layout/navigation';
 import { InvestmentsBoard } from '../../../portal/features/investments/InvestmentsBoard';
 import { usePartnerBook } from '../book/usePartnerBook';
+import { PartnerService, type PartnerBond, type PartnerShare } from '../../services/PartnerService';
+import { CardGrid, ProductsTools, Rail, RailSkeleton, type ToolItem } from '../../../portal/features/explore/cards';
+import { popularBonds } from '../../../portal/features/explore/ExploreHub';
+import { PartnerBondSellCard, PartnerShareSellCard } from '../sell/SellCards';
+import type { PartnerBondIntent } from '../bonds/BondsModule';
+import type { PartnerShareIntent } from '../shares/SharesModule';
 
 interface Props {
   snapshot: PartnerSnapshot;
   onNavigate: (view: PartnerView) => void;
   /** Refresh the portal snapshot after a new client is onboarded. */
   onOnboarded: () => void;
+  /** Products switched off for this partner. */
+  hidden?: ReadonlySet<string>;
+  onOpenBond?: (intent: PartnerBondIntent) => void;
+  onOpenShare?: (intent: PartnerShareIntent) => void;
 }
 
-/**
- * Partner dashboard.
- *
- * Every monetary tile is labelled by what it actually is — "Raised this FY",
- * "Paid", "Awaiting payment" — never "payout MTD/YTD". Debit notes are keyed
- * (dsa_id, month, year), so no accrual figure exists until the month's note is
- * raised; a tile implying otherwise would be wrong the day a partner looks at it
- * mid-month.
- */
-export function DashboardPage({ snapshot, onNavigate, onOnboarded }: Props) {
+const NONE: ReadonlySet<string> = new Set();
+
+export function DashboardPage({ snapshot, onNavigate, onOnboarded, hidden = NONE, onOpenBond, onOpenShare }: Props) {
   const { profile, clients, payout, notes } = snapshot;
   const [showOnboard, setShowOnboard] = useState(false);
   const book = usePartnerBook(clients);
+  const showBonds = !hidden.has('bonds');
+  const showShares = !hidden.has('unlisted-shares');
 
-  const totalInvested = clients.reduce((s, c) => s + Number(c.invested_amount || 0), 0);
-  const totalValue = clients.reduce((s, c) => s + Number(c.current_value || 0), 0);
+  const [bonds, setBonds] = useState<PartnerBond[] | null>(null);
+  const [shares, setShares] = useState<PartnerShare[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    if (showBonds) PartnerService.getBonds().then((b) => alive && setBonds(b)).catch(() => alive && setBonds([]));
+    if (showShares) PartnerService.getShares().then((s) => alive && setShares(s)).catch(() => alive && setShares([]));
+    return () => {
+      alive = false;
+    };
+  }, [showBonds, showShares]);
+  const topBonds = useMemo(() => (bonds ? popularBonds(bonds, 3) : []), [bonds]);
+
   const activeClients = clients.filter((c) => c.onboarding_status === 'active').length;
-
-  // Computed notifications — derived from the snapshot, no notifications table.
   const unsigned = notes.filter((n) => n.signature_status !== 'signed');
   const unpaid = notes.filter((n) => n.status !== 'paid');
+
+  const bondGo = (id: string, action: PartnerBondIntent['action']) =>
+    onOpenBond ? onOpenBond({ id, action }) : onNavigate('bonds');
+  const shareGo = (id: string, action: PartnerShareIntent['action']) =>
+    onOpenShare ? onOpenShare({ id, action }) : onNavigate('unlisted-shares');
+
+  const tools: ToolItem[] = [
+    { key: 'onboard', label: 'Onboard a client', icon: UserPlus, onClick: () => setShowOnboard(true) },
+    { key: 'clients', label: 'My clients', icon: Users, badge: clients.length ? `${clients.length}` : undefined, onClick: () => onNavigate('clients') },
+    ...(showBonds ? [{ key: 'bonds', label: 'All bonds', icon: Landmark, badge: bonds ? `${bonds.length} open` : undefined, onClick: () => onNavigate('bonds') }] : []),
+    ...(showShares ? [{ key: 'shares', label: 'All unlisted shares', icon: Gem, badge: shares ? `${shares.length} open` : undefined, onClick: () => onNavigate('unlisted-shares') }] : []),
+    { key: 'referral', label: 'Referral link', icon: Share2, onClick: () => onNavigate('referral') },
+    { key: 'lead', label: 'Submit a lead', icon: ClipboardList, onClick: () => onNavigate('submit-lead') },
+    { key: 'payouts', label: 'Statements', icon: FileSignature, badge: unsigned.length ? `${unsigned.length} to sign` : undefined, onClick: () => onNavigate('payouts') },
+  ];
 
   return (
     <div className="space-y-6">
@@ -47,9 +100,7 @@ export function DashboardPage({ snapshot, onNavigate, onOnboarded }: Props) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="font-display text-2xl font-bold text-text-primary">
-            {/* Full name, not a first-name split: many partners are firms or HUFs
-                ("KATHARE WEALTH ADVISORS", "SHIVAM GUPTA (HUF)") and initialled
-                names like "B K M GANESH BABU" would greet the partner as "B". */}
+            {/* Full name, not a first-name split: many partners are firms or HUFs. */}
             Welcome, {profile?.full_name ?? 'Partner'}
           </h2>
           <p className="mt-1 text-sm text-text-muted">
@@ -67,7 +118,6 @@ export function DashboardPage({ snapshot, onNavigate, onOnboarded }: Props) {
         </button>
       </div>
 
-      {/* Action required — only rendered when there is something to act on. */}
       {unsigned.length > 0 && (
         <Card accent padding="md">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -93,185 +143,188 @@ export function DashboardPage({ snapshot, onNavigate, onOnboarded }: Props) {
         </Card>
       )}
 
-      {/* Client book — every sourced client's holdings, Groww-style. */}
-      {clients.length > 0 && (
-        book.loading ? (
-          <Card>
-            <div className="flex items-center justify-center gap-2 py-10 text-sm text-text-muted">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading your clients' portfolio…
-            </div>
-          </Card>
-        ) : (
-          <InvestmentsBoard
-            rows={book.rows}
-            enriching={book.enriching}
-            title="Client book"
-            maxRows={8}
-            onViewAll={() => onNavigate('clients')}
-          />
-        )
-      )}
-
-      {/* Earnings — frozen figures only. */}
-      <Card>
-        <SectionHeader title={`Earnings — FY ${payout?.fy_label ?? ''}`} icon={Wallet} />
-        <div className="mt-5 grid grid-cols-2 gap-6 lg:grid-cols-4">
-          <KpiStat
-            label="Raised this FY"
-            value={fmt(Number(payout?.fy_net ?? 0))}
-            sub={`Gross ${fmt(Number(payout?.fy_gross ?? 0))} · TDS ${fmt(Number(payout?.fy_tds ?? 0))}`}
-          />
-          <KpiStat
-            label="Paid to date"
-            value={fmt(Number(payout?.paid_net ?? 0))}
-            color="var(--success)"
-            sub="Net of TDS"
-            trend="up"
-          />
-          <KpiStat
-            label="Awaiting payment"
-            value={fmt(Number(payout?.awaiting_payment_net ?? 0))}
-            color={unpaid.length ? 'var(--warning)' : undefined}
-            sub={`${unpaid.length} statement${unpaid.length !== 1 ? 's' : ''}`}
-          />
-          <KpiStat
-            label="Lifetime earnings"
-            value={fmt(Number(payout?.lifetime_net ?? 0))}
-            sub="Net of TDS, all years"
-          />
-        </div>
-        {payout?.latest_note_number && (
-          <p className="mt-5 border-t border-border-subtle pt-4 text-xs text-text-muted">
-            Latest statement{' '}
-            <span className="font-mono text-text-secondary">{payout.latest_note_number}</span> for{' '}
-            {payout.latest_note_period} — {fmt(Number(payout.latest_note_net ?? 0))} net payable.
-          </p>
-        )}
-      </Card>
-
-      {/* Business */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <SectionHeader title="Your Business" icon={TrendingUp} />
-          <div className="mt-5 grid grid-cols-2 gap-6 sm:grid-cols-4">
-            <KpiStat label="Clients sourced" value={String(clients.length)} sub={`${activeClients} active`} />
-            <KpiStat label="Total invested" value={fmt(totalInvested)} />
-            <KpiStat
-              label="Current value"
-              value={fmt(totalValue)}
-              color={totalValue >= totalInvested ? 'var(--success)' : 'var(--danger)'}
-              sub={
-                totalInvested > 0
-                  ? `${totalValue >= totalInvested ? '+' : ''}${(((totalValue - totalInvested) / totalInvested) * 100).toFixed(1)}%`
-                  : undefined
-              }
-              trend={totalValue >= totalInvested ? 'up' : 'down'}
-            />
-            <KpiStat label="Statements" value={String(notes.length)} sub="Raised to date" />
-          </div>
-
-          <div className="mt-6 border-t border-border-subtle pt-4">
-            {clients.length === 0 ? (
-              <EmptyState
-                icon={Users}
-                title="No clients sourced yet"
-                hint="Clients you introduce will appear here once they are onboarded."
-                compact
-              />
-            ) : (
-              <>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Recent clients
-                </p>
-                <ul className="space-y-2">
-                  {clients.slice(0, 4).map((c) => (
-                    <li key={c.client_id} className="flex items-center justify-between gap-3 text-sm">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-text-primary">{c.full_name}</p>
-                        <p className="font-mono text-[11px] text-text-secondary">{c.client_code}</p>
-                      </div>
-                      <span className="shrink-0 font-medium text-text-primary">
-                        {fmt(Number(c.current_value || 0))}
-                      </span>
-                    </li>
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+        {/* ------------------------------------------------ left */}
+        <div className="min-w-0 space-y-10">
+          {showBonds && (
+            <Rail title="Sell today · Bonds" icon={Landmark} more="All bonds" onMore={() => onNavigate('bonds')}>
+              {bonds === null ? (
+                <RailSkeleton />
+              ) : topBonds.length ? (
+                <CardGrid cols={3}>
+                  {topBonds.map((b) => (
+                    <PartnerBondSellCard
+                      key={b.id}
+                      bond={b}
+                      onOpen={() => bondGo(b.id, 'detail')}
+                      onOrder={() => bondGo(b.id, 'order')}
+                      onShare={() => bondGo(b.id, 'share')}
+                      onImage={() => bondGo(b.id, 'image')}
+                    />
                   ))}
-                </ul>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('clients')}
-                  className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-accent transition-colors hover:text-accent-soft"
-                >
-                  View all clients <ArrowRight className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-          </div>
-        </Card>
-
-        {/* RM card — the single thing partners most often need. */}
-        <Card>
-          <SectionHeader title="Your Relationship Manager" icon={BadgeCheck} />
-          {profile?.rm_name ? (
-            <div className="mt-5 space-y-4">
-              <div className="flex items-center gap-3">
-                {profile.rm_avatar_url ? (
-                  <img
-                    src={profile.rm_avatar_url}
-                    alt=""
-                    className="h-11 w-11 rounded-token-md object-cover"
-                  />
-                ) : (
-                  <div className="flex h-11 w-11 items-center justify-center rounded-token-md bg-accent/15 text-sm font-bold text-accent">
-                    {profile.rm_name.charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-text-primary">{profile.rm_name}</p>
-                  <p className="text-xs text-text-muted">Niyom Wealth</p>
-                </div>
-              </div>
-              {profile.rm_mobile && (
-                <a
-                  href={`tel:${profile.rm_mobile}`}
-                  className="flex items-center gap-2.5 rounded-token-md border border-border bg-bg-surface px-3 py-2.5 text-sm text-text-primary transition-colors hover:text-accent"
-                >
-                  <Phone className="h-4 w-4 shrink-0 text-text-muted" />
-                  <span className="truncate">{profile.rm_mobile}</span>
-                </a>
+                </CardGrid>
+              ) : (
+                <p className="rounded-token-xl border border-dashed border-border px-5 py-8 text-center text-sm text-text-secondary">
+                  No bonds are open for you right now — your RM adds new offers regularly.
+                </p>
               )}
-              {profile.rm_email && (
-                <a
-                  href={`mailto:${profile.rm_email}`}
-                  className="flex items-center gap-2.5 rounded-token-md border border-border bg-bg-surface px-3 py-2.5 text-sm text-text-primary transition-colors hover:text-accent"
-                >
-                  <Mail className="h-4 w-4 shrink-0 text-text-muted" />
-                  <span className="truncate">{profile.rm_email}</span>
-                </a>
-              )}
-              <p className="text-xs text-text-faint">
-                Contact your RM for password resets, bank detail changes, or anything
-                about your statements.
-              </p>
-            </div>
-          ) : (
-            <div className="mt-5">
-              <EmptyState icon={BadgeCheck} title="No relationship manager assigned" compact />
-            </div>
+            </Rail>
           )}
-          <div className="mt-4 border-t border-border-subtle pt-4">
-            <StatusPill tone={profile?.status === 'active' ? 'success' : 'muted'}>
-              Partner status: {profile?.status ?? '—'}
-            </StatusPill>
-          </div>
-        </Card>
+
+          {showShares && (
+            <Rail title="Sell today · Unlisted shares" icon={Gem} more="All unlisted shares" onMore={() => onNavigate('unlisted-shares')}>
+              {shares === null ? (
+                <RailSkeleton />
+              ) : shares.length ? (
+                <CardGrid cols={3}>
+                  {shares.slice(0, 3).map((s) => (
+                    <PartnerShareSellCard
+                      key={s.id}
+                      share={s}
+                      onOpen={() => shareGo(s.id, 'detail')}
+                      onOrder={() => shareGo(s.id, 'order')}
+                      onShare={() => shareGo(s.id, 'share')}
+                    />
+                  ))}
+                </CardGrid>
+              ) : (
+                <p className="rounded-token-xl border border-dashed border-border px-5 py-8 text-center text-sm text-text-secondary">
+                  No unlisted shares are open right now.
+                </p>
+              )}
+            </Rail>
+          )}
+
+          {/* Client book — every sourced client's holdings. */}
+          {clients.length > 0 &&
+            (book.loading ? (
+              <Card>
+                <div className="flex items-center justify-center gap-2 py-10 text-sm text-text-muted">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading your clients&rsquo; portfolio…
+                </div>
+              </Card>
+            ) : (
+              <InvestmentsBoard
+                rows={book.rows}
+                enriching={book.enriching}
+                title="Client book"
+                maxRows={8}
+                compact
+                onViewAll={() => onNavigate('clients')}
+              />
+            ))}
+        </div>
+
+        {/* ------------------------------------------------ right */}
+        <aside className="space-y-8">
+          <section>
+            <h2 className="mb-4 font-display text-xl font-bold tracking-tight text-text-primary">Your earnings</h2>
+            <div className="rounded-token-xl border border-border bg-bg-elevated p-5 shadow-token-card">
+              <p className="text-xs text-text-secondary">Raised this FY {payout?.fy_label ? `(${payout.fy_label})` : ''}</p>
+              <p className="mt-1 font-display text-3xl font-bold tabular-nums text-text-primary">
+                {inr(Number(payout?.fy_net ?? 0))}
+              </p>
+              <p className="mt-0.5 text-[11px] text-text-faint">
+                Gross {inr(Number(payout?.fy_gross ?? 0))} · TDS {inr(Number(payout?.fy_tds ?? 0))}
+              </p>
+              <div className="mt-4 divide-y divide-border-subtle border-t border-dashed border-border">
+                <EarnRow label="Paid to date" value={inr(Number(payout?.paid_net ?? 0))} tone="text-success" />
+                <EarnRow
+                  label={`Awaiting payment${unpaid.length ? ` (${unpaid.length})` : ''}`}
+                  value={inr(Number(payout?.awaiting_payment_net ?? 0))}
+                  tone={unpaid.length ? 'text-warning' : undefined}
+                />
+                <EarnRow label="Lifetime (net of TDS)" value={inr(Number(payout?.lifetime_net ?? 0))} />
+                <EarnRow label="Clients sourced" value={`${clients.length} · ${activeClients} active`} />
+              </div>
+              {payout?.latest_note_number && (
+                <p className="mt-3 border-t border-border-subtle pt-3 text-[11px] text-text-muted">
+                  Latest statement <span className="font-mono text-text-secondary">{payout.latest_note_number}</span> for{' '}
+                  {payout.latest_note_period} — {inr(Number(payout.latest_note_net ?? 0))} net.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => onNavigate('payouts')}
+                className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-accent hover:text-accent-soft"
+              >
+                <Wallet className="h-3.5 w-3.5" /> Statements & payouts
+              </button>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="mb-4 font-display text-xl font-bold tracking-tight text-text-primary">Your RM</h2>
+            <div className="rounded-token-xl border border-border bg-bg-elevated p-5 shadow-token-card">
+              {profile?.rm_name ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    {profile.rm_avatar_url ? (
+                      <img src={profile.rm_avatar_url} alt="" className="h-11 w-11 rounded-token-md object-cover" />
+                    ) : (
+                      <div className="flex h-11 w-11 items-center justify-center rounded-token-md bg-accent/15 text-sm font-bold text-accent">
+                        {profile.rm_name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-text-primary">{profile.rm_name}</p>
+                      <p className="text-xs text-text-muted">Relationship manager</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {profile.rm_mobile && (
+                      <a
+                        href={`tel:${profile.rm_mobile}`}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-2 text-xs font-semibold text-text-primary hover:text-accent"
+                      >
+                        <Phone className="h-3.5 w-3.5" /> Call
+                      </a>
+                    )}
+                    {profile.rm_email && (
+                      <a
+                        href={`mailto:${profile.rm_email}`}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-2 text-xs font-semibold text-text-primary hover:text-accent"
+                      >
+                        <Mail className="h-3.5 w-3.5" /> Email
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="flex items-center gap-2 text-sm text-text-secondary">
+                  <BadgeCheck className="h-4 w-4" /> No relationship manager assigned
+                </p>
+              )}
+              <div className="mt-4 border-t border-border-subtle pt-3">
+                <StatusPill tone={profile?.status === 'active' ? 'success' : 'muted'}>
+                  Partner status: {profile?.status ?? '—'}
+                </StatusPill>
+              </div>
+            </div>
+          </section>
+
+          <ProductsTools title="Tools" items={tools} />
+        </aside>
       </div>
 
       {showOnboard && (
         <OnboardClientModal
           onClose={() => setShowOnboard(false)}
-          onOnboarded={() => { setShowOnboard(false); onOnboarded(); }}
+          onOnboarded={() => {
+            setShowOnboard(false);
+            onOnboarded();
+          }}
         />
       )}
+    </div>
+  );
+}
+
+function EarnRow({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <span className="text-sm text-text-secondary">{label}</span>
+      <span className={`text-sm font-semibold tabular-nums ${tone ?? 'text-text-primary'}`}>{value}</span>
     </div>
   );
 }

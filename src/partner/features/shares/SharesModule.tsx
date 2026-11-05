@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
-import { Segmented } from '../../../portal/components/Segmented';
+import { ProductTabs } from '../../../portal/components/ProductTabs';
 import {
   PartnerService, PARTNER_ACCESS_REVOKED,
   type PartnerShare, type PartnerShareOrder,
@@ -19,7 +19,21 @@ import { PartnerMyShareOrders } from './PartnerMyShareOrders';
 type Tab = 'explore' | 'orders';
 type Screen = { name: 'list' } | { name: 'detail'; share: PartnerShare };
 
-export function SharesModule({ onAccessRevoked }: { onAccessRevoked?: () => void }) {
+/** A share picked on the partner home, with the action to open it on. */
+export interface PartnerShareIntent {
+  id: string;
+  action: 'detail' | 'order' | 'share';
+}
+
+export function SharesModule({
+  onAccessRevoked,
+  intent = null,
+  onIntentConsumed,
+}: {
+  onAccessRevoked?: () => void;
+  intent?: PartnerShareIntent | null;
+  onIntentConsumed?: () => void;
+}) {
   const [shares, setShares] = useState<PartnerShare[]>([]);
   const [orders, setOrders] = useState<PartnerShareOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +60,19 @@ export function SharesModule({ onAccessRevoked }: { onAccessRevoked?: () => void
   }, [onAccessRevoked]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Deep link from the partner home: open the share (and its action) once.
+  useEffect(() => {
+    if (loading || !intent) return;
+    const hit = shares.find((x) => x.id === intent.id);
+    if (hit) {
+      setScreen({ name: 'detail', share: hit });
+      if (intent.action === 'order') setOrderShare(hit);
+      if (intent.action === 'share') setLinkShare(hit);
+    }
+    onIntentConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, intent, shares]);
 
   const currentMarkup = shares[0]?.self_markup_percent ?? 0;
 
@@ -92,10 +119,10 @@ export function SharesModule({ onAccessRevoked }: { onAccessRevoked?: () => void
 
   return (
     <div className="space-y-5">
-      <Segmented<Tab>
-        options={[
-          { value: 'explore', label: 'Explore shares', count: shares.length || undefined },
-          { value: 'orders', label: 'My Orders', count: orders.length || undefined },
+      <ProductTabs<Tab>
+        tabs={[
+          { key: 'explore', label: 'Explore', count: shares.length || undefined },
+          { key: 'orders', label: 'Orders', count: orders.length || undefined },
         ]}
         value={tab}
         onChange={setTab}

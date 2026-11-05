@@ -16,8 +16,8 @@ import { usePartnerSnapshot } from './hooks/usePartnerSnapshot';
 import { isDemoSession } from './demo/demoData';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ClientsPage } from './features/clients/ClientsPage';
-import { BondsModule } from './features/bonds/BondsModule';
-import { SharesModule } from './features/shares/SharesModule';
+import { BondsModule, type PartnerBondIntent } from './features/bonds/BondsModule';
+import { SharesModule, type PartnerShareIntent } from './features/shares/SharesModule';
 import { MfStaffPlaceholder } from '../components/MfStaffPlaceholder';
 import { PayoutsPage } from './features/payouts/PayoutsPage';
 import { ProfilePage } from './features/profile/ProfilePage';
@@ -47,6 +47,9 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
     if (hiddenProducts.has(view)) routeTo('dashboard');
   }, [hiddenProducts, view, routeTo]);
   const [showChangePw, setShowChangePw] = useState(false);
+  /** A bond/share + action picked on the partner home, opened in its module. */
+  const [bondIntent, setBondIntent] = useState<PartnerBondIntent | null>(null);
+  const [shareIntent, setShareIntent] = useState<PartnerShareIntent | null>(null);
 
   // Kill-switch: nw_current_dsa_id() embeds the enabled + active checks, so the
   // moment an RM disables the login or deactivates the DSA, the next RPC raises
@@ -82,13 +85,39 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
 
     switch (view) {
       case 'dashboard':
-        return <DashboardPage snapshot={snapshot} onNavigate={navigate} onOnboarded={refresh} />;
+        return <DashboardPage
+            snapshot={snapshot}
+            onNavigate={navigate}
+            onOnboarded={refresh}
+            hidden={hiddenProducts}
+            onOpenBond={(i) => {
+              setBondIntent(i);
+              navigate('bonds');
+            }}
+            onOpenShare={(i) => {
+              setShareIntent(i);
+              navigate('unlisted-shares');
+            }}
+          />;
       case 'clients':
         return <ClientsPage clients={snapshot.clients} onOnboarded={refresh} />;
       case 'bonds':
-        return <BondsModule partner={snapshot.profile} onAccessRevoked={handleAccessRevoked} />;
+        return (
+          <BondsModule
+            partner={snapshot.profile}
+            onAccessRevoked={handleAccessRevoked}
+            intent={bondIntent}
+            onIntentConsumed={() => setBondIntent(null)}
+          />
+        );
       case 'unlisted-shares':
-        return <SharesModule onAccessRevoked={handleAccessRevoked} />;
+        return (
+          <SharesModule
+            onAccessRevoked={handleAccessRevoked}
+            intent={shareIntent}
+            onIntentConsumed={() => setShareIntent(null)}
+          />
+        );
       case 'mutual-funds':
         return <MfStaffPlaceholder />;
       case 'payouts':
@@ -104,7 +133,20 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
           <ProfilePage profile={snapshot.profile} bankAccounts={snapshot.bankAccounts} onChangePassword={() => setShowChangePw(true)} />
         );
       default:
-        return <DashboardPage snapshot={snapshot} onNavigate={navigate} onOnboarded={refresh} />;
+        return <DashboardPage
+            snapshot={snapshot}
+            onNavigate={navigate}
+            onOnboarded={refresh}
+            hidden={hiddenProducts}
+            onOpenBond={(i) => {
+              setBondIntent(i);
+              navigate('bonds');
+            }}
+            onOpenShare={(i) => {
+              setShareIntent(i);
+              navigate('unlisted-shares');
+            }}
+          />;
     }
   };
 

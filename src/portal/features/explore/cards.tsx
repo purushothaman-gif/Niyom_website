@@ -49,8 +49,10 @@ export function Rail({
   );
 }
 
-export function CardGrid({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">{children}</div>;
+export function CardGrid({ children, cols = 4 }: { children: ReactNode; cols?: 3 | 4 }) {
+  return (
+    <div className={`grid grid-cols-2 gap-3 sm:gap-4 ${cols === 3 ? 'xl:grid-cols-3' : 'lg:grid-cols-4'}`}>{children}</div>
+  );
 }
 
 const cardCls =

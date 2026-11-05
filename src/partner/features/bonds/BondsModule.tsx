@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
-import { Segmented } from '../../../portal/components/Segmented';
+import { ProductTabs } from '../../../portal/components/ProductTabs';
 import {
   PartnerService, PARTNER_ACCESS_REVOKED,
   type PartnerBond, type PartnerBondOrder,
@@ -22,7 +22,23 @@ import { PartnerShareModal } from './PartnerShareModal';
 type Tab = 'explore' | 'orders';
 type Screen = { name: 'list' } | { name: 'detail'; bond: PartnerBond };
 
-export function BondsModule({ partner, onAccessRevoked }: { partner: PartnerIdentity | null; onAccessRevoked?: () => void }) {
+/** A bond picked on the partner home, with the action to open it on. */
+export interface PartnerBondIntent {
+  id: string;
+  action: 'detail' | 'order' | 'share' | 'image';
+}
+
+export function BondsModule({
+  partner,
+  onAccessRevoked,
+  intent = null,
+  onIntentConsumed,
+}: {
+  partner: PartnerIdentity | null;
+  onAccessRevoked?: () => void;
+  intent?: PartnerBondIntent | null;
+  onIntentConsumed?: () => void;
+}) {
   const [bonds, setBonds] = useState<PartnerBond[]>([]);
   const [orders, setOrders] = useState<PartnerBondOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +67,20 @@ export function BondsModule({ partner, onAccessRevoked }: { partner: PartnerIden
   }, [onAccessRevoked]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Deep link from the partner home: open the bond (and its action) once.
+  useEffect(() => {
+    if (loading || !intent) return;
+    const hit = bonds.find((b) => b.id === intent.id);
+    if (hit) {
+      setScreen({ name: 'detail', bond: hit });
+      if (intent.action === 'order') setOrderBond(hit);
+      if (intent.action === 'share') setShareBond(hit);
+      if (intent.action === 'image') setMarketingBond(hit);
+    }
+    onIntentConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, intent, bonds]);
 
   const currentMarkup = bonds[0]?.self_markup_percent ?? 0;
 
@@ -98,10 +128,10 @@ export function BondsModule({ partner, onAccessRevoked }: { partner: PartnerIden
 
   return (
     <div className="space-y-5">
-      <Segmented<Tab>
-        options={[
-          { value: 'explore', label: 'Explore bonds', count: bonds.length || undefined },
-          { value: 'orders', label: 'My Orders', count: orders.length || undefined },
+      <ProductTabs<Tab>
+        tabs={[
+          { key: 'explore', label: 'Explore', count: bonds.length || undefined },
+          { key: 'orders', label: 'Orders', count: orders.length || undefined },
         ]}
         value={tab}
         onChange={setTab}
