@@ -6,6 +6,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { ProductTabs } from '../../../portal/components/ProductTabs';
+import { WatchlistTab, WatchStar } from '../../../portal/watchlist/Watchlist';
+import { PartnerShareSellCard } from '../sell/SellCards';
 import {
   PartnerService, PARTNER_ACCESS_REVOKED,
   type PartnerShare, type PartnerShareOrder,
@@ -16,7 +18,7 @@ import { PartnerShareOrderModal } from './PartnerShareOrderModal';
 import { PartnerShareLinkModal } from './PartnerShareLinkModal';
 import { PartnerMyShareOrders } from './PartnerMyShareOrders';
 
-type Tab = 'explore' | 'orders';
+type Tab = 'explore' | 'orders' | 'shortlist';
 type Screen = { name: 'list' } | { name: 'detail'; share: PartnerShare };
 
 /** A share picked on the partner home, with the action to open it on. */
@@ -96,6 +98,9 @@ export function SharesModule({
   if (screen.name === 'detail') {
     return (
       <>
+        <div className="mb-3 flex justify-end">
+          <WatchStar variant="pill" type="share" itemRef={screen.share.id} />
+        </div>
         <PartnerShareDetail
           share={screen.share}
           onBack={() => setScreen({ name: 'list' })}
@@ -123,6 +128,7 @@ export function SharesModule({
         tabs={[
           { key: 'explore', label: 'Explore', count: shares.length || undefined },
           { key: 'orders', label: 'Orders', count: orders.length || undefined },
+          { key: 'shortlist', label: 'Shortlist' },
         ]}
         value={tab}
         onChange={setTab}
@@ -134,6 +140,22 @@ export function SharesModule({
           currentMarkup={currentMarkup}
           onSaveMarkup={async (pct) => { await PartnerService.setShareMarkup(pct); await load(); }}
           onOpen={(share) => setScreen({ name: 'detail', share })}
+        />
+      ) : tab === 'shortlist' ? (
+        <WatchlistTab
+          type="share"
+          items={shares}
+          idOf={(x) => x.id}
+          what="shares"
+          onExplore={() => setTab('explore')}
+          render={(x) => (
+            <PartnerShareSellCard
+              share={x}
+              onOpen={() => setScreen({ name: 'detail', share: x })}
+              onOrder={() => { setScreen({ name: 'detail', share: x }); setOrderShare(x); }}
+              onShare={() => { setScreen({ name: 'detail', share: x }); setLinkShare(x); }}
+            />
+          )}
         />
       ) : (
         <PartnerMyShareOrders orders={orders} onExplore={() => setTab('explore')} />

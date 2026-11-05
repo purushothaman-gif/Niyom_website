@@ -15,6 +15,7 @@ import { AllocationPage } from './features/allocation/AllocationPage';
 import { MutualFundsModule } from './features/mutual-funds/MutualFundsModule';
 import { MfLaunchPage } from './features/mutual-funds/MfLaunchPage';
 import { ExploreHub, type ExploreScreen } from './features/explore/ExploreHub';
+import { WatchlistProvider } from './watchlist/Watchlist';
 import { useMfLaunch } from './features/mutual-funds/useMfLaunch';
 import { BondsModule } from './features/bonds/BondsModule';
 import { SharesModule } from './features/shares/SharesModule';
@@ -364,6 +365,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
 
   return (
     <>
+      <WatchlistProvider surface="client" demo={isDemoClientSession()}>
       <PortalShell
         view={view}
         title={VIEW_TITLES[view]}
@@ -377,6 +379,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
       >
         {renderView()}
       </PortalShell>
+      </WatchlistProvider>
 
       {showChangePw && (
         <ChangePasswordModal clientId={clientId} onClose={() => setShowChangePw(false)} />

@@ -14,6 +14,7 @@ import { useHiddenProducts } from '../lib/productAccess';
 import type { PartnerView } from './layout/navigation';
 import { usePartnerSnapshot } from './hooks/usePartnerSnapshot';
 import { isDemoSession } from './demo/demoData';
+import { WatchlistProvider } from '../portal/watchlist/Watchlist';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ClientsPage } from './features/clients/ClientsPage';
 import { BondsModule, type PartnerBondIntent } from './features/bonds/BondsModule';
@@ -152,6 +153,7 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
 
   return (
     <>
+      <WatchlistProvider surface="partner" demo={isDemoSession()} noun="Shortlist">
       <PartnerShell
         view={view}
         title={VIEW_TITLES[view]}
@@ -165,6 +167,7 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
       >
         {renderView()}
       </PartnerShell>
+      </WatchlistProvider>
 
       {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
 

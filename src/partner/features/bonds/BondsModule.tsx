@@ -7,6 +7,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { ProductTabs } from '../../../portal/components/ProductTabs';
+import { WatchlistTab, WatchStar } from '../../../portal/watchlist/Watchlist';
+import { PartnerBondSellCard } from '../sell/SellCards';
 import {
   PartnerService, PARTNER_ACCESS_REVOKED,
   type PartnerBond, type PartnerBondOrder,
@@ -19,7 +21,7 @@ import { PartnerMyOrders } from './PartnerMyOrders';
 import { PartnerMarketingModal } from './PartnerMarketingModal';
 import { PartnerShareModal } from './PartnerShareModal';
 
-type Tab = 'explore' | 'orders';
+type Tab = 'explore' | 'orders' | 'shortlist';
 type Screen = { name: 'list' } | { name: 'detail'; bond: PartnerBond };
 
 /** A bond picked on the partner home, with the action to open it on. */
@@ -101,6 +103,9 @@ export function BondsModule({
   if (screen.name === 'detail') {
     return (
       <>
+        <div className="mb-3 flex justify-end">
+          <WatchStar variant="pill" type="bond" itemRef={screen.bond.id} />
+        </div>
         <PartnerBondDetail
           bond={screen.bond}
           onBack={() => setScreen({ name: 'list' })}
@@ -132,6 +137,7 @@ export function BondsModule({
         tabs={[
           { key: 'explore', label: 'Explore', count: bonds.length || undefined },
           { key: 'orders', label: 'Orders', count: orders.length || undefined },
+          { key: 'shortlist', label: 'Shortlist' },
         ]}
         value={tab}
         onChange={setTab}
@@ -143,6 +149,23 @@ export function BondsModule({
           currentMarkup={currentMarkup}
           onSaveMarkup={async (pct) => { await PartnerService.setBondMarkup(pct); await load(); }}
           onOpen={(bond) => setScreen({ name: 'detail', bond })}
+        />
+      ) : tab === 'shortlist' ? (
+        <WatchlistTab
+          type="bond"
+          items={bonds}
+          idOf={(b) => b.id}
+          what="bonds"
+          onExplore={() => setTab('explore')}
+          render={(b) => (
+            <PartnerBondSellCard
+              bond={b}
+              onOpen={() => setScreen({ name: 'detail', bond: b })}
+              onOrder={() => { setScreen({ name: 'detail', bond: b }); setOrderBond(b); }}
+              onShare={() => { setScreen({ name: 'detail', bond: b }); setShareBond(b); }}
+              onImage={() => { setScreen({ name: 'detail', bond: b }); setMarketingBond(b); }}
+            />
+          )}
         />
       ) : (
         <PartnerMyOrders orders={orders} onExplore={() => setTab('explore')} />

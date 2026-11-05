@@ -12,6 +12,7 @@ import type { CatalogFund } from '../../types/funds';
 import { AmcAvatar } from '../mutual-funds/components/AmcAvatar';
 import type { FundCollection } from '../mutual-funds/explore/collections';
 import { signedPct, toneOf } from '../investments/format';
+import { WatchStar } from '../../watchlist/Watchlist';
 
 /** Section heading with an optional "See more" link, as on Groww. */
 export function Rail({
@@ -56,7 +57,7 @@ export function CardGrid({ children, cols = 4 }: { children: ReactNode; cols?: 3
 }
 
 const cardCls =
-  'group flex h-full min-h-[11.5rem] flex-col rounded-token-xl border border-border bg-bg-elevated p-4 text-left shadow-token-card transition-all hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-token-lg';
+  'group flex h-full min-h-[11.5rem] w-full flex-col rounded-token-xl border border-border bg-bg-elevated p-4 text-left shadow-token-card transition-all hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-token-lg';
 
 /** Two-letter logo tile from a name, coloured deterministically. */
 export function Monogram({ name, size = 44 }: { name: string; size?: number }) {
@@ -109,27 +110,30 @@ export function BondCard({ bond, onOpen }: { bond: BondLike; onOpen: () => void 
   const grade = ratingGrade(bond.rating);
   const safe = grade && /^AA/.test(grade);
   return (
-    <button type="button" onClick={onOpen} className={cardCls}>
-      <Monogram name={name} />
-      <p className="mt-3 line-clamp-2 text-sm font-semibold leading-snug text-text-primary">
-        {name}
-        {bond.maturity_date && <span className="text-text-secondary"> {maturityShort(bond.maturity_date)}</span>}
-      </p>
-      <div className="mt-auto pt-4">
-        <p className="font-display text-lg font-bold tabular-nums text-text-primary">
-          {y != null ? `${y.toFixed(2)}%` : '—'}
+    <div className="relative h-full">
+      <button type="button" onClick={onOpen} className={cardCls}>
+        <Monogram name={name} />
+        <p className="mt-3 line-clamp-2 text-sm font-semibold leading-snug text-text-primary">
+          {name}
+          {bond.maturity_date && <span className="text-text-secondary"> {maturityShort(bond.maturity_date)}</span>}
         </p>
-        <div className="mt-0.5 flex items-center justify-between text-[11px] text-text-secondary">
-          <span>{months != null ? `${months} months` : 'Yield'}</span>
-          {grade && (
-            <span className="inline-flex items-center gap-1 font-semibold text-text-primary">
-              {grade}
-              <span className={`h-1.5 w-1.5 rounded-full ${safe ? 'bg-success' : 'bg-warning'}`} />
-            </span>
-          )}
+        <div className="mt-auto pt-4">
+          <p className="font-display text-lg font-bold tabular-nums text-text-primary">
+            {y != null ? `${y.toFixed(2)}%` : '—'}
+          </p>
+          <div className="mt-0.5 flex items-center justify-between text-[11px] text-text-secondary">
+            <span>{months != null ? `${months} months` : 'Yield'}</span>
+            {grade && (
+              <span className="inline-flex items-center gap-1 font-semibold text-text-primary">
+                {grade}
+                <span className={`h-1.5 w-1.5 rounded-full ${safe ? 'bg-success' : 'bg-warning'}`} />
+              </span>
+            )}
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
+      <WatchStar type="bond" itemRef={bond.id} className="absolute right-2 top-2" />
+    </div>
   );
 }
 
@@ -140,14 +144,17 @@ export function FundCard({ fund, onOpen }: { fund: CatalogFund; onOpen: () => vo
   const r1 = fund.returns['1Y'];
   const shown = r3 ?? r1;
   return (
-    <button type="button" onClick={onOpen} className={cardCls}>
-      <AmcAvatar amc={fund.amc || fund.name} size={44} />
-      <p className="mt-3 line-clamp-2 text-sm font-semibold leading-snug text-text-primary">{fund.name}</p>
-      <div className="mt-auto flex items-end justify-between pt-4">
-        <p className={`font-display text-lg font-bold tabular-nums ${toneOf(shown)}`}>{signedPct(shown, 2)}</p>
-        <span className="text-[11px] font-medium text-text-secondary">{r3 != null ? '3Y' : '1Y'}</span>
-      </div>
-    </button>
+    <div className="relative h-full">
+      <button type="button" onClick={onOpen} className={cardCls}>
+        <AmcAvatar amc={fund.amc || fund.name} size={44} />
+        <p className="mt-3 line-clamp-2 text-sm font-semibold leading-snug text-text-primary">{fund.name}</p>
+        <div className="mt-auto flex items-end justify-between pt-4">
+          <p className={`font-display text-lg font-bold tabular-nums ${toneOf(shown)}`}>{signedPct(shown, 2)}</p>
+          <span className="text-[11px] font-medium text-text-secondary">{r3 != null ? '3Y' : '1Y'}</span>
+        </div>
+      </button>
+      <WatchStar type="fund" itemRef={fund.amfiCode} className="absolute right-2 top-2" />
+    </div>
   );
 }
 
@@ -185,25 +192,28 @@ export function ShareCard({
 }) {
   const name = share.short_name || share.company_name;
   return (
-    <button type="button" onClick={onOpen} className={cardCls}>
-      {share.logo_url ? (
-        <img
-          src={share.logo_url}
-          alt=""
-          className="h-11 w-11 rounded-token-md bg-white object-contain p-1"
-          onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')}
-        />
-      ) : (
-        <Monogram name={name} />
-      )}
-      <p className="mt-3 line-clamp-2 text-sm font-semibold leading-snug text-text-primary">{name}</p>
-      <div className="mt-auto pt-4">
-        <p className="font-display text-lg font-bold tabular-nums text-text-primary">
-          {price != null ? inr(price, price < 1000) : '—'}
-        </p>
-        <p className="mt-0.5 truncate text-[11px] text-text-secondary">{share.sector || 'Unlisted'}</p>
-      </div>
-    </button>
+    <div className="relative h-full">
+      <button type="button" onClick={onOpen} className={cardCls}>
+        {share.logo_url ? (
+          <img
+            src={share.logo_url}
+            alt=""
+            className="h-11 w-11 rounded-token-md bg-white object-contain p-1"
+            onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')}
+          />
+        ) : (
+          <Monogram name={name} />
+        )}
+        <p className="mt-3 line-clamp-2 text-sm font-semibold leading-snug text-text-primary">{name}</p>
+        <div className="mt-auto pt-4">
+          <p className="font-display text-lg font-bold tabular-nums text-text-primary">
+            {price != null ? inr(price, price < 1000) : '—'}
+          </p>
+          <p className="mt-0.5 truncate text-[11px] text-text-secondary">{share.sector || 'Unlisted'}</p>
+        </div>
+      </button>
+      <WatchStar type="share" itemRef={share.id} className="absolute right-2 top-2" />
+    </div>
   );
 }
 

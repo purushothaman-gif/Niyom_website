@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, ArrowLeft, CalendarClock, Clock, LineChart, Lock } from 'lucide-react';
 import { fmt } from '../../../../crm/utils';
+import { WatchStar } from '../../../watchlist/Watchlist';
 // The public MF Research page already renders NAV history as a hand-rolled SVG
 // with range toggles. Same data shape, same look — reused rather than forked.
 import { NavChart } from '../../../../pages/shared/NavChart';
@@ -108,13 +109,16 @@ export function CatalogFundPage({ fund, schemes, gate, onBack, onInvest, platfor
 
   return (
     <div className="space-y-5">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-muted hover:text-accent"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-muted hover:text-accent"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+        <WatchStar variant="pill" type="fund" itemRef={fund.amfiCode} />
+      </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">

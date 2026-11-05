@@ -8,6 +8,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { LogoLoader } from '../../../components/LogoLoader';
 import { ProductHoldings, ProductTabs } from '../../components/ProductTabs';
+import { WatchlistTab, WatchStar } from '../../watchlist/Watchlist';
+import { BondCard } from '../explore/cards';
 import type { PortalHolding } from '../../types/cas';
 import {
   BondOrderService,
@@ -19,7 +21,7 @@ import { BondDetailPage } from './BondDetailPage';
 import { BondOrderFlow } from './BondOrderFlow';
 import { MyOrdersPage } from './MyOrdersPage';
 
-type Tab = 'explore' | 'holdings' | 'orders';
+type Tab = 'explore' | 'holdings' | 'orders' | 'watchlist';
 
 type Screen =
   | { name: 'list' }
@@ -108,12 +110,17 @@ export function BondsModule({
   // --- Detail / order flow take over the whole view ------------------------
   if (screen.name === 'detail') {
     return (
-      <BondDetailPage
-        bond={screen.bond}
-        canInvest={onboardingComplete}
-        onBack={goList}
-        onInvest={(units) => setScreen({ name: 'order', bond: screen.bond, units })}
-      />
+      <div className="relative">
+        <div className="absolute right-0 top-0 z-10">
+          <WatchStar variant="pill" type="bond" itemRef={screen.bond.id} />
+        </div>
+        <BondDetailPage
+          bond={screen.bond}
+          canInvest={onboardingComplete}
+          onBack={goList}
+          onInvest={(units) => setScreen({ name: 'order', bond: screen.bond, units })}
+        />
+      </div>
     );
   }
 
@@ -141,6 +148,7 @@ export function BondsModule({
           { key: 'explore', label: 'Explore', count: bonds.length || undefined },
           { key: 'holdings', label: 'Holdings' },
           { key: 'orders', label: 'Orders', count: orders.length || undefined },
+          { key: 'watchlist', label: 'Watchlist' },
         ]}
         value={tab}
         onChange={setTab}
@@ -148,6 +156,15 @@ export function BondsModule({
 
       {tab === 'explore' ? (
         <BondsListPage bonds={bonds} onOpen={(bond) => setScreen({ name: 'detail', bond })} />
+      ) : tab === 'watchlist' ? (
+        <WatchlistTab
+          type="bond"
+          items={bonds}
+          idOf={(x) => x.id}
+          what="bonds"
+          onExplore={() => setTab('explore')}
+          render={(b) => <BondCard bond={b} onOpen={() => setScreen({ name: 'detail', bond: b })} />}
+        />
       ) : tab === 'holdings' ? (
         <ProductHoldings holdings={holdings} asset="bond" title="Bonds" onExplore={() => setTab('explore')} />
       ) : (

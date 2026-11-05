@@ -10649,6 +10649,48 @@ export type Database = {
           },
         ]
       }
+      nw_watchlist: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          dsa_id: string | null
+          id: string
+          item_ref: string
+          item_type: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          dsa_id?: string | null
+          id?: string
+          item_ref: string
+          item_type: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          dsa_id?: string | null
+          id?: string
+          item_ref?: string
+          item_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_watchlist_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_watchlist_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nw_wylth_sso_log: {
         Row: {
           caller_auth_id: string | null

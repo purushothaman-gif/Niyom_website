@@ -13,8 +13,9 @@ import { useRtaMf } from '../../hooks/useRtaMf';
 import type { MfLaunchState } from './useMfLaunch';
 import type { PortalHolding } from '../../types/cas';
 import { ExploreHub } from '../explore/ExploreHub';
+import { MfWatchlist } from './MfWatchlist';
 
-type MfTab = 'explore' | 'dashboard' | 'sips';
+type MfTab = 'explore' | 'dashboard' | 'sips' | 'watchlist';
 
 interface Props {
   clientId: string;
@@ -75,6 +76,7 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
     { key: 'explore', label: 'Explore' },
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'sips', label: 'SIPs' },
+    { key: 'watchlist', label: 'Watchlist' },
   ];
 
   return (
@@ -124,6 +126,8 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
           fundInvest={<InvestCta full />}
           fundsOnly
         />
+      ) : tab === 'watchlist' ? (
+        <MfWatchlist fundInvest={<InvestCta full />} onExplore={() => setTab('explore')} />
       ) : tab === 'sips' ? (
         <SipsCard sips={data?.sips ?? []} />
       ) : loading && !data ? (

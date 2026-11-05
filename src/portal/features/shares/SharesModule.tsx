@@ -8,6 +8,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { LogoLoader } from '../../../components/LogoLoader';
 import { ProductHoldings, ProductTabs } from '../../components/ProductTabs';
+import { WatchlistTab, WatchStar } from '../../watchlist/Watchlist';
+import { ShareCard } from '../explore/cards';
 import type { PortalHolding } from '../../types/cas';
 import {
   ShareOrderService,
@@ -19,7 +21,7 @@ import { ShareDetailPage } from './ShareDetailPage';
 import { ShareOrderFlow } from './ShareOrderFlow';
 import { MyShareOrdersPage } from './MyShareOrdersPage';
 
-type Tab = 'explore' | 'holdings' | 'orders';
+type Tab = 'explore' | 'holdings' | 'orders' | 'watchlist';
 
 type Screen =
   | { name: 'list' }
@@ -107,12 +109,17 @@ export function SharesModule({
 
   if (screen.name === 'detail') {
     return (
-      <ShareDetailPage
-        share={screen.share}
-        canInvest={onboardingComplete}
-        onBack={goList}
-        onInvest={(qty) => setScreen({ name: 'order', share: screen.share, qty })}
-      />
+      <div className="relative">
+        <div className="absolute right-0 top-0 z-10">
+          <WatchStar variant="pill" type="share" itemRef={screen.share.id} />
+        </div>
+        <ShareDetailPage
+          share={screen.share}
+          canInvest={onboardingComplete}
+          onBack={goList}
+          onInvest={(qty) => setScreen({ name: 'order', share: screen.share, qty })}
+        />
+      </div>
     );
   }
 
@@ -139,6 +146,7 @@ export function SharesModule({
           { key: 'explore', label: 'Explore', count: shares.length || undefined },
           { key: 'holdings', label: 'Holdings' },
           { key: 'orders', label: 'Orders', count: orders.length || undefined },
+          { key: 'watchlist', label: 'Watchlist' },
         ]}
         value={tab}
         onChange={setTab}
@@ -146,6 +154,15 @@ export function SharesModule({
 
       {tab === 'explore' ? (
         <SharesListPage shares={shares} onOpen={(share) => setScreen({ name: 'detail', share })} />
+      ) : tab === 'watchlist' ? (
+        <WatchlistTab
+          type="share"
+          items={shares}
+          idOf={(x) => x.id}
+          what="shares"
+          onExplore={() => setTab('explore')}
+          render={(b) => <ShareCard share={b} price={b.client_price} onOpen={() => setScreen({ name: 'detail', share: b })} />}
+        />
       ) : tab === 'holdings' ? (
         <ProductHoldings holdings={holdings} asset="unlisted_share" title="Unlisted shares" onExplore={() => setTab('explore')} />
       ) : (
