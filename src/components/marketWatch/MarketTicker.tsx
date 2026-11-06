@@ -4,9 +4,9 @@
  * A slim band directly under each surface's header (CRM, client portal,
  * partner portal), in normal page flow, so it never covers content and does not
  * move anything except by its own fixed height, which is reserved from the
- * first paint. When the items do not fit it runs as a ticker (paused on hover);
- * otherwise it sits still. Clicking
- * it opens the full Market Watch page. Reads only our cache tables, like the
+ * first paint. It always runs as a ticker, right to left in a seamless loop at
+ * a steady reading speed (SPEED_PX_S, whatever the screen width), and pauses
+ * on hover. Clicking it opens the full Market Watch page. Reads only our cache tables, like the
  * page itself; hovering an item shows its as-of time.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -16,6 +16,9 @@ import { Activity, ChevronRight } from 'lucide-react';
 import { fmtSignedPct, loadTicker, toneOfChange, type TickerItem } from '../../../shared/market/marketWatch';
 
 const REFRESH_MS = 60_000;
+
+/** Scroll speed. Constant in pixels, so wide screens don't race. ~45 px/s reads comfortably. */
+const SPEED_PX_S = 45;
 
 const tone = { up: 'text-success', down: 'text-danger', flat: 'text-text-secondary' } as const;
 
@@ -29,11 +32,14 @@ function Items({ items, hidden, innerRef }: { items: TickerItem[]; hidden?: bool
       {items.map((i) => {
         const t = toneOfChange(i.changePct);
         return (
-          <span key={i.key} title={`As of ${i.asOf}`} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3">
+          <span key={i.key} title={`As of ${i.asOf}`} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap pl-4">
             <span className="font-semibold text-text-secondary">{i.label}</span>
             <span className="font-semibold tabular-nums text-text-primary">{i.value}</span>
             <span className={`font-semibold tabular-nums ${tone[t]}`}>
               {t === 'up' ? '▲' : t === 'down' ? '▼' : ''} {fmtSignedPct(i.changePct)}
+            </span>
+            <span className="pl-2.5 text-text-faint" aria-hidden>
+              •
             </span>
           </span>
         );
@@ -53,8 +59,11 @@ export function MarketTicker({
 }) {
   const [items, setItems] = useState<TickerItem[] | null>(null);
   const [failed, setFailed] = useState(false);
-  // Scroll only when the items do not fit; a still strip reads better.
-  const [running, setRunning] = useState(false);
+  // The loop is two identical halves; the track slides left by exactly one
+  // half (-50%) and restarts, which is invisible. Each half repeats the items
+  // enough times to be at least as wide as the strip, so a wide screen never
+  // shows a gap. Duration follows the half's width to keep the speed constant.
+  const [loop, setLoop] = useState<{ reps: number; seconds: number } | null>(null);
   const viewportRef = useRef<HTMLSpanElement>(null);
   const itemsRef = useRef<HTMLDivElement>(null);
 
@@ -62,7 +71,13 @@ export function MarketTicker({
     const vp = viewportRef.current;
     const it = itemsRef.current;
     if (!vp || !it) return;
-    const measure = () => setRunning(it.scrollWidth > vp.clientWidth + 1);
+    const measure = () => {
+      const w = it.scrollWidth;
+      if (!w) return;
+      const reps = Math.max(1, Math.ceil(vp.clientWidth / w));
+      const seconds = Math.round(((reps * w) / SPEED_PX_S) * 10) / 10;
+      setLoop((prev) => (prev && prev.reps === reps && prev.seconds === seconds ? prev : { reps, seconds }));
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(vp);
@@ -106,9 +121,13 @@ export function MarketTicker({
         </span>
         <span ref={viewportRef} className="nw-ticker-viewport relative h-full min-w-0 flex-1 overflow-hidden">
           {items && (
-            <span className={`nw-ticker-track absolute inset-y-0 left-0 flex items-center ${running ? 'is-running' : ''}`}>
+            <span
+              className={`nw-ticker-track absolute inset-y-0 left-0 flex items-center ${loop ? 'is-running' : ''}`}
+              style={loop ? { animationDuration: `${loop.seconds}s` } : undefined}
+            >
               <Items items={items} innerRef={itemsRef} />
-              {running && <Items items={items} hidden />}
+              {loop &&
+                Array.from({ length: loop.reps * 2 - 1 }, (_, n) => <Items key={n} items={items} hidden />)}
             </span>
           )}
         </span>
