@@ -26,7 +26,7 @@ import type { PortalHolding } from '../../types/cas';
 import { BondOrderService, type ClientBond } from '../../../../shared/portal/services/BondOrderService';
 import { ShareOrderService, type ClientShare } from '../../../../shared/portal/services/ShareOrderService';
 import { ratingGrade } from '../../../../shared/portal/bonds/bondFilters';
-import { findLogo, issuerFromBondName, useBrandLogoMap } from '../../../components/brandLogos';
+import { brandKey, findLogo, issuerFromBondName, useBrandLogoMap } from '../../../components/brandLogos';
 import { fromClientHoldings, summarise } from '../../../../shared/portal/investments/model';
 import { useMfCatalog } from '../../hooks/useMfCatalog';
 import type { CatalogFund } from '../../types/funds';
@@ -38,6 +38,7 @@ import { FundTable } from '../mutual-funds/explore/FundTable';
 import {
   BondCard,
   CardGrid,
+  ScrollRow,
   CollectionTile,
   FundCard,
   ProductsTools,
@@ -50,17 +51,26 @@ import {
 } from './cards';
 import { YourInvestmentsCard } from './YourInvestmentsCard';
 
-/** Popular funds: staff picks first, else the 3Y leader of four core categories. */
-export function popularFunds(funds: CatalogFund[], picks: string[]): CatalogFund[] {
+/**
+ * Popular funds: staff picks first, then the leaders of the core categories
+ * taken round-robin (best flexi, large, mid, small… then the second-best of
+ * each), so the scrolling rail stays varied rather than one category deep.
+ */
+export function popularFunds(funds: CatalogFund[], picks: string[], n = 12): CatalogFund[] {
   const byCode = new Map(funds.map((f) => [f.amfiCode, f]));
-  const picked = picks.map((c) => byCode.get(c)).filter((f): f is CatalogFund => !!f);
-  if (picked.length >= 4) return picked.slice(0, 4);
-  const out = [...picked];
-  for (const id of ['flexi-cap', 'large-cap', 'mid-cap', 'small-cap', 'high-return', 'hybrid']) {
-    if (out.length >= 4) break;
-    const c = collectionById(id);
-    const top = c ? fundsIn(c, funds).find((f) => !out.some((o) => o.amfiCode === f.amfiCode)) : undefined;
-    if (top) out.push(top);
+  const out = picks.map((c) => byCode.get(c)).filter((f): f is CatalogFund => !!f).slice(0, n);
+  const seen = new Set(out.map((f) => f.amfiCode));
+  const lists = ['flexi-cap', 'large-cap', 'mid-cap', 'small-cap', 'high-return', 'hybrid']
+    .map((id) => collectionById(id))
+    .map((c) => (c ? fundsIn(c, funds) : []));
+  for (let rank = 0; out.length < n && lists.some((l) => l.length > rank); rank++) {
+    for (const l of lists) {
+      const f = l[rank];
+      if (f && !seen.has(f.amfiCode) && out.length < n) {
+        seen.add(f.amfiCode);
+        out.push(f);
+      }
+    }
   }
   return out;
 }
@@ -69,12 +79,6 @@ export function popularFunds(funds: CatalogFund[], picks: string[]): CatalogFund
 function bondGradeRank(b: BondLike): number {
   const g = ratingGrade(b.rating) ?? '';
   return g.startsWith('AAA') ? 0 : g.startsWith('AA') ? 1 : g.startsWith('A') ? 2 : 3;
-}
-
-/** Secured — collateral-backed, not a subordinated/unsecured instrument. */
-function bondSecured(b: BondLike): boolean {
-  const s = (b.security_type ?? '').toLowerCase();
-  return s.includes('secured') && !s.includes('unsecured');
 }
 
 /** Popular bonds: investment-grade first (AA and above), then by yield. */
@@ -86,44 +90,47 @@ export function popularBonds<T extends BondLike & { maturity_date: string | null
 }
 
 /**
- * The client "Popular Bonds" rail — the handful worth featuring, not the whole
- * book. Every bond shown must earn it: a real issuer logo on file (so the card
- * shows a brand, not a monogram), a secured instrument and a good credit grade
- * (A-category or better). Among those we lead with the ones yielding a decent
- * 10–13%, then top up with the next-best by yield so the rail stays full.
+ * The client "Popular Bonds" rail: top brands with a good rating and a good
+ * yield.
  *
- * If nothing clears the logo+secured+grade bar (e.g. the logo table hasn't
- * loaded yet) we fall back to the strongest secured, well-rated bonds rather
- * than leave the rail empty — a transient state that self-corrects on the next
- * render once logos arrive.
+ *   brand   — a real issuer logo on file (the names clients recognise)
+ *   rating  — AA- or better (AAA / AA bucket)
+ *   yield   — highest first
+ *
+ * One bond per issuer, so the rail shows many brands rather than five Muthoot
+ * tranches. If fewer than four bonds qualify, it widens step by step: branded
+ * A-category issuers, then AA-or-better issuers without a logo yet, then the
+ * best of the rest — the rail is never empty while bonds exist.
  */
-export function curatedBonds<T extends BondLike & { maturity_date: string | null }>(
+export function curatedBonds<T extends BondLike & { maturity_date: string | null; bond_name?: string | null }>(
   bonds: T[],
   hasLogo: (b: T) => boolean,
-  n = 4,
+  n = 12,
 ): T[] {
   const live = bonds.filter((b) => !b.maturity_date || new Date(b.maturity_date) > new Date());
   const byYield = (a: T, b: T) => (bondYield(b) ?? 0) - (bondYield(a) ?? 0);
-  const byBest = (a: T, b: T) => bondGradeRank(a) - bondGradeRank(b) || byYield(a, b);
-  const goodGrade = (b: T) => bondGradeRank(b) <= 2; // A-category and above
-  const inBand = (b: T) => {
-    const y = bondYield(b);
-    return y != null && y >= 10 && y <= 13;
-  };
+  const issuerOf = (b: T) => brandKey(b.issuer_name?.trim() || issuerFromBondName(b.bond_name ?? '') || b.bond_name || b.isin || '');
 
-  // The headline set: logo + secured + good rating. 10–13% yields first, then
-  // the next-best by yield so four cards still show if few land exactly in band.
-  const featured = live.filter((b) => hasLogo(b) && bondSecured(b) && goodGrade(b));
-  if (featured.length) {
-    const band = featured.filter(inBand).sort(byYield);
-    const rest = featured.filter((b) => !inBand(b)).sort(byYield);
-    return [...band, ...rest].slice(0, n);
+  const tiers: Array<(b: T) => boolean> = [
+    (b) => hasLogo(b) && bondGradeRank(b) <= 1,
+    (b) => hasLogo(b) && bondGradeRank(b) === 2,
+    (b) => bondGradeRank(b) <= 1,
+    () => true,
+  ];
+  const out: T[] = [];
+  const issuers = new Set<string>();
+  for (const tier of tiers) {
+    for (const b of live.filter(tier).sort(byYield)) {
+      if (out.length >= n) break;
+      const key = issuerOf(b);
+      if (issuers.has(key)) continue;
+      issuers.add(key);
+      out.push(b);
+    }
+    // Stop widening once the rail is reasonably full.
+    if (out.length >= 4) break;
   }
-
-  // Fallbacks (nothing logo-matched yet): best secured/well-rated bonds we have.
-  const secured = live.filter((b) => bondSecured(b) && goodGrade(b)).sort(byBest);
-  if (secured.length) return secured.slice(0, n);
-  return [...live].sort(byBest).slice(0, n);
+  return out;
 }
 
 /** Rows rendered in the all-funds list; search narrows the rest. */
@@ -315,7 +322,7 @@ export function ExploreHub({
   ];
 
   return (
-    <div className={embedded ? '' : 'grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]'}>
+    <div className={embedded ? '' : 'grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]'}>
       {/* ------------------------------------------------ left column */}
       <div className="min-w-0 space-y-10">
         {showBonds && (
@@ -323,11 +330,11 @@ export function ExploreHub({
             {bonds === null ? (
               <RailSkeleton />
             ) : popBonds.length ? (
-              <CardGrid>
+              <ScrollRow label="popular bonds">
                 {popBonds.map((b) => (
                   <BondCard key={b.id} bond={b} onOpen={() => onOpenBond(b.id)} />
                 ))}
-              </CardGrid>
+              </ScrollRow>
             ) : (
               <EmptyRail text="New bond offers are added regularly — check back soon." />
             )}
@@ -339,11 +346,11 @@ export function ExploreHub({
             {catalog.loading ? (
               <RailSkeleton />
             ) : (
-              <CardGrid>
+              <ScrollRow label="popular funds">
                 {popFunds.map((f) => (
                   <FundCard key={f.amfiCode} fund={f} onOpen={() => setScreen({ name: 'fund', amfiCode: f.amfiCode })} />
                 ))}
-              </CardGrid>
+              </ScrollRow>
             )}
           </Rail>
         )}

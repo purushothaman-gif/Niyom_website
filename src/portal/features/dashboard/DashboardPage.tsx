@@ -140,7 +140,7 @@ export function DashboardPage({
         Groww-style: discovery on the left (bonds, then mutual funds, then
         unlisted shares), the client's own money in the right-hand column.
       */}
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0">{exploreBlockNode}</div>
         <aside className="space-y-8">
           <YourInvestmentsCard summary={rows.length ? summarise(rows) : null} xirr={xirr} onOpen={() => onNavigate('portfolio')} />

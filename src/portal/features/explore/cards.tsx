@@ -2,8 +2,8 @@
  * Explore building blocks — the Groww-style card rails used by the Invest
  * Explore hub and the Mutual Funds Explore tab. Pure presentation.
  */
-import type { ReactNode } from 'react';
-import { ChevronRight, type LucideIcon } from 'lucide-react';
+import { Children, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, type LucideIcon } from 'lucide-react';
 import { inr } from '../../../lib/money';
 import type { ClientBond } from '../../../../shared/portal/services/BondOrderService';
 import type { ClientShare } from '../../../../shared/portal/services/ShareOrderService';
@@ -49,6 +49,62 @@ export function Rail({
         </button>
       )}
     </section>
+  );
+}
+
+/**
+ * A horizontally scrolling card row (Groww-style): four cards across on desktop,
+ * two on phones, with left/right arrows that appear only when there is more to
+ * see that way. Swipe and trackpad scrolling work as usual; cards snap.
+ */
+export function ScrollRow({ children, label }: { children: ReactNode; label: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edge, setEdge] = useState({ start: true, end: true });
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setEdge({ start: el.scrollLeft <= 4, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 4 });
+  }, []);
+  useEffect(() => {
+    update();
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [update, children]);
+  const go = (dir: -1 | 1) => {
+    const el = ref.current;
+    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.9, behavior: 'smooth' });
+  };
+  const arrow = (dir: -1 | 1) => (
+    <button
+      type="button"
+      onClick={() => go(dir)}
+      aria-label={dir < 0 ? `Scroll ${label} left` : `Scroll ${label} right`}
+      className={`absolute top-1/2 z-10 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full border border-border bg-bg-elevated text-text-primary shadow-token-lg transition-colors hover:border-accent hover:text-accent ${
+        dir < 0 ? 'left-0 sm:-left-4' : 'right-0 sm:-right-4'
+      }`}
+    >
+      {dir < 0 ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+    </button>
+  );
+  return (
+    <div className="relative">
+      <div
+        ref={ref}
+        onScroll={update}
+        role="region"
+        aria-label={label}
+        className="-mx-1 -my-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 py-1 sm:gap-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {Children.map(children, (c) => (
+          <div className="w-[calc(50%-0.375rem)] shrink-0 snap-start sm:w-[calc(50%-0.5rem)] lg:w-[calc(25%-0.75rem)]">{c}</div>
+        ))}
+      </div>
+      {!edge.start && arrow(-1)}
+      {!edge.end && arrow(1)}
+    </div>
   );
 }
 
