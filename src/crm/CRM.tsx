@@ -23,6 +23,7 @@ import FundResearch from './marketing/funds/FundResearch';
 import { MfStaffPlaceholder } from '../components/MfStaffPlaceholder';
 import MfFeeds from './mf/MfFeeds';
 import MfBrokerage from './mf/MfBrokerage';
+import BrokerageMis from './mf/BrokerageMis';
 import ClientOnboarding from './ClientOnboarding';
 import ManageClients from './ManageClients';
 import Portfolio from './Portfolio';
@@ -98,6 +99,7 @@ export default function CRM() {
     'mf_platform',
     'mf_feeds',
     'mf_brokerage',
+    'mf_brokerage_mis',
     'mail_campaigns',
     'mis',
     'dsa_management',
@@ -259,6 +261,7 @@ export default function CRM() {
       case 'mf_platform': return <MfStaffPlaceholder />;
       case 'mf_feeds': return isAdmin ? <MfFeeds employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
       case 'mf_brokerage': return isAdmin ? <MfBrokerage employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
+      case 'mf_brokerage_mis': return <BrokerageMis employee={employee} />;
       // Open to every employee: admins mail as the company, employees as themselves to their own book (enforced in the database).
       case 'mail_campaigns': return <Mail employee={employee} />;
       case 'documents': return <Documents employee={employee} initialClientId={pageParams.clientId} onBack={pageParams.clientId ? () => navigate('clients') : undefined} />;

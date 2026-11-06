@@ -18,6 +18,8 @@ import { isWbr2, parseWbr2 } from './wbr2.ts';
 import { isKfAum, isKfSip, parseKfAum, parseKfSip } from './kfintech.ts';
 import { isWbtrn, parseWbtrn } from './wbtrn.ts';
 import type { RtaTxnStage } from './txns.ts';
+import { isWbr77, parseWbr77 } from './wbr77.ts';
+import { isWbr39, parseWbr39 } from './wbr39.ts';
 import { unzipMember, WinzipError } from './winzip.ts';
 
 /** A base64 body inflates by a third; the ZIPs are a few KB, cap well above. */
@@ -44,12 +46,15 @@ export function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-export type RtaReport = 'WBR9' | 'WBR49' | 'WSREG' | 'WBCUM' | 'WBR2' | 'WBTRN';
+export type RtaReport = 'WBR9' | 'WBR49' | 'WSREG' | 'WBCUM' | 'WBR2' | 'WBTRN' | 'WBR77' | 'WBR39';
 
 /** Which report is this? Matched by column presence, not file name. */
 export function detectReport(table: DbfTable): RtaReport | null {
   const names = new Set(table.fields.map((f) => f.name));
+  // WBR77 first: it also carries FOLIO_NO + AUTO_AMOUN, which WBR49 keys on.
+  if (isWbr77(table)) return 'WBR77';
   if (['FOLIOCHK', 'CLOS_BAL', 'SCH_NAME'].every((n) => names.has(n))) return 'WBR9';
+  if (isWbr39(table)) return 'WBR39';
   if (['FOLIO_NO', 'AUT_TRNTYP', 'AUTO_AMOUN'].every((n) => names.has(n))) return 'WBR49';
   if (isWbr2(table)) return 'WBR2';
   return null;
@@ -94,6 +99,11 @@ interface ReportSummary {
   txnsUpserted: number;
   matched: number;
   unmatched: number;
+  brokerageUpserted?: number;
+  schemesUpserted?: number;
+  /** The file's own amount totals (brokerage ex-GST, GST) — logged for reconciliation. */
+  amountTotal?: number | null;
+  gstTotal?: number | null;
 }
 
 /** PAN -> client id for the PANs in this batch. */
@@ -406,6 +416,73 @@ async function importWbr49(
   return importSips(sb, parseWbr49(table, registrar, snapshotDate).sips, registrar, snapshotDate);
 }
 
+const EMPTY: Omit<ReportSummary, 'snapshotDate' | 'rowsTotal'> = {
+  foliosUpserted: 0, holdingsUpserted: 0, sipsUpserted: 0, txnsUpserted: 0, matched: 0, unmatched: 0,
+};
+
+/**
+ * CAMS WBR77 brokerage: upsert every line keyed by (registrar, row_key), match
+ * to clients by folio (SQL, mf_rta_brokerage_match), then RECONCILE: the rows
+ * now stamped with this file's hash must add up to the file's own record count
+ * and brokerage total, or the import is refused as an error.
+ */
+async function importWbr77(
+  sb: SupabaseClient, table: DbfTable, registrar: string, fileHash: string | null,
+): Promise<ReportSummary> {
+  if (!fileHash) throw new RtaError('Missing file hash for the brokerage import.', 500);
+  const parsed = parseWbr77(table, registrar);
+  const nowIso = new Date().toISOString();
+  const rows = parsed.lines.map((l) => ({ ...l, source_file_hash: fileHash, last_seen_at: nowIso }));
+  const BATCH = 200;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const { error } = await sb.from('mf_rta_brokerage').upsert(rows.slice(i, i + BATCH), { onConflict: 'registrar,row_key' });
+    if (error) throw new RtaError(`Could not save brokerage lines: ${error.message}`, 500);
+  }
+
+  const { error: mErr } = await sb.rpc('mf_rta_brokerage_match', { p_only_unmatched: true });
+  if (mErr) throw new RtaError(`Could not match brokerage to clients: ${mErr.message}`, 500);
+
+  // Reconcile what landed against the file's own totals.
+  let stored = 0, storedAmt = 0, matched = 0;
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from('mf_rta_brokerage')
+      .select('brokerage, client_id').eq('source_file_hash', fileHash).range(from, from + 999);
+    if (error) throw new RtaError(`Could not verify the brokerage import: ${error.message}`, 500);
+    const page = (data ?? []) as { brokerage: number | string; client_id: string | null }[];
+    for (const r of page) { stored++; storedAmt += Number(r.brokerage); if (r.client_id) matched++; }
+    if (page.length < 1000) break;
+  }
+  if (stored !== parsed.totals.rows || Math.abs(storedAmt - parsed.totals.brokerage) > 0.0001) {
+    throw new RtaError(
+      `Brokerage reconciliation failed: file has ${parsed.totals.rows} lines / ₹${parsed.totals.brokerage.toFixed(4)}, ` +
+      `stored ${stored} / ₹${storedAmt.toFixed(4)}.`, 500);
+  }
+
+  return {
+    ...EMPTY,
+    snapshotDate: parsed.snapshotDate,
+    rowsTotal: parsed.totals.rows,
+    brokerageUpserted: rows.length,
+    matched,
+    unmatched: stored - matched,
+    amountTotal: parsed.totals.brokerage,
+    gstTotal: parsed.totals.gst,
+  };
+}
+
+/** CAMS WBR39 scheme master: upsert the labelling columns per AMC + scheme code. */
+async function importWbr39(sb: SupabaseClient, table: DbfTable, registrar: string, snap: string | null): Promise<ReportSummary> {
+  const { schemes, rows } = parseWbr39(table, registrar);
+  const nowIso = new Date().toISOString();
+  const BATCH = 500;
+  for (let i = 0; i < schemes.length; i += BATCH) {
+    const { error } = await sb.from('mf_rta_schemes')
+      .upsert(schemes.slice(i, i + BATCH).map((s) => ({ ...s, last_seen_at: nowIso })), { onConflict: 'registrar,amc_code,scheme_code' });
+    if (error) throw new RtaError(`Could not save the scheme master: ${error.message}`, 500);
+  }
+  return { ...EMPTY, snapshotDate: snap, rowsTotal: rows, schemesUpserted: schemes.length };
+}
+
 export interface RunImportOptions {
   zipBytes: Uint8Array;
   passwords: string[];
@@ -499,7 +576,7 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       const table = parseDbf(bytes);
       report = detectReport(table);
       if (!report) {
-        throw new RtaError('Unrecognised registrar feed (not a WBR9 holdings, WBR49 SIP, or WBR2 transaction file).', 422);
+        throw new RtaError('Unrecognised registrar feed (not a WBR9 holdings, WBR49 SIP, WBR2 transaction, WBR77 brokerage or WBR39 scheme-master file).', 422);
       }
       if (table.truncated) {
         // The DBF ended before its declared record count — the feed is short
@@ -507,11 +584,17 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
         // flag it so the import is not trusted as complete and can be re-pulled.
         warning = `TRUNCATED: feed declared ${table.declaredCount} records but ended early at ${table.rows.length}; imported partial data — re-pull for the full feed.`;
       }
-      summary = report === 'WBR9'
-        ? await importWbr9(sb, table, registrar)
-        : report === 'WBR2'
-          ? await importWbr2(sb, table, registrar)
-          : await importWbr49(sb, table, registrar, snap);
+      // WBR77 must be complete to reconcile: a truncated brokerage file is refused.
+      if (report === 'WBR77' && table.truncated) {
+        throw new RtaError(`WBR77 file is truncated (declared ${table.declaredCount} records, read ${table.rows.length}); re-pull it.`, 422);
+      }
+      switch (report) {
+        case 'WBR77': summary = await importWbr77(sb, table, registrar, fileHash); break;
+        case 'WBR39': summary = await importWbr39(sb, table, registrar, snap); break;
+        case 'WBR9': summary = await importWbr9(sb, table, registrar); break;
+        case 'WBR2': summary = await importWbr2(sb, table, registrar); break;
+        default: summary = await importWbr49(sb, table, registrar, snap);
+      }
     }
     snapshotDate = summary.snapshotDate;
 
@@ -521,6 +604,8 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       folios_upserted: summary.foliosUpserted, holdings_upserted: summary.holdingsUpserted,
       sips_upserted: summary.sipsUpserted, txns_upserted: summary.txnsUpserted,
       matched: summary.matched, unmatched: summary.unmatched,
+      brokerage_upserted: summary.brokerageUpserted ?? 0, schemes_upserted: summary.schemesUpserted ?? 0,
+      amount_total: summary.amountTotal ?? null, gst_total: summary.gstTotal ?? null,
       status: 'ok', error: warning, duration_ms: Date.now() - started, imported_by: importedBy,
     });
 

@@ -5174,6 +5174,50 @@ export type Database = {
         }
         Relationships: []
       }
+      mf_brokerage_receipts: {
+        Row: {
+          amc_code: string
+          amount: number
+          created_at: string
+          entered_by: string | null
+          id: string
+          notes: string | null
+          period_month: string
+          registrar: string
+          updated_at: string
+        }
+        Insert: {
+          amc_code: string
+          amount: number
+          created_at?: string
+          entered_by?: string | null
+          id?: string
+          notes?: string | null
+          period_month: string
+          registrar?: string
+          updated_at?: string
+        }
+        Update: {
+          amc_code?: string
+          amount?: number
+          created_at?: string
+          entered_by?: string | null
+          id?: string
+          notes?: string | null
+          period_month?: string
+          registrar?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mf_brokerage_receipts_entered_by_fkey"
+            columns: ["entered_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mf_detail_cache: {
         Row: {
           created_at: string
@@ -5230,6 +5274,169 @@ export type Database = {
           sources?: string[]
         }
         Relationships: []
+      }
+      mf_rta_brokerage: {
+        Row: {
+          adj_flag: string | null
+          amc_code: string | null
+          arn: string | null
+          avg_assets: number | null
+          brokerage: number
+          brokerage_from: string | null
+          brokerage_month: string
+          brokerage_to: string | null
+          brokerage_type: string | null
+          category: string
+          cgst: number
+          client_id: string | null
+          euin: string | null
+          euin_valid: boolean | null
+          first_seen_at: string
+          folio: string
+          folio_id: string | null
+          gst_total: number | null
+          holder_name: string | null
+          id: string
+          igst: number
+          last_seen_at: string
+          match_method: string | null
+          matched_at: string | null
+          no_of_days: number | null
+          posted_date: string | null
+          process_from: string | null
+          process_to: string | null
+          rate: number | null
+          rate_ref: string | null
+          registrar: string
+          row_key: string
+          scheme_code: string | null
+          sgst: number
+          sold_by_employee_id: string | null
+          source_file_hash: string | null
+          sub_broker: string | null
+          trade_date: string | null
+          trxn_desc: string | null
+          trxn_no: string | null
+          trxn_type: string | null
+          txn_amount: number | null
+          txn_scheme_code: string | null
+          txn_units: number | null
+        }
+        Insert: {
+          adj_flag?: string | null
+          amc_code?: string | null
+          arn?: string | null
+          avg_assets?: number | null
+          brokerage?: number
+          brokerage_from?: string | null
+          brokerage_month: string
+          brokerage_to?: string | null
+          brokerage_type?: string | null
+          category?: string
+          cgst?: number
+          client_id?: string | null
+          euin?: string | null
+          euin_valid?: boolean | null
+          first_seen_at?: string
+          folio: string
+          folio_id?: string | null
+          gst_total?: number | null
+          holder_name?: string | null
+          id?: string
+          igst?: number
+          last_seen_at?: string
+          match_method?: string | null
+          matched_at?: string | null
+          no_of_days?: number | null
+          posted_date?: string | null
+          process_from?: string | null
+          process_to?: string | null
+          rate?: number | null
+          rate_ref?: string | null
+          registrar?: string
+          row_key: string
+          scheme_code?: string | null
+          sgst?: number
+          sold_by_employee_id?: string | null
+          source_file_hash?: string | null
+          sub_broker?: string | null
+          trade_date?: string | null
+          trxn_desc?: string | null
+          trxn_no?: string | null
+          trxn_type?: string | null
+          txn_amount?: number | null
+          txn_scheme_code?: string | null
+          txn_units?: number | null
+        }
+        Update: {
+          adj_flag?: string | null
+          amc_code?: string | null
+          arn?: string | null
+          avg_assets?: number | null
+          brokerage?: number
+          brokerage_from?: string | null
+          brokerage_month?: string
+          brokerage_to?: string | null
+          brokerage_type?: string | null
+          category?: string
+          cgst?: number
+          client_id?: string | null
+          euin?: string | null
+          euin_valid?: boolean | null
+          first_seen_at?: string
+          folio?: string
+          folio_id?: string | null
+          gst_total?: number | null
+          holder_name?: string | null
+          id?: string
+          igst?: number
+          last_seen_at?: string
+          match_method?: string | null
+          matched_at?: string | null
+          no_of_days?: number | null
+          posted_date?: string | null
+          process_from?: string | null
+          process_to?: string | null
+          rate?: number | null
+          rate_ref?: string | null
+          registrar?: string
+          row_key?: string
+          scheme_code?: string | null
+          sgst?: number
+          sold_by_employee_id?: string | null
+          source_file_hash?: string | null
+          sub_broker?: string | null
+          trade_date?: string | null
+          trxn_desc?: string | null
+          trxn_no?: string | null
+          trxn_type?: string | null
+          txn_amount?: number | null
+          txn_scheme_code?: string | null
+          txn_units?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mf_rta_brokerage_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mf_rta_brokerage_folio_id_fkey"
+            columns: ["folio_id"]
+            isOneToOne: false
+            referencedRelation: "mf_rta_folios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mf_rta_brokerage_sold_by_employee_id_fkey"
+            columns: ["sold_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       mf_rta_folios: {
         Row: {
@@ -5369,11 +5576,14 @@ export type Database = {
       }
       mf_rta_import_log: {
         Row: {
+          amount_total: number | null
+          brokerage_upserted: number
           created_at: string
           duration_ms: number | null
           error: string | null
           file_hash: string | null
           folios_upserted: number
+          gst_total: number | null
           holdings_upserted: number
           id: string
           imported_by: string | null
@@ -5382,6 +5592,7 @@ export type Database = {
           registrar: string | null
           report: string | null
           rows_total: number
+          schemes_upserted: number
           sips_upserted: number
           snapshot_date: string | null
           source: string | null
@@ -5391,11 +5602,14 @@ export type Database = {
           unmatched: number
         }
         Insert: {
+          amount_total?: number | null
+          brokerage_upserted?: number
           created_at?: string
           duration_ms?: number | null
           error?: string | null
           file_hash?: string | null
           folios_upserted?: number
+          gst_total?: number | null
           holdings_upserted?: number
           id?: string
           imported_by?: string | null
@@ -5404,6 +5618,7 @@ export type Database = {
           registrar?: string | null
           report?: string | null
           rows_total?: number
+          schemes_upserted?: number
           sips_upserted?: number
           snapshot_date?: string | null
           source?: string | null
@@ -5413,11 +5628,14 @@ export type Database = {
           unmatched?: number
         }
         Update: {
+          amount_total?: number | null
+          brokerage_upserted?: number
           created_at?: string
           duration_ms?: number | null
           error?: string | null
           file_hash?: string | null
           folios_upserted?: number
+          gst_total?: number | null
           holdings_upserted?: number
           id?: string
           imported_by?: string | null
@@ -5426,6 +5644,7 @@ export type Database = {
           registrar?: string | null
           report?: string | null
           rows_total?: number
+          schemes_upserted?: number
           sips_upserted?: number
           snapshot_date?: string | null
           source?: string | null
@@ -5433,6 +5652,51 @@ export type Database = {
           status?: string
           txns_upserted?: number | null
           unmatched?: number
+        }
+        Relationships: []
+      }
+      mf_rta_schemes: {
+        Row: {
+          amc_code: string
+          amc_name: string | null
+          asset_class: string | null
+          isin: string | null
+          last_seen_at: string
+          parent_code: string | null
+          plan_type: string | null
+          registrar: string
+          scheme_code: string
+          scheme_name: string | null
+          scheme_type: string | null
+          sebi_class: string | null
+        }
+        Insert: {
+          amc_code: string
+          amc_name?: string | null
+          asset_class?: string | null
+          isin?: string | null
+          last_seen_at?: string
+          parent_code?: string | null
+          plan_type?: string | null
+          registrar?: string
+          scheme_code: string
+          scheme_name?: string | null
+          scheme_type?: string | null
+          sebi_class?: string | null
+        }
+        Update: {
+          amc_code?: string
+          amc_name?: string | null
+          asset_class?: string | null
+          isin?: string | null
+          last_seen_at?: string
+          parent_code?: string | null
+          plan_type?: string | null
+          registrar?: string
+          scheme_code?: string
+          scheme_name?: string | null
+          scheme_type?: string | null
+          sebi_class?: string | null
         }
         Relationships: []
       }
@@ -11435,6 +11699,77 @@ export type Database = {
         }
         Relationships: []
       }
+      mf_rta_brokerage_mis: {
+        Row: {
+          amc_code: string | null
+          amc_name: string | null
+          asset_class: string | null
+          avg_assets: number | null
+          brokerage: number | null
+          brokerage_from: string | null
+          brokerage_month: string | null
+          brokerage_to: string | null
+          brokerage_type: string | null
+          category: string | null
+          client_code: string | null
+          client_id: string | null
+          client_name: string | null
+          dsa_id: string | null
+          dsa_name: string | null
+          euin: string | null
+          euin_valid: boolean | null
+          folio: string | null
+          gst_total: number | null
+          holder_name: string | null
+          id: string | null
+          isin: string | null
+          match_method: string | null
+          no_of_days: number | null
+          plan_type: string | null
+          posted_date: string | null
+          rate: number | null
+          registrar: string | null
+          rm_id: string | null
+          rm_name: string | null
+          scheme_code: string | null
+          scheme_name: string | null
+          sold_by_employee_id: string | null
+          sold_by_name: string | null
+          trade_date: string | null
+          trxn_type: string | null
+          txn_amount: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mf_rta_brokerage_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mf_rta_brokerage_sold_by_employee_id_fkey"
+            columns: ["sold_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_clients_dsa_id_fkey"
+            columns: ["dsa_id"]
+            isOneToOne: false
+            referencedRelation: "nw_dsa"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nw_clients_employee_id_fkey"
+            columns: ["rm_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mf_rta_feed_health: {
         Row: {
           hours_since_ok: number | null
@@ -12156,6 +12491,7 @@ export type Database = {
         }
       }
       mail_unsubscribe_by_token: { Args: { p_token: string }; Returns: boolean }
+      mf_folio_base: { Args: { p: string }; Returns: string }
       mf_isins_for_scheme_name: { Args: { p_name: string }; Returns: string[] }
       mf_nav_history_cursor: { Args: never; Returns: string }
       mf_nav_history_floor: { Args: never; Returns: string }
@@ -12182,6 +12518,10 @@ export type Database = {
         Returns: boolean
       }
       mf_nav_validate: { Args: { p_date: string }; Returns: Json }
+      mf_rta_brokerage_match: {
+        Args: { p_only_unmatched?: boolean }
+        Returns: number
+      }
       mf_scheme_name_key: { Args: { p_name: string }; Returns: string }
       mf_scheme_nav_history: { Args: { p_scheme_code: string }; Returns: Json }
       mkt_auto_alert_admins: {

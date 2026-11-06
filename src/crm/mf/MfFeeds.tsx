@@ -18,6 +18,9 @@ interface ImportSummary {
   sipsUpserted?: number;
   matched?: number;
   unmatched?: number;
+  brokerageUpserted?: number;
+  schemesUpserted?: number;
+  amountTotal?: number | null;
   error?: string;
 }
 
@@ -58,6 +61,13 @@ const MAX_BYTES = 8 * 1024 * 1024;
 // successful import — long enough to clear a weekend-free business day, short
 // enough to catch a genuinely missed day.
 const STALE_HOURS = 30;
+// Brokerage (WBR77) and the scheme master (WBR39) are monthly, not daily.
+const MONTHLY_REPORTS = new Set(['WBR77', 'WBR39']);
+const STALE_HOURS_MONTHLY = 40 * 24;
+const REPORT_LABELS: Record<string, string> = {
+  WBR9: 'Holdings (WBR9)', WBR49: 'SIPs (WBR49)', WBR2: 'Transactions (WBR2)', WSREG: 'SIPs (WSREG)',
+  WBCUM: 'Holdings (WBCUM)', WBTRN: 'Transactions (WBTRN)', WBR77: 'Brokerage (WBR77)', WBR39: 'Scheme master (WBR39)',
+};
 
 export default function MfFeeds({ employee }: Props) {
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
@@ -208,9 +218,10 @@ export default function MfFeeds({ employee }: Props) {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {health.map((h) => {
-              const stale = h.hours_since_ok == null || h.hours_since_ok > STALE_HOURS;
+              const stale = h.hours_since_ok == null
+                || h.hours_since_ok > (MONTHLY_REPORTS.has(h.report) ? STALE_HOURS_MONTHLY : STALE_HOURS);
               const dot = stale ? 'var(--c-red, #ef4444)' : 'var(--c-green, #16a34a)';
-              const label = h.report === 'WBR49' ? 'SIPs (WBR49)' : 'Holdings (WBR9)';
+              const label = REPORT_LABELS[h.report] ?? h.report;
               const age = h.hours_since_ok == null ? 'never'
                 : h.hours_since_ok < 1 ? 'just now'
                 : h.hours_since_ok < 48 ? `${Math.round(h.hours_since_ok)}h ago`
@@ -247,7 +258,7 @@ export default function MfFeeds({ employee }: Props) {
               className="px-3 py-2.5 rounded-xl text-sm text-text-primary outline-none"
               style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}
             >
-              <option value="CAMS">CAMS (WBR9)</option>
+              <option value="CAMS">CAMS (WBR9 / 49 / 2 / 77 / 39)</option>
               <option value="KFINTECH">KFintech</option>
             </select>
           </div>
@@ -289,10 +300,16 @@ export default function MfFeeds({ employee }: Props) {
               Imported {result.sourceFile ?? 'feed'}{result.snapshotDate ? ` · snapshot ${fmtDate(result.snapshotDate)}` : ''}
             </p>
             <p className="mt-1" style={{ color: 'var(--text-secondary)' }}>
-              {result.report === 'WBR49'
-                ? `${result.sipsUpserted ?? 0} SIP registrations`
-                : `${result.foliosUpserted ?? 0} folios · ${result.holdingsUpserted ?? 0} holdings`}
-              {' · '}{result.matched ?? 0} matched · {result.unmatched ?? 0} unmatched
+              {result.report === 'WBR39'
+                ? `${result.schemesUpserted ?? 0} schemes in the scheme master`
+                : <>
+                  {result.report === 'WBR77'
+                    ? `${result.brokerageUpserted ?? 0} brokerage lines · ₹${Number(result.amountTotal ?? 0).toFixed(2)} ex-GST (reconciled to the file total)`
+                    : result.report === 'WBR49'
+                      ? `${result.sipsUpserted ?? 0} SIP registrations`
+                      : `${result.foliosUpserted ?? 0} folios · ${result.holdingsUpserted ?? 0} holdings`}
+                  {' · '}{result.matched ?? 0} matched · {result.unmatched ?? 0} unmatched
+                </>}
             </p>
           </div>
         )}

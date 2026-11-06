@@ -14,6 +14,8 @@ import { unzipSingleDbf } from '../supabase/functions/_shared/rta/winzip.ts';
 import { parseDbf } from '../supabase/functions/_shared/rta/dbf.ts';
 import { parseWbr9 } from '../supabase/functions/_shared/rta/wbr9.ts';
 import { parseWbr49 } from '../supabase/functions/_shared/rta/wbr49.ts';
+import { parseWbr77 } from '../supabase/functions/_shared/rta/wbr77.ts';
+import { parseWbr39 } from '../supabase/functions/_shared/rta/wbr39.ts';
 import { detectReport, snapshotFromName } from '../supabase/functions/_shared/rta/pipeline.ts';
 
 const zipPath = process.argv[2];
@@ -49,6 +51,24 @@ try {
     }
     console.log(`  snapshot: ${p.snapshotDate}, sips: ${p.sips.length}, folios: ${folios.size}`);
     console.log(`  status: ${by.active} active / ${by.paused} paused / ${by.ceased} ceased; ${withPan} with a PAN`);
+  } else if (report === 'WBR77') {
+    const p = parseWbr77(table);
+    const months = {}, cats = {}, amcs = new Set(), folios = new Set();
+    for (const l of p.lines) {
+      months[l.brokerage_month] = (months[l.brokerage_month] ?? 0) + l.brokerage;
+      cats[l.category] = (cats[l.category] ?? 0) + 1;
+      if (l.amc_code) amcs.add(l.amc_code);
+      folios.add(l.folio);
+    }
+    console.log(`  declared records: ${table.declaredCount}, truncated: ${table.truncated ? 'YES' : 'no'}`);
+    console.log(`  FILE TOTALS: ${p.totals.rows} lines, brokerage ex-GST ₹${p.totals.brokerage.toFixed(4)}, GST ₹${p.totals.gst.toFixed(4)}`);
+    const parsedSum = p.lines.reduce((s, l) => s + l.brokerage, 0);
+    console.log(`  parsed lines: ${p.lines.length}, parsed brokerage ₹${parsedSum.toFixed(4)}, unique keys: ${new Set(p.lines.map((l) => l.row_key)).size}`);
+    console.log(`  months: ${Object.entries(months).map(([m, v]) => `${m}=₹${v.toFixed(4)}`).join(', ')}`);
+    console.log(`  categories: ${JSON.stringify(cats)}; AMCs: ${amcs.size}; folios: ${folios.size}`);
+  } else if (report === 'WBR39') {
+    const p = parseWbr39(table);
+    console.log(`  scheme records: ${p.rows}, unique AMC+scheme codes: ${p.schemes.length}, AMCs: ${new Set(p.schemes.map((s) => s.amc_code)).size}`);
   } else {
     console.log('  (no parser matched — columns did not look like WBR9 or WBR49)');
     process.exit(1);

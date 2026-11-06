@@ -90,6 +90,7 @@ const NAV: NavSection[] = [
     items: [
       { key: 'reports' as CRMPage,           label: 'Reports',           icon: FileText },
       { key: 'mis' as CRMPage,               label: 'MIS Report',        icon: BarChart3 },
+      { key: 'mf_brokerage_mis' as CRMPage,  label: 'Brokerage MIS',     icon: BadgeIndianRupee },
     ],
   },
   {
