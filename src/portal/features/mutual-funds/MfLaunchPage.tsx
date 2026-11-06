@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronRight, Hourglass, Loader2, Plus, ShieldCheck, TrendingUp } from 'lucide-react';
 import { PortalButton } from '../../ui/kit';
-import { fromRtaHoldings } from '../../../../shared/portal/investments/model';
+import { fromClientHoldings } from '../../../../shared/portal/investments/model';
 import { InvestmentsBoard } from '../investments/InvestmentsBoard';
 import { useInvestmentRows } from '../investments/useInvestmentRows';
 import { SipsCard } from '../investments/SipsCard';
@@ -43,9 +43,11 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
   const [tab, setTab] = useState<MfTab>('explore');
   const mfHoldings = useMemo(() => holdings.filter((h) => h.product_type === 'mutual_fund'), [holdings]);
   const { data, loading } = useRtaMf(clientId);
-  const baseRows = useMemo(() => fromRtaHoldings(data?.holdings ?? []), [data]);
+  // The complete MF book (registrar feed + held-away CAS funds), not just the
+  // funds we service — so "all distributors" shows here too, with cost/returns.
+  const baseRows = useMemo(() => fromClientHoldings(mfHoldings), [mfHoldings]);
   const { rows, enriching } = useInvestmentRows('client', baseRows);
-  const hasData = !!data?.hasData;
+  const hasData = mfHoldings.length > 0 || !!data?.hasData;
   const busy = state === 'opening';
 
   // What the primary action is, and whether investing is possible right now.

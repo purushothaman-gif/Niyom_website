@@ -28,6 +28,7 @@ import { SupportCard } from './sections/SupportCard';
 import { OnboardingChecklistCard } from '../onboarding/OnboardingChecklistCard';
 import { ActivateProductsCard } from './sections/ActivateProductsCard';
 import { ImportPortfolioCard } from '../portfolio/ImportPortfolioCard';
+import { AddExternalFundsCta } from '../mutual-funds/AddExternalFundsCta';
 import { onboardingIncomplete, canActivateMoreProducts } from '../onboarding/onboardingSteps';
 
 interface DashboardPageProps {
@@ -149,6 +150,9 @@ export function DashboardPage({
           ) : (
             <MutualFundSummaryCard mf={data.mutualFunds} onViewAll={() => onNavigate('mutual-funds')} />
           )}
+          {/* Persistent Smart CAS entry once a statement has been imported — the
+              big prompt below only shows to a client who has never imported one. */}
+          {hasImportedStatement && <AddExternalFundsCta onAdd={onImport} />}
           <RecentTransactionsCard
             transactions={data.recentTransactions}
             onViewAll={() => onNavigate('transactions')}
@@ -156,8 +160,9 @@ export function DashboardPage({
         </aside>
       </div>
 
-      {/* No statement import once mutual funds run on the MF platform. */}
-      {!hasImportedStatement && !mfSsoEnabled() && (
+      {/* Importing a CAS brings in funds held away from us, which is valuable on
+          the platform path too now that held-away funds fold into the portfolio. */}
+      {!hasImportedStatement && (
         <ImportPortfolioCard
           onImport={onImport}
           visibleHoldings={summary.holdingsCount}
