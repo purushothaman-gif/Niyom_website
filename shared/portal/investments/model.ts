@@ -281,11 +281,7 @@ export function fromPartnerHoldings(
     .map((h) => {
       const registrar = opts.registrarMf && h.product_type === 'mutual_fund';
       const value = n(h.current_value);
-      // A registrar-fed fund shows a return only when we actually know its cost
-      // (a CAS-bridged or transaction-derived cost sets avg_cost > 0); without it
-      // invested stays null so no invented gain appears.
-      const invested =
-        registrar && !(n(h.avg_cost) > 0) ? null : n(h.invested_amount);
+      const invested = registrar ? null : n(h.invested_amount);
       const units = h.quantity ? n(h.quantity) : null;
       return {
         id: opts.clientId ? `${opts.clientId}:${h.holding_id}` : h.holding_id,
