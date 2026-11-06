@@ -86,42 +86,44 @@ export function popularBonds<T extends BondLike & { maturity_date: string | null
 }
 
 /**
- * The client "Popular Bonds" hero — a single standout card, not a rail of four.
+ * The client "Popular Bonds" rail — the handful worth featuring, not the whole
+ * book. Every bond shown must earn it: a real issuer logo on file (so the card
+ * shows a brand, not a monogram), a secured instrument and a good credit grade
+ * (A-category or better). Among those we lead with the ones yielding a decent
+ * 10–13%, then top up with the next-best by yield so the rail stays full.
  *
- * The one we lead with has to earn it: a logo on file (so the card shows a real
- * brand, not a monogram), a secured instrument, a good credit grade and a
- * decent 10–13% yield. We score every live bond against that ideal and take the
- * best; if nothing clears the bar we relax it step by step rather than leave the
- * rail empty, so the card is always the strongest bond we can honestly feature.
+ * If nothing clears the logo+secured+grade bar (e.g. the logo table hasn't
+ * loaded yet) we fall back to the strongest secured, well-rated bonds rather
+ * than leave the rail empty — a transient state that self-corrects on the next
+ * render once logos arrive.
  */
-export function heroBonds<T extends BondLike & { maturity_date: string | null }>(
+export function curatedBonds<T extends BondLike & { maturity_date: string | null }>(
   bonds: T[],
   hasLogo: (b: T) => boolean,
-  n = 1,
+  n = 4,
 ): T[] {
   const live = bonds.filter((b) => !b.maturity_date || new Date(b.maturity_date) > new Date());
-  const byBest = (a: T, b: T) =>
-    bondGradeRank(a) - bondGradeRank(b) || (bondYield(b) ?? 0) - (bondYield(a) ?? 0);
-  const inBand = (lo: number, hi: number) => (b: T) => {
-    const y = bondYield(b);
-    return y != null && y >= lo && y <= hi;
-  };
+  const byYield = (a: T, b: T) => (bondYield(b) ?? 0) - (bondYield(a) ?? 0);
+  const byBest = (a: T, b: T) => bondGradeRank(a) - bondGradeRank(b) || byYield(a, b);
   const goodGrade = (b: T) => bondGradeRank(b) <= 2; // A-category and above
+  const inBand = (b: T) => {
+    const y = bondYield(b);
+    return y != null && y >= 10 && y <= 13;
+  };
 
-  // Strictest first; each later tier drops one condition so the rail still fills.
-  const tiers: Array<(b: T) => boolean> = [
-    (b) => hasLogo(b) && bondSecured(b) && goodGrade(b) && inBand(10, 13)(b),
-    (b) => hasLogo(b) && bondSecured(b) && goodGrade(b) && inBand(9.5, 13.5)(b),
-    (b) => hasLogo(b) && bondSecured(b) && goodGrade(b),
-    (b) => hasLogo(b) && bondSecured(b),
-    (b) => bondSecured(b) && goodGrade(b),
-    () => true,
-  ];
-  for (const pass of tiers) {
-    const hit = live.filter(pass).sort(byBest);
-    if (hit.length) return hit.slice(0, n);
+  // The headline set: logo + secured + good rating. 10–13% yields first, then
+  // the next-best by yield so four cards still show if few land exactly in band.
+  const featured = live.filter((b) => hasLogo(b) && bondSecured(b) && goodGrade(b));
+  if (featured.length) {
+    const band = featured.filter(inBand).sort(byYield);
+    const rest = featured.filter((b) => !inBand(b)).sort(byYield);
+    return [...band, ...rest].slice(0, n);
   }
-  return [];
+
+  // Fallbacks (nothing logo-matched yet): best secured/well-rated bonds we have.
+  const secured = live.filter((b) => bondSecured(b) && goodGrade(b)).sort(byBest);
+  if (secured.length) return secured.slice(0, n);
+  return [...live].sort(byBest).slice(0, n);
 }
 
 /** Rows rendered in the all-funds list; search narrows the rest. */
@@ -217,7 +219,7 @@ export function ExploreHub({
       !!findLogo(logoMap, 'bond_issuer', b.issuer_name?.trim() || issuerFromBondName(b.bond_name) || null),
     [logoMap],
   );
-  const popBonds = useMemo(() => (bonds ? heroBonds(bonds, hasLogo) : []), [bonds, hasLogo]);
+  const popBonds = useMemo(() => (bonds ? curatedBonds(bonds, hasLogo) : []), [bonds, hasLogo]);
   const collections = useMemo(
     () =>
       FUND_COLLECTIONS.map((c) => ({ c, n: fundsIn(c, funds).length }))
