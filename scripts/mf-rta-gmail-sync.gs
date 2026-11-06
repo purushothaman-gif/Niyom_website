@@ -22,6 +22,9 @@
  *       SUPABASE_URL    = https://jlmwazuwjnhoqqloyeoj.supabase.co
  *       ALERT_EMAIL     = who to email if a run hits errors (optional)
  * 3. Run `setup` once (authorise Gmail + external-request scopes when asked).
+ *    It installs two triggers: `syncNow` daily ~18:00, and `monthEndSync` daily
+ *    ~05:00 which only does work on the LAST DAY of the month (see below).
+ *    Re-running `setup` after pasting a newer version adds any missing trigger.
  * 4. Run `syncNow` once to backfill and confirm it works (View → Executions).
  * ──────────────────────────────────────────────────────────────────────────
  *
@@ -48,6 +51,13 @@ var SENDERS = [
 
 var DONE_LABEL = 'NiyomRTA/Done';
 var LOOKBACK = 'newer_than:3d'; // a few days of slack so a missed run self-heals
+// Month-end sweep: brokerage (WBR77) and the scheme master (WBR39) arrive about
+// once a month, whenever CAMS (or a request made through Wylth) sends them. On
+// the last day of each month an early-morning run looks back over the whole
+// month, so anything the daily run missed (a failed day, a mail that arrived
+// outside the 3-day window) still lands before month-end MIS.
+var MONTH_END_LOOKBACK = 'newer_than:35d';
+var MONTH_END_HOUR = 5; // ~05:00 local, early morning
 
 function prop(k) { return PropertiesService.getScriptProperties().getProperty(k) || ''; }
 
@@ -57,31 +67,58 @@ function ingestUrl() {
   return base + '/functions/v1/mf-rta-ingest';
 }
 
-/** Install the daily trigger + label. Run once. */
+/** Install the triggers + label. Safe to re-run: only adds what's missing. */
 function setup() {
   GmailApp.getUserLabelByName(DONE_LABEL) || GmailApp.createLabel(DONE_LABEL);
-  var have = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'syncNow'; });
-  if (!have) {
+  var handlers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); });
+  var added = [];
+  if (handlers.indexOf('syncNow') < 0) {
     ScriptApp.newTrigger('syncNow').timeBased().everyDays(1).atHour(18).create(); // ~18:00 local
+    added.push('syncNow');
   }
-  Logger.log('Setup complete. Trigger installed: %s', !have);
+  if (handlers.indexOf('monthEndSync') < 0) {
+    // Apps Script has no "last day of month" trigger: fire daily early morning
+    // and let monthEndSync() decide whether today is the last day.
+    ScriptApp.newTrigger('monthEndSync').timeBased().everyDays(1).atHour(MONTH_END_HOUR).create();
+    added.push('monthEndSync');
+  }
+  Logger.log('Setup complete. Triggers added: %s', added.join(', ') || 'none (already installed)');
 }
 
+/** True on the last calendar day of the month (script time zone). */
+function isLastDayOfMonth(d) {
+  var t = new Date(d.getTime());
+  t.setDate(t.getDate() + 1);
+  return t.getDate() === 1;
+}
+
+/** Early-morning month-end sweep. Runs daily but only works on the last day. */
+function monthEndSync() {
+  if (!isLastDayOfMonth(new Date())) return;
+  runSync(MONTH_END_LOOKBACK, 'month-end');
+}
+
+/** Run the month-end sweep right now, whatever the date (manual use). */
+function monthEndSyncNow() { runSync(MONTH_END_LOOKBACK, 'month-end (manual)'); }
+
 /** The daily job. Also safe to run by hand. */
-function syncNow() {
+function syncNow() { runSync(LOOKBACK, 'daily'); }
+
+function runSync(lookback, kind) {
   var label = GmailApp.getUserLabelByName(DONE_LABEL) || GmailApp.createLabel(DONE_LABEL);
   var url = ingestUrl();
   var secret = prop('INGEST_SECRET');
   if (!secret) throw new Error('Set the INGEST_SECRET script property.');
   var anon = prop('ANON_KEY');
 
-  var totals = { files: 0, ok: 0, skipped: 0, errors: 0, holdings: 0, sips: 0, txns: 0, matched: 0 };
+  var totals = { run: kind, files: 0, ok: 0, skipped: 0, errors: 0, holdings: 0, sips: 0, txns: 0,
+    brokerageLines: 0, brokerageAmount: 0, schemes: 0, matched: 0 };
   var problems = [];
 
   SENDERS.forEach(function (sender) {
-    var query = 'from:' + sender.email + ' ' + LOOKBACK + ' -label:' + DONE_LABEL.toLowerCase();
+    var query = 'from:' + sender.email + ' ' + lookback + ' -label:' + DONE_LABEL.toLowerCase();
     if (sender.mode === 'attachment') query += ' has:attachment';
-    GmailApp.search(query, 0, 50).forEach(function (thread) {
+    GmailApp.search(query, 0, lookback === LOOKBACK ? 50 : 200).forEach(function (thread) {
       var allHandled = true;
       thread.getMessages().forEach(function (msg) {
         if (sender.subjectMatch && !sender.subjectMatch.test(msg.getSubject() || '')) return;
@@ -99,9 +136,16 @@ function syncNow() {
               totals.holdings += res.holdingsUpserted || 0;
               totals.sips += res.sipsUpserted || 0;
               totals.txns += res.txnsUpserted || 0;
+              totals.brokerageLines += res.brokerageUpserted || 0;
+              totals.brokerageAmount += res.amountTotal || 0;
+              totals.schemes += res.schemesUpserted || 0;
               totals.matched += res.matched || 0;
             } else if (res.permanent) {
               totals.skipped++; // unrecognised / empty — handled, don't retry
+              // ...but a feed we DO recognise that was rejected (wrong password —
+              // e.g. a report requested through Wylth with its own password — or a
+              // truncated brokerage file) needs a human: report it.
+              if (!/unrecognised/i.test(res.error || '')) problems.push(feed.name + ' (not retried): ' + res.error);
             } else {
               totals.errors++; allHandled = false; problems.push(feed.name + ': ' + res.error);
             }

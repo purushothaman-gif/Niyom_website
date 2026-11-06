@@ -59,9 +59,12 @@ Deno.serve(async (req: Request) => {
     // password per report (SIP subscription vs AUM report), so fall back to the
     // CAMS password too; deduped, blanks dropped.
     const cams = Deno.env.get('RTA_CAMS_PASSWORD') ?? '';
+    // Optional second CAMS password: a report requested via another channel
+    // (e.g. Wylth) can be encrypted with that requester's own password.
+    const cams2 = Deno.env.get('RTA_CAMS_PASSWORD_2') ?? '';
     const kf = Deno.env.get('RTA_KFINTECH_PASSWORD') ?? '';
     const kf2 = Deno.env.get('RTA_KFINTECH_PASSWORD_2') ?? '';
-    const passwords = (registrar === 'KFINTECH' ? [kf, kf2, cams] : [cams])
+    const passwords = (registrar === 'KFINTECH' ? [kf, kf2, cams, cams2] : [cams, cams2])
       .filter((p, i, a) => p && a.indexOf(p) === i);
     if (!passwords.length) throw new RtaError(`The ${registrar} mailback password is not configured on the server.`, 500);
 
