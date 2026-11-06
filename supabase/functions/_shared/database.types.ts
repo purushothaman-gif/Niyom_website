@@ -5020,6 +5020,7 @@ export type Database = {
           launch_date: string | null
           master_synced_at: string | null
           min_amount: number | null
+          name_key: string | null
           override_asset_class: string | null
           override_at: string | null
           override_by: string | null
@@ -5044,6 +5045,7 @@ export type Database = {
           launch_date?: string | null
           master_synced_at?: string | null
           min_amount?: number | null
+          name_key?: string | null
           override_asset_class?: string | null
           override_at?: string | null
           override_by?: string | null
@@ -5068,6 +5070,7 @@ export type Database = {
           launch_date?: string | null
           master_synced_at?: string | null
           min_amount?: number | null
+          name_key?: string | null
           override_asset_class?: string | null
           override_at?: string | null
           override_by?: string | null
@@ -5189,6 +5192,42 @@ export type Database = {
           last_synced_at?: string
           payload?: Json
           scheme_code?: string
+        }
+        Relationships: []
+      }
+      mf_nav_tracked: {
+        Row: {
+          attempts: number
+          first_seen_at: string
+          history_first_date: string | null
+          history_loaded_at: string | null
+          history_rows: number | null
+          isin: string
+          last_attempt_at: string | null
+          last_error: string | null
+          sources: string[]
+        }
+        Insert: {
+          attempts?: number
+          first_seen_at?: string
+          history_first_date?: string | null
+          history_loaded_at?: string | null
+          history_rows?: number | null
+          isin: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          sources?: string[]
+        }
+        Update: {
+          attempts?: number
+          first_seen_at?: string
+          history_first_date?: string | null
+          history_loaded_at?: string | null
+          history_rows?: number | null
+          isin?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          sources?: string[]
         }
         Relationships: []
       }
@@ -12117,10 +12156,33 @@ export type Database = {
         }
       }
       mail_unsubscribe_by_token: { Args: { p_token: string }; Returns: boolean }
+      mf_isins_for_scheme_name: { Args: { p_name: string }; Returns: string[] }
       mf_nav_history_cursor: { Args: never; Returns: string }
       mf_nav_history_floor: { Args: never; Returns: string }
+      mf_nav_history_sweep: { Args: never; Returns: number }
       mf_nav_history_tick: { Args: never; Returns: undefined }
+      mf_nav_keep_days: { Args: never; Returns: number }
+      mf_nav_prune: { Args: { p_limit?: number }; Returns: number }
+      mf_nav_request_history: {
+        Args: { p_isins: string[] }
+        Returns: undefined
+      }
+      mf_nav_track: {
+        Args: { p_isin: string; p_source: string }
+        Returns: undefined
+      }
+      mf_nav_tracked_result: {
+        Args: {
+          p_error: string
+          p_first_date: string
+          p_isin: string
+          p_ok: boolean
+          p_rows: number
+        }
+        Returns: boolean
+      }
       mf_nav_validate: { Args: { p_date: string }; Returns: Json }
+      mf_scheme_name_key: { Args: { p_name: string }; Returns: string }
       mf_scheme_nav_history: { Args: { p_scheme_code: string }; Returns: Json }
       mkt_auto_alert_admins: {
         Args: { p_message: string; p_title: string }
