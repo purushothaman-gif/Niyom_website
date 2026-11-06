@@ -8,7 +8,7 @@
  * invest action; bonds and shares hand off to their own modules, which own the
  * order flows and the demat/KYC gating.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -26,6 +26,7 @@ import type { PortalHolding } from '../../types/cas';
 import { BondOrderService, type ClientBond } from '../../../../shared/portal/services/BondOrderService';
 import { ShareOrderService, type ClientShare } from '../../../../shared/portal/services/ShareOrderService';
 import { ratingGrade } from '../../../../shared/portal/bonds/bondFilters';
+import { findLogo, issuerFromBondName, useBrandLogoMap } from '../../../components/brandLogos';
 import { fromClientHoldings, summarise } from '../../../../shared/portal/investments/model';
 import { useMfCatalog } from '../../hooks/useMfCatalog';
 import type { CatalogFund } from '../../types/funds';
@@ -64,16 +65,63 @@ export function popularFunds(funds: CatalogFund[], picks: string[]): CatalogFund
   return out;
 }
 
+/** Credit grade bucket, best first: AAA 0 · AA 1 · A-category 2 · BBB and below 3. */
+function bondGradeRank(b: BondLike): number {
+  const g = ratingGrade(b.rating) ?? '';
+  return g.startsWith('AAA') ? 0 : g.startsWith('AA') ? 1 : g.startsWith('A') ? 2 : 3;
+}
+
+/** Secured — collateral-backed, not a subordinated/unsecured instrument. */
+function bondSecured(b: BondLike): boolean {
+  const s = (b.security_type ?? '').toLowerCase();
+  return s.includes('secured') && !s.includes('unsecured');
+}
+
 /** Popular bonds: investment-grade first (AA and above), then by yield. */
 export function popularBonds<T extends BondLike & { maturity_date: string | null }>(bonds: T[], n = 4): T[] {
-  const gradeRank = (b: T) => {
-    const g = ratingGrade(b.rating) ?? '';
-    return g.startsWith('AAA') ? 0 : g.startsWith('AA') ? 1 : g.startsWith('A') ? 2 : 3;
-  };
   const live = bonds.filter((b) => !b.maturity_date || new Date(b.maturity_date) > new Date());
   return [...live]
-    .sort((a, b) => gradeRank(a) - gradeRank(b) || (bondYield(b) ?? 0) - (bondYield(a) ?? 0))
+    .sort((a, b) => bondGradeRank(a) - bondGradeRank(b) || (bondYield(b) ?? 0) - (bondYield(a) ?? 0))
     .slice(0, n);
+}
+
+/**
+ * The client "Popular Bonds" hero — a single standout card, not a rail of four.
+ *
+ * The one we lead with has to earn it: a logo on file (so the card shows a real
+ * brand, not a monogram), a secured instrument, a good credit grade and a
+ * decent 10–13% yield. We score every live bond against that ideal and take the
+ * best; if nothing clears the bar we relax it step by step rather than leave the
+ * rail empty, so the card is always the strongest bond we can honestly feature.
+ */
+export function heroBonds<T extends BondLike & { maturity_date: string | null }>(
+  bonds: T[],
+  hasLogo: (b: T) => boolean,
+  n = 1,
+): T[] {
+  const live = bonds.filter((b) => !b.maturity_date || new Date(b.maturity_date) > new Date());
+  const byBest = (a: T, b: T) =>
+    bondGradeRank(a) - bondGradeRank(b) || (bondYield(b) ?? 0) - (bondYield(a) ?? 0);
+  const inBand = (lo: number, hi: number) => (b: T) => {
+    const y = bondYield(b);
+    return y != null && y >= lo && y <= hi;
+  };
+  const goodGrade = (b: T) => bondGradeRank(b) <= 2; // A-category and above
+
+  // Strictest first; each later tier drops one condition so the rail still fills.
+  const tiers: Array<(b: T) => boolean> = [
+    (b) => hasLogo(b) && bondSecured(b) && goodGrade(b) && inBand(10, 13)(b),
+    (b) => hasLogo(b) && bondSecured(b) && goodGrade(b) && inBand(9.5, 13.5)(b),
+    (b) => hasLogo(b) && bondSecured(b) && goodGrade(b),
+    (b) => hasLogo(b) && bondSecured(b),
+    (b) => bondSecured(b) && goodGrade(b),
+    () => true,
+  ];
+  for (const pass of tiers) {
+    const hit = live.filter(pass).sort(byBest);
+    if (hit.length) return hit.slice(0, n);
+  }
+  return [];
 }
 
 /** Rows rendered in the all-funds list; search narrows the rest. */
@@ -161,7 +209,15 @@ export function ExploreHub({
     () => popularFunds(funds, catalog.recommendations.map((r) => r.amfiCode)),
     [funds, catalog.recommendations],
   );
-  const popBonds = useMemo(() => (bonds ? popularBonds(bonds) : []), [bonds]);
+  // The hero bond must show a real logo, so resolve the issuer the same way the
+  // card does (issuer name, else parsed from the bond name) against the logo map.
+  const logoMap = useBrandLogoMap();
+  const hasLogo = useCallback(
+    (b: ClientBond) =>
+      !!findLogo(logoMap, 'bond_issuer', b.issuer_name?.trim() || issuerFromBondName(b.bond_name) || null),
+    [logoMap],
+  );
+  const popBonds = useMemo(() => (bonds ? heroBonds(bonds, hasLogo) : []), [bonds, hasLogo]);
   const collections = useMemo(
     () =>
       FUND_COLLECTIONS.map((c) => ({ c, n: fundsIn(c, funds).length }))

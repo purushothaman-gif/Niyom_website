@@ -9,6 +9,8 @@ import type { ClientBond } from '../../../../shared/portal/services/BondOrderSer
 import type { ClientShare } from '../../../../shared/portal/services/ShareOrderService';
 import { ratingGrade } from '../../../../shared/portal/bonds/bondFilters';
 import type { CatalogFund } from '../../types/funds';
+import { BrandLogo } from '../../../components/BrandLogo';
+import { issuerFromBondName } from '../../../components/brandLogos';
 import { AmcAvatar } from '../mutual-funds/components/AmcAvatar';
 import type { FundCollection } from '../mutual-funds/explore/collections';
 import { signedPct, toneOf } from '../investments/format';
@@ -95,7 +97,7 @@ function monthsTo(iso: string | null): number | null {
 }
 
 /** The bond fields a card needs — satisfied by both ClientBond and PartnerBond. */
-export type BondLike = Pick<ClientBond, 'id' | 'isin' | 'bond_name' | 'issuer_name' | 'coupon_rate' | 'maturity_date' | 'rating'> & {
+export type BondLike = Pick<ClientBond, 'id' | 'isin' | 'bond_name' | 'issuer_name' | 'coupon_rate' | 'maturity_date' | 'rating' | 'security_type'> & {
   analytics?: { ytm?: number | null } | null;
 };
 
@@ -109,10 +111,11 @@ export function BondCard({ bond, onOpen }: { bond: BondLike; onOpen: () => void 
   const months = monthsTo(bond.maturity_date);
   const grade = ratingGrade(bond.rating);
   const safe = grade && /^AA/.test(grade);
+  const issuerName = bond.issuer_name?.trim() || issuerFromBondName(bond.bond_name) || name;
   return (
     <div className="relative h-full">
       <button type="button" onClick={onOpen} className={cardCls}>
-        <Monogram name={name} />
+        <BrandLogo kind="bond_issuer" name={issuerName} size={44} fallback={<Monogram name={name} />} />
         <p className="mt-3 line-clamp-2 text-sm font-semibold leading-snug text-text-primary">
           {name}
           {bond.maturity_date && <span className="text-text-secondary"> {maturityShort(bond.maturity_date)}</span>}
