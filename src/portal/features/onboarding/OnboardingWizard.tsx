@@ -7,6 +7,7 @@ import {
 import { clientSupabase as supabase } from '../../../lib/supabase';
 import type { NWClient } from '../../../crm/types';
 import type { PortalView } from '../../layout/navigation';
+import { prepareUploadFile } from '../../../components/PdfPasswordPrompt';
 import { AvatarPicker } from '../../components/AvatarPicker';
 import { Card } from '../../components/Card';
 import { Segmented } from '../../components/Segmented';
@@ -152,7 +153,11 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
     if (!file) return;
     setError('');
     setBusy(true);
-    const r = await OnboardingService.uploadDoc(clientId, clientCode, docType, file);
+    const ready = await prepareUploadFile(file, {
+      fullName: panName || client?.full_name, pan, dob, phone: client?.phone,
+      accountNumbers: [bankAccount, client?.demat_account],
+    });
+    const r = await OnboardingService.uploadDoc(clientId, clientCode, docType, ready);
     setBusy(false);
     if (!r.ok) return setError(r.error || 'Upload failed. Please try again.');
     setUploaded((u) => ({ ...u, [docType]: true }));

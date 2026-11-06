@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { compressImageFile } from '../../shared/lib/compressImage';
+import { prepareUploadFile } from '../components/PdfPasswordPrompt';
 import { NWEmployee, NWClient } from './types';
 import { DOC_FOLDERS, DocFolderKey, buildFileName, validateFile } from './Documents';
 import {
@@ -198,6 +199,12 @@ export default function AdminDocuments({ employee }: Props) {
 
     // Overwrite the existing object at the same path (no new copy, no orphan).
     // keepType: the path (and its extension) is fixed, so the format must stay.
+    const { data: who } = await supabase.from('nw_clients')
+      .select('full_name, pan, dob, phone, bank_account, demat_account').eq('id', doc.client_id).maybeSingle();
+    file = await prepareUploadFile(file, {
+      fullName: who?.full_name, pan: who?.pan, dob: who?.dob, phone: who?.phone,
+      accountNumbers: [who?.bank_account, who?.demat_account],
+    });
     file = await compressImageFile(file, { keepType: true });
     const { error: upErr } = await supabase.storage
       .from('crm-documents')

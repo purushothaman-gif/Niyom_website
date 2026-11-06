@@ -5,6 +5,7 @@ import {
 import type { NWClient } from '../../../crm/types';
 import { StatusPill } from '../../components/StatusPill';
 import { OnboardingService } from './onboardingService';
+import { prepareUploadFile } from '../../../components/PdfPasswordPrompt';
 import { ACTIVATABLE_PRODUCTS, activatableProducts } from './onboardingSteps';
 
 interface Props {
@@ -39,7 +40,11 @@ export function ActivateProductsModal({ client, clientId, onClose, onDone }: Pro
     if (!file) return;
     setError('');
     setBusy(true);
-    const r = await OnboardingService.uploadDoc(clientId, clientCode, 'CML', file);
+    const ready = await prepareUploadFile(file, {
+      fullName: client?.full_name, pan: client?.pan, dob: client?.dob, phone: client?.phone,
+      accountNumbers: [demat, client?.bank_account],
+    });
+    const r = await OnboardingService.uploadDoc(clientId, clientCode, 'CML', ready);
     setBusy(false);
     if (!r.ok) return setError(r.error || 'Could not upload the CML. Please try again.');
     setCmlDone(true);

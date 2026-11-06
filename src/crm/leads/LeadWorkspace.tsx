@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { compressImageFile } from '../../../shared/lib/compressImage';
+import { prepareUploadFile } from '../../components/PdfPasswordPrompt';
 import { NWEmployee, CRMPage } from '../types';
 import {
   ArrowLeft, Phone, MessageCircle, Mail, Pencil, UserPlus, StickyNote,
@@ -549,7 +550,9 @@ function DocUploadInput({ leadId, leadCode, employee, onUploaded, disabled }:
     if (!pending) return;
     setBusy(true); setErr('');
     try {
-      const file = await compressImageFile(pending);
+      const { data: who } = await supabase.from('nw_leads').select('lead_name, pan, mobile').eq('id', leadId).maybeSingle();
+      const unlocked = await prepareUploadFile(pending, { fullName: who?.lead_name, pan: who?.pan, phone: who?.mobile });
+      const file = await compressImageFile(unlocked);
       const ext = file.name.substring(file.name.lastIndexOf('.'));
       const path = `leads/${leadCode}/${docType}/${Date.now()}${ext}`;
       const { error: upErr } = await supabase.storage.from('crm-documents').upload(path, file, { upsert: true });

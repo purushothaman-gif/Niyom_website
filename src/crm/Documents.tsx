@@ -1,12 +1,15 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { compressImageFile, swapExt } from '../../shared/lib/compressImage';
+import { unlockPdfForUpload } from '../lib/pdfUnlock';
+import { passwordCandidates } from '../lib/pdfPasswordCandidates';
+import { askPdfPassword } from '../components/PdfPasswordPrompt';
 import { NWEmployee, NWClient, NWClientBankAccount } from './types';
 import {
   Folder, FolderOpen, Upload, Download, Trash2, Eye, Search,
   FileText, FileImage, File, X, CheckCircle2, AlertCircle,
-  ChevronDown, RefreshCw, ArrowLeft, Plus, Pencil,
+  ChevronDown, RefreshCw, ArrowLeft, Plus, Pencil, Unlock,
 } from 'lucide-react';
 
 interface Props {
@@ -164,6 +167,22 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
 
   const selectedClient = clients.find(c => c.id === selectedClientId);
 
+  // Locked PDFs (bank statements, CML, CAS): auto-try the passwords the issuer
+  // most likely used, built from this client's own details; else ask once.
+  const [pwHints, setPwHints] = useState<{ full_name: string | null; pan: string | null; dob: string | null; phone: string | null; bank_account: string | null; demat_account: string | null } | null>(null);
+  useEffect(() => {
+    setPwHints(null);
+    if (!selectedClientId) return;
+    supabase.from('nw_clients').select('full_name, pan, dob, phone, bank_account, demat_account')
+      .eq('id', selectedClientId).maybeSingle()
+      .then(({ data }) => setPwHints((data as typeof pwHints) ?? null));
+  }, [selectedClientId]);
+  const pdfCandidates = useMemo(() => passwordCandidates({
+    fullName: pwHints?.full_name, pan: pwHints?.pan, dob: pwHints?.dob, phone: pwHints?.phone,
+    accountNumbers: [pwHints?.bank_account, pwHints?.demat_account, ...bankAccounts.map(a => a.account_number)],
+  }), [pwHints, bankAccounts]);
+  const [unlockingId, setUnlockingId] = useState<string | null>(null);
+
   // Folder stats
   const folderCounts = DOC_FOLDERS.map(f => ({
     ...f,
@@ -209,7 +228,9 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
 
       setUploadItems(prev => prev.map((x, idx) => idx === i ? { ...x, status: 'uploading', progress: 10 } : x));
 
-      const file = await compressImageFile(item.file);
+      const unlocked = await unlockPdfForUpload(item.file, pdfCandidates, askPdfPassword);
+      if (unlocked.status === 'unlocked') showToast('success', `${item.file.name}: password removed${unlocked.automatic ? ' automatically' : ''}`);
+      const file = await compressImageFile(unlocked.file);
       const path = `clients/${selectedClient.client_code}/${uploadFolder}/${file === item.file ? item.name : swapExt(item.name, file.name)}`;
       const { error: upErr } = await supabase.storage.from('crm-documents').upload(path, file, { upsert: true });
 
@@ -304,6 +325,7 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
 
     // Overwrite the existing object at the same path (no new copy, no orphan).
     // keepType: the path (and its extension) is fixed, so the format must stay.
+    file = (await unlockPdfForUpload(file, pdfCandidates, askPdfPassword)).file;
     file = await compressImageFile(file, { keepType: true });
     const { error: upErr } = await supabase.storage
       .from('crm-documents')
@@ -325,6 +347,27 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
 
     await loadDocuments();
     showToast('success', 'Document replaced successfully');
+  };
+
+  // Unlock a PDF that is ALREADY stored with a password: same path, same row.
+  const handleUnlockExisting = async (doc: NWDocument) => {
+    setUnlockingId(doc.id);
+    try {
+      const { data: blob, error } = await supabase.storage.from('crm-documents').download(doc.file_path);
+      if (error || !blob) { showToast('error', error?.message || 'Could not open the document'); return; }
+      const original = new window.File([blob], doc.file_name, { type: 'application/pdf' });
+      const res = await unlockPdfForUpload(original, pdfCandidates, askPdfPassword);
+      if (res.status === 'not-locked') { showToast('success', 'This PDF is not password-protected'); return; }
+      if (res.status === 'skipped') return;
+      const { error: upErr } = await supabase.storage.from('crm-documents')
+        .upload(doc.file_path, res.file, { upsert: true, contentType: 'application/pdf' });
+      if (upErr) { showToast('error', upErr.message); return; }
+      await supabase.from('nw_documents').update({ file_size: res.file.size }).eq('id', doc.id);
+      await loadDocuments();
+      showToast('success', `Password removed${res.automatic ? ' automatically' : ''} — anyone can open it now`);
+    } finally {
+      setUnlockingId(null);
+    }
   };
 
   const folderInfo = DOC_FOLDERS.find(f => f.key === selectedFolder);
@@ -503,6 +546,14 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
                           className="p-1.5 rounded-lg transition-colors hover:bg-hover">
                           <Download className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />
                         </button>
+                        {(doc.mime_type === 'application/pdf' || /\.pdf$/i.test(doc.file_path)) && (
+                          <button onClick={() => handleUnlockExisting(doc)} title="Remove PDF password" disabled={unlockingId === doc.id}
+                            className="p-1.5 rounded-lg transition-colors hover:bg-hover disabled:opacity-50">
+                            {unlockingId === doc.id
+                              ? <div className="w-3.5 h-3.5 rounded-full border-2 animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+                              : <Unlock className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />}
+                          </button>
+                        )}
                         <button onClick={() => triggerReplace(doc)} title="Edit / Replace" disabled={replacingId === doc.id}
                           className="p-1.5 rounded-lg transition-colors hover:bg-hover disabled:opacity-50">
                           {replacingId === doc.id

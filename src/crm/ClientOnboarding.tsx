@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { compressImageFile, swapExt } from '../../shared/lib/compressImage';
+import { prepareUploadFile } from '../components/PdfPasswordPrompt';
 import { passwordError, isPasswordStrong } from '../lib/passwordPolicy';
 import { NWEmployee, NWDSA, CRMPage } from './types';
 import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
@@ -388,8 +389,12 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
   };
 
   const uploadFile = async (original: File, rawPath: string): Promise<string | null> => {
-    const file = await compressImageFile(original);
-    const path = file === original ? rawPath : swapExt(rawPath, file.name);
+    const unlocked = await prepareUploadFile(original, {
+      fullName: form.full_name, pan: form.pan, dob: form.dob, phone: form.phone,
+      accountNumbers: [form.bank_account, form.demat_account],
+    });
+    const file = await compressImageFile(unlocked);
+    const path = file === unlocked ? rawPath : swapExt(rawPath, file.name);
     const { data, error: upErr } = await supabase.storage.from('crm-documents').upload(path, file, { upsert: true });
     if (upErr || !data) return null;
     return data.path;

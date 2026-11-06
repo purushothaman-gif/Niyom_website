@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { compressImageFile } from '../../shared/lib/compressImage';
+import { prepareUploadFile } from '../components/PdfPasswordPrompt';
 import { ProductAccessEditor } from './ProductAccess';
 import { NWEmployee, NWDSA, NWDSABankAccount } from './types';
 import { PartnerOnboardLinks } from './PartnerOnboardLinks';
@@ -399,7 +400,10 @@ export default function DSAManagement({ employee }: Props) {
   };
 
   const uploadDoc = async (original: File, path: string): Promise<string | null> => {
-    const file = await compressImageFile(original);
+    const unlocked = await prepareUploadFile(original, {
+      fullName: form.full_name, pan: form.pan, phone: form.mobile, accountNumbers: [form.bank_account],
+    });
+    const file = await compressImageFile(unlocked);
     const { error } = await supabase.storage.from('crm-documents').upload(path, file, { upsert: true, contentType: file.type });
     if (error) return null;
     const { data } = supabase.storage.from('crm-documents').getPublicUrl(path);
