@@ -17,6 +17,8 @@ import { ChevronDown, KeyRound, LogOut, MoreHorizontal, RefreshCw, Sparkles, X }
 import { isDemoClientSession } from '../../../shared/portal/demo/demoClient';
 import type { NWClient } from '../../crm/types';
 import { ThemeToggle } from '../../theme/ThemeToggle';
+import { getDb } from '../../../shared/platform/db';
+import { MarketTicker } from '../../components/marketWatch/MarketTicker';
 import { ClientAvatar } from '../components/ClientAvatar';
 import {
   ACCOUNT_ITEMS,
@@ -272,6 +274,9 @@ export function PortalShell({
           </div>
         </div>
       </header>
+
+      {/* Headline market strip (NIFTY, SENSEX, gold, silver) → Market Watch. */}
+      <MarketTicker db={getDb('client')} onOpen={() => onNavigate('market-watch')} />
 
       {/* Sample-data banner. Deliberately persistent and above the content
           rather than a dismissible toast: these credentials are handed to

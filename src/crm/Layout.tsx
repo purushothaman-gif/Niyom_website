@@ -13,6 +13,7 @@ import {
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
 import { EmployeeAvatar } from './EmployeeAvatar';
+import { MarketTicker } from '../components/marketWatch/MarketTicker';
 
 interface Props {
   children: React.ReactNode;
@@ -451,6 +452,13 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
             </div>
           </div>
         </header>
+
+        {/* Headline market strip (NIFTY, SENSEX, gold, silver). Sits between
+            the fixed topbar and the scrolling page, so it is always in view. */}
+        <MarketTicker
+          db={supabase}
+          onOpen={employee.role === 'transfer_admin' ? undefined : () => onNavigate('market_watch' as CRMPage)}
+        />
 
         {/* Page content — keyed by page so each navigation re-plays a subtle
             fade + rise (see .crm-page-enter). */}

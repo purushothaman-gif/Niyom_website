@@ -796,3 +796,19 @@ input[type='range'] {
   z-index: 1;
   background: var(--bg-surface);
 }
+
+/* ---- Market ticker strip (src/components/marketWatch/MarketTicker.tsx) ----
+   Runs only when the items overflow the strip (the component measures and
+   adds .is-running plus a duplicate copy): two copies scroll as one seamless
+   loop, since -50% is exactly one copy. Reduced motion: still, scrollable. */
+@keyframes nw-ticker-run {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.nw-ticker-track.is-running { animation: nw-ticker-run 28s linear infinite; }
+.nw-ticker:hover .nw-ticker-track.is-running { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .nw-ticker-track.is-running { animation: none; }
+  .nw-ticker-dup { display: none !important; }
+  .nw-ticker-viewport { overflow-x: auto; }
+}

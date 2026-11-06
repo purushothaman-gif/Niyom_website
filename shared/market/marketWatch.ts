@@ -243,3 +243,52 @@ export function fmtAsOfDate(ymd: string | null | undefined): string {
     timeZone: 'UTC',
   });
 }
+
+// ---- Ticker strip --------------------------------------------------------------
+
+/** The headline figures for the always-visible strip, in display order. */
+export const TICKER_SYMBOLS = ['NIFTY50', 'SENSEX'] as const;
+
+export interface TickerItem {
+  key: string;
+  label: string;
+  /** Formatted level, e.g. "25,030.35" or "₹1,39,574". */
+  value: string;
+  changePct: number | null;
+  /** Formatted as-of stamp for the tooltip. */
+  asOf: string;
+}
+
+export function tickerItems(quotes: MarketQuote[], commodities: CommodityQuote[]): TickerItem[] {
+  const out: TickerItem[] = [];
+  for (const s of TICKER_SYMBOLS) {
+    const q = quotes.find((x) => x.symbol === s);
+    if (!q || q.price === null) continue;
+    out.push({ key: s, label: q.label, value: fmtLevel(q.price, 2), changePct: q.changePct, asOf: fmtAsOfTime(q.asOf) });
+  }
+  for (const c of commodities) {
+    out.push({
+      key: c.commodity,
+      label: `${c.label} ${c.unit.replace(' ', '')}`,
+      value: `₹${fmtLevel(c.price, 0)}`,
+      changePct: c.changePct,
+      asOf: fmtAsOfDate(c.asOfDate),
+    });
+  }
+  return out;
+}
+
+/** Just what the strip needs: two index rows and the last few metal prices. */
+export async function loadTicker(db: AnyDb): Promise<TickerItem[]> {
+  const [q, c] = await Promise.all([
+    db.from('market_quotes').select('*').in('symbol', [...TICKER_SYMBOLS]),
+    db
+      .from('commodity_prices')
+      .select('commodity, price, price_date')
+      .order('price_date', { ascending: false })
+      .limit(8),
+  ]);
+  if (q.error) throw q.error;
+  if (c.error) throw c.error;
+  return tickerItems((q.data ?? []).map(rowToQuote), commoditiesFromRows(c.data ?? []));
+}

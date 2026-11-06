@@ -3,6 +3,8 @@ import { Sparkles } from 'lucide-react';
 import { isDemoSession } from '../demo/demoData';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { getDb } from '../../../shared/platform/db';
+import { MarketTicker } from '../../components/marketWatch/MarketTicker';
 import type { PartnerView } from './navigation';
 import type { PartnerIdentity } from '../types';
 
@@ -59,6 +61,9 @@ export function PartnerShell({
             onChangePassword={onChangePassword}
             onLogout={onLogout}
           />
+
+          {/* Headline market strip (NIFTY, SENSEX, gold, silver) → Market Watch. */}
+          <MarketTicker db={getDb('partner')} onOpen={() => onNavigate('market-watch')} />
 
           {/* Sample-data banner. Deliberately persistent and above the content
               rather than a dismissible toast: these credentials are handed to
