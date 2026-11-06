@@ -246,13 +246,28 @@ export function fmtAsOfDate(ymd: string | null | undefined): string {
 
 // ---- Ticker strip --------------------------------------------------------------
 
-/** The headline figures for the always-visible strip, in display order. */
-export const TICKER_SYMBOLS = ['NIFTY50', 'SENSEX'] as const;
+/**
+ * Everything on Market Watch except mutual funds, in strip order: the indices,
+ * then the metals, then the rupee. Index/currency keys are market_quotes
+ * symbols; 'gold' / 'silver' come from commodity_prices.
+ */
+export const TICKER_ORDER = [
+  'NIFTY50',
+  'SENSEX',
+  'BANKNIFTY',
+  'NIFTYMIDCAP100',
+  'INDIAVIX',
+  'gold',
+  'silver',
+  'USDINR',
+] as const;
+
+const TICKER_QUOTE_SYMBOLS = TICKER_ORDER.filter((k) => k !== 'gold' && k !== 'silver');
 
 export interface TickerItem {
   key: string;
   label: string;
-  /** Formatted level, e.g. "25,030.35" or "₹1,39,574". */
+  /** Formatted level, e.g. "25,030.35", "₹1,39,574" or "₹93.895". */
   value: string;
   changePct: number | null;
   /** Formatted as-of stamp for the tooltip. */
@@ -261,27 +276,36 @@ export interface TickerItem {
 
 export function tickerItems(quotes: MarketQuote[], commodities: CommodityQuote[]): TickerItem[] {
   const out: TickerItem[] = [];
-  for (const s of TICKER_SYMBOLS) {
-    const q = quotes.find((x) => x.symbol === s);
+  for (const key of TICKER_ORDER) {
+    const c = commodities.find((x) => x.commodity === key);
+    if (c) {
+      out.push({
+        key,
+        label: `${c.label} ${c.unit.replace(' ', '')}`,
+        value: `₹${fmtLevel(c.price, 0)}`,
+        changePct: c.changePct,
+        asOf: fmtAsOfDate(c.asOfDate),
+      });
+      continue;
+    }
+    const q = quotes.find((x) => x.symbol === key);
     if (!q || q.price === null) continue;
-    out.push({ key: s, label: q.label, value: fmtLevel(q.price, 2), changePct: q.changePct, asOf: fmtAsOfTime(q.asOf) });
-  }
-  for (const c of commodities) {
+    const currency = q.kind === 'currency';
     out.push({
-      key: c.commodity,
-      label: `${c.label} ${c.unit.replace(' ', '')}`,
-      value: `₹${fmtLevel(c.price, 0)}`,
-      changePct: c.changePct,
-      asOf: fmtAsOfDate(c.asOfDate),
+      key,
+      label: q.label,
+      value: currency ? `₹${fmtLevel(q.price, 3)}` : fmtLevel(q.price, 2),
+      changePct: q.changePct,
+      asOf: fmtAsOfTime(q.asOf),
     });
   }
   return out;
 }
 
-/** Just what the strip needs: two index rows and the last few metal prices. */
+/** Just what the strip needs: the index/currency rows and the last few metal prices. */
 export async function loadTicker(db: AnyDb): Promise<TickerItem[]> {
   const [q, c] = await Promise.all([
-    db.from('market_quotes').select('*').in('symbol', [...TICKER_SYMBOLS]),
+    db.from('market_quotes').select('*').in('symbol', TICKER_QUOTE_SYMBOLS),
     db
       .from('commodity_prices')
       .select('commodity, price, price_date')

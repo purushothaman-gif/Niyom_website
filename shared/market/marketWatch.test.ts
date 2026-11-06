@@ -68,16 +68,22 @@ describe('formatting', () => {
 });
 
 describe('tickerItems', () => {
-  it('lists NIFTY, SENSEX, then metals, skipping unpriced quotes', () => {
+  it('lists indices, then metals, then the rupee, skipping unpriced quotes', () => {
     const quotes = [
+      rowToQuote({ symbol: 'USDINR', label: 'USD / INR', kind: 'currency', price: '93.895', change_pct: '-0.6034', as_of: '2026-11-06T21:36:46Z' }),
       rowToQuote({ symbol: 'SENSEX', label: 'SENSEX', kind: 'index', price: '81028.02', change_pct: '2.166', as_of: '2026-11-06T10:02:33Z' }),
       rowToQuote({ symbol: 'NIFTY50', label: 'NIFTY 50', kind: 'index', price: null, change_pct: null, as_of: null }),
+      rowToQuote({ symbol: 'INDIAVIX', label: 'India VIX', kind: 'index', price: '17.465', change_pct: '12.099', as_of: '2026-11-06T10:13:34Z' }),
     ];
-    const metals = commoditiesFromRows([{ commodity: 'gold', price: 139574, price_date: '2026-11-06' }]);
+    const metals = commoditiesFromRows([
+      { commodity: 'silver', price: 204080, price_date: '2026-11-06' },
+      { commodity: 'gold', price: 139574, price_date: '2026-11-06' },
+    ]);
     const items = tickerItems(quotes, metals);
-    expect(items.map((i) => i.key)).toEqual(['SENSEX', 'gold']);
-    expect(items[0].value).toBe('81,028.02');
-    expect(items[0].asOf).toBe('6 Nov, 3:32 pm');
-    expect(items[1]).toMatchObject({ label: 'Gold 10g', value: '₹1,39,574', asOf: '6 Nov 2026' });
+    expect(items.map((i) => i.key)).toEqual(['SENSEX', 'INDIAVIX', 'gold', 'silver', 'USDINR']);
+    expect(items[0]).toMatchObject({ value: '81,028.02', asOf: '6 Nov, 3:32 pm' });
+    expect(items[2]).toMatchObject({ label: 'Gold 10g', value: '₹1,39,574', asOf: '6 Nov 2026' });
+    expect(items[3]).toMatchObject({ label: 'Silver 1kg', value: '₹2,04,080' });
+    expect(items[4]).toMatchObject({ label: 'USD / INR', value: '₹93.895' });
   });
 });
