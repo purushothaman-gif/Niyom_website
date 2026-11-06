@@ -1,4 +1,4 @@
-import html2pdf from 'html2pdf.js';
+import { html2pdfTrimmed } from '../lib/html2pdfTrimmed';
 import { NWDSA } from './types';
 import { PRODUCT_LABELS } from './utils';
 import { amountInWords } from '../lib/money';
@@ -320,7 +320,7 @@ export async function generateDebitNotePdfBlob(input: DebitNoteInput): Promise<B
       jsPDF: { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const },
       pagebreak: { mode: ['css', 'legacy'] as string[] },
     };
-    const blob: Blob = await html2pdf().set(opt).from(container.firstElementChild as HTMLElement).outputPdf('blob');
+    const blob: Blob = await (await html2pdfTrimmed(opt, container.firstElementChild as HTMLElement)).worker.outputPdf('blob');
     return blob;
   } finally {
     document.body.removeChild(container);
@@ -350,7 +350,7 @@ export async function generateSignedDebitNotePdfBase64(input: DebitNoteInput): P
       jsPDF: { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const },
       pagebreak: { mode: ['css', 'legacy'] as string[] },
     };
-    const dataUri: string = await html2pdf().set(opt).from(container.firstElementChild as HTMLElement).output('datauristring');
+    const dataUri: string = await (await html2pdfTrimmed(opt, container.firstElementChild as HTMLElement)).worker.output('datauristring');
     return dataUri.split(',')[1];
   } finally {
     document.body.removeChild(container);

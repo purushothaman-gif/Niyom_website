@@ -1,3 +1,4 @@
+import { html2pdfTrimmed } from '../../lib/html2pdfTrimmed';
 /**
  * Payslip PDF.
  *
@@ -131,8 +132,6 @@ async function waitForImages(root: HTMLElement): Promise<void> {
 }
 
 export async function generatePayslipBlob(data: PayslipData): Promise<Blob> {
-  const { default: html2pdf } = await import('html2pdf.js');
-
   const container = document.createElement('div');
   container.style.position = 'fixed';
   container.style.left = '-10000px';
@@ -150,7 +149,7 @@ export async function generatePayslipBlob(data: PayslipData): Promise<Blob> {
       jsPDF: { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const },
       pagebreak: { mode: ['css', 'legacy'] as string[] },
     };
-    return await html2pdf().set(opt).from(container.firstElementChild as HTMLElement).outputPdf('blob');
+    return await (await html2pdfTrimmed(opt, container.firstElementChild as HTMLElement)).worker.outputPdf('blob');
   } finally {
     document.body.removeChild(container);
   }

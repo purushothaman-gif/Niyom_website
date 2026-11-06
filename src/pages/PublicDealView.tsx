@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
 import { edgeFunctionErrorMessage } from '../lib/edgeFunctionError';
-import html2pdf from 'html2pdf.js';
+import { html2pdfTrimmed } from '../lib/html2pdfTrimmed';
 import DealDocument, { DealDocumentData } from '../crm/DealDocument';
 import { CheckCircle2, XCircle, AlertCircle, ShieldCheck, Loader2, PenLine, Mail } from 'lucide-react';
 
@@ -230,7 +230,7 @@ export default function PublicDealView({ token }: Props) {
     try {
       const el = document.getElementById('signed-pdf-content');
       if (!el) throw new Error('Document not ready. Please retry.');
-      const dataUri: string = await html2pdf().set(buildPdfOpts(deal)).from(el).output('datauristring');
+      const dataUri: string = await (await html2pdfTrimmed(buildPdfOpts(deal), el)).worker.output('datauristring');
       const signedPdfBase64 = dataUri.split(',')[1];
 
       const { data, error: fnErr } = await supabase.functions.invoke('accept-deal', {

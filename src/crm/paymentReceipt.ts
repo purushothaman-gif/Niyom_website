@@ -1,4 +1,4 @@
-import html2pdf from 'html2pdf.js';
+import { html2pdfTrimmed } from '../lib/html2pdfTrimmed';
 import { NIYOM_COMPANY, amountInWords } from './dsaDebitNote';
 
 // ---------------------------------------------------------------------------
@@ -367,10 +367,9 @@ export async function renderPaymentReceiptPdf(input: ReceiptRenderInput): Promis
   document.body.appendChild(wrap);
   try {
     await waitForImages(wrap);
-    const dataUri: string = await html2pdf()
-      .set(PDF_OPTS(`${input.payment.receipt_number}.pdf`))
-      .from(wrap.firstElementChild as HTMLElement)
-      .output('datauristring');
+    const dataUri: string = await (await html2pdfTrimmed(
+      PDF_OPTS(`${input.payment.receipt_number}.pdf`), wrap.firstElementChild as HTMLElement,
+    )).worker.output('datauristring');
     return dataUri.split(',')[1];
   } finally {
     document.body.removeChild(wrap);
@@ -386,10 +385,9 @@ export async function downloadPaymentReceiptPdf(input: ReceiptRenderInput): Prom
   document.body.appendChild(wrap);
   try {
     await waitForImages(wrap);
-    await html2pdf()
-      .set(PDF_OPTS(`${input.payment.receipt_number}.pdf`))
-      .from(wrap.firstElementChild as HTMLElement)
-      .save();
+    await (await html2pdfTrimmed(
+      PDF_OPTS(`${input.payment.receipt_number}.pdf`), wrap.firstElementChild as HTMLElement,
+    )).worker.save();
   } finally {
     document.body.removeChild(wrap);
   }

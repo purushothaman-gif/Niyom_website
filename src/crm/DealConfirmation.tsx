@@ -9,7 +9,7 @@ import {
   FileText, Plus, Search, ChevronDown, Eye, Pencil, Trash2,
   Download, CheckCircle2, AlertCircle, ChevronLeft, Send, Wallet, Lock, Ban,
 } from 'lucide-react';
-import html2pdf from 'html2pdf.js';
+import { html2pdfTrimmed } from '../lib/html2pdfTrimmed';
 import DealDocument from './DealDocument';
 import DealPayments from './DealPayments';
 import SecuritySearch from './SecuritySearch';
@@ -997,10 +997,10 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
           <div className="flex-1" />
           {/* Download PDF */}
           <button
-            onClick={() => {
+            onClick={async () => {
               const element = document.getElementById('deal-confirmation-pdf-content');
               if (!element) return;
-              html2pdf().set(pdfOpt).from(element).save();
+              await (await html2pdfTrimmed(pdfOpt, element)).worker.save();
             }}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent"
             style={{ background: 'linear-gradient(135deg, var(--accent-strong), var(--accent-strong-deep))' }}
