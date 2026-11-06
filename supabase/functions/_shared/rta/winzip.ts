@@ -111,8 +111,13 @@ export function aesCtrXor(key: Uint8Array, data: Uint8Array): Uint8Array {
     const ks = aes.encryptBlock(counter);
     const end = Math.min(16, data.length - off);
     for (let j = 0; j < end; j++) out[off + j] = data[off + j] ^ ks[j];
+    // Little-endian increment with carry. NOT `if (++counter[k] !== 0)`: on a
+    // Uint8Array that expression evaluates to 256 (the stored byte is 0), so the
+    // carry never happened and every block from #256 on was decrypted with the
+    // wrong keystream — any feed over ~4 KB compressed came out corrupt.
     for (let k = 0; k < 16; k++) {
-      if (++counter[k] !== 0) break; // little-endian increment with carry
+      counter[k] = (counter[k] + 1) & 0xff;
+      if (counter[k] !== 0) break;
     }
   }
   return out;
