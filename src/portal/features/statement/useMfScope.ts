@@ -1,54 +1,29 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { PortalHolding } from '../../types/cas';
-import { CasPortfolioService } from '../../../../shared/portal/services/CasPortfolioService';
-import { isDemoClientSession } from '../../../../shared/portal/demo/demoClient';
-import type { MfScope } from './portfolioStatementPdf';
+import { applyMfScope, isHeldAwayMf, type MfScope } from '../../../../shared/portal/investments/mfScope';
 
 /**
- * Which mutual funds the portfolio shows:
- *
- *   'niyom'  funds held through Niyom's ARN — the registrar feed (default)
- *   'all'    every fund with every distributor, from the client's uploaded
- *            CAS. Only offered once a CAS exists; it REPLACES the registrar
- *            rows (a fund bought through us appears in both, so adding them
- *            would count it twice).
- *
- * Non-MF holdings are the same in both.
+ * Which mutual funds the portfolio shows. Defaults to ALL distributors — the
+ * same complete book the dashboard shows. "Through Niyom" filters that book
+ * down; it never re-reads or re-prices anything, so a fund we service has the
+ * same figures in both views (see shared/portal/investments/mfScope.ts).
  */
-export function useMfScope(clientId: string, holdings: PortalHolding[]) {
-  const [scope, setScope] = useState<MfScope>('niyom');
-  const [cas, setCas] = useState<{ holdings: PortalHolding[]; statementTo: string | null } | null>(null);
-  const [casChecked, setCasChecked] = useState(false);
+export function useMfScope(holdings: PortalHolding[]) {
+  const [scope, setScope] = useState<MfScope>('all');
 
-  useEffect(() => {
-    let alive = true;
-    if (isDemoClientSession()) {
-      setCasChecked(true);
-      return;
-    }
-    CasPortfolioService.getPortfolio(clientId)
-      .then((p) => {
-        if (!alive) return;
-        setCas(p && p.holdings.length ? { holdings: p.holdings, statementTo: p.statementTo } : null);
-      })
-      .catch(() => alive && setCas(null))
-      .finally(() => alive && setCasChecked(true));
-    return () => {
-      alive = false;
-    };
-  }, [clientId]);
+  const heldAwayCount = useMemo(() => holdings.filter(isHeldAwayMf).length, [holdings]);
+  const filtered = useMemo(() => applyMfScope(holdings, scope), [holdings, scope]);
+  // The newest statement any held-away fund came from — its units are as of then.
+  const casStatementTo = useMemo(
+    () =>
+      holdings
+        .filter(isHeldAwayMf)
+        .map((h) => h.cas?.statementTo ?? '')
+        .filter(Boolean)
+        .sort()
+        .pop() ?? null,
+    [holdings],
+  );
 
-  const effective = useMemo(() => {
-    if (scope !== 'all' || !cas) return holdings;
-    return [...holdings.filter((h) => h.product_type !== 'mutual_fund'), ...cas.holdings];
-  }, [scope, cas, holdings]);
-
-  return {
-    scope: cas ? scope : ('niyom' as MfScope),
-    setScope,
-    holdings: effective,
-    casAvailable: !!cas,
-    casChecked,
-    casStatementTo: cas?.statementTo ?? null,
-  };
+  return { scope, setScope, holdings: filtered, heldAwayCount, casStatementTo };
 }

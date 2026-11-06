@@ -42,7 +42,7 @@ export function PortfolioPage({
   /** NAV date the mutual fund figures are priced at, when newer than the statement. */
   valuedOn?: string | null;
 }) {
-  const mf = useMfScope(clientId, holdings);
+  const mf = useMfScope(holdings);
   const rta = useRtaMf(clientId);
   const baseRows = useMemo(() => fromClientHoldings(mf.holdings), [mf.holdings]);
   const { rows, enriching } = useInvestmentRows('client', baseRows);
@@ -137,19 +137,16 @@ export function PortfolioPage({
           <div className="inline-flex rounded-full border border-border bg-bg-surface p-0.5">
             {(
               [
-                { key: 'niyom', label: 'Through Niyom' },
                 { key: 'all', label: 'All distributors' },
+                { key: 'niyom', label: 'Through Niyom' },
               ] as const
             ).map((o) => {
               const on = mf.scope === o.key;
-              const disabled = o.key === 'all' && !mf.casAvailable;
               return (
                 <button
                   key={o.key}
                   type="button"
-                  disabled={disabled}
                   onClick={() => mf.setScope(o.key)}
-                  title={disabled ? 'Upload your CAS (Consolidated Account Statement) to include funds held with other distributors' : undefined}
                   className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                     on ? 'bg-accent text-on-accent' : 'text-text-secondary hover:text-text-primary'
                   }`}
@@ -160,11 +157,15 @@ export function PortfolioPage({
             })}
           </div>
           <span className="text-[11px] text-text-faint">
-            {mf.scope === 'all'
-              ? `From your CAS${mf.casStatementTo ? ` (to ${new Date(mf.casStatementTo).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}`
-              : mf.casAvailable
-                ? 'Registrar data, updated daily'
-                : 'Upload your CAS to see funds held with other distributors'}
+            {mf.heldAwayCount === 0
+              ? 'All your funds are held through Niyom. Upload your CAS to add funds held with other distributors.'
+              : mf.scope === 'all'
+                ? `Includes ${mf.heldAwayCount} fund${mf.heldAwayCount > 1 ? 's' : ''} held with other distributors, from your CAS${
+                    mf.casStatementTo
+                      ? ` (units as of ${new Date(mf.casStatementTo).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})`
+                      : ''
+                  }`
+                : `Only funds held through Niyom · ${mf.heldAwayCount} fund${mf.heldAwayCount > 1 ? 's' : ''} with other distributors hidden`}
           </span>
         </div>
         <button

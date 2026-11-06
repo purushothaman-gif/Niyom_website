@@ -14,7 +14,8 @@ import { NIYOM, NIYOM_BRAND } from '../../../crm/bonds/bondConstants';
 import { ASSET_META, ASSET_ORDER, summarise, type AssetKey, type InvestmentRow } from '../../../../shared/portal/investments/model';
 import type { RtaSipRow } from '../../../../shared/mf/rtaMf';
 
-export type MfScope = 'niyom' | 'all';
+import type { MfScope } from '../../../../shared/portal/investments/mfScope';
+export type { MfScope };
 
 export interface StatementInput {
   client: {
@@ -266,9 +267,11 @@ export function buildStatementHtml(input: StatementInput): string {
 
   const scopeNote =
     mfScope === 'all'
-      ? `Mutual funds include holdings with <b>all distributors</b>, read from your Consolidated Account Statement${
-          input.casStatementTo ? ` dated up to ${fdate(input.casStatementTo)}` : ''
-        }; those figures are as of that date.`
+      ? `Mutual funds include holdings with <b>all distributors</b>. Funds held through Niyom (${ARN}) are as reported by the registrars (CAMS / KFintech)${
+          input.valuedOn ? `, latest valuation ${fdate(input.valuedOn)}` : ''
+        }; funds held with other distributors are taken from your Consolidated Account Statement${
+          input.casStatementTo ? ` (units as of ${fdate(input.casStatementTo)})` : ''
+        }, valued at the latest available NAV.`
       : `Mutual funds show only holdings made <b>through Niyom (${ARN})</b>, as reported daily by the registrars (CAMS / KFintech)${
           input.valuedOn ? `, latest valuation ${fdate(input.valuedOn)}` : ''
         }.`;
