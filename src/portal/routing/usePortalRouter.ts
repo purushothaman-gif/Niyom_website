@@ -18,6 +18,7 @@ const DEFAULT_VIEW: PortalView = 'dashboard';
 const VALID: PortalView[] = [
   'dashboard',
   'explore',
+  'market-watch',
   'onboarding',
   'portfolio',
   'allocation',

@@ -20,6 +20,7 @@ import UnlistedShares from './shares/UnlistedShares';
 import BrandLogos from './BrandLogos';
 import MarketingContent from './marketing/MarketingContent';
 import FundResearch from './marketing/funds/FundResearch';
+import { MarketWatch } from '../components/marketWatch/MarketWatch';
 import { MfStaffPlaceholder } from '../components/MfStaffPlaceholder';
 import MfFeeds from './mf/MfFeeds';
 import MfBrokerage from './mf/MfBrokerage';
@@ -80,6 +81,7 @@ export default function CRM() {
 
   const validPages = [
     'dashboard',
+    'market_watch',
     'leads',
     'onboarding',
     'deal_confirmation',
@@ -241,6 +243,7 @@ export default function CRM() {
   const renderPage = () => {
     switch (page) {
       case 'dashboard': return <Dashboard employee={employee} onNavigate={navigate} />;
+      case 'market_watch': return <MarketWatch db={supabase} showTitle />;
       case 'leads': return <Leads employee={employee} onNavigate={navigate} pageParams={pageParams} />;
       case 'onboarding': return <ClientOnboarding employee={employee} onNavigate={navigate} pageParams={pageParams} />;
       case 'clients': return <ManageClients employee={employee} onNavigate={navigate} />;

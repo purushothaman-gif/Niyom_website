@@ -444,6 +444,10 @@ verify_jwt = false
 [functions.update-commodity-prices]
 verify_jwt = false
 
+# Market Watch quote cache — pg_cron calls it without a JWT; takes no input.
+[functions.market-watch-refresh]
+verify_jwt = false
+
 # --- Conversion-first public onboarding. start/send-otp/verify-otp are fully
 #     anonymous (no session yet). pan-verify/record-doc/submit run public but
 #     require the client's own bearer token and verify record ownership inside

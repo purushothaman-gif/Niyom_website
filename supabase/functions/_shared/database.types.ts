@@ -5007,6 +5007,90 @@ export type Database = {
           },
         ]
       }
+      market_mf_day_change: {
+        Row: {
+          amfi_category: string | null
+          change_pct: number
+          computed_at: string
+          fund_house: string | null
+          nav: number
+          nav_date: string
+          prev_nav: number
+          prev_nav_date: string
+          scheme_code: string
+          scheme_name: string
+        }
+        Insert: {
+          amfi_category?: string | null
+          change_pct: number
+          computed_at?: string
+          fund_house?: string | null
+          nav: number
+          nav_date: string
+          prev_nav: number
+          prev_nav_date: string
+          scheme_code: string
+          scheme_name: string
+        }
+        Update: {
+          amfi_category?: string | null
+          change_pct?: number
+          computed_at?: string
+          fund_house?: string | null
+          nav?: number
+          nav_date?: string
+          prev_nav?: number
+          prev_nav_date?: string
+          scheme_code?: string
+          scheme_name?: string
+        }
+        Relationships: []
+      }
+      market_quotes: {
+        Row: {
+          as_of: string | null
+          change: number | null
+          change_pct: number | null
+          error: string | null
+          fetched_at: string | null
+          kind: string
+          label: string
+          prev_close: number | null
+          price: number | null
+          sort_order: number
+          source: string | null
+          symbol: string
+        }
+        Insert: {
+          as_of?: string | null
+          change?: number | null
+          change_pct?: number | null
+          error?: string | null
+          fetched_at?: string | null
+          kind: string
+          label: string
+          prev_close?: number | null
+          price?: number | null
+          sort_order?: number
+          source?: string | null
+          symbol: string
+        }
+        Update: {
+          as_of?: string | null
+          change?: number | null
+          change_pct?: number | null
+          error?: string | null
+          fetched_at?: string | null
+          kind?: string
+          label?: string
+          prev_close?: number | null
+          price?: number | null
+          sort_order?: number
+          source?: string | null
+          symbol?: string
+        }
+        Relationships: []
+      }
       mf_asset_class: {
         Row: {
           ambiguous: boolean
@@ -12491,6 +12575,7 @@ export type Database = {
         }
       }
       mail_unsubscribe_by_token: { Args: { p_token: string }; Returns: boolean }
+      market_refresh_mf_day_change: { Args: never; Returns: number }
       mf_folio_base: { Args: { p: string }; Returns: string }
       mf_isins_for_scheme_name: { Args: { p_name: string }; Returns: string[] }
       mf_nav_history_cursor: { Args: never; Returns: string }
@@ -13576,6 +13661,7 @@ export type Database = {
       }
       trigger_bond_yield_refresh: { Args: never; Returns: undefined }
       trigger_commodity_price_update: { Args: never; Returns: undefined }
+      trigger_market_watch_refresh: { Args: never; Returns: undefined }
       trigger_mf_market_data: {
         Args: { p_body: Json; p_function: string }
         Returns: undefined

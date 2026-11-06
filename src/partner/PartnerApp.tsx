@@ -26,6 +26,7 @@ import { ReferralPage } from './features/referral/ReferralPage';
 import { SubmitLeadPage } from './features/referral/SubmitLeadPage';
 import { LeadsPage } from './features/referral/LeadsPage';
 import { ChangePasswordModal } from './features/profile/ChangePasswordModal';
+import { MarketWatchView } from '../portal/features/market/MarketWatchView';
 
 interface PartnerAppProps {
   onLogout: () => void;
@@ -129,6 +130,8 @@ export default function PartnerApp({ onLogout }: PartnerAppProps) {
         return <SubmitLeadPage onSubmitted={refresh} />;
       case 'leads':
         return <LeadsPage leads={snapshot.leads} />;
+      case 'market-watch':
+        return <MarketWatchView surface="partner" />;
       case 'profile':
         return (
           <ProfilePage profile={snapshot.profile} bankAccounts={snapshot.bankAccounts} onChangePassword={() => setShowChangePw(true)} />

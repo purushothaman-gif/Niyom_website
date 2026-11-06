@@ -332,6 +332,7 @@ export type ProductType = 'unlisted_share' | 'secondary_bond' | 'primary_bond' |
 
 export type CRMPage =
   | 'dashboard'
+  | 'market_watch'
   | 'mf_platform'
   | 'mf_feeds'
   | 'mf_brokerage'

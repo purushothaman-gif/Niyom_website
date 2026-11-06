@@ -27,6 +27,7 @@ import {
   Bell,
   LifeBuoy,
   UserRound,
+  Activity,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -34,6 +35,7 @@ import {
 export type PortalView =
   | 'dashboard'
   | 'explore'
+  | 'market-watch'
   | 'onboarding'
   | 'portfolio'
   | 'allocation'
@@ -138,6 +140,13 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Compass,
       },
       {
+        view: 'market-watch',
+        key: 'market-watch',
+        label: 'Market Watch',
+        description: 'Indices, gold, the rupee and fund movers',
+        icon: Activity,
+      },
+      {
         key: 'fixed-deposits',
         label: 'Fixed Deposits',
         description: 'Assured returns',
@@ -233,6 +242,7 @@ export const PRIMARY_VIEWS: { view: PortalView; label: string; icon: LucideIcon 
 export const VIEW_TITLES: Record<PortalView, string> = {
   dashboard: 'Wealth Dashboard',
   explore: 'Explore',
+  'market-watch': 'Market Watch',
   onboarding: 'Complete Your KYC',
   portfolio: 'My Portfolio',
   allocation: 'Asset Allocation',
@@ -258,6 +268,7 @@ export const VIEW_TITLES: Record<PortalView, string> = {
  */
 export const VIEW_SUBTITLES: Partial<Record<PortalView, string>> = {
   explore: 'Popular bonds, mutual funds and unlisted shares — picked for you.',
+  'market-watch': 'Where the markets stand today. Indicative figures, each with its own as-of time.',
   portfolio: 'Every holding you have with us, valued at the latest published NAV.',
   allocation: 'How your money is spread across asset classes, products and fund houses.',
   'mutual-funds': 'Your mutual fund holdings, investments and SIPs.',

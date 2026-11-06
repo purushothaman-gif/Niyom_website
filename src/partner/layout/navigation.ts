@@ -14,6 +14,7 @@ import {
   ClipboardList,
   UserRound,
   TrendingUp,
+  Activity,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -28,6 +29,7 @@ export type PartnerView =
   | 'referral'
   | 'submit-lead'
   | 'leads'
+  | 'market-watch'
   | 'profile';
 
 export interface NavItem {
@@ -58,6 +60,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // Partner SSO isn't specced yet; Sidebar hides this until VITE_MF_SSO_STAFF.
       { view: 'mutual-funds', key: 'mutual-funds', label: 'Mutual Funds', icon: TrendingUp },
       { view: 'leads', key: 'leads', label: 'My Leads', icon: ClipboardList },
+      { view: 'market-watch', key: 'market-watch', label: 'Market Watch', icon: Activity },
     ],
   },
   {
@@ -99,6 +102,7 @@ export const VIEW_TITLES: Record<PartnerView, string> = {
   referral: 'Referral Link',
   'submit-lead': 'Submit a Lead',
   leads: 'My Leads',
+  'market-watch': 'Market Watch',
   profile: 'Profile',
 };
 

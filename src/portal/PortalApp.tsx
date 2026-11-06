@@ -16,6 +16,7 @@ import { MutualFundsModule } from './features/mutual-funds/MutualFundsModule';
 import { MfLaunchPage } from './features/mutual-funds/MfLaunchPage';
 import { ExploreHub, type ExploreScreen } from './features/explore/ExploreHub';
 import { WatchlistProvider } from './watchlist/Watchlist';
+import { MarketWatchView } from './features/market/MarketWatchView';
 import { useMfLaunch } from './features/mutual-funds/useMfLaunch';
 import { BondsModule } from './features/bonds/BondsModule';
 import { SharesModule } from './features/shares/SharesModule';
@@ -247,6 +248,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
     if (view === 'documents') return <DocumentsPage clientId={clientId} />;
     if (view === 'notifications') return <NotificationsPage client={client} onNavigate={navigate} />;
     if (view === 'support') return <SupportPage clientId={clientId} />;
+    if (view === 'market-watch') return <MarketWatchView surface="client" />;
 
     // Snapshot-backed views (need the client record / holdings).
     const snapshotView =

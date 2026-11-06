@@ -8,7 +8,7 @@ import {
   Send, Target, Landmark, LifeBuoy, Sparkles, LineChart, BadgePercent, Gem,
   CalendarCheck, CalendarClock, CalendarDays, Coins, Receipt, Fingerprint,
   BadgeIndianRupee, SlidersHorizontal, Mail, Trophy, ExternalLink, Database,
-  Image as ImageIcon,
+  Image as ImageIcon, Activity,
 } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
@@ -53,6 +53,7 @@ const NAV: NavSection[] = [
     id: 'overview', label: null,
     items: [
       { key: 'dashboard' as CRMPage,         label: 'Dashboard',         icon: LayoutDashboard },
+      { key: 'market_watch' as CRMPage,      label: 'Market Watch',      icon: Activity },
       // Opens the MF platform's dashboard in a new tab (see mfStaffUrl below).
       { key: 'mf_platform' as CRMPage,       label: 'MF Platform',       icon: LineChart },
     ],
