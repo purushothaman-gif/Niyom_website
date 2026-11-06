@@ -112,8 +112,10 @@ export const HoldingService = {
     if (isDemoClientSession()) {
       return mfSsoEnabled() ? withoutMutualFunds(demoSnapshot()) : demoSnapshot();
     }
-    // Mutual funds live on the MF platform: neither our MF rows nor an
-    // imported statement may appear beside it, so skip the statement read.
+    // Mutual funds live on the MF platform: our in-house MF rows give way to the
+    // daily registrar feed. An imported CAS is still read, though — it is the one
+    // source for funds the client holds AWAY from us (other distributors), which
+    // the registrar feed by definition cannot see.
     const mfOnPlatform = mfSsoEnabled();
     const [clientRes, holdingsRes, txnRes, latestMfRes, cas] = await Promise.all([
       supabase.from('nw_clients').select('*').eq('id', clientId).maybeSingle(),
@@ -143,8 +145,10 @@ export const HoldingService = {
         .limit(1)
         .maybeSingle(),
       // Best-effort: a client with no import, or a failure reading one, still
-      // gets the portfolio we hold for them rather than an error screen.
-      mfOnPlatform ? null : CasPortfolioService.getPortfolio(clientId).catch(() => null),
+      // gets the portfolio we hold for them rather than an error screen. Read on
+      // the platform path too — not for the funds we service (the registrar feed
+      // owns those) but for the held-away ones only a CAS carries.
+      CasPortfolioService.getPortfolio(clientId).catch(() => null),
     ]);
 
     const manual = (holdingsRes.data as NWHolding[]) ?? [];
@@ -173,23 +177,51 @@ export const HoldingService = {
       valuedOn: valuationDate(holdings),
     };
     if (!mfOnPlatform) return snapshot;
-    // Mutual funds run on the platform: drop any in-house MF rows, then fold in
-    // the registrar feed (mf_rta_*) as the authoritative, daily-updated source,
-    // so every view built from this snapshot — dashboard, portfolio, allocation,
-    // reports — shows the client's real funds instead of nothing.
+    // Mutual funds run on the platform, so the registrar feed (mf_rta_*) is the
+    // authoritative, daily source for funds the client holds THROUGH US; in-house
+    // MF rows and the CAS copies of those same funds are dropped to avoid double
+    // counting. On top of that we fold in the client's HELD-AWAY funds — the CAS
+    // schemes not serviced under our ARN (is_ours = false), which the registrar
+    // can never see — priced live by ISIN, so "external funds" actually appear.
     const stripped = withoutMutualFunds(snapshot);
     const rta = await fetchRtaMf(supabase, clientId).catch(() => null);
-    if (!rta || !rta.holdings.length) return stripped;
-    const mf = rta.holdings.map((h) => toRegistrarMfHolding(clientId, h));
-    const merged = [...stripped.holdings, ...mf];
+    const registrarMf = (rta?.holdings ?? []).map((h) => toRegistrarMfHolding(clientId, h));
+
+    // Dedupe held-away rows against the registrar feed by folio, so a fund we
+    // service is never also pulled from the CAS (is_ours should already exclude
+    // it; the folio check is a belt-and-braces guard against a stale ARN match).
+    const registrarFolios = new Set(registrarMf.map((h) => normFolioKey(h.folio_number)));
+    const heldAwaySrc = (cas?.holdings ?? []).filter(
+      (h) =>
+        h.product_type === 'mutual_fund' &&
+        h.cas != null &&
+        !h.cas.isOurs &&
+        !registrarFolios.has(normFolioKey(h.folio_number ?? h.cas.folioNumber)),
+    );
+    const heldAwayQuotes = await loadNavQuotes(heldAwaySrc.map((h) => h.cas?.isin ?? h.isin ?? ''));
+    const heldAway = heldAwaySrc.map((h) => applyNav(h, heldAwayQuotes.get(h.cas?.isin ?? h.isin ?? '')));
+
+    const merged = [...stripped.holdings, ...registrarMf, ...heldAway];
     return {
       ...stripped,
       holdings: merged,
-      valuedOn: rta.snapshotDate ?? valuationDate(merged),
+      // A statement was imported — carry its context (held-away funds are stated
+      // as of its date) even though the registrar drives the funds we service.
+      mfSource: cas ? 'cas' : stripped.mfSource,
+      casStatementTo: cas?.statementTo ?? null,
+      casStatementFrom: cas?.statementFrom ?? null,
+      casFlows: cas?.flows ?? [],
+      casFreshness: assessCasFreshness(cas?.statementTo ?? null, latestOwnMfTxnDate),
+      historyComplete: cas ? cas.historyComplete : true,
+      valuedOn: rta?.snapshotDate ?? valuationDate(merged),
       dayChange: portfolioDayChange(merged),
     };
   },
 };
+
+/** Folio compared without spacing or case, to dedupe registrar vs CAS rows. */
+const normFolioKey = (f: string | null | undefined): string =>
+  (f ?? '').replace(/\s+/g, '').toUpperCase();
 
 /**
  * A registrar-fed mutual-fund holding as a PortalHolding. When the transaction
