@@ -214,7 +214,7 @@ function buildPdfOpts(confirmationNumber: string, dealDate: string, scale: numbe
   return {
     margin: 0,
     filename: `DEAL-CONFIRMATION-${confirmationNumber}-${dealDate}.pdf`,
-    image: { type: 'png' as const, quality: 1 },
+    image: { type: 'jpeg' as const, quality: 0.9 },
     html2canvas: { scale, useCORS: true, logging: false, windowWidth: 794, letterRendering: true },
     jsPDF: { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const },
     pagebreak: { mode: ['css', 'legacy'] as string[] },

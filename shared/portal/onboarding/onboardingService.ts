@@ -5,6 +5,7 @@
  */
 import { clientSupabase as supabase } from '../../lib/supabase';
 import { getEnv } from '../../platform/env';
+import { compressImageFile } from '../../lib/compressImage';
 
 const BUCKET = 'crm-documents';
 
@@ -35,8 +36,9 @@ export const OnboardingService = {
     clientId: string,
     clientCode: string,
     docType: 'PAN' | 'CML' | 'BANK',
-    file: File,
+    original: File,
   ): Promise<{ ok: boolean; error?: string }> {
+    const file = await compressImageFile(original);
     /*
      * The browser has a `File`; a phone has a picked URI it read into bytes.
      * Both end in the same upload, so this normalises and delegates.

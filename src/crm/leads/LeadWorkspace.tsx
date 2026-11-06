@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { compressImageFile } from '../../../shared/lib/compressImage';
 import { NWEmployee, CRMPage } from '../types';
 import {
   ArrowLeft, Phone, MessageCircle, Mail, Pencil, UserPlus, StickyNote,
@@ -548,14 +549,15 @@ function DocUploadInput({ leadId, leadCode, employee, onUploaded, disabled }:
     if (!pending) return;
     setBusy(true); setErr('');
     try {
-      const ext = pending.name.substring(pending.name.lastIndexOf('.'));
+      const file = await compressImageFile(pending);
+      const ext = file.name.substring(file.name.lastIndexOf('.'));
       const path = `leads/${leadCode}/${docType}/${Date.now()}${ext}`;
-      const { error: upErr } = await supabase.storage.from('crm-documents').upload(path, pending, { upsert: true });
+      const { error: upErr } = await supabase.storage.from('crm-documents').upload(path, file, { upsert: true });
       if (upErr) throw upErr;
       await supabase.from('nw_lead_documents').insert([{
         lead_id: leadId, employee_id: employee.id, doc_type: docType,
-        file_name: pending.name, file_path: path, file_size: pending.size,
-        mime_type: pending.type, uploaded_by_name: employee.full_name,
+        file_name: pending.name, file_path: path, file_size: file.size,
+        mime_type: file.type, uploaded_by_name: employee.full_name,
       }]);
       await supabase.from('nw_lead_activities').insert([{
         lead_id: leadId, employee_id: employee.id, action: 'Document Uploaded', description: `${docType}: ${pending.name}`,

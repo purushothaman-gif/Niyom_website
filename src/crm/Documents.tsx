@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
+import { compressImageFile, swapExt } from '../../shared/lib/compressImage';
 import { NWEmployee, NWClient, NWClientBankAccount } from './types';
 import {
   Folder, FolderOpen, Upload, Download, Trash2, Eye, Search,
@@ -208,8 +209,9 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
 
       setUploadItems(prev => prev.map((x, idx) => idx === i ? { ...x, status: 'uploading', progress: 10 } : x));
 
-      const path = `clients/${selectedClient.client_code}/${uploadFolder}/${item.name}`;
-      const { error: upErr } = await supabase.storage.from('crm-documents').upload(path, item.file, { upsert: true });
+      const file = await compressImageFile(item.file);
+      const path = `clients/${selectedClient.client_code}/${uploadFolder}/${file === item.file ? item.name : swapExt(item.name, file.name)}`;
+      const { error: upErr } = await supabase.storage.from('crm-documents').upload(path, file, { upsert: true });
 
       if (upErr) {
         setUploadItems(prev => prev.map((x, idx) => idx === i ? { ...x, status: 'error', error: upErr.message, progress: 0 } : x));
@@ -224,7 +226,7 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
         document_type: uploadFolder,
         file_name: item.name,
         file_path: path,
-        file_size: item.file.size,
+        file_size: file.size,
         mime_type: item.file.type,
         uploaded_by_name: employee.full_name,
         bank_account_id: uploadFolder === 'BANK' ? (uploadBankAccountId || null) : null,
@@ -301,6 +303,8 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
     setReplacingId(doc.id);
 
     // Overwrite the existing object at the same path (no new copy, no orphan).
+    // keepType: the path (and its extension) is fixed, so the format must stay.
+    file = await compressImageFile(file, { keepType: true });
     const { error: upErr } = await supabase.storage
       .from('crm-documents')
       .upload(doc.file_path, file, { upsert: true, contentType: file.type });

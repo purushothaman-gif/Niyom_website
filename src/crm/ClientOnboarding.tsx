@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { compressImageFile, swapExt } from '../../shared/lib/compressImage';
 import { passwordError, isPasswordStrong } from '../lib/passwordPolicy';
 import { NWEmployee, NWDSA, CRMPage } from './types';
 import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
@@ -386,7 +387,9 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
     setStep(s => s + 1);
   };
 
-  const uploadFile = async (file: File, path: string): Promise<string | null> => {
+  const uploadFile = async (original: File, rawPath: string): Promise<string | null> => {
+    const file = await compressImageFile(original);
+    const path = file === original ? rawPath : swapExt(rawPath, file.name);
     const { data, error: upErr } = await supabase.storage.from('crm-documents').upload(path, file, { upsert: true });
     if (upErr || !data) return null;
     return data.path;
@@ -526,7 +529,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
           client_id: client.id,
           employee_id: employee.id,
           document_type: folderKey,
-          file_name: fname,
+          file_name: storedPath.split('/').pop() || fname,
           file_path: storedPath,
           file_size: doc.file.size,
           mime_type: doc.file.type,

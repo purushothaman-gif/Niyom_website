@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { supabase } from '../lib/supabase';
+import { compressImageFile } from '../../shared/lib/compressImage';
 import { NWEmployee, NWClient } from './types';
 import { DOC_FOLDERS, DocFolderKey, buildFileName, validateFile } from './Documents';
 import {
@@ -196,6 +197,8 @@ export default function AdminDocuments({ employee }: Props) {
     setReplacingId(doc.id);
 
     // Overwrite the existing object at the same path (no new copy, no orphan).
+    // keepType: the path (and its extension) is fixed, so the format must stay.
+    file = await compressImageFile(file, { keepType: true });
     const { error: upErr } = await supabase.storage
       .from('crm-documents')
       .upload(doc.file_path, file, { upsert: true, contentType: file.type });

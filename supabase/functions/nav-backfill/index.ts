@@ -17,13 +17,16 @@
 //                       change, so one run settles that date permanently.
 //   { mode: "history" } the full-history queue: settles the next week below the
 //                       oldest settled window, walking back to 01-Apr-2006.
-//                       Scheduled every minute by pg_cron until done.
+//                       RETIRED 2026-11-07 — no longer scheduled.
+//   { mode: "scheme", isins: [...] }  full history for up to 10 specific ISINs
+//                       from mfapi.in; fired on demand when a fund first appears.
 //
 // Auth matches nav-refresh: verify_jwt off so pg_cron can reach it, and a
 // NAV_REFRESH_SECRET header required so nobody else can.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { backfillNavOn, GRANDFATHER_DATE, runHistoryBackfill } from '../_shared/cas/navHistory.ts';
 import { envConfig } from '../_shared/cas/db.ts';
+import { loadSchemeHistories } from '../_shared/cas/navScheme.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -52,14 +55,25 @@ Deno.serve(async (req) => {
   // body at all.
   let date = GRANDFATHER_DATE;
   let mode: string | null = null;
+  let isins: unknown[] = [];
   try {
     const body = await req.json();
     if (typeof body?.date === 'string') date = body.date;
     if (typeof body?.mode === 'string') mode = body.mode;
+    if (Array.isArray(body?.isins)) isins = body.isins;
   } catch {
     // no body — take the default
   }
 
+  // Full history for specific funds — fired by mf_nav_track() the moment a fund
+  // first appears anywhere, and by the 10-minute retry sweep.
+  if (mode === 'scheme') {
+    const results = await loadSchemeHistories(envConfig(), isins);
+    return json({ ok: results.every((r) => r.ok), results }, 200);
+  }
+
+  // Retired 2026-11-07: the all-schemes backfill. Kept callable for a manual
+  // one-off, but no longer scheduled (see 20261107010000_nav_history_on_demand).
   if (mode === 'history') {
     const run = await runHistoryBackfill(envConfig());
     return json(run, run.ok ? 200 : 502);

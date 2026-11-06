@@ -352,7 +352,7 @@ async function waitForImages(root: HTMLElement): Promise<void> {
 const PDF_OPTS = (filename: string) => ({
   margin: 0,
   filename,
-  image: { type: 'png' as const, quality: 1 },
+  image: { type: 'jpeg' as const, quality: 0.9 },
   html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 794 },
   jsPDF: { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const },
   pagebreak: { mode: ['css', 'legacy'] as string[] },

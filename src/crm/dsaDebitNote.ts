@@ -315,7 +315,7 @@ export async function generateDebitNotePdfBlob(input: DebitNoteInput): Promise<B
     const opt = {
       margin: 0,
       filename: `${input.debitNoteNumber}.pdf`,
-      image: { type: 'png' as const, quality: 1 },
+      image: { type: 'jpeg' as const, quality: 0.9 },
       html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 794 },
       jsPDF: { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const },
       pagebreak: { mode: ['css', 'legacy'] as string[] },
