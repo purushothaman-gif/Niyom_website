@@ -5671,6 +5671,7 @@ export type Database = {
           holdings_upserted: number
           id: string
           imported_by: string | null
+          layout: Json | null
           matched: number
           message_id: string | null
           registrar: string | null
@@ -5697,6 +5698,7 @@ export type Database = {
           holdings_upserted?: number
           id?: string
           imported_by?: string | null
+          layout?: Json | null
           matched?: number
           message_id?: string | null
           registrar?: string | null
@@ -5723,6 +5725,7 @@ export type Database = {
           holdings_upserted?: number
           id?: string
           imported_by?: string | null
+          layout?: Json | null
           matched?: number
           message_id?: string | null
           registrar?: string | null

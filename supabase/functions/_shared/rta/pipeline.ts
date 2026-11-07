@@ -27,10 +27,40 @@ export const MAX_ZIP_BYTES = 8 * 1024 * 1024;
 
 export class RtaError extends Error {
   status: number;
-  constructor(message: string, status = 400) {
+  /** For an unrecognised feed: its column layout (names only), logged for a future parser. */
+  layout?: FeedLayout;
+  constructor(message: string, status = 400, layout?: FeedLayout) {
     super(message);
     this.status = status;
+    this.layout = layout;
   }
+}
+
+/**
+ * The shape of a feed we could not recognise — column NAMES and counts only,
+ * never a value, so it is safe to store in the (admin-readable) import log.
+ * This is what lets a new CAMS/KFintech report be wired from the real file.
+ */
+// A type alias (not an interface) so it is assignable to the generated Json column type.
+export type FeedLayout = {
+  format: 'dbf' | 'csv';
+  member: string;
+  columns: string[];
+  rows: number;
+  declaredRows?: number;
+};
+
+export function dbfLayout(member: string, table: DbfTable): FeedLayout {
+  return {
+    format: 'dbf', member,
+    columns: table.fields.map((f) => `${f.name}:${f.type}${f.length}`),
+    rows: table.rows.length,
+    declaredRows: table.declaredCount,
+  };
+}
+
+export function csvLayout(member: string, header: string[], rows: number): FeedLayout {
+  return { format: 'csv', member, columns: header.map((h) => h.trim()).filter(Boolean), rows };
 }
 
 export async function sha256Hex(data: Uint8Array): Promise<string> {
@@ -570,13 +600,15 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
         const parsed = parseWbtrn(csv, registrar);
         summary = await importTransactions(sb, parsed.txns, registrar, parsed.snapshotDate ?? snap);
       } else {
-        throw new RtaError('Unrecognised KFintech CSV feed (expected a SIP registration, Client-wise AUM, or Transaction Feeds report).', 422);
+        throw new RtaError('Unrecognised KFintech CSV feed (expected a SIP registration, Client-wise AUM, or Transaction Feeds report).', 422,
+          csvLayout(name, csv.header, csv.rows.length));
       }
     } else {
       const table = parseDbf(bytes);
       report = detectReport(table);
       if (!report) {
-        throw new RtaError('Unrecognised registrar feed (not a WBR9 holdings, WBR49 SIP, WBR2 transaction, WBR77 brokerage or WBR39 scheme-master file).', 422);
+        throw new RtaError('Unrecognised registrar feed (not a WBR9 holdings, WBR49 SIP, WBR2 transaction, WBR77 brokerage or WBR39 scheme-master file).', 422,
+          dbfLayout(name, table));
       }
       if (table.truncated) {
         // The DBF ended before its declared record count — the feed is short
@@ -620,6 +652,7 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       await sb.from('mf_rta_import_log').insert({
         registrar, report, source_file: sourceFile, file_hash: fileHash, message_id: messageId, source,
         status: 'error', error: message.slice(0, 500), duration_ms: Date.now() - started, imported_by: importedBy,
+        layout: e instanceof RtaError ? (e.layout ?? null) : null,
       });
     } catch { /* best-effort */ }
     throw new RtaError(message, status);

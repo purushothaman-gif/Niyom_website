@@ -45,8 +45,11 @@ var SENDERS = [
   //     for the since-inception backfill of first-investment date + cost).
   // A "no data" feed email carries no download link, so it yields no feed and
   // is just marked Done.
+  //   - Master AUM / Investor Master (WBMST) and SIP Termination (WSTPT) are
+  //     forwarded too (added 2026-11-07). Until their parsers land, the ingest
+  //     logs their column layout and treats them as handled — no retry loop.
   { email: 'distributorcare@kfintech.com', registrar: 'KFINTECH', mode: 'link',
-    subjectMatch: /sip registration|subscribed sip|client-wise aum|transaction feeds|transaction report/i },
+    subjectMatch: /sip registration|subscribed sip|client-wise aum|transaction feeds|transaction report|master aum|investor master|sip termination/i },
 ];
 
 var DONE_LABEL = 'NiyomRTA/Done';
