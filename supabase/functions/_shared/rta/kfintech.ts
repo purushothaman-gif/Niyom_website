@@ -195,3 +195,49 @@ export function parseKfAum(table: CsvTable, registrar = 'KFINTECH'): Wbr9Parsed 
 
   return { snapshotDate, folios, holdings };
 }
+
+// ---------------------------------------------------------------------------
+// KFintech Investor Master (WBMST; MFSD211 on-demand / MFSD311 subscribed).
+// One row per folio, ~140 columns, NO balances — it is KFintech's folio master,
+// the counterpart of the CAMS WBR9 static block. Only the fields the folio
+// master stores are read. The file also carries Aadhaar references, bank
+// account numbers, dates of birth and nominee details: those are deliberately
+// NOT read or stored.
+
+const MASTER_REQUIRED = ['Folio', 'Investor Name', 'PAN Number', 'Product Code'];
+
+/** Does this CSV look like a KFintech Investor Master (and not the AUM report)? */
+export function isKfMaster(table: CsvTable): boolean {
+  const names = new Set(table.header);
+  return MASTER_REQUIRED.every((r) => names.has(r)) && !names.has('Balance');
+}
+
+export function parseKfMaster(table: CsvTable, registrar = 'KFINTECH'): Wbr9Parsed {
+  if (!isKfMaster(table)) throw new Error('This file is not a KFintech Investor Master report.');
+  const folios = new Map<string, RtaFolioStage>();
+  let snapshotDate: string | null = null;
+  for (const row of table.rows) {
+    const folio = txt(row.Folio);
+    if (!folio) continue;
+    const snap = kfDate(row['Report Date']);
+    if (snap && (!snapshotDate || snap > snapshotDate)) snapshotDate = snap;
+    if (folios.has(folio)) continue; // one master row per folio (a folio spans schemes)
+    folios.set(folio, {
+      registrar,
+      folio,
+      amc_code: txt(row.Fund),
+      holder_name: txt(row['Investor Name']),
+      pan: pan(row['PAN Number']),
+      joint_names: [txt(row['Joint Name 1']), txt(row['Joint Name 2'])].filter((x): x is string => !!x),
+      joint_pans: [pan(row.PAN2), pan(row.PAN3)].filter((x): x is string => !!x),
+      tax_status: txt(row['Tax Status']),
+      arn: txt(row['Broker Code']),
+      sub_broker: null,
+      email: txt(row.Email),
+      mobile: txt(row['Mobile Number']),
+      demat: txt(row.DPID),
+      folio_open_date: null,
+    });
+  }
+  return { snapshotDate, folios, holdings: [] };
+}

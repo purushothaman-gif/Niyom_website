@@ -15,7 +15,8 @@ import { parseCsv } from './csv.ts';
 import { parseWbr9, type RtaFolioStage, type RtaHoldingStage } from './wbr9.ts';
 import { parseWbr49, type RtaSipStage } from './wbr49.ts';
 import { isWbr2, parseWbr2 } from './wbr2.ts';
-import { isKfAum, isKfSip, parseKfAum, parseKfSip } from './kfintech.ts';
+import { isKfAum, isKfMaster, isKfSip, parseKfAum, parseKfMaster, parseKfSip } from './kfintech.ts';
+import { isWbr22, isWbr53, parseWbr22, parseWbr53 } from './wbr53.ts';
 import { isWbtrn, parseWbtrn } from './wbtrn.ts';
 import type { RtaTxnStage } from './txns.ts';
 import { isWbr77, parseWbr77 } from './wbr77.ts';
@@ -76,7 +77,9 @@ export function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-export type RtaReport = 'WBR9' | 'WBR49' | 'WSREG' | 'WBCUM' | 'WBR2' | 'WBTRN' | 'WBR77' | 'WBR39';
+export type RtaReport =
+  | 'WBR9' | 'WBR49' | 'WSREG' | 'WBCUM' | 'WBR2' | 'WBTRN' | 'WBR77' | 'WBR39'
+  | 'WBR53' | 'WBR22' | 'WBMST';
 
 /** Which report is this? Matched by column presence, not file name. */
 export function detectReport(table: DbfTable): RtaReport | null {
@@ -84,6 +87,10 @@ export function detectReport(table: DbfTable): RtaReport | null {
   // WBR77 first: it also carries FOLIO_NO + AUTO_AMOUN, which WBR49 keys on.
   if (isWbr77(table)) return 'WBR77';
   if (['FOLIOCHK', 'CLOS_BAL', 'SCH_NAME'].every((n) => names.has(n))) return 'WBR9';
+  // Full-book holdings snapshots. WBR53 shares FOLIOCHK/CLOS_BAL with WBR9 but
+  // has no SCH_NAME, so the WBR9 test above never claims it.
+  if (isWbr53(table)) return 'WBR53';
+  if (isWbr22(table)) return 'WBR22';
   if (isWbr39(table)) return 'WBR39';
   if (['FOLIO_NO', 'AUT_TRNTYP', 'AUTO_AMOUN'].every((n) => names.has(n))) return 'WBR49';
   if (isWbr2(table)) return 'WBR2';
@@ -242,6 +249,30 @@ async function importHoldings(
     matched,
     unmatched,
   };
+}
+
+/**
+ * WBR53 carries no scheme names: label them from the CAMS scheme master
+ * (WBR39 → mf_rta_schemes) where it knows the code. Anything still unnamed
+ * keeps the name a WBR9 import already stored (the DB never blanks it).
+ */
+async function withSchemeNames<T extends { holdings: RtaHoldingStage[] }>(sb: SupabaseClient, parsed: T): Promise<T> {
+  const codes = [...new Set(parsed.holdings.filter((h) => !h.scheme_name).map((h) => h.scheme_code))];
+  if (!codes.length) return parsed;
+  const { data } = await sb.from('mf_rta_schemes').select('amc_code, scheme_code, scheme_name').in('scheme_code', codes);
+  const byKey = new Map<string, string>();
+  const byCode = new Map<string, string | null>();
+  for (const r of (data ?? []) as { amc_code: string | null; scheme_code: string; scheme_name: string | null }[]) {
+    if (!r.scheme_name) continue;
+    byKey.set(`${r.amc_code ?? ''}|${r.scheme_code}`, r.scheme_name);
+    // A code shared by two AMCs is ambiguous by itself: only use it when unique.
+    byCode.set(r.scheme_code, byCode.has(r.scheme_code) ? null : r.scheme_name);
+  }
+  for (const h of parsed.holdings) {
+    if (h.scheme_name) continue;
+    h.scheme_name = byKey.get(`${h.amc_code ?? ''}|${h.scheme_code}`) ?? byCode.get(h.scheme_code) ?? null;
+  }
+  return parsed;
 }
 
 /** CAMS WBR9: parse the DBF, then share the holdings upsert. */
@@ -595,19 +626,22 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
       } else if (isKfAum(csv)) {
         report = 'WBCUM';
         summary = await importHoldings(sb, parseKfAum(csv, registrar));
+      } else if (isKfMaster(csv)) {
+        report = 'WBMST';
+        summary = await importHoldings(sb, parseKfMaster(csv, registrar));
       } else if (isWbtrn(csv)) {
         report = 'WBTRN';
         const parsed = parseWbtrn(csv, registrar);
         summary = await importTransactions(sb, parsed.txns, registrar, parsed.snapshotDate ?? snap);
       } else {
-        throw new RtaError('Unrecognised KFintech CSV feed (expected a SIP registration, Client-wise AUM, or Transaction Feeds report).', 422,
+        throw new RtaError('Unrecognised KFintech CSV feed (expected a SIP registration, Client-wise AUM, Investor Master, or Transaction Feeds report).', 422,
           csvLayout(name, csv.header, csv.rows.length));
       }
     } else {
       const table = parseDbf(bytes);
       report = detectReport(table);
       if (!report) {
-        throw new RtaError('Unrecognised registrar feed (not a WBR9 holdings, WBR49 SIP, WBR2 transaction, WBR77 brokerage or WBR39 scheme-master file).', 422,
+        throw new RtaError('Unrecognised registrar feed (not a WBR9/WBR22/WBR53 holdings, WBR49 SIP, WBR2 transaction, WBR77 brokerage or WBR39 scheme-master file).', 422,
           dbfLayout(name, table));
       }
       if (table.truncated) {
@@ -624,6 +658,8 @@ export async function runImport(sb: SupabaseClient, opts: RunImportOptions): Pro
         case 'WBR77': summary = await importWbr77(sb, table, registrar, fileHash); break;
         case 'WBR39': summary = await importWbr39(sb, table, registrar, snap); break;
         case 'WBR9': summary = await importWbr9(sb, table, registrar); break;
+        case 'WBR53': summary = await importHoldings(sb, await withSchemeNames(sb, parseWbr53(table, registrar))); break;
+        case 'WBR22': summary = await importHoldings(sb, parseWbr22(table, registrar)); break;
         case 'WBR2': summary = await importWbr2(sb, table, registrar); break;
         default: summary = await importWbr49(sb, table, registrar, snap);
       }
