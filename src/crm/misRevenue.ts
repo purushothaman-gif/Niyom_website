@@ -32,6 +32,14 @@ export interface MISRow {
   notes: string;
 }
 
+/**
+ * Last month whose MF brokerage comes from the retired manual Excel upload
+ * (mf_brokerage). Every later month is read from the CAMS WBR77 feed
+ * (mf_rta_brokerage). Don't move this back: those months are closed and
+ * incentives were paid on the uploaded figures.
+ */
+export const MANUAL_BROKERAGE_LAST_MONTH = '2026-09-01';
+
 export function getLastDayOfMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
 }
@@ -416,25 +424,22 @@ export async function computeMisRows(
     }
 
     // ---------------------------------------------------------------------
-    // Actual MF brokerage (month-on-month, client-wise). The manual Excel upload
-    // page was retired 2026-11-09; rows already in mf_brokerage (Jul–Sep 2026)
-    // still count here. This is the
-    // real mutual-fund revenue, ex-GST, credited to the client's RM in the
-    // month it was earned — it supersedes the theoretical trail above for MF.
+    // Actual MF brokerage — ex-GST, client-wise, credited to the client's RM in
+    // the month it was earned. Two sources, split by month so a payout is never
+    // counted twice:
+    //   • up to MANUAL_BROKERAGE_LAST_MONTH: the retired manual Excel upload
+    //     (mf_brokerage). Kept as-is because those months are closed and
+    //     incentives were already paid on them.
+    //   • after it: the CAMS WBR77 mailback (mf_rta_brokerage, brokerage_month),
+    //     summed per client. Unmatched lines (no client yet) are not credited
+    //     until they are mapped on Brokerage MIS.
     // ---------------------------------------------------------------------
     {
-      const { data: broks } = await supabase
-        .from('mf_brokerage')
-        .select('client_id, brokerage, period_label')
-        .in('client_id', clientIds)
-        .eq('period_month', startDate);
-      for (const b of (broks ?? []) as { client_id: string; brokerage: number | string; period_label: string | null }[]) {
-        const client = clientList.find(c => c.id === b.client_id);
-        if (!client) continue;
-        const rev = Number(b.brokerage) || 0;
-        if (rev === 0) continue;
+      const pushBrokerage = (clientId: string, rev: number, note: string) => {
+        const client = clientList.find(c => c.id === clientId);
+        if (!client || rev === 0) return;
         computed.push({
-          client_id: b.client_id,
+          client_id: clientId,
           employee_id: client.employee_id ?? null,
           client_name: client.full_name,
           client_code: client.client_code,
@@ -443,8 +448,59 @@ export async function computeMisRows(
           product_name: 'Mutual Fund brokerage',
           revenue_type: 'mf_brokerage',
           revenue: rev,
-          notes: `Actual MF brokerage (ex-GST)${b.period_label ? ` · ${b.period_label}` : ''}`,
+          notes: note,
         });
+      };
+
+      if (startDate <= MANUAL_BROKERAGE_LAST_MONTH) {
+        const { data: broks } = await supabase
+          .from('mf_brokerage')
+          .select('client_id, brokerage, period_label')
+          .in('client_id', clientIds)
+          .eq('period_month', startDate);
+        for (const b of (broks ?? []) as { client_id: string; brokerage: number | string; period_label: string | null }[]) {
+          pushBrokerage(b.client_id, Number(b.brokerage) || 0,
+            `Actual MF brokerage (ex-GST)${b.period_label ? ` · ${b.period_label}` : ''}`);
+        }
+      } else {
+        const lines: { client_id: string | null; brokerage: number | string; category: string; scheme_code: string | null }[] = [];
+        const PAGE = 1000;
+        // Chunk the client filter (long .in() lists overflow the URL) and page
+        // each chunk past PostgREST's 1000-row cap.
+        for (let i = 0; i < clientIds.length; i += 300) {
+          const ids = clientIds.slice(i, i + 300);
+          for (let from = 0; ; from += PAGE) {
+            const { data, error } = await supabase
+              .from('mf_rta_brokerage')
+              .select('client_id, brokerage, category, scheme_code')
+              .in('client_id', ids)
+              .eq('brokerage_month', startDate)
+              .order('id')
+              .range(from, from + PAGE - 1);
+            // Same policy as the other revenue sources here: a failed read must not
+            // take the whole MIS page down, but it must not be silent either.
+            if (error) { console.error('MIS: CAMS MF brokerage could not be loaded', error); break; }
+            lines.push(...((data ?? []) as typeof lines));
+            if (!data || data.length < PAGE) break;
+          }
+        }
+        const byClient = new Map<string, { rev: number; lines: number; schemes: Set<string>; trail: number }>();
+        for (const l of lines) {
+          if (!l.client_id) continue;
+          const agg = byClient.get(l.client_id) ?? { rev: 0, lines: 0, schemes: new Set<string>(), trail: 0 };
+          const amt = Number(l.brokerage) || 0;
+          agg.rev += amt;
+          agg.lines += 1;
+          if (l.scheme_code) agg.schemes.add(l.scheme_code);
+          if (l.category === 'trail') agg.trail += amt;
+          byClient.set(l.client_id, agg);
+        }
+        for (const [clientId, a] of byClient) {
+          const rev = Math.round(a.rev * 100) / 100;
+          const mix = a.trail === a.rev ? 'trail' : a.trail === 0 ? 'upfront/other' : 'trail + upfront';
+          pushBrokerage(clientId, rev,
+            `CAMS brokerage (ex-GST) · ${a.lines} line${a.lines === 1 ? '' : 's'}, ${a.schemes.size} scheme${a.schemes.size === 1 ? '' : 's'} · ${mix}`);
+        }
       }
     }
 

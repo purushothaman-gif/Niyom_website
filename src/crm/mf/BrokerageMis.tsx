@@ -7,8 +7,9 @@
 // only panels (reconciliation, AUM-without-brokerage, unmatched lines, imports)
 // read tables RMs cannot see at all.
 //
-// This page REPORTS brokerage; it does not feed MIS revenue (MIS still reads
-// mf_brokerage) and holds no payout/incentive formula.
+// This page REPORTS brokerage and holds no payout/incentive formula. MIS
+// revenue reads the same mf_rta_brokerage lines (from Oct 2026 — see
+// MANUAL_BROKERAGE_LAST_MONTH in crm/misRevenue.ts).
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { supabase } from '../../lib/supabase';
 import { NWEmployee } from '../types';
