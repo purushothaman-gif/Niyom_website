@@ -26,6 +26,16 @@ export interface RtaHoldingRow {
   investedCost: number | null;
   /** Earliest purchase trade date from the transaction feed, or null. */
   firstInvestmentDate: string | null;
+  /**
+   * True when the imported transactions explain every unit held (net units
+   * from the feed = units held). Only then is the feed's cost trusted, and only
+   * then are its cash flows usable for a money-weighted return — a feed that
+   * misses a redemption, or the purchases before a broker transfer, would
+   * otherwise produce a confident but wrong figure.
+   */
+  reconciled: boolean;
+  /** Investor-signed cash flows (invest = negative), present only when reconciled. */
+  flows: { date: string; amount: number }[];
 }
 
 export interface RtaSipRow {
@@ -60,17 +70,34 @@ const EMPTY: RtaMfData = { holdings: [], sips: [], totalValue: 0, totalInvested:
 const INFLOW = new Set(['purchase', 'sip', 'switch_in']);
 const OUTFLOW = new Set(['redemption', 'switch_out']);
 
-interface TxnAgg { invested: number; first: string | null; seen: boolean }
+interface TxnAgg {
+  invested: number;
+  first: string | null;
+  seen: boolean;
+  netUnits: number;
+  flows: { date: string; amount: number }[];
+}
 
-function foldTxn(agg: TxnAgg, kind: string, amount: number, tradeDate: string | null): void {
+const newAgg = (): TxnAgg => ({ invested: 0, first: null, seen: false, netUnits: 0, flows: [] });
+
+function foldTxn(agg: TxnAgg, kind: string, amount: number, units: number, tradeDate: string | null): void {
   if (INFLOW.has(kind)) {
     agg.invested += amount;
+    agg.netUnits += Math.abs(units);
     agg.seen = true;
     if (tradeDate && (!agg.first || tradeDate < agg.first)) agg.first = tradeDate;
+    if (tradeDate && amount) agg.flows.push({ date: tradeDate, amount: -Math.abs(amount) });
   } else if (OUTFLOW.has(kind)) {
     agg.invested -= amount;
+    agg.netUnits -= Math.abs(units);
     agg.seen = true;
+    if (tradeDate && amount) agg.flows.push({ date: tradeDate, amount: Math.abs(amount) });
   }
+}
+
+/** Do the feed's net units explain the units held (0.1% / 0.01-unit tolerance)? */
+export function unitsReconcile(held: number, net: number): boolean {
+  return Math.abs(held - net) <= Math.max(0.01, Math.abs(held) * 0.001);
 }
 
 export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfData> {
@@ -99,7 +126,7 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
       .eq('client_id', clientId),
     db
       .from('mf_rta_transactions')
-      .select('folio, scheme_code, txn_kind, amount, trade_date')
+      .select('folio, scheme_code, txn_kind, amount, units, trade_date')
       .eq('client_id', clientId),
   ]);
   if (holdingsRes.error) throw new Error(holdingsRes.error.message);
@@ -117,12 +144,13 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
   const schemeKey = (folio: string, code: string) => `${folio}\u0000${code}`;
   for (const t of txnRows) {
     const amount = Number(t.amount ?? 0);
+    const units = Number((t as { units?: number | string | null }).units ?? 0);
     const kind = (t.txn_kind ?? 'other') as string;
     const sk = schemeKey(t.folio, t.scheme_code);
-    if (!byScheme.has(sk)) byScheme.set(sk, { invested: 0, first: null, seen: false });
-    if (!byFolio.has(t.folio)) byFolio.set(t.folio, { invested: 0, first: null, seen: false });
-    foldTxn(byScheme.get(sk)!, kind, amount, t.trade_date);
-    foldTxn(byFolio.get(t.folio)!, kind, amount, t.trade_date);
+    if (!byScheme.has(sk)) byScheme.set(sk, newAgg());
+    if (!byFolio.has(t.folio)) byFolio.set(t.folio, newAgg());
+    foldTxn(byScheme.get(sk)!, kind, amount, units, t.trade_date);
+    foldTxn(byFolio.get(t.folio)!, kind, amount, units, t.trade_date);
   }
 
   const rawHoldings = (holdingsRes.data ?? []);
@@ -139,7 +167,10 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
       // transferred in from a prior broker, which the transaction feed misses.
       // Fall back to the transaction-derived net investment otherwise.
       const registrarCost = h.invested_cost == null ? null : Number(h.invested_cost);
-      const txnCost = agg ? Math.max(0, Math.round(agg.invested * 100) / 100) : null;
+      const held = Number(h.units ?? 0);
+      const reconciled = !!agg && unitsReconcile(held, agg.netUnits);
+      // The feed's cost is only a cost when its units add up to what is held.
+      const txnCost = agg && reconciled ? Math.max(0, Math.round(agg.invested * 100) / 100) : null;
       return {
         id: h.id,
         folio: h.folio,
@@ -153,6 +184,8 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
         snapshotDate: h.snapshot_date,
         investedCost: registrarCost != null ? registrarCost : txnCost,
         firstInvestmentDate: agg ? agg.first : null,
+        reconciled,
+        flows: reconciled && agg ? agg.flows : [],
       };
     })
     // Registrar value when present, else units*nav; biggest first.

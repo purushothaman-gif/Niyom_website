@@ -199,6 +199,8 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
         <ExploreHub
           holdings={snapshot.holdings}
           xirrPercent={dashboardData?.xirrPercent ?? null}
+          xirrCoveragePct={dashboardData?.xirrCoveragePct ?? null}
+          xirrNote={dashboardData?.xirrNote ?? null}
           hidden={hiddenProducts}
           onNavigate={navigate}
           onOpenBond={(id) => {
@@ -272,6 +274,8 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
                 embedded
                 holdings={snapshot.holdings}
                 xirrPercent={dashboardData?.xirrPercent ?? null}
+          xirrCoveragePct={dashboardData?.xirrCoveragePct ?? null}
+          xirrNote={dashboardData?.xirrNote ?? null}
                 hidden={hiddenProducts}
                 onNavigate={navigate}
                 onOpenBond={(id) => {
@@ -322,6 +326,8 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
             data={portfolioData}
             holdings={snapshot.holdings}
             xirrPercent={dashboardData?.xirrPercent ?? null}
+          xirrCoveragePct={dashboardData?.xirrCoveragePct ?? null}
+          xirrNote={dashboardData?.xirrNote ?? null}
             onNavigate={navigate}
             onImport={() => setShowImport(true)}
             freshness={snapshot.casFreshness}

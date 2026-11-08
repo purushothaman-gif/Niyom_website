@@ -230,6 +230,10 @@ export interface InvestmentsBoardProps {
   title?: string;
   /** Portfolio XIRR across ALL holdings; shown on the All tab only. */
   xirrPercent?: number | null;
+  /** Share of the portfolio the XIRR covers (0–100). */
+  xirrCoveragePct?: number | null;
+  /** 'under_1y': XIRR not annualised yet. */
+  xirrNote?: 'under_1y' | null;
   /** Lock the board to one asset (e.g. the Mutual Funds page). */
   lockedAsset?: AssetKey;
   /** Header-right content, e.g. an "Invest more" button. */
@@ -251,6 +255,8 @@ export function InvestmentsBoard({
   enriching = false,
   title = 'Your investments',
   xirrPercent,
+  xirrCoveragePct = null,
+  xirrNote = null,
   lockedAsset,
   actions,
   maxRows,
@@ -338,7 +344,7 @@ export function InvestmentsBoard({
           </div>
         </div>
 
-        <SummaryHero summary={summary} xirr={tab === 'all' ? xirrPercent : undefined} mask={mask} />
+        <SummaryHero summary={summary} xirr={tab === 'all' ? xirrPercent : undefined} xirrCoverage={xirrCoveragePct} xirrNote={xirrNote} mask={mask} />
 
         {!lockedAsset && tabs.length > 2 && (
           <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
@@ -514,10 +520,14 @@ export function InvestmentsBoard({
 function SummaryHero({
   summary,
   xirr,
+  xirrCoverage = null,
+  xirrNote = null,
   mask,
 }: {
   summary: InvestmentSummary;
   xirr?: number | null;
+  xirrCoverage?: number | null;
+  xirrNote?: 'under_1y' | null;
   mask: (s: string) => string;
 }) {
   const returnsKnown = summary.returnsPct != null;
@@ -548,7 +558,7 @@ function SummaryHero({
           tone={returnsKnown ? summary.returns : null}
         />
         {showXirr ? (
-          <Stat label="XIRR" value={xirr == null ? '—' : signedPct(xirr)} tone={xirr} sub={xirr == null ? 'Needs more history' : 'Annualised'} />
+          <Stat label="XIRR" value={xirr == null ? '—' : signedPct(xirr)} tone={xirr} sub={xirr == null ? (xirrNote === 'under_1y' ? 'Shown after 1 year' : 'Needs more history') : xirrCoverage != null && xirrCoverage < 99.5 ? `Covers ${Math.round(xirrCoverage)}% of value` : 'Annualised'} />
         ) : (
           <Stat label="Holdings" value={String(summary.count)} sub={summary.slices.length > 1 ? `${summary.slices.length} asset classes` : undefined} />
         )}

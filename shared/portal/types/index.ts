@@ -197,4 +197,12 @@ export interface DashboardData {
    * which is different from a return of zero.
    */
   xirrPercent: number | null;
+  /**
+   * Share of the portfolio's value the XIRR covers (0–100). Below 100 when some
+   * holdings' cash flows are not on file (e.g. a registrar fund whose feed lacks
+   * a redemption); those are left out of the return rather than guessed.
+   */
+  xirrCoveragePct?: number | null;
+  /** Why XIRR is blank when it is: 'under_1y' = oldest investment is under a year old (shown as absolute return instead). */
+  xirrNote?: 'under_1y' | null;
 }

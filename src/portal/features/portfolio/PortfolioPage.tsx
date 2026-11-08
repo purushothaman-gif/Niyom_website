@@ -20,6 +20,8 @@ export function PortfolioPage({
   client,
   holdings,
   xirrPercent = null,
+  xirrCoveragePct = null,
+  xirrNote = null,
   onNavigate,
   onImport,
   freshness,
@@ -33,6 +35,8 @@ export function PortfolioPage({
   data: PortfolioData;
   holdings: PortalHolding[];
   xirrPercent?: number | null;
+  xirrCoveragePct?: number | null;
+  xirrNote?: 'under_1y' | null;
   onNavigate?: (view: PortalView) => void;
   /** Opens the import wizard, which PortalApp owns so both screens share one. */
   onImport: () => void;
@@ -48,7 +52,7 @@ export function PortfolioPage({
   const { rows, enriching } = useInvestmentRows('client', baseRows);
   // See DashboardPage: no XIRR while registrar funds lack purchase flows, nor
   // in all-distributor mode (statement funds' flows aren't in our ledger).
-  const xirr = rows.some((r) => r.source !== 'niyom') ? null : xirrPercent;
+  const xirr = xirrPercent;
   const [downloading, setDownloading] = useState(false);
   const download = async () => {
     if (!client) return;
@@ -184,6 +188,8 @@ export function PortfolioPage({
         enriching={enriching}
         title="Holdings"
         xirrPercent={xirr}
+        xirrCoveragePct={xirrCoveragePct}
+        xirrNote={xirrNote}
         actions={
           onNavigate && (
             <button

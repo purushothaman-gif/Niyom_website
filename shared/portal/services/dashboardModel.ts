@@ -54,6 +54,47 @@ export function buildDashboardData(snapshot: ClientWealthSnapshot): DashboardDat
      * describes all of it, and the rate that reconciles those two is meaningless
      * — one real client saw 198,502%. Null says "unknown", which is true.
      */
-    xirrPercent: historyComplete ? portfolioXirr(otherTxns, summary.netWorth, casFlows) : null,
+    ...xirrFor(snapshot, historyComplete, otherTxns, summary.netWorth, casFlows),
   };
+}
+
+/**
+ * MF on platform: XIRR over the holdings whose cash flows explain them (see
+ * ClientWealthSnapshot.xirrBasis), with the share of the portfolio it covers.
+ * Off platform: the original statement-ledger calculation, covering everything.
+ */
+function xirrFor(
+  snapshot: ClientWealthSnapshot,
+  historyComplete: boolean,
+  otherTxns: ClientWealthSnapshot['transactions'],
+  netWorth: number,
+  casFlows: ClientWealthSnapshot['casFlows'],
+): { xirrPercent: number | null; xirrCoveragePct: number | null; xirrNote: 'under_1y' | null } {
+  const b = snapshot.xirrBasis;
+  if (!b) {
+    if (historyComplete && spanUnderAYear(otherTxns.map((t) => t.txn_date), casFlows.map((f) => f.date))) {
+      return { xirrPercent: null, xirrCoveragePct: null, xirrNote: 'under_1y' };
+    }
+    const x = historyComplete ? portfolioXirr(otherTxns, netWorth, casFlows) : null;
+    return { xirrPercent: x, xirrCoveragePct: x == null ? null : 100, xirrNote: null };
+  }
+  if (!(b.value > 0)) return { xirrPercent: null, xirrCoveragePct: null, xirrNote: null };
+  if (spanUnderAYear(b.transactions.map((t) => t.txn_date), b.extraFlows.map((f) => f.date))) {
+    return { xirrPercent: null, xirrCoveragePct: null, xirrNote: 'under_1y' };
+  }
+  const x = portfolioXirr(b.transactions, b.value, b.extraFlows);
+  const total = b.value + b.excludedValue;
+  return { xirrPercent: x, xirrCoveragePct: x == null || !(total > 0) ? null : (b.value / total) * 100, xirrNote: null };
+}
+
+/**
+ * Returns over less than a year are shown as plain (absolute) returns, never
+ * annualised — SEBI's presentation norm, and the only honest choice: a 4.8%
+ * gain over five days annualises to ~3,000%. XIRR appears once the OLDEST
+ * included cash flow is a year old. Exported for tests.
+ */
+export function spanUnderAYear(...dateLists: string[][]): boolean {
+  const dates = dateLists.flat().map((d) => new Date(d).getTime()).filter((t) => Number.isFinite(t));
+  if (!dates.length) return false; // nothing to annualise — the caller returns null anyway
+  return Date.now() - Math.min(...dates) < 365 * 86_400_000;
 }

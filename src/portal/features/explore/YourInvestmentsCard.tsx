@@ -11,11 +11,17 @@ import { signedInr, signedPct, toneOf } from '../investments/format';
 export function YourInvestmentsCard({
   summary,
   xirr,
+  xirrCoveragePct = null,
+  xirrNote = null,
   title = 'Your investments',
   onOpen,
 }: {
   summary: InvestmentSummary | null;
   xirr?: number | null;
+  /** Share of the portfolio's value the XIRR covers; a note shows below 100%. */
+  xirrCoveragePct?: number | null;
+  /** 'under_1y': oldest investment is under a year old, so XIRR is not annualised yet. */
+  xirrNote?: 'under_1y' | null;
   title?: string;
   onOpen?: () => void;
 }) {
@@ -59,6 +65,18 @@ export function YourInvestmentsCard({
               <Row label="Invested">{known ? inr(summary!.invested) : '—'}</Row>
               {xirr !== undefined && (
                 <Row label="XIRR">{xirr == null ? '—' : <span className={toneOf(xirr)}>{signedPct(xirr)}</span>}</Row>
+              )}
+              {xirr == null && xirrNote === 'under_1y' && (
+                <p className="py-2 text-[11px] leading-relaxed text-text-faint">
+                  XIRR appears once your oldest investment is a year old. Until then returns aren&rsquo;t
+                  annualised &mdash; see Total returns.
+                </p>
+              )}
+              {xirr != null && xirrCoveragePct != null && xirrCoveragePct < 99.5 && (
+                <p className="py-2 text-[11px] leading-relaxed text-text-faint">
+                  XIRR covers {Math.round(xirrCoveragePct)}% of your portfolio. Funds whose full purchase history
+                  isn&rsquo;t on file yet are left out rather than estimated.
+                </p>
               )}
             </div>
             {onOpen && (

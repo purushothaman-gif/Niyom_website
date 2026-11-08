@@ -85,10 +85,12 @@ export function DashboardPage({
   const rta = useRtaMf(clientId);
   const baseRows = useMemo(() => fromClientHoldings(holdings), [holdings]);
   const { rows } = useInvestmentRows('client', baseRows);
-  // Registrar funds arrive without their purchase flows, so a money-weighted
-  // return over the whole portfolio would be measured against missing cash —
-  // suppress it rather than show a misleading figure.
-  const xirr = rows.some((r) => r.source === 'registrar') ? null : data.xirrPercent;
+  // XIRR now covers only holdings whose cash flows explain them (registrar
+  // funds whose transactions reconcile to the units held); the rest are left
+  // out and the coverage is shown — see dashboardModel.xirrFor.
+  const xirr = data.xirrPercent;
+  const xirrCoverage = data.xirrCoveragePct ?? null;
+  const xirrNote = data.xirrNote ?? null;
 
   const exploreBlockNode = (
     <>
@@ -143,7 +145,7 @@ export function DashboardPage({
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0">{exploreBlockNode}</div>
         <aside className="space-y-8">
-          <YourInvestmentsCard summary={rows.length ? summarise(rows) : null} xirr={xirr} onOpen={() => onNavigate('portfolio')} />
+          <YourInvestmentsCard summary={rows.length ? summarise(rows) : null} xirr={xirr} xirrCoveragePct={xirrCoverage} xirrNote={xirrNote} onOpen={() => onNavigate('portfolio')} />
           <TopHoldingsCard rows={rows} onOpen={() => onNavigate('portfolio')} />
           {mfSsoOn ? (
             <SipsCard sips={rta.data?.sips ?? []} onOpen={() => onNavigate('mutual-funds')} />

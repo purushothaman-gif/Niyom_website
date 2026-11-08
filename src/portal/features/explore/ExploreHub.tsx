@@ -146,6 +146,9 @@ type Screen = ExploreScreen;
 interface Props {
   holdings: PortalHolding[];
   xirrPercent: number | null;
+  /** Share of the portfolio the XIRR covers; below 100 shows a note. */
+  xirrCoveragePct?: number | null;
+  xirrNote?: 'under_1y' | null;
   /** Views switched off for this client (product access). */
   hidden: ReadonlySet<string>;
   onNavigate: (view: PortalView) => void;
@@ -169,6 +172,8 @@ interface Props {
 export function ExploreHub({
   holdings,
   xirrPercent,
+  xirrCoveragePct = null,
+  xirrNote = null,
   hidden,
   onNavigate,
   onOpenBond,
@@ -211,7 +216,7 @@ export function ExploreHub({
   const baseRows = useMemo(() => fromClientHoldings(holdings), [holdings]);
   const { rows } = useInvestmentRows('client', baseRows);
   const summary = useMemo(() => (rows.length ? summarise(rows) : null), [rows]);
-  const xirr = rows.some((r) => r.source === 'registrar') ? null : xirrPercent;
+  const xirr = xirrPercent;
 
   const funds = catalog.funds;
   const popFunds = useMemo(
@@ -404,7 +409,7 @@ export function ExploreHub({
       {/* ------------------------------------------------ right column */}
       {!embedded && (
       <aside className="space-y-8">
-        <YourInvestmentsCard summary={summary} xirr={xirr} onOpen={() => onNavigate('portfolio')} />
+        <YourInvestmentsCard summary={summary} xirr={xirr} xirrCoveragePct={xirrCoveragePct} xirrNote={xirrNote} onOpen={() => onNavigate('portfolio')} />
         <ProductsTools items={tools} />
         <p className="flex items-start gap-2 px-1 text-[11px] leading-relaxed text-text-faint">
           <CalendarClock className="mt-px h-3.5 w-3.5 shrink-0" />

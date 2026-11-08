@@ -104,6 +104,21 @@ export interface ClientWealthSnapshot {
   dayChange: number | null;
   /** The date the mutual fund valuations are as at, when newer than the statement. */
   valuedOn: string | null;
+  /**
+   * Inputs for a money-weighted return when mutual funds come from the
+   * registrar (MF on platform). Only holdings whose cash flows fully explain
+   * them are inside: non-MF holdings with ALL their recorded transactions, and
+   * registrar funds whose imported transactions reconcile to the units held.
+   * Funds the feeds cannot explain (missing redemptions, history before a broker
+   * transfer, held-away funds) sit in `excludedValue` — left out of both sides,
+   * never guessed. Absent off-platform, where the statement ledger is used.
+   */
+  xirrBasis?: {
+    transactions: { txn_type: 'buy' | 'sell'; consolidated_amount: number; txn_date: string }[];
+    extraFlows: CasCashFlow[];
+    value: number;
+    excludedValue: number;
+  };
 }
 
 export const HoldingService = {
@@ -202,7 +217,29 @@ export const HoldingService = {
     const heldAway = heldAwaySrc.map((h) => applyNav(h, heldAwayQuotes.get(h.cas?.isin ?? h.isin ?? '')));
 
     const merged = [...stripped.holdings, ...registrarMf, ...heldAway];
+
+    // XIRR basis — see ClientWealthSnapshot.xirrBasis. Every non-MF transaction
+    // (the snapshot above keeps only the latest 25 for display).
+    const { data: allTxns } = await supabase
+      .from('nw_transactions')
+      .select('txn_type, consolidated_amount, txn_date, product_type')
+      .eq('client_id', clientId)
+      .neq('product_type', 'mutual_fund');
+    const rtaHoldings = rta?.holdings ?? [];
+    const regValue = (h: RtaHoldingRow) => h.rtaValue ?? h.navValue ?? (h.nav != null ? h.units * h.nav : 0);
+    const reconciled = rtaHoldings.filter((h) => h.reconciled && h.flows.length);
+    const nonMfValue = stripped.holdings.reduce((t, h) => t + (Number(h.current_value) || 0), 0);
+    const xirrBasis = {
+      transactions: ((allTxns ?? []) as { txn_type: 'buy' | 'sell'; consolidated_amount: number; txn_date: string }[]),
+      extraFlows: reconciled.flatMap((h) => h.flows),
+      value: nonMfValue + reconciled.reduce((t, h) => t + regValue(h), 0),
+      excludedValue:
+        rtaHoldings.filter((h) => !(h.reconciled && h.flows.length)).reduce((t, h) => t + regValue(h), 0) +
+        heldAway.reduce((t, h) => t + (Number(h.current_value) || 0), 0),
+    };
+
     return {
+      xirrBasis,
       ...stripped,
       holdings: merged,
       // A statement was imported — carry its context (held-away funds are stated
