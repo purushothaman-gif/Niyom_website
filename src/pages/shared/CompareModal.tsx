@@ -62,7 +62,7 @@ export function CompareModal({ funds, onClose, onRemove }: CompareModalProps) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => window.open('/onboarding', '_blank')}
-              className="lift press inline-flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black font-semibold px-4 py-2 rounded-lg shadow-md text-sm"
+              className="lift press inline-flex items-center gap-2 bg-accent hover:bg-accent-strong text-on-accent font-semibold px-4 py-2 rounded-lg shadow-md text-sm"
             >
               <Wallet size={15} /> Invest Now
             </button>

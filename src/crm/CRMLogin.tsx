@@ -611,7 +611,7 @@ export default function CRMLogin({ onLogin }: Props) {
                 </div>
                 <button type="submit" disabled={loading || !!lockoutMsg}
                   className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity"
-                  style={{ background: 'linear-gradient(135deg, var(--accent-soft), var(--accent-soft-deep))' }}>
+                  style={{ background: 'var(--accent-gradient)' }}>
                   {loading ? 'Signing in...' : <><span>Sign In</span><ArrowRight className="w-4 h-4" /></>}
                 </button>
               </form>
@@ -693,7 +693,7 @@ export default function CRMLogin({ onLogin }: Props) {
                 </label>
                 <button type="submit" disabled={loading || mfaCode.length !== 6}
                   className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-                  style={{ background: 'var(--accent-soft)', color: 'var(--text-on-accent)' }}>
+                  style={{ background: 'var(--accent)', color: 'var(--text-on-accent)' }}>
                   {loading ? <RotateCw className="w-4 h-4 animate-spin" /> : <>Verify <ArrowRight className="w-4 h-4" /></>}
                 </button>
               </form>
@@ -768,7 +768,7 @@ export default function CRMLogin({ onLogin }: Props) {
                 </label>
                 <button type="submit" disabled={loading || mfaCode.length !== 6}
                   className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-                  style={{ background: 'var(--accent-soft)', color: 'var(--text-on-accent)' }}>
+                  style={{ background: 'var(--accent)', color: 'var(--text-on-accent)' }}>
                   {loading ? <RotateCw className="w-4 h-4 animate-spin" /> : <>Activate <CheckCircle2 className="w-4 h-4" /></>}
                 </button>
               </form>
@@ -808,7 +808,7 @@ export default function CRMLogin({ onLogin }: Props) {
                 </div>
                 <button type="submit" disabled={loading}
                   className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent flex items-center justify-center gap-2 disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg, var(--accent-soft), var(--accent-soft-deep))' }}>
+                  style={{ background: 'var(--accent-gradient)' }}>
                   {loading ? 'Sending...' : <><span>Send Verification Code</span><ArrowRight className="w-4 h-4" /></>}
                 </button>
               </form>
@@ -853,7 +853,7 @@ export default function CRMLogin({ onLogin }: Props) {
                 </div>
                 <button type="submit" disabled={loading || otp.length !== 6}
                   className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent flex items-center justify-center gap-2 disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg, var(--accent-soft), var(--accent-soft-deep))' }}>
+                  style={{ background: 'var(--accent-gradient)' }}>
                   {loading ? 'Verifying...' : <><span>Verify Code</span><ArrowRight className="w-4 h-4" /></>}
                 </button>
               </form>
@@ -929,7 +929,7 @@ export default function CRMLogin({ onLogin }: Props) {
                   </div>
                   <button type="submit" disabled={loading || !passwordValid(newPassword) || newPassword !== confirmPassword}
                     className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent flex items-center justify-center gap-2 disabled:opacity-50"
-                    style={{ background: 'linear-gradient(135deg, var(--accent-soft), var(--accent-soft-deep))' }}>
+                    style={{ background: 'var(--accent-gradient)' }}>
                     {loading ? 'Updating...' : 'Reset Password'}
                   </button>
                 </form>
@@ -952,7 +952,7 @@ export default function CRMLogin({ onLogin }: Props) {
               </div>
               <button onClick={() => { resetFpState(); setPassword(''); setView('login'); }}
                 className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent flex items-center justify-center gap-2"
-                style={{ background: 'linear-gradient(135deg, var(--accent-soft), var(--accent-soft-deep))' }}>
+                style={{ background: 'var(--accent-gradient)' }}>
                 <span>Back to Sign In</span><ArrowRight className="w-4 h-4" />
               </button>
             </div>

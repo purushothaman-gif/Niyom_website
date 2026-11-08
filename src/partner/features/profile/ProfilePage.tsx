@@ -1,4 +1,5 @@
-import { UserRound, Landmark, ShieldCheck, KeyRound, Info } from 'lucide-react';
+import { UserRound, Landmark, ShieldCheck, KeyRound, Info, Palette } from 'lucide-react';
+import { ThemeToggle } from '../../../theme/ThemeToggle';
 import { Card } from '../../../portal/components/Card';
 import { SectionHeader } from '../../../portal/components/SectionHeader';
 import { StatusPill } from '../../../portal/components/StatusPill';
@@ -116,6 +117,19 @@ export function ProfilePage({ profile, bankAccounts, onChangePassword }: Props) 
           >
             <KeyRound className="h-4 w-4" /> Change password
           </button>
+        </div>
+      </Card>
+
+      <Card>
+        <SectionHeader title="Appearance" icon={Palette} />
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-text-primary">Theme</p>
+            <p className="mt-0.5 text-xs text-text-muted">
+              Light, dark, or match your device. Saved on this browser.
+            </p>
+          </div>
+          <ThemeToggle variant="segmented" className="self-start sm:self-auto" />
         </div>
       </Card>
     </div>

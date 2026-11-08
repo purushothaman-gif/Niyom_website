@@ -730,7 +730,7 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
             </div>
             <div className="flex gap-3">
               <button onClick={() => setDeleteDoc(null)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
-              <button onClick={handleDelete} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: '#DC2626' }}>Delete</button>
+              <button onClick={handleDelete} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: 'var(--danger)' }}>Delete</button>
             </div>
           </div>
         </div>

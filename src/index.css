@@ -95,15 +95,33 @@ h1, h2, h3, h4 {
     color 0.25s ease, fill 0.25s ease, stroke 0.25s ease, box-shadow 0.25s ease;
 }
 
-/* NOTE (Phase 1): the app shell `body` background/text are intentionally NOT
- * tokenized yet. The default theme is dark, but public pages still render their
- * own light backgrounds; theming `body` is done per-surface during migration
- * (Phase 2/3) so Phase 1 leaves the current look untouched. */
+/* The canvas behind every page follows the theme, so rubber-band overscroll,
+ * short pages and the gap before React mounts never flash white in dark mode.
+ * Pages still paint their own surfaces on top. */
+html {
+  background-color: var(--bg-base);
+}
 
 @media (prefers-reduced-motion: no-preference) {
   body * {
     transition: var(--theme-transition);
   }
+}
+
+/* Theme switch via the View Transitions API (ThemeContext.withThemeTransition):
+ * the browser cross-fades one snapshot, so per-element colour transitions are
+ * switched off for that instant — otherwise the "new" snapshot would still be
+ * mid-fade and thousands of table cells would ripple. */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.28s;
+  animation-timing-function: var(--ease-in-out, ease);
 }
 
 /* Theme-aware placeholders, selection, focus ring and scrollbars.
@@ -265,7 +283,7 @@ input[type='range'] {
   color: var(--text-faint);
 }
 .crm-icon-danger:hover {
-  color: var(--danger);
+  color: rgb(var(--danger-soft-rgb));
 }
 
 /* Icon button that turns accent-gold on hover, and stays gold while its page

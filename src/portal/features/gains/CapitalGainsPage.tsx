@@ -111,7 +111,7 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
             <button
               type="button"
               onClick={onImport}
-              className="rounded-token-md bg-accent px-4 py-2 text-xs font-semibold text-white"
+              className="rounded-token-md bg-accent px-4 py-2 text-xs font-semibold text-on-accent"
             >
               Import my portfolio
             </button>

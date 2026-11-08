@@ -80,7 +80,7 @@ export default function CompanyLinkCard() {
           onClick={copy}
           className="px-3 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 flex-shrink-0 transition-colors"
           style={{
-            background: 'var(--accent-soft)',
+            background: 'var(--accent)',
             color: 'var(--text-on-accent)',
           }}
         >

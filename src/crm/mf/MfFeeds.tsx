@@ -220,7 +220,7 @@ export default function MfFeeds({ employee }: Props) {
             {health.map((h) => {
               const stale = h.hours_since_ok == null
                 || h.hours_since_ok > (MONTHLY_REPORTS.has(h.report) ? STALE_HOURS_MONTHLY : STALE_HOURS);
-              const dot = stale ? 'var(--c-red, #ef4444)' : 'var(--c-green, #16a34a)';
+              const dot = stale ? 'var(--c-red)' : 'var(--c-green)';
               const label = REPORT_LABELS[h.report] ?? h.report;
               const age = h.hours_since_ok == null ? 'never'
                 : h.hours_since_ok < 1 ? 'just now'
@@ -274,7 +274,7 @@ export default function MfFeeds({ employee }: Props) {
           <button
             onClick={onImport}
             disabled={busy}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-on-accent disabled:opacity-50"
             style={{ background: 'var(--accent)' }}
           >
             <Upload className={`w-4 h-4 ${busy ? 'animate-pulse' : ''}`} /> {busy ? 'Importing…' : 'Import'}
@@ -296,7 +296,7 @@ export default function MfFeeds({ employee }: Props) {
         {result?.ok && (
           <div className="mt-4 p-4 rounded-xl text-sm" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
             <p className="font-semibold text-text-primary flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--c-green, #16a34a)' }} />
+              <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--c-green)' }} />
               Imported {result.sourceFile ?? 'feed'}{result.snapshotDate ? ` · snapshot ${fmtDate(result.snapshotDate)}` : ''}
             </p>
             <p className="mt-1" style={{ color: 'var(--text-secondary)' }}>
@@ -387,7 +387,7 @@ export default function MfFeeds({ employee }: Props) {
                     <td className="px-5 py-2.5 text-right text-text-primary">{r.unmatched}</td>
                     <td className="px-5 py-2.5">
                       {r.status === 'ok' ? (
-                        <span className="text-xs font-semibold" style={{ color: 'var(--c-green, #16a34a)' }}>OK</span>
+                        <span className="text-xs font-semibold" style={{ color: 'var(--c-green)' }}>OK</span>
                       ) : (
                         <span className="text-xs font-semibold text-c-red" title={r.error ?? ''}>Error</span>
                       )}

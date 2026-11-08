@@ -117,9 +117,9 @@
   --text-primary: #f4f7fc;
   --text-secondary: #9fb0c9;
   --text-muted: #7688a4;
-  --text-faint: #566a86;
+  --text-faint: #6a7fa0;   /* ~4.2:1 on cards (was 3.1 — sub-AA) */
   --text-bright: #c7d3e5;    /* hover-brightened secondary text         */
-  --text-placeholder: #566a86;
+  --text-placeholder: #7184a3; /* ~3.9:1 on input fills */
   --text-on-accent: #071524; /* deep navy text/icons on a gold fill     */
 
   /* Brand accent — Niyom gold (#C8A45D) */
@@ -133,6 +133,9 @@
   --accent-strong-deep: #9a7938; /* darker stop for gold button gradients */
 
   /* Brand sign-in panel (CRM/Client login left rail) — deep navy */
+  /* Gold FILL gradient (buttons, badges). Text on it = --text-on-accent. */
+  --accent-gradient: linear-gradient(135deg, #d8bd86 0%, #b8934a 100%);
+
   --brand-panel-bg: linear-gradient(160deg, #071524 0%, #081B33 55%, #10284D 100%);
 
   /* Buttons */
@@ -178,6 +181,20 @@
   --chart-5: #06b6d4;
   --chart-6: #f97316;
 
+  /* Solid aliases — older call sites reference these names directly. Defined
+   * per theme so nested [data-theme] scopes resolve them correctly. */
+  --c-green: rgb(var(--c-emerald-rgb));
+  --c-emerald: rgb(var(--c-emerald-rgb));
+  --c-red: rgb(var(--c-red-rgb));
+  --success-soft: rgb(var(--success-soft-rgb));
+  --danger-soft: rgb(var(--danger-soft-rgb));
+  --on-accent: var(--text-on-accent);
+  --bg-input: var(--input-bg);
+  --overlay: var(--bg-overlay);
+
+  /* Browser chrome colour (meta theme-color) — mirrors --bg-base. */
+  --theme-color: #071524;
+
   /* Focus ring & scrollbar */
   --focus-ring: rgba(200, 164, 93, 0.55);
   --scrollbar-thumb: #1b3559;
@@ -216,11 +233,11 @@
   --hover-bg-rgb: 8, 27, 51;
   --selected-bg: rgba(184, 147, 74, 0.12);
   --disabled-bg: #eef2f9;
-  --disabled-text: #aab4c4;
+  --disabled-text: #9aa5b6;
   --veil: rgba(8, 27, 51, 0.04);
 
   /* Borders — cool blue-grey */
-  --border-subtle: #eef2f9;
+  --border-subtle: #e6ebf3; /* distinct from --bg-raised so dividers show on zebra rows */
   --border: #dde4ee;
   --border-strong: #cbd5e3;
   --border-stronger: #b4c1d4;
@@ -230,20 +247,22 @@
   --text-primary: #1b2430;   /* brand ink        */
   --text-secondary: #475467; /* ~8:1             */
   --text-muted: #667085;     /* brand muted ~5:1 */
-  --text-faint: #94a0b3;     /* ~3:1 — meta      */
+  --text-faint: #737f94;     /* ~4:1 — meta (was 2.6:1) */
   --text-bright: #0f1a2b;    /* hover-darkened   */
-  --text-placeholder: #94a0b3;
-  --text-on-accent: #ffffff;
+  --text-placeholder: #7d889b;
+  --text-on-accent: #081b33; /* navy on gold: 6:1 (white was 2.9:1) — same as dark */
 
   /* Brand accent — the gold reads as a fill here; a darker companion carries
    * gold TEXT so it stays AA-legible on white (#C8A45D text alone is too light). */
   --accent: #b8934a;
   --accent-rgb: 184, 147, 74;
-  --accent-soft: #a67f3c;
-  --accent-soft-rgb: 166, 127, 60;
-  --accent-soft-deep: #8a6a30;  /* darker companion (gold gradients)    */
-  --accent-soft-deep-rgb: 138, 106, 48;
+  --accent-soft: #8a6a30;      /* gold INK: 5:1 on white (was 3.7:1)  */
+  --accent-soft-rgb: 138, 106, 48;
+  --accent-soft-deep: #6f5526;  /* darker companion                     */
+  --accent-soft-deep-rgb: 111, 85, 38;
   --accent-strong: #9a7938;
+
+  --accent-gradient: linear-gradient(135deg, #c8a45d 0%, #b08c45 100%);
 
   /* Brand sign-in panel — deep navy, matching the premium dark rail */
   --brand-panel-bg: linear-gradient(160deg, #071524 0%, #081B33 55%, #10284D 100%);
@@ -255,9 +274,9 @@
   --btn-secondary-border: var(--border);
 
   /* Semantic state (solid) — brand values, tuned for contrast on light */
-  --success: #16a34a;
-  --success-rgb: 22, 163, 74;
-  --success-deep: #12833c;   /* darker stop for success gradients */
+  --success: #15803d;        /* green-700: white text 5:1 (green-600 was 3.3) */
+  --success-rgb: 21, 128, 61;
+  --success-deep: #116632;   /* darker stop for success gradients */
   --danger: #dc2626;
   --danger-rgb: 220, 38, 38;
   --warning: #d97706;        /* amber-600: #F59E0B text is sub-AA on white */
@@ -266,13 +285,13 @@
   --info-rgb: 37, 99, 235;
 
   /* Semantic state (soft) — darker bases so text reads AA and tints stay soft */
-  --success-soft-rgb: 22, 163, 74;
+  --success-soft-rgb: 21, 128, 61;
   --danger-soft-rgb: 220, 38, 38;
   --warning-soft-rgb: 180, 83, 9;
   --info-soft-rgb: 37, 99, 235;
 
   /* Category / chart palette (light = darker `-600`-ish) */
-  --c-emerald-rgb: 5, 150, 105;
+  --c-emerald-rgb: 4, 120, 87;
   --c-red-rgb: 220, 38, 38;
   --c-blue-rgb: 37, 99, 235;
   --c-amber-rgb: 180, 83, 9;
@@ -288,7 +307,18 @@
   --chart-5: #0891b2;
   --chart-6: #ea580c;
 
-  --focus-ring: rgba(184, 147, 74, 0.5);
+  --c-green: rgb(var(--c-emerald-rgb));
+  --c-emerald: rgb(var(--c-emerald-rgb));
+  --c-red: rgb(var(--c-red-rgb));
+  --success-soft: rgb(var(--success-soft-rgb));
+  --danger-soft: rgb(var(--danger-soft-rgb));
+  --on-accent: var(--text-on-accent);
+  --bg-input: var(--input-bg);
+  --overlay: var(--bg-overlay);
+
+  --theme-color: #f6f8fc;
+
+  --focus-ring: rgba(138, 106, 48, 0.55);
   --scrollbar-thumb: #c2cddd;
   --scrollbar-track: transparent;
 

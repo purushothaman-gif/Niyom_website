@@ -43,13 +43,13 @@ const IS_DECK = new Set(CONTENT_TYPES.filter(t => t.slides).map(t => t.id as str
  */
 const STATE_STYLE: Record<AutoSlotState, { fg: string; bg: string; label: string }> = {
   planned:    { fg: 'var(--text-muted)', bg: 'rgba(142,160,181,0.12)', label: 'Planned' },
-  generating: { fg: '#38bdf8',           bg: 'rgba(56,189,248,0.12)',  label: 'Writing' },
-  generated:  { fg: '#f59e0b',           bg: 'rgba(245,158,11,0.12)',  label: 'Generated' },
-  rendering:  { fg: '#38bdf8',           bg: 'rgba(56,189,248,0.12)',  label: 'Rendering' },
-  rendered:   { fg: '#f59e0b',           bg: 'rgba(245,158,11,0.12)',  label: 'Rendered' },
-  approved:   { fg: '#22c55e',           bg: 'rgba(34,197,94,0.14)',   label: 'Live' },
-  flagged:    { fg: '#f59e0b',           bg: 'rgba(245,158,11,0.16)',  label: 'Needs review' },
-  failed:     { fg: '#ef4444',           bg: 'rgba(239,68,68,0.14)',   label: 'Failed' },
+  generating: { fg: 'rgb(var(--c-cyan-rgb))',           bg: 'rgba(var(--c-cyan-rgb),0.12)',  label: 'Writing' },
+  generated:  { fg: 'rgb(var(--warning-soft-rgb))',           bg: 'rgba(var(--warning-soft-rgb),0.12)',  label: 'Generated' },
+  rendering:  { fg: 'rgb(var(--c-cyan-rgb))',           bg: 'rgba(var(--c-cyan-rgb),0.12)',  label: 'Rendering' },
+  rendered:   { fg: 'rgb(var(--warning-soft-rgb))',           bg: 'rgba(var(--warning-soft-rgb),0.12)',  label: 'Rendered' },
+  approved:   { fg: 'var(--success-soft)',           bg: 'rgba(var(--success-soft-rgb),0.14)',   label: 'Live' },
+  flagged:    { fg: 'rgb(var(--warning-soft-rgb))',           bg: 'rgba(var(--warning-soft-rgb),0.16)',  label: 'Needs review' },
+  failed:     { fg: 'var(--danger-soft)',           bg: 'rgba(var(--danger-soft-rgb),0.14)',   label: 'Failed' },
 };
 
 const IST_DATE = new Intl.DateTimeFormat('en-IN', {
@@ -98,12 +98,12 @@ function SlotChip({ slot }: { slot: MktAutoSlot }) {
       </div>
 
       {slot.state === 'flagged' && slot.lint_flags.length > 0 && (
-        <p className="text-[10px] mt-1.5" style={{ color: '#f59e0b' }}>
+        <p className="text-[10px] mt-1.5" style={{ color: 'rgb(var(--warning-soft-rgb))' }}>
           {slot.lint_flags.length} issue{slot.lint_flags.length === 1 ? '' : 's'}: {slot.lint_flags[0].label}
         </p>
       )}
       {slot.state === 'failed' && slot.error && (
-        <p className="text-[10px] mt-1.5 line-clamp-2" style={{ color: '#ef4444' }} title={slot.error}>
+        <p className="text-[10px] mt-1.5 line-clamp-2" style={{ color: 'var(--danger-soft)' }} title={slot.error}>
           {slot.error}
         </p>
       )}
@@ -116,7 +116,7 @@ function PublishCountdown({ publishAt }: { publishAt: string }) {
   const ms = new Date(publishAt).getTime() - Date.now();
   if (ms <= 0) {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: '#22c55e' }}>
+      <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: 'var(--success-soft)' }}>
         <CheckCircle2 className="w-3.5 h-3.5" /> Gate open since {IST_TIME.format(new Date(publishAt))}
       </span>
     );
@@ -157,7 +157,7 @@ function DayRow({ day, today }: { day: MktAutoDay; today: string }) {
         </div>
 
         {alarming ? (
-          <span className="inline-flex items-center gap-1 text-xs font-bold" style={{ color: '#ef4444' }}>
+          <span className="inline-flex items-center gap-1 text-xs font-bold" style={{ color: 'var(--danger-soft)' }}>
             <AlertTriangle className="w-3.5 h-3.5" /> Nothing live — needs attention
           </span>
         ) : isToday ? (
@@ -172,7 +172,7 @@ function DayRow({ day, today }: { day: MktAutoDay; today: string }) {
       <div className="flex gap-2 flex-wrap sm:flex-nowrap">
         {day.slots.map(s => <SlotChip key={s.id} slot={s} />)}
         {day.slots.length === 0 && (
-          <p className="text-xs" style={{ color: '#ef4444' }}>
+          <p className="text-xs" style={{ color: 'var(--danger-soft)' }}>
             Planned but no slots — the rotation failed for this day.
           </p>
         )}
@@ -291,7 +291,7 @@ export default function AutoSchedule({ onBack }: Props) {
           </GhostButton>
         </div>
         {skipDay.isError && (
-          <p className="text-xs mt-2" style={{ color: '#ef4444' }}>
+          <p className="text-xs mt-2" style={{ color: 'var(--danger-soft)' }}>
             Could not block that date. It may already be blocked, or already planned — a planned day
             has to be cleared before it can be skipped.
           </p>

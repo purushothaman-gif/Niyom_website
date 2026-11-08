@@ -86,7 +86,7 @@ export function ProductAccessEditor({ audience, clientId, dsaId }: {
           return (
             <div key={p.key} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: 'var(--bg-elevated)' }}>
               <span className="text-sm text-text-primary flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full" style={{ background: effective ? 'var(--c-emerald, #34d399)' : 'var(--text-faint, #888)' }} />
+                <span className="w-2 h-2 rounded-full" style={{ background: effective ? 'var(--c-emerald)' : 'var(--text-faint, #888)' }} />
                 {p.label}
               </span>
               <select

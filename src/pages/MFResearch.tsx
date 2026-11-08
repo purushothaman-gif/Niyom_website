@@ -157,7 +157,7 @@ export default function MFResearch({ onBack }: MFResearchProps) {
       actions={
         <button
           onClick={() => window.open('/onboarding', '_blank')}
-          className="lift press inline-flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black font-semibold px-5 py-2.5 rounded-xl shadow-md"
+          className="lift press inline-flex items-center gap-2 bg-accent hover:bg-accent-strong text-on-accent font-semibold px-5 py-2.5 rounded-xl shadow-md"
         >
           <Wallet size={16} /> Invest now
         </button>

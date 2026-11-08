@@ -171,7 +171,7 @@ export function CancelDialog({ subject, onClose, onDone }: Props) {
                 type="button"
                 onClick={() => void submit()}
                 disabled={blocked}
-                className="flex-1 rounded-token-md bg-danger-soft py-2.5 text-xs font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                className="flex-1 rounded-token-md bg-danger py-2.5 text-xs font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
               >
                 {busy ? 'Sending to BSE…' : `Cancel this ${thing}`}
               </button>

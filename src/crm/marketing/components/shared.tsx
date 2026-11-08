@@ -9,9 +9,9 @@ import { LintFinding } from '../marketingConstants';
 
 const STATUS_STYLES: Record<ContentStatus, { label: string; bg: string; fg: string }> = {
   draft:    { label: 'Draft',    bg: 'rgba(142,160,181,0.16)', fg: 'var(--text-muted)' },
-  approved: { label: 'Live',     bg: 'rgba(34,197,94,0.16)',   fg: '#22c55e' },
-  rejected: { label: 'Rejected', bg: 'rgba(239,68,68,0.16)',   fg: '#ef4444' },
-  archived: { label: 'Archived', bg: 'rgba(148,163,184,0.16)', fg: '#94a3b8' },
+  approved: { label: 'Live',     bg: 'rgba(var(--success-soft-rgb),0.14)',   fg: 'var(--success-soft)' },
+  rejected: { label: 'Rejected', bg: 'rgba(var(--danger-soft-rgb),0.14)',   fg: 'var(--danger-soft)' },
+  archived: { label: 'Archived', bg: 'rgba(var(--hover-bg-rgb),0.08)', fg: 'var(--text-muted)' },
 };
 
 export function StatusPill({ status }: { status: ContentStatus }) {
@@ -45,7 +45,7 @@ export function ExpiryCountdown({ expiresAt, compact }: { expiresAt: string | nu
 
   if (msLeft <= 0) {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: '#ef4444' }}>
+      <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: 'var(--danger-soft)' }}>
         <Clock className="w-3 h-3" /> Expired
       </span>
     );
@@ -58,7 +58,7 @@ export function ExpiryCountdown({ expiresAt, compact }: { expiresAt: string | nu
 
   return (
     <span className="inline-flex items-center gap-1 text-xs font-semibold"
-      style={{ color: urgent ? '#f59e0b' : 'var(--text-muted)' }}>
+      style={{ color: urgent ? 'rgb(var(--warning-soft-rgb))' : 'var(--text-muted)' }}>
       <Clock className="w-3 h-3" />
       {compact ? text : `Expires in ${hours >= 1 ? `${hours}h ${minutes}m` : `${minutes}m`}`}
     </span>
@@ -73,7 +73,7 @@ export function LintBadges({ findings }: { findings: LintFinding[] }) {
 
   return (
     <div className="rounded-xl p-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)' }}>
-      <p className="text-xs font-bold flex items-center gap-1.5 mb-2" style={{ color: '#ef4444' }}>
+      <p className="text-xs font-bold flex items-center gap-1.5 mb-2" style={{ color: 'var(--danger-soft)' }}>
         <AlertTriangle className="w-3.5 h-3.5" />
         {findings.length} compliance {findings.length === 1 ? 'issue' : 'issues'} — edit the copy or archive the post
       </p>
@@ -82,7 +82,7 @@ export function LintBadges({ findings }: { findings: LintFinding[] }) {
           <li key={i} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
             <span className="font-semibold">{f.field}</span>
             {': '}
-            <span style={{ color: '#ef4444' }}>&ldquo;{f.phrase}&rdquo;</span>
+            <span style={{ color: 'var(--danger-soft)' }}>&ldquo;{f.phrase}&rdquo;</span>
             <span style={{ color: 'var(--text-faint)' }}> — {f.label}</span>
           </li>
         ))}

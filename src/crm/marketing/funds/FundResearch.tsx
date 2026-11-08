@@ -527,7 +527,7 @@ function CompareView({ funds, onBack, onRemove }: {
               <button key={r.id} onClick={() => setRange(r.id)}
                 className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors"
                 style={range === r.id
-                  ? { background: 'var(--accent-soft)', color: 'var(--text-on-accent)' }
+                  ? { background: 'var(--accent)', color: 'var(--text-on-accent)' }
                   : { background: 'transparent', color: 'var(--text-faint)' }}>
                 {r.label}
               </button>
@@ -771,7 +771,7 @@ function FundDetail({ fund, onBack }: { fund: CatalogFund; onBack: () => void })
               <button key={r.id} onClick={() => setRange(r.id)}
                 className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors"
                 style={range === r.id
-                  ? { background: 'var(--accent-soft)', color: 'var(--text-on-accent)' }
+                  ? { background: 'var(--accent)', color: 'var(--text-on-accent)' }
                   : { background: 'transparent', color: 'var(--text-faint)' }}>
                 {r.label}
               </button>

@@ -1,9 +1,12 @@
-import { Moon, Sun } from 'lucide-react';
-import { useTheme } from './ThemeContext';
+import { Monitor, Moon, Sun } from 'lucide-react';
+import { useTheme, type ThemePreference } from './ThemeContext';
 
 interface ThemeToggleProps {
-  /** Visual style: a labelled sliding switch, or a compact icon button. */
-  variant?: 'switch' | 'icon';
+  /**
+   * Visual style: a sliding switch, a compact icon button, or a three-way
+   * Light / Dark / System segmented control (for settings pages).
+   */
+  variant?: 'switch' | 'icon' | 'segmented';
   className?: string;
 }
 
@@ -16,6 +19,8 @@ export function ThemeToggle({ variant = 'switch', className = '' }: ThemeToggleP
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
   const label = `Switch to ${isDark ? 'light' : 'dark'} mode`;
+
+  if (variant === 'segmented') return <ThemeSegmented className={className} />;
 
   if (variant === 'icon') {
     return (
@@ -83,6 +88,51 @@ export function ThemeToggle({ variant = 'switch', className = '' }: ThemeToggleP
         {isDark ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
       </span>
     </button>
+  );
+}
+
+const OPTIONS: { value: ThemePreference; label: string; Icon: typeof Sun }[] = [
+  { value: 'light', label: 'Light', Icon: Sun },
+  { value: 'dark', label: 'Dark', Icon: Moon },
+  { value: 'system', label: 'System', Icon: Monitor },
+];
+
+/** Light / Dark / System picker. "System" follows the device setting live. */
+function ThemeSegmented({ className = '' }: { className?: string }) {
+  const { preference, setPreference } = useTheme();
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Appearance"
+      className={`inline-flex items-center gap-0.5 rounded-xl p-0.5 ${className}`}
+      style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}
+    >
+      {OPTIONS.map(({ value, label, Icon }) => {
+        const active = preference === value;
+        return (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => setPreference(value)}
+            className="inline-flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-xs font-semibold"
+            style={{
+              background: active ? 'var(--bg-elevated)' : 'transparent',
+              color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+              boxShadow: active ? 'var(--shadow-sm)' : 'none',
+              border: `1px solid ${active ? 'var(--border)' : 'transparent'}`,
+            }}
+          >
+            <Icon
+              className="h-3.5 w-3.5"
+              style={{ color: active ? 'var(--accent-soft)' : 'currentColor' }}
+            />
+            {label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

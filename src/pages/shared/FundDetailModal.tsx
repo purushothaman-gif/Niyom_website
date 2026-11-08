@@ -208,7 +208,7 @@ export function FundDetailModal({ seed, onClose }: FundDetailModalProps) {
           </p>
           <button
             onClick={() => window.open('/onboarding', '_blank')}
-            className="lift press inline-flex items-center justify-center gap-2 flex-shrink-0 bg-accent-soft hover:bg-accent-soft-deep text-black font-bold px-6 py-3 rounded-xl shadow-md"
+            className="lift press inline-flex items-center justify-center gap-2 flex-shrink-0 bg-accent hover:bg-accent-strong text-on-accent font-bold px-6 py-3 rounded-xl shadow-md"
           >
             <Wallet size={16} /> Invest Now
           </button>

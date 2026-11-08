@@ -411,7 +411,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
                 <Bell className="w-4 h-4" />
                 {unread > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-xs flex items-center justify-center font-bold"
-                    style={{ background: 'var(--accent-soft)', color: 'var(--text-on-accent)' }}>
+                    style={{ background: 'var(--accent)', color: 'var(--text-on-accent)' }}>
                     {unread > 9 ? '9+' : unread}
                   </span>
                 )}

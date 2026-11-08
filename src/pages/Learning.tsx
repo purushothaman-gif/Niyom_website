@@ -293,7 +293,7 @@ export function Learning({ onBack }: LearningProps) {
         <p className="text-gray-300 mb-6 max-w-xl mx-auto">Explore our investment solutions or talk to our team to build a plan around your goals.</p>
         <button
           onClick={() => window.open('/onboarding', '_blank')}
-          className="lift press bg-accent-soft hover:bg-accent-soft-deep text-black font-bold px-8 py-3.5 rounded-xl shadow-lg"
+          className="lift press bg-accent hover:bg-accent-strong text-on-accent font-bold px-8 py-3.5 rounded-xl shadow-lg"
         >
           Start Investing
         </button>

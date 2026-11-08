@@ -6,6 +6,7 @@ import { User, Lock, Bell, CheckCircle2, AlertCircle, Eye, EyeOff, Shield, Smart
 import { EmployeeAvatar } from './EmployeeAvatar';
 import { ProductDefaultsPanel } from './ProductAccess';
 import ImageCropModal from './ImageCropModal';
+import { ThemeToggle } from '../theme/ThemeToggle';
 import {
   listVerifiedTotpFactors, startTotpEnrollment, verifyTotpCode, cancelEnrollment,
   disableTotp, mfaErrorMessage, isMfaUnavailable, employeeIsPrivileged,
@@ -167,7 +168,7 @@ export default function Settings({ employee }: Props) {
   const tabs = [
     { key: 'profile' as const, label: 'Profile', icon: User },
     { key: 'security' as const, label: 'Security', icon: Lock },
-    { key: 'notifications' as const, label: 'Notifications', icon: Bell },
+    { key: 'notifications' as const, label: 'Preferences', icon: Bell },
     ...(isAdmin ? [{ key: 'products' as const, label: 'Products', icon: Package }] : []),
   ];
 
@@ -439,6 +440,13 @@ export default function Settings({ employee }: Props) {
         <div className="rounded-2xl p-6 space-y-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
           <h3 className="text-sm font-bold text-text-primary flex items-center gap-2"><Bell className="w-4 h-4" style={{ color: 'var(--accent)' }} /> Notification Preferences</h3>
           <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-sm font-semibold text-text-primary">Appearance</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>Light, dark, or match your device. Saved on this browser.</p>
+              </div>
+              <ThemeToggle variant="segmented" />
+            </div>
             {[
               { key: 'email_alerts' as const, label: 'Email Alerts', desc: 'Receive important notifications via email' },
               { key: 'txn_alerts' as const, label: 'Transaction Alerts', desc: 'Get notified on new transactions' },

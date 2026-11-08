@@ -253,12 +253,12 @@ export function ProfilePage({
 
           <SectionCard title="Settings" icon={Lock}>
           <div className="space-y-2">
-            <div className="flex items-center justify-between rounded-token-md bg-bg-surface px-3.5 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-token-md bg-bg-surface px-3.5 py-3">
               <div>
                 <p className="text-sm font-semibold text-text-primary">Appearance</p>
-                <p className="text-[11px] text-text-secondary">Switch between light and dark.</p>
+                <p className="text-[11px] text-text-secondary">Light, dark, or match your device.</p>
               </div>
-              <ThemeToggle variant="switch" />
+              <ThemeToggle variant="segmented" />
             </div>
             <button
               type="button"

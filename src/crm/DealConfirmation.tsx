@@ -1003,7 +1003,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
               await (await html2pdfTrimmed(pdfOpt, element)).worker.save();
             }}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent"
-            style={{ background: 'linear-gradient(135deg, var(--accent-strong), var(--accent-strong-deep))' }}
+            style={{ background: 'var(--accent-gradient)' }}
           >
             <Download className="w-4 h-4" /> Download PDF
           </button>
@@ -1035,7 +1035,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
             onClick={() => handleSendSecureLink(previewDeal)}
             disabled={emailSending || !!previewDeal.cancelled_at}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent transition-all disabled:cursor-not-allowed"
-            style={{ background: 'linear-gradient(135deg, var(--accent-strong), var(--accent-strong-deep))', opacity: emailSending ? 0.75 : 1 }}
+            style={{ background: 'var(--accent-gradient)', opacity: emailSending ? 0.75 : 1 }}
           >
             {emailSending ? (
               <>

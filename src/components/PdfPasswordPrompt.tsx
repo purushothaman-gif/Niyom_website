@@ -47,14 +47,14 @@ function PasswordDialog({ fileName, wrong, done }: { fileName: string; wrong: bo
           aria-label="PDF password"
           style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 12, fontSize: 14, outline: 'none', fontFamily: font, background: 'var(--bg-raised, #16243a)', border: `1px solid ${wrong ? '#DC2626' : 'var(--border, #334155)'}`, color: 'var(--text-bright, #fff)' }}
         />
-        {wrong && <p style={{ margin: 0, fontSize: 12, color: '#DC2626' }}>That password didn't open the file. Try again.</p>}
+        {wrong && <p style={{ margin: 0, fontSize: 12, color: 'var(--danger-soft, #dc2626)' }}>That password didn't open the file. Try again.</p>}
         <div style={{ display: 'flex', gap: 12 }}>
           <button type="button" onClick={() => done(null)}
             style={{ ...btn, background: 'var(--bg-raised, #16243a)', color: 'var(--text-secondary, #cbd5e1)', border: '1px solid var(--border, #334155)' }}>
             Skip (upload locked)
           </button>
           <button type="submit" disabled={!value}
-            style={{ ...btn, fontWeight: 700, color: '#fff', border: 'none', background: 'var(--accent, #c9a24d)', opacity: value ? 1 : 0.5 }}>
+            style={{ ...btn, fontWeight: 700, color: 'var(--text-on-accent, #081b33)', border: 'none', background: 'var(--accent, #c9a24d)', opacity: value ? 1 : 0.5 }}>
             Unlock
           </button>
         </div>

@@ -33,7 +33,7 @@ export function NotFound() {
       </p>
       <Link
         to="/"
-        className="lift press inline-flex items-center gap-2 bg-accent-soft hover:bg-accent-soft-deep text-black px-6 py-3 rounded-xl font-semibold shadow-md"
+        className="lift press inline-flex items-center gap-2 bg-accent hover:bg-accent-strong text-on-accent px-6 py-3 rounded-xl font-semibold shadow-md"
       >
         <Home size={18} /> Back to Home
       </Link>

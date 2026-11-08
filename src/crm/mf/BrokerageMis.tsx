@@ -377,11 +377,11 @@ export default function BrokerageMis({ employee }: Props) {
                             <div className="flex justify-end gap-1">
                               <input value={draft[k] ?? (r.receipt ? String(r.receipt.amount) : '')} onChange={(e) => setDraft((d) => ({ ...d, [k]: e.target.value }))}
                                 inputMode="decimal" placeholder="₹ paid" className="w-24 px-2 py-1 rounded-lg text-sm text-right text-text-primary" style={sel} />
-                              {draft[k] != null && <button disabled={busy} onClick={() => saveReceipt(r.amc_code, r.month)} className="px-2 py-1 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: 'var(--accent)' }}>Save</button>}
+                              {draft[k] != null && <button disabled={busy} onClick={() => saveReceipt(r.amc_code, r.month)} className="px-2 py-1 rounded-lg text-xs font-semibold text-on-accent disabled:opacity-50" style={{ background: 'var(--accent)' }}>Save</button>}
                             </div>
                           </td>
-                          <td className={`${td} text-right`} style={{ color: diff == null ? 'var(--text-muted)' : ok ? 'var(--c-green, #16a34a)' : 'var(--c-red)' }}>{diff == null ? '—' : inr(diff)}</td>
-                          <td className={td} style={{ color: diff == null ? 'var(--text-muted)' : ok ? 'var(--c-green, #16a34a)' : 'var(--c-red)' }}>
+                          <td className={`${td} text-right`} style={{ color: diff == null ? 'var(--text-muted)' : ok ? 'var(--c-green)' : 'var(--c-red)' }}>{diff == null ? '—' : inr(diff)}</td>
+                          <td className={td} style={{ color: diff == null ? 'var(--text-muted)' : ok ? 'var(--c-green)' : 'var(--c-red)' }}>
                             {diff == null ? 'Awaiting payout' : ok ? (Math.abs(diff) < 0.01 ? 'Matched' : 'Matched (incl. GST)') : diff < 0 ? 'Short-paid' : 'Over-paid'}
                           </td>
                         </tr>
@@ -438,7 +438,7 @@ export default function BrokerageMis({ employee }: Props) {
                       <option value="">Assign to client…</option>
                       {clients.map((c) => <option key={c.id} value={c.id}>{c.full_name} ({c.client_code})</option>)}
                     </select>
-                    <button onClick={() => assignFolio(u.folio)} disabled={!assign[u.folio] || busy} className="px-3 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: 'var(--accent)' }}>Save</button>
+                    <button onClick={() => assignFolio(u.folio)} disabled={!assign[u.folio] || busy} className="px-3 py-2 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50" style={{ background: 'var(--accent)' }}>Save</button>
                   </div>
                 ))}
               </div>
@@ -466,7 +466,7 @@ export default function BrokerageMis({ employee }: Props) {
                         <td className={`${td} text-right text-text-primary`}>{r.rows_total ?? '—'}</td>
                         <td className={`${td} text-right`} style={{ color: 'var(--text-secondary)' }}>{r.report === 'WBR77' ? `${r.matched ?? 0}/${(r.matched ?? 0) + (r.unmatched ?? 0)}` : `${r.schemes_upserted ?? 0} schemes`}</td>
                         <td className={`${td} text-right text-text-primary`}>{r.amount_total != null ? inr(Number(r.amount_total)) : '—'}</td>
-                        <td className={td} style={{ color: r.status === 'ok' ? 'var(--c-green, #16a34a)' : 'var(--c-red)' }}>
+                        <td className={td} style={{ color: r.status === 'ok' ? 'var(--c-green)' : 'var(--c-red)' }}>
                           {r.status === 'ok' ? (r.report === 'WBR77' ? 'Reconciled' : 'OK') : (r.error ?? 'Error')}
                         </td>
                       </tr>

@@ -209,13 +209,13 @@ export default function MfBrokerage({ employee }: Props) {
               className="block w-full text-sm text-text-primary file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:cursor-pointer" />
           </div>
           <button onClick={onImport} disabled={busy || !parsed}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: 'var(--accent)' }}>
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-on-accent disabled:opacity-50" style={{ background: 'var(--accent)' }}>
             <Upload className={`w-4 h-4 ${busy ? 'animate-pulse' : ''}`} /> {busy ? 'Working…' : 'Import'}
           </button>
         </div>
 
         {error && <div className="mt-4 p-3 rounded-xl text-sm text-c-red flex items-start gap-2" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" /> {error}</div>}
-        {result && <div className="mt-4 p-4 rounded-xl text-sm" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}><p className="font-semibold text-text-primary flex items-center gap-2"><CheckCircle2 className="w-4 h-4" style={{ color: 'var(--c-green, #16a34a)' }} /> {result}</p></div>}
+        {result && <div className="mt-4 p-4 rounded-xl text-sm" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}><p className="font-semibold text-text-primary flex items-center gap-2"><CheckCircle2 className="w-4 h-4" style={{ color: 'var(--c-green)' }} /> {result}</p></div>}
 
         {parsed && preview && (
           <div className="mt-4 p-4 rounded-xl text-sm space-y-2" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}>
@@ -224,7 +224,7 @@ export default function MfBrokerage({ employee }: Props) {
               Months: {parsed.months.map((m) => m.label).join(', ')} · {parsed.clientNames.length} clients · total {fmt(parsed.totalBrokerage)} (ex-GST)
             </p>
             <p style={{ color: 'var(--text-secondary)' }}>
-              <span style={{ color: 'var(--c-green, #16a34a)' }}>{preview.matched} will match</span> ·{' '}
+              <span style={{ color: 'var(--c-green)' }}>{preview.matched} will match</span> ·{' '}
               <span style={{ color: preview.unmatched ? 'var(--c-red)' : 'var(--text-muted)' }}>{preview.unmatched} unmatched</span>
               {preview.ambiguous > 0 && ` (incl. ${preview.ambiguous} duplicate-name)`} — unmatched rows import but aren't credited until you map them below.
             </p>
@@ -253,7 +253,7 @@ export default function MfBrokerage({ employee }: Props) {
                       <option value="">Select client…</option>
                       {clients.map((c) => <option key={c.id} value={c.id}>{c.full_name} ({c.client_code})</option>)}
                     </select>
-                    <button onClick={doMap} disabled={!mapClientId || busy} className="px-3 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: 'var(--accent)' }}>Save</button>
+                    <button onClick={doMap} disabled={!mapClientId || busy} className="px-3 py-2 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50" style={{ background: 'var(--accent)' }}>Save</button>
                     <button onClick={() => { setMapName(null); setMapClientId(''); }} className="px-3 py-2 rounded-lg text-sm" style={{ color: 'var(--text-secondary)' }}>Cancel</button>
                   </>
                 ) : (

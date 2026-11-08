@@ -688,7 +688,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
           </a>
           <button
             onClick={() => window.open('/onboarding', '_blank')}
-            className="press flex-1 flex items-center justify-center gap-2 h-12 rounded-xl bg-accent-soft hover:bg-accent-soft-deep text-black font-bold"
+            className="press flex-1 flex items-center justify-center gap-2 h-12 rounded-xl bg-accent hover:bg-accent-strong text-on-accent font-bold"
           >
             Start Investing <ArrowRight size={18} />
           </button>
