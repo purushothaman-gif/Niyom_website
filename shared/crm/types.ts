@@ -335,7 +335,6 @@ export type CRMPage =
   | 'market_watch'
   | 'mf_platform'
   | 'mf_feeds'
-  | 'mf_brokerage'
   | 'mf_brokerage_mis'
   | 'leads'
   | 'onboarding'

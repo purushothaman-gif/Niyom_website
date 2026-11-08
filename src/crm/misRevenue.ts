@@ -416,7 +416,9 @@ export async function computeMisRows(
     }
 
     // ---------------------------------------------------------------------
-    // Actual MF brokerage (uploaded month-on-month, client-wise). This is the
+    // Actual MF brokerage (month-on-month, client-wise). The manual Excel upload
+    // page was retired 2026-11-09; rows already in mf_brokerage (Jul–Sep 2026)
+    // still count here. This is the
     // real mutual-fund revenue, ex-GST, credited to the client's RM in the
     // month it was earned — it supersedes the theoretical trail above for MF.
     // ---------------------------------------------------------------------

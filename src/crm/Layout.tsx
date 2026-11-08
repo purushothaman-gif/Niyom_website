@@ -84,7 +84,6 @@ const NAV: NavSection[] = [
       { key: 'bond_orders' as CRMPage,       label: 'Bond Orders',       icon: Receipt },
       { key: 'share_orders' as CRMPage,      label: 'Share Orders',      icon: Receipt },
       { key: 'mf_feeds' as CRMPage,          label: 'MF Feeds',          icon: Database, adminOnly: true },
-      { key: 'mf_brokerage' as CRMPage,      label: 'MF Brokerage',      icon: BadgeIndianRupee, adminOnly: true },
     ],
   },
   {

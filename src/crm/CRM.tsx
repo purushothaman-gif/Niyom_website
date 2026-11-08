@@ -23,7 +23,6 @@ import FundResearch from './marketing/funds/FundResearch';
 import { MarketWatch } from '../components/marketWatch/MarketWatch';
 import { MfStaffPlaceholder } from '../components/MfStaffPlaceholder';
 import MfFeeds from './mf/MfFeeds';
-import MfBrokerage from './mf/MfBrokerage';
 import BrokerageMis from './mf/BrokerageMis';
 import ClientOnboarding from './ClientOnboarding';
 import ManageClients from './ManageClients';
@@ -100,7 +99,6 @@ export default function CRM() {
     'marketing_funds',
     'mf_platform',
     'mf_feeds',
-    'mf_brokerage',
     'mf_brokerage_mis',
     'mail_campaigns',
     'mis',
@@ -263,7 +261,6 @@ export default function CRM() {
       // page only shows if someone types /crm/mf_platform directly.
       case 'mf_platform': return <MfStaffPlaceholder />;
       case 'mf_feeds': return isAdmin ? <MfFeeds employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
-      case 'mf_brokerage': return isAdmin ? <MfBrokerage employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
       case 'mf_brokerage_mis': return <BrokerageMis employee={employee} />;
       // Open to every employee: admins mail as the company, employees as themselves to their own book (enforced in the database).
       case 'mail_campaigns': return <Mail employee={employee} />;
