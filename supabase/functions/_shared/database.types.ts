@@ -11776,6 +11776,7 @@ export type Database = {
           last_daily_ok: boolean | null
           last_daily_ok_at: string | null
           last_daily_validation: Json | null
+          latest_calendar_nav_date: string | null
           latest_nav_date: string | null
           latest_nav_rows: number | null
           master_synced_at: string | null
@@ -11783,6 +11784,10 @@ export type Database = {
           nav_age_days: number | null
           returns_from_nav_daily: number | null
           returns_stale: number | null
+          tracked_funds: number | null
+          tracked_gave_up_24h: number | null
+          tracked_loaded: number | null
+          tracked_waiting_over_1d: number | null
         }
         Relationships: []
       }

@@ -28,6 +28,13 @@ export interface MarketHealthRow {
   master_synced_at: string | null;
   returns_stale: number;
   returns_from_nav_daily: number;
+  /* On-demand NAV history (mf_nav_tracked), since 2026-11-07. Optional so an
+     older view without these columns still type-checks. */
+  latest_calendar_nav_date?: string | null;
+  tracked_funds?: number;
+  tracked_loaded?: number;
+  tracked_gave_up_24h?: number;
+  tracked_waiting_over_1d?: number;
 }
 
 export interface Problem {
@@ -51,10 +58,15 @@ export function assessHealth(h: MarketHealthRow, now = new Date()): Problem[] {
     });
   const big = h.last_daily_validation?.big_moves ?? 0;
   if (big > 25) out.push({ level: 'warning', text: `${big} schemes moved more than 20% in one day — check for bad NAVs.` });
-  if (h.history_failures_24h >= 10)
-    out.push({ level: 'warning', text: `NAV history backfill failed ${h.history_failures_24h} times in 24h.` });
-  if (h.history_windows_skipped > 0)
-    out.push({ level: 'warning', text: `${h.history_windows_skipped} history week(s) were skipped after repeated failures — gaps exist.` });
+  // NAV history is loaded on demand for funds clients hold (mf_nav_tracked).
+  // Only NEW give-ups are reported, so a fund the source simply has no history
+  // for is mentioned once, not every morning.
+  const gaveUp = Number(h.tracked_gave_up_24h ?? 0);
+  if (gaveUp > 0)
+    out.push({ level: 'warning', text: `${gaveUp} client-held fund(s) could not get their NAV history loaded after repeated attempts.` });
+  const waiting = Number(h.tracked_waiting_over_1d ?? 0);
+  if (waiting > 0)
+    out.push({ level: 'warning', text: `${waiting} client-held fund(s) have been waiting over a day for their NAV history to load.` });
   const masterAgeH = h.master_synced_at ? (now.getTime() - new Date(h.master_synced_at).getTime()) / 3.6e6 : null;
   if (masterAgeH == null || masterAgeH > 72)
     out.push({ level: 'warning', text: 'AMFI scheme master has not synced in over 3 days.' });
@@ -70,7 +82,7 @@ async function sendAlert(problems: Problem[], h: MarketHealthRow): Promise<strin
   const crit = problems.some((p) => p.level === 'critical');
   const subject = `${crit ? '[ACTION] ' : ''}MF market data: ${problems.length} issue${problems.length > 1 ? 's' : ''}`;
   const lines = problems.map((p) => `• [${p.level}] ${p.text}`).join('\n');
-  const text = `${lines}\n\nLatest NAV date: ${h.latest_nav_date ?? '—'}\nHistory backfill reached: ${h.history_cursor ?? 'not started'}\n\nNiyom MF market-data health check`;
+  const text = `${lines}\n\nLatest full NAV day: ${h.latest_nav_date ?? '—'} (${h.latest_nav_rows ?? 0} ISINs)\nClient funds with NAV history: ${h.tracked_loaded ?? '—'} of ${h.tracked_funds ?? '—'}\n\nNiyom MF market-data health check`;
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },

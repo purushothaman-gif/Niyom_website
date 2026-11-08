@@ -61,8 +61,13 @@ describe('health assessment', () => {
     const p = assessHealth({ ...ok, nav_age_days: 6, last_daily_ok: false, last_daily_error: 'boom' }, now);
     expect(p.filter((x) => x.level === 'critical')).toHaveLength(2);
   });
-  it('flags a partial file, bad NAVs and skipped history', () => {
-    const p = assessHealth({ ...ok, latest_nav_rows: 9000, last_daily_validation: { big_moves: 80 }, history_windows_skipped: 2 }, now);
-    expect(p).toHaveLength(3);
+  it('flags a partial file and bad NAVs', () => {
+    const p = assessHealth({ ...ok, latest_nav_rows: 9000, last_daily_validation: { big_moves: 80 } }, now);
+    expect(p).toHaveLength(2);
+  });
+  it('reports on-demand history problems, not the retired universe backfill', () => {
+    expect(assessHealth({ ...ok, history_windows_skipped: 8, history_failures_24h: 30 }, now)).toEqual([]);
+    const p = assessHealth({ ...ok, tracked_gave_up_24h: 1, tracked_waiting_over_1d: 2 }, now);
+    expect(p.map((x) => x.text).join(' ')).toMatch(/1 client-held fund.*could not.*2 client-held fund/s);
   });
 });
