@@ -51,7 +51,7 @@ export function RecentTransactionsCard({ transactions, onViewAll }: Props) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold text-text-primary">{t.productName}</p>
                   <p className="text-[11px] text-text-secondary">
-                    {PRODUCT_LABELS[t.productType]} · {fmtDate(t.date)}
+                    {PRODUCT_LABELS[t.productType]}{t.kindLabel ? ` · ${t.kindLabel}` : ''} · {fmtDate(t.date)}
                   </p>
                 </div>
                 <p className="text-xs font-bold text-text-primary">{fmt(t.amount)}</p>

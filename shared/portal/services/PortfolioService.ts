@@ -166,6 +166,7 @@ export const PortfolioService = {
       txnType: t.txn_type,
       amount: t.consolidated_amount || 0,
       date: t.txn_date,
+      kindLabel: t.id.startsWith('rta-') ? t.notes || undefined : undefined,
     }));
   },
 

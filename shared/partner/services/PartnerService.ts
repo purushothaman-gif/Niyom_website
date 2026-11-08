@@ -187,7 +187,18 @@ export const PartnerService = {
           if (error) throw error;
           return (data ?? []) as PartnerTransactionRow[];
         })();
-    return mfSsoEnabled() ? rows.filter((r) => r.product_type !== 'mutual_fund') : rows;
+    if (!mfSsoEnabled()) return rows;
+    // Funds run on the platform: the registrar is the fund record, so in-house
+    // MF rows give way to the client's registrar transactions (ownership is
+    // re-checked server-side; never both, so nothing is listed twice).
+    const nonMf = rows.filter((r) => r.product_type !== 'mutual_fund');
+    if (isDemoSession()) return nonMf;
+    const { data: mf, error: mfErr } = await supabase.rpc('nw_partner_client_mf_transactions', {
+      p_client_id: clientId,
+    });
+    // Best-effort: a failure here still shows the client's bond/share history.
+    const mfRows = mfErr ? [] : ((mf ?? []) as PartnerTransactionRow[]);
+    return [...nonMf, ...mfRows].sort((a, b) => (b.txn_date ?? '').localeCompare(a.txn_date ?? ''));
   },
 
   async getPayoutSummary(): Promise<PartnerPayoutSummary | null> {

@@ -13386,6 +13386,20 @@ export type Database = {
           quantity: number
         }[]
       }
+      nw_partner_client_mf_transactions: {
+        Args: { p_client_id: string }
+        Returns: {
+          amount: number
+          client_price: number
+          dsa_price: number
+          product_name: string
+          product_type: string
+          quantity: number
+          txn_date: string
+          txn_id: string
+          txn_type: string
+        }[]
+      }
       nw_partner_client_portfolio: {
         Args: { p_client_id: string }
         Returns: {

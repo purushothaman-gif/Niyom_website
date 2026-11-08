@@ -41,7 +41,7 @@ import {
   type NavRow,
 } from './cas/model';
 import { isDemoClientSession, demoSnapshot } from '../demo/demoClient';
-import { fetchRtaMf, type RtaHoldingRow } from '../../mf/rtaMf';
+import { fetchRtaMf, fetchRtaTransactions, mergeByDateDesc, type RtaHoldingRow } from '../../mf/rtaMf';
 
 /**
  * How far back to look for a quote.
@@ -238,10 +238,15 @@ export const HoldingService = {
         heldAway.reduce((t, h) => t + (Number(h.current_value) || 0), 0),
     };
 
+    // The activity list: our non-MF records plus the registrar's fund
+    // transactions (in-house MF rows were dropped above, so nothing doubles).
+    const rtaTxns = await fetchRtaTransactions(supabase, clientId, 25);
+
     return {
       xirrBasis,
       ...stripped,
       holdings: merged,
+      transactions: mergeByDateDesc(stripped.transactions, rtaTxns, 25),
       // A statement was imported — carry its context (held-away funds are stated
       // as of its date) even though the registrar drives the funds we service.
       mfSource: cas ? 'cas' : stripped.mfSource,

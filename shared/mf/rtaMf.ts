@@ -10,6 +10,7 @@
  * actually holds, refreshed without anyone lifting a finger.
  */
 import type { NiyomDb } from '../platform/db';
+import type { NWTransaction } from '../crm/types';
 
 export interface RtaHoldingRow {
   id: string;
@@ -226,4 +227,66 @@ function valueOf(h: RtaHoldingRow): number {
   if (h.navValue != null) return h.navValue;
   if (h.nav != null) return h.units * h.nav;
   return 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Registrar transactions (mf_rta_transactions) as the portal's transaction
+ * rows. Once mutual funds run on the platform, in-house MF rows are dropped
+ * from every list (the registrar is the record) — these take their place, so a
+ * client who only holds funds no longer sees an empty history.
+ * ------------------------------------------------------------------------- */
+/** How each registrar transaction kind reads to a client. Others are not shown. */
+export const RTA_TXN_LABEL: Record<string, { label: string; side: 'buy' | 'sell' }> = {
+  purchase: { label: 'Purchase', side: 'buy' },
+  sip: { label: 'SIP', side: 'buy' },
+  switch_in: { label: 'Switch in', side: 'buy' },
+  redemption: { label: 'Redemption', side: 'sell' },
+  switch_out: { label: 'Switch out', side: 'sell' },
+};
+
+/**
+ * The client's registrar fund transactions, newest first, in NWTransaction
+ * shape (id prefixed `rta-`, the kind's label in `notes`). RLS scopes rows to
+ * the caller. Best-effort: a read failure returns [] so lists still render.
+ */
+export async function fetchRtaTransactions(db: NiyomDb, clientId: string, limit?: number): Promise<NWTransaction[]> {
+  if (!clientId) return [];
+  let q = db
+    .from('mf_rta_transactions')
+    .select('id, scheme_name, scheme_code, folio, txn_kind, amount, units, nav, trade_date, post_date, created_at')
+    .eq('client_id', clientId)
+    .in('txn_kind', Object.keys(RTA_TXN_LABEL))
+    .order('trade_date', { ascending: false, nullsFirst: false });
+  if (limit) q = q.limit(limit);
+  const { data, error } = await q;
+  if (error || !data) return [];
+  return data
+    .filter((t) => t.trade_date || t.post_date)
+    .map((t) => {
+      const k = RTA_TXN_LABEL[t.txn_kind as string];
+      const date = (t.trade_date ?? t.post_date) as string;
+      return {
+        id: `rta-${t.id}`,
+        client_id: clientId,
+        employee_id: null,
+        txn_type: k.side,
+        product_type: 'mutual_fund',
+        product_name: t.scheme_name ?? t.scheme_code,
+        quantity: t.units == null ? null : Math.abs(Number(t.units)),
+        per_unit_price: t.nav == null ? null : Number(t.nav),
+        consolidated_amount: Math.abs(Number(t.amount ?? 0)),
+        txn_date: date,
+        notes: k.label,
+        created_at: t.created_at ?? date,
+        updated_at: t.created_at ?? date,
+        folio_number: t.folio,
+        mf_mode: t.txn_kind === 'sip' ? 'sip' : null,
+      } satisfies NWTransaction;
+    });
+}
+
+/** Merge two newest-first transaction lists into one newest-first list. */
+export function mergeByDateDesc<T extends { txn_date: string }>(a: T[], b: T[], limit?: number): T[] {
+  const out = [...a, ...b].sort((x, y) => (y.txn_date ?? '').localeCompare(x.txn_date ?? ''));
+  return limit ? out.slice(0, limit) : out;
 }

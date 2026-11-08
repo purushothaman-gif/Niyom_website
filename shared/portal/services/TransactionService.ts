@@ -10,6 +10,7 @@ import { PRODUCT_LABELS, PRODUCT_CHART_COLORS } from '../../crm/utils';
 import type { TransactionRow, TxnFilter, TxnSummary } from '../types/activity';
 import { isDemoClientSession, demoClientTransactions } from '../demo/demoClient';
 import { mfSsoEnabled } from '../../platform/env';
+import { fetchRtaTransactions, mergeByDateDesc } from '../../mf/rtaMf';
 
 async function fetchAll(clientId: string): Promise<NWTransaction[]> {
   const { data, error } = await supabase
@@ -25,8 +26,13 @@ export const TransactionService = {
   /** All transactions for a client, newest first. Sole Supabase boundary here. */
   async getAll(clientId: string): Promise<NWTransaction[]> {
     const txns = isDemoClientSession() ? demoClientTransactions : await fetchAll(clientId);
-    // The MF platform is the mutual fund record once the switch is on.
-    return mfSsoEnabled() ? txns.filter((t) => t.product_type !== 'mutual_fund') : txns;
+    if (!mfSsoEnabled()) return txns;
+    // Mutual funds run on the platform: the registrar is the fund record, so our
+    // own MF rows give way to the registrar's transactions (never both — that
+    // would list each purchase twice).
+    const nonMf = txns.filter((t) => t.product_type !== 'mutual_fund');
+    if (isDemoClientSession()) return nonMf;
+    return mergeByDateDesc(nonMf, await fetchRtaTransactions(supabase, clientId));
   },
 
   /** Normalize DB rows into presentation rows. */
@@ -42,6 +48,8 @@ export const TransactionService = {
       units: t.quantity ?? undefined,
       price: t.per_unit_price ?? undefined,
       date: t.txn_date,
+      // Registrar rows carry their kind ("SIP", "Switch in", "Redemption"…).
+      kindLabel: t.id.startsWith('rta-') ? t.notes || undefined : undefined,
     }));
   },
 

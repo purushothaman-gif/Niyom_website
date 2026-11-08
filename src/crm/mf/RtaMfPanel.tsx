@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Repeat, Wallet } from 'lucide-react';
+import { ArrowLeftRight, Repeat, Wallet } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { LogoLoader } from '../../components/LogoLoader';
 import { fmt, fmtDate } from '../utils';
-import { fetchRtaMf, type RtaMfData } from '../../../shared/mf/rtaMf';
+import { fetchRtaMf, fetchRtaTransactions, type RtaMfData } from '../../../shared/mf/rtaMf';
+import type { NWTransaction } from '../types';
 
 /**
  * A client's mutual funds as the REGISTRAR reports them — holdings and live
@@ -16,6 +17,7 @@ import { fetchRtaMf, type RtaMfData } from '../../../shared/mf/rtaMf';
  */
 export function RtaMfPanel({ clientId }: { clientId: string }) {
   const [data, setData] = useState<RtaMfData | null>(null);
+  const [txns, setTxns] = useState<NWTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,6 +25,8 @@ export function RtaMfPanel({ clientId }: { clientId: string }) {
     let alive = true;
     setLoading(true);
     setError(null);
+    // Last 5 registrar transactions alongside; best-effort (returns [] on failure).
+    fetchRtaTransactions(supabase, clientId, 5).then((t) => alive && setTxns(t));
     fetchRtaMf(supabase, clientId)
       .then((d) => alive && setData(d))
       .catch((e) => alive && setError(e instanceof Error ? e.message : 'Could not load registrar MF.'))
@@ -92,6 +96,41 @@ export function RtaMfPanel({ clientId }: { clientId: string }) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {txns.length > 0 && (
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <ArrowLeftRight className="h-4 w-4" style={{ color: 'var(--accent)' }} />
+            <h4 className="text-xs font-bold text-text-primary">Recent transactions (last {txns.length})</h4>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ color: 'var(--text-secondary)' }} className="text-left text-[11px] uppercase tracking-wider">
+                  <th className="py-2 pr-3 font-medium">Date</th>
+                  <th className="py-2 px-3 font-medium">Scheme</th>
+                  <th className="py-2 px-3 font-medium">Type</th>
+                  <th className="py-2 px-3 font-medium text-right">Units</th>
+                  <th className="py-2 pl-3 font-medium text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {txns.map((t) => (
+                  <tr key={t.id} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td className="py-2 pr-3" style={{ color: 'var(--text-secondary)' }}>{fmtDate(t.txn_date)}</td>
+                    <td className="py-2 px-3 text-text-primary">{t.product_name}</td>
+                    <td className="py-2 px-3" style={{ color: t.txn_type === 'sell' ? 'var(--danger)' : 'var(--success)' }}>{t.notes}</td>
+                    <td className="py-2 px-3 text-right" style={{ color: 'var(--text-secondary)' }}>
+                      {t.quantity != null ? t.quantity.toLocaleString('en-IN', { maximumFractionDigits: 3 }) : '—'}
+                    </td>
+                    <td className="py-2 pl-3 text-right text-text-primary">{fmt(t.consolidated_amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

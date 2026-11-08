@@ -122,7 +122,7 @@ export function TransactionsPage({ clientId, client }: { clientId: string; clien
                           <p className="truncate text-sm font-semibold text-text-primary">{r.name}</p>
                           <p className="flex items-center gap-1.5 text-[11px] text-text-secondary">
                             <span className="h-1.5 w-1.5 rounded-sm" style={{ background: r.productColor }} />
-                            {r.productLabel} · {fmtDate(r.date)}
+                            {r.productLabel}{r.kindLabel ? ` · ${r.kindLabel}` : ''} · {fmtDate(r.date)}
                             {r.units ? ` · ${r.units} units` : ''}
                           </p>
                         </div>

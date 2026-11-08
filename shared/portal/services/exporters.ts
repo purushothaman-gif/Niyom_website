@@ -35,7 +35,7 @@ export async function exportTransactionsXlsx(rows: TransactionRow[], client: NWC
     fmtDate(r.date),
     r.productLabel,
     r.name,
-    r.txnType === 'buy' ? 'Buy' : 'Sell',
+    r.kindLabel ?? (r.txnType === 'buy' ? 'Buy' : 'Sell'),
     r.units ?? '',
     r.price ?? '',
     r.amount,

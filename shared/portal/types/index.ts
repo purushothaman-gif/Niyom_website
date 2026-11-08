@@ -64,6 +64,8 @@ export interface RecentTransaction {
   txnType: 'buy' | 'sell';
   amount: number;
   date: string;
+  /** Finer kind for registrar fund rows: "SIP", "Switch in", "Redemption"… */
+  kindLabel?: string;
 }
 
 /* ---------------------------------------------------------------------------
