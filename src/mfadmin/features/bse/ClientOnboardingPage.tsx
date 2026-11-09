@@ -165,9 +165,10 @@ function nomineeIssues(f: Form): (string | null)[] {
 
 function validate(f: Form): Partial<Record<keyof Form, string>> {
   const e: Partial<Record<keyof Form, string>> = {};
-  // BSE accepts more than plain alphanumerics here — hyphenated codes such as
-  // NW-002-0001 were confirmed against live BSE — so the code is passed through
-  // as typed. Only length is enforced; BSE is the authority on the rest.
+  // Client codes created from Nov 2026 have no separators (NW0020008) — the
+  // BSE StAR / Wylth format. Older hyphenated codes such as NW-002-0001 were
+  // accepted by live BSE and stay as-is, so the code is passed through as
+  // typed. Only length is enforced; BSE is the authority on the rest.
   if (!f.clientCode.trim()) e.clientCode = 'Required — must be unique for this member.';
   else if (f.clientCode.trim().length > 20) e.clientCode = 'Up to 20 characters.';
 

@@ -9,6 +9,7 @@ import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships
 import { Search, Eye, Pencil, Trash2, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog, Users } from 'lucide-react';
 import { ClientProfileExtrasModal } from './ClientProfileExtras';
 import { mfSsoEnabled } from '../../shared/platform/env';
+import { clientCodeOrClause } from '../../shared/crm/clientCode';
 
 interface Props { employee: NWEmployee; onNavigate: (page: any, params?: any) => void; }
 
@@ -147,7 +148,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
       let query = supabase.from('nw_clients')
         .select('*, employee:nw_employees(full_name, employee_code), dsa:nw_dsa(full_name, dsa_code)');
 
-      if (search) query = query.or(`full_name.ilike.%${search}%,client_code.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,pan.ilike.%${search}%`);
+      if (search) query = query.or(`full_name.ilike.%${search}%,client_code.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,pan.ilike.%${search}%${clientCodeOrClause(search)}`);
 
       if (bseReadyFilter === 'incomplete') {
         // Any of these blank means BSE's add_ucc would be rejected.

@@ -13,6 +13,7 @@
  * against exactly that. Hand-typing names is how a UCC ends up stuck.
  */
 import { supabase } from '../../lib/supabase';
+import { clientCodeOrClause } from '../../../shared/crm/clientCode';
 
 export interface CrmClientLookup {
   id: string;
@@ -113,7 +114,7 @@ export const CrmImportService = {
       const { data, error } = await supabase
         .from('nw_clients')
         .select(COLUMNS)
-        .or(`full_name.ilike.%${q}%,client_code.ilike.%${q}%,pan.ilike.%${q}%`)
+        .or(`full_name.ilike.%${q}%,client_code.ilike.%${q}%,pan.ilike.%${q}%${clientCodeOrClause(q)}`)
         .limit(20);
       if (error) return [];
       return ((data as Record<string, unknown>[]) ?? []).map(shape);

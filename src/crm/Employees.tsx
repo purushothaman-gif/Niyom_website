@@ -347,7 +347,7 @@ export default function Employees({ employee }: Props) {
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Employee ID <span style={{ color: 'var(--accent)' }}>*</span></label>
               <input type="text" value={addForm.employee_code} onChange={e => setAddForm(f => ({ ...f, employee_code: e.target.value }))} placeholder="e.g. NIYOM-002" className={inputClass} style={inputStyle} />
-              <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>Client IDs will be generated as NW-002-0001, NW-002-0002, ...</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>Client IDs will be generated as NW0020001, NW0020002, ...</p>
             </div>
             {[['Full Name', 'full_name', 'text'], ['Email', 'email', 'email']].map(([label, key, type]) => (
               <div key={key}>
