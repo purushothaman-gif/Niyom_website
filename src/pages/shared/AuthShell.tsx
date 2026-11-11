@@ -352,7 +352,7 @@ function PartnerPreview() {
       </p>
       <p className="mt-1 font-display text-3xl font-bold tabular-nums text-text-primary">₹6.8 Cr</p>
       <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold" style={{ color: '#4FC59A' }}>
-        <TrendingUp className="h-3.5 w-3.5" /> Growing across bonds, funds and unlisted shares
+        <TrendingUp className="h-3.5 w-3.5" /> Growing across bonds, mutual funds and unlisted shares
       </p>
       <ul className="mt-4 divide-y" style={{ borderTop: '1px dashed rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.08)' }}>
         {rows.map((r) => (
