@@ -18,6 +18,7 @@ import type { ProxyConfig } from '../config.js';
 import { CasError, sbInsert, sbPatch, sbSelect } from './db.js';
 import { mapParseToDemat, smartParseUrl, storeDematParse } from './casparserCdsl.js';
 import { inboxConnect, inboxDisconnect, inboxEnabled, inboxListCas } from './casparserInbox.js';
+import { importMfFromUrl } from './mfImport.js';
 
 const PROVIDERS = ['gmail', 'outlook', 'zoho'];
 const DEMAT_TYPES = new Set(['cdsl', 'nsdl']);
@@ -175,21 +176,36 @@ export function inboxRouter(cfg: ProxyConfig): Router {
       let imported = 0;
       let holdings = 0;
       let duplicates = 0;
-      let mfFound = 0;
+      let mfImported = 0;
+      let mfManual = 0;
+      const panOk = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan);
       for (const f of files) {
-        if (!DEMAT_TYPES.has(f.casType)) {
-          // CAMS/KFintech MF statements go through our own reconciling parser —
-          // wired in a later step. Count them so the client knows they exist.
-          if (f.casType === 'cams' || f.casType === 'kfintech') mfFound += 1;
+        if (!f.url) continue;
+        // Mutual funds go through OUR reconciling parser (cas-import), not the
+        // demat path. A CAMS statement (and anything our generator requested)
+        // unlocks with the PAN; a KFintech one with a custom password does not,
+        // and is reported as needing manual import.
+        if (f.casType === 'cams' || f.casType === 'kfintech') {
+          if (!panOk) {
+            mfManual += 1;
+            continue;
+          }
+          const mf = await importMfFromUrl(cfg, clientId, f.url, pan);
+          if (mf.duplicate) {
+            // already imported
+          } else if (mf.ok) {
+            mfImported += 1;
+          } else {
+            mfManual += 1;
+          }
           continue;
         }
-        if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan) || !f.url) continue;
+        if (!DEMAT_TYPES.has(f.casType) || !panOk) continue;
         try {
-          const parsed = await smartParseUrl(cfg, f.url, pan);
           const r = await storeDematParse(cfg, {
             clientId,
             pan,
-            mapped: mapParseToDemat(parsed),
+            mapped: mapParseToDemat(await smartParseUrl(cfg, f.url, pan)),
             source: 'inbox',
           });
           if (r.duplicate) duplicates += 1;
@@ -203,7 +219,7 @@ export function inboxRouter(cfg: ProxyConfig): Router {
       }
 
       await sbPatch(cfg, `inbox_connections?id=eq.${conn.id}`, { last_synced_at: new Date().toISOString() }).catch(() => undefined);
-      res.json({ imported, holdings, duplicates, mfFound, filesSeen: files.length });
+      res.json({ imported, holdings, duplicates, mfImported, mfManual, filesSeen: files.length });
     } catch (err) {
       next(err);
     }

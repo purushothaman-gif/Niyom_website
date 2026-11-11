@@ -161,12 +161,12 @@ export function ConnectInbox({ onImported }: { onImported: () => void }) {
       {summary && (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-text-muted">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success-soft" />
-          {summary.imported > 0
-            ? `Imported ${summary.imported} statement${summary.imported === 1 ? '' : 's'} (${summary.holdings} holdings).`
+          {summary.imported + summary.mfImported > 0
+            ? `Imported ${summary.imported + summary.mfImported} statement${summary.imported + summary.mfImported === 1 ? '' : 's'}.`
             : summary.filesSeen === 0
               ? 'No new statements in your inbox yet.'
               : 'Nothing new to import.'}
-          {summary.mfFound > 0 ? ` ${summary.mfFound} mutual-fund statement${summary.mfFound === 1 ? '' : 's'} found — import those from the statement screen.` : ''}
+          {summary.mfManual > 0 ? ` ${summary.mfManual} statement${summary.mfManual === 1 ? '' : 's'} couldn’t be opened automatically — import those from the statement screen.` : ''}
         </p>
       )}
     </div>

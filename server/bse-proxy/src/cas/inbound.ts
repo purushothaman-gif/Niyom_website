@@ -16,6 +16,7 @@ import type { ProxyConfig } from '../config.js';
 import { CasError, sbInsert, sbPatch, sbSelect } from './db.js';
 import { mapParseToDemat, smartParseUrl, storeDematParse } from './casparserCdsl.js';
 import { createInboundEmail, deleteInboundEmail, inboundEnabled, listInboundFiles } from './casparserInbound.js';
+import { importMfFromUrl } from './mfImport.js';
 
 const DEMAT_TYPES = new Set(['cdsl', 'nsdl']);
 const SOURCES = ['cdsl', 'nsdl', 'cams', 'kfintech'];
@@ -38,8 +39,8 @@ function ownClientId(req: Request, bodyClientId?: string): string {
 }
 
 /** Pull new files for one address and import the demat ones. Idempotent via the cursor. */
-async function importNew(cfg: ProxyConfig, row: Row): Promise<{ imported: number; holdings: number; mfFound: number; filesSeen: number }> {
-  if (!row.inbound_email_id) return { imported: 0, holdings: 0, mfFound: 0, filesSeen: 0 };
+async function importNew(cfg: ProxyConfig, row: Row): Promise<{ imported: number; holdings: number; mfImported: number; mfManual: number; filesSeen: number }> {
+  if (!row.inbound_email_id) return { imported: 0, holdings: 0, mfImported: 0, mfManual: 0, filesSeen: 0 };
   const [client] = await sbSelect<{ pan: string | null }>(
     cfg,
     `nw_clients?select=pan&id=eq.${encodeURIComponent(row.client_id)}&limit=1`,
@@ -49,13 +50,29 @@ async function importNew(cfg: ProxyConfig, row: Row): Promise<{ imported: number
   const { files, cursor } = await listInboundFiles(cfg, row.inbound_email_id, row.last_cursor);
   let imported = 0;
   let holdings = 0;
-  let mfFound = 0;
+  let mfImported = 0;
+  let mfManual = 0;
+  const panOk = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan);
   for (const f of files) {
-    if (!DEMAT_TYPES.has(f.casType)) {
-      if (f.casType === 'cams' || f.casType === 'kfintech') mfFound += 1;
+    if (!f.url) continue;
+    // Mutual funds import through our own reconciling parser; demat through the
+    // CASParser path. See mfImport.ts for the PAN-password caveat.
+    if (f.casType === 'cams' || f.casType === 'kfintech') {
+      if (!panOk) {
+        mfManual += 1;
+        continue;
+      }
+      const mf = await importMfFromUrl(cfg, row.client_id, f.url, pan);
+      if (mf.duplicate) {
+        // already imported
+      } else if (mf.ok) {
+        mfImported += 1;
+      } else {
+        mfManual += 1;
+      }
       continue;
     }
-    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan) || !f.url) continue;
+    if (!DEMAT_TYPES.has(f.casType) || !panOk) continue;
     try {
       const r = await storeDematParse(cfg, {
         clientId: row.client_id,
@@ -77,7 +94,7 @@ async function importNew(cfg: ProxyConfig, row: Row): Promise<{ imported: number
     last_cursor: cursor ?? row.last_cursor,
   }).catch(() => undefined);
 
-  return { imported, holdings, mfFound, filesSeen: files.length };
+  return { imported, holdings, mfImported, mfManual, filesSeen: files.length };
 }
 
 /** PUBLIC — CASParser POSTs here when a forwarded statement is processed. */

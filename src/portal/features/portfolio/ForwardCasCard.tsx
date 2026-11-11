@@ -125,10 +125,10 @@ export function ForwardCasCard({ onImported }: { onImported: () => void }) {
       {result && !error && (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-text-muted">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success-soft" />
-          {result.imported > 0
-            ? `Imported ${result.imported} statement${result.imported === 1 ? '' : 's'} (${result.holdings} holdings).`
+          {result.imported + result.mfImported > 0
+            ? `Imported ${result.imported + result.mfImported} statement${result.imported + result.mfImported === 1 ? '' : 's'}.`
             : 'Nothing new yet — forward a statement and check again in a moment.'}
-          {result.mfFound > 0 ? ` ${result.mfFound} mutual-fund statement${result.mfFound === 1 ? '' : 's'} found — import those from the statement screen.` : ''}
+          {result.mfManual > 0 ? ` ${result.mfManual} statement${result.mfManual === 1 ? '' : 's'} couldn’t be opened automatically — import those from the statement screen.` : ''}
         </p>
       )}
 

@@ -28,7 +28,10 @@ export interface SyncSummary {
   imported: number;
   holdings: number;
   duplicates: number;
-  mfFound: number;
+  /** Mutual-fund statements imported through our own parser. */
+  mfImported: number;
+  /** MF statements we could not open automatically (e.g. a KFintech password). */
+  mfManual: number;
   filesSeen: number;
   reconnectNeeded?: boolean;
 }

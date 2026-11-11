@@ -79,7 +79,10 @@ interface ClientRow {
 
 type Caller =
   | { kind: 'client'; clientId: string }
-  | { kind: 'staff'; employeeId: string | null };
+  | { kind: 'staff'; employeeId: string | null }
+  // Server-initiated (the droplet's email-import sync). No user; the clientId in
+  // the body is trusted because only the server holds the service-role key.
+  | { kind: 'service' };
 
 /**
  * Who is calling, from their own token.
@@ -98,6 +101,8 @@ async function resolveCaller(req: Request): Promise<Caller> {
   );
 
   const token = authHeader.replace(/^Bearer\s+/i, '');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  if (serviceKey && token === serviceKey) return { kind: 'service' };
   const { data: userData, error } = await supabase.auth.getUser(token);
   const uid = userData?.user?.id;
   if (error || !uid) throw new CasError('Your session has expired. Sign in again.', 401);
@@ -179,7 +184,7 @@ Deno.serve(async (req) => {
     const caller = await resolveCaller(req);
 
     const clientId =
-      caller.kind === 'staff' ? String(body.clientId ?? '').trim() : caller.clientId;
+      caller.kind === 'client' ? caller.clientId : String(body.clientId ?? '').trim();
     if (!clientId) {
       throw new CasError('A client is required — say whose statement this is.', 400);
     }
@@ -238,7 +243,7 @@ Deno.serve(async (req) => {
           client_id: clientId,
           file_name: body.fileName ?? null,
           file_sha256: sha256,
-          source: caller.kind === 'staff' ? 'staff_upload' : 'client_upload',
+          source: caller.kind === 'staff' ? 'staff_upload' : caller.kind === 'service' ? 'email' : 'client_upload',
           status: 'failed',
           error: `Statement is for PAN ${masked}, not this client.`,
           created_by: caller.kind === 'staff' ? caller.employeeId : null,
@@ -308,7 +313,7 @@ Deno.serve(async (req) => {
         investor_pan: statementPans[0] ?? null,
         investor_name: investor.name || client.full_name,
         investor_email: investor.email || client.email,
-        source: caller.kind === 'staff' ? 'staff_upload' : 'client_upload',
+        source: caller.kind === 'staff' ? 'staff_upload' : caller.kind === 'service' ? 'email' : 'client_upload',
         cas_type: 'CAMS_KFINTECH',
         statement_from: period?.from ?? null,
         statement_to: statementTo,

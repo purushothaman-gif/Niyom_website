@@ -25,7 +25,8 @@ export interface InboundStatus {
 export interface InboundCheck {
   imported: number;
   holdings: number;
-  mfFound: number;
+  mfImported: number;
+  mfManual: number;
   filesSeen: number;
 }
 
