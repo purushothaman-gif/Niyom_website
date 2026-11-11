@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, Hourglass, Loader2, Plus, Repeat, ShieldCheck, TrendingUp, Wallet } from 'lucide-react';
+import { ChevronRight, Hourglass, Loader2, Plus, ShieldCheck, TrendingUp } from 'lucide-react';
 import { PortalButton } from '../../ui/kit';
 import { fromClientHoldings } from '../../../../shared/portal/investments/model';
 import { InvestmentsBoard } from '../investments/InvestmentsBoard';
@@ -16,8 +16,9 @@ import { ExploreHub } from '../explore/ExploreHub';
 import { MfWatchlist } from './MfWatchlist';
 import { AddExternalFundsCta } from './AddExternalFundsCta';
 import { isFundHeld } from './heldFund';
+import { MfInvestPicker } from './MfInvestPicker';
 
-type MfTab = 'explore' | 'dashboard' | 'sips' | 'watchlist';
+type MfTab = 'explore' | 'dashboard' | 'sips' | 'watchlist' | 'start-sip' | 'lumpsum';
 
 interface Props {
   clientId: string;
@@ -58,7 +59,8 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
   // `fund` = the button sits on one fund's detail page (Explore / Watchlist).
   // There the label is about THAT fund: "Invest more" only when the client
   // holds it, never just because they hold some other fund.
-  const InvestCta = ({ full = false, fund }: { full?: boolean; fund?: 'held' | 'new' }) => {
+  // `label` names the action outright (the SIP / lumpsum pickers).
+  const InvestCta = ({ full = false, fund, label }: { full?: boolean; fund?: 'held' | 'new'; label?: string }) => {
     if (state === 'kyc_incomplete') {
       return (
         <PortalButton variant="primary" onClick={() => onNavigate('onboarding')} full={full}>
@@ -75,26 +77,9 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
     }
     if (state === 'not_available' || state === 'demo') return null;
     return (
-      <PortalButton variant="primary" icon={busy ? Loader2 : fund === 'new' ? undefined : Plus} onClick={onLaunch} disabled={busy} full={full}>
-        {busy ? 'Opening…' : fund === 'new' ? 'Invest now' : fund === 'held' || hasData ? 'Invest more' : 'Start investing'}
+      <PortalButton variant="primary" icon={busy ? Loader2 : fund === 'new' || label ? undefined : Plus} onClick={onLaunch} disabled={busy} full={full}>
+        {busy ? 'Opening…' : label ? label : fund === 'new' ? 'Invest now' : fund === 'held' || hasData ? 'Invest more' : 'Start investing'}
       </PortalButton>
-    );
-  };
-
-  // Top-right shortcuts. A client picks a fund and invests from its page; these
-  // are for the one who arrives knowing HOW they want to invest. Both open the
-  // investing account — the SIP / one-time choice is made there.
-  const QuickActions = () => {
-    if (gated) return <InvestCta />;
-    return (
-      <>
-        <PortalButton variant="primary" icon={busy ? Loader2 : Repeat} onClick={onLaunch} disabled={busy}>
-          Start a SIP
-        </PortalButton>
-        <PortalButton variant="secondary" icon={Wallet} onClick={onLaunch} disabled={busy}>
-          Invest lumpsum (one-time)
-        </PortalButton>
-      </>
     );
   };
 
@@ -103,19 +88,21 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'sips', label: 'SIPs' },
     { key: 'watchlist', label: 'Watchlist' },
+    { key: 'start-sip', label: 'Start a SIP' },
+    { key: 'lumpsum', label: 'Invest lumpsum (one-time)' },
   ];
 
   return (
     <div className="space-y-5">
       {/* Groww-style sub-navigation */}
       <div className="-mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border">
-        <nav className="flex gap-1">
+        <nav className="-mb-px flex min-w-0 max-w-full gap-1 overflow-x-auto">
           {tabs.map((t) => (
             <button
               key={t.key}
               type="button"
               onClick={() => setTab(t.key)}
-              className={`relative px-4 pb-3 pt-1 text-[15px] font-semibold transition-colors ${
+              className={`relative shrink-0 whitespace-nowrap px-4 pb-3 pt-1 text-[15px] font-semibold transition-colors ${
                 tab === t.key ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'
               }`}
             >
@@ -124,9 +111,11 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
             </button>
           ))}
         </nav>
-        <div className="flex flex-wrap items-center gap-2 pb-2">
-          <QuickActions />
-        </div>
+        {gated && (
+          <div className="pb-2">
+            <InvestCta />
+          </div>
+        )}
       </div>
 
       {statusNote && (
@@ -154,6 +143,13 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
         />
       ) : tab === 'watchlist' ? (
         <MfWatchlist fundInvest={(f) => <InvestCta full fund={isFundHeld(f.name, mfHoldings) ? 'held' : 'new'} />} onExplore={() => setTab('explore')} />
+      ) : tab === 'start-sip' || tab === 'lumpsum' ? (
+        <MfInvestPicker
+          key={tab}
+          mode={tab === 'start-sip' ? 'sip' : 'lumpsum'}
+          holdings={mfHoldings}
+          fundInvest={() => <InvestCta full label={tab === 'start-sip' ? 'Start a SIP' : 'Invest one-time'} />}
+        />
       ) : tab === 'sips' ? (
         <SipsCard sips={data?.sips ?? []} />
       ) : loading && !data ? (
