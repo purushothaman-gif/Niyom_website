@@ -488,14 +488,22 @@ export function InvestmentsBoard({
 
       {/* ---------------- Side column ---------------- */}
       {!compact && (
-        <aside className="space-y-5">
-          <AllocationPanel summary={allSummary} hidden={hidden} />
-          <div className="hidden overflow-hidden rounded-token-xl border border-border bg-bg-elevated shadow-token-card lg:block">
-            <HoldingDetail
-              row={selected}
-              onClose={selected ? () => setSelectedId(null) : undefined}
-              action={selected ? detailAction?.(selected) : undefined}
-            />
+        <aside>
+          {/* Sticky so the allocation + selected-holding detail follow the scroll:
+              the list on the left is long, and clicking a holding far down used
+              to show a detail pane that had already scrolled off the top. The
+              grid cell stays as tall as the list, giving this room to stick;
+              top-20 clears the sticky h-16 header. Scrolls internally if it ever
+              grows past the viewport. */}
+          <div className="space-y-5 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+            <AllocationPanel summary={allSummary} hidden={hidden} />
+            <div className="hidden overflow-hidden rounded-token-xl border border-border bg-bg-elevated shadow-token-card lg:block">
+              <HoldingDetail
+                row={selected}
+                onClose={selected ? () => setSelectedId(null) : undefined}
+                action={selected ? detailAction?.(selected) : undefined}
+              />
+            </div>
           </div>
         </aside>
       )}
