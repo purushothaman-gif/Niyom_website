@@ -32,7 +32,7 @@ const COPY: Record<AuthPortal, { label: string; eyebrow: string; headline: strin
   },
   partner: {
     label: 'Partner Portal',
-    eyebrow: 'Your business, at a glance',
+    eyebrow: 'Technology that scales with you',
     headline: 'Grow your practice on a tech-first platform',
     sub: 'Onboard clients digitally, share ready-made offers in a tap, and watch your whole client book in real time.',
   },
