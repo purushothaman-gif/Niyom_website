@@ -54,7 +54,10 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
   const gated = state === 'kyc_incomplete' || state === 'not_mapped' || state === 'not_available' || state === 'demo';
   const statusNote = STATUS_NOTE[state];
 
-  const InvestCta = ({ full = false }: { full?: boolean }) => {
+  // `fund` = the button sits on one fund's detail page (Explore / Watchlist).
+  // There the label is about THAT fund, which the client may not hold, so it
+  // must not say "Invest more" just because they hold some other fund.
+  const InvestCta = ({ full = false, fund = false }: { full?: boolean; fund?: boolean }) => {
     if (state === 'kyc_incomplete') {
       return (
         <PortalButton variant="primary" onClick={() => onNavigate('onboarding')} full={full}>
@@ -71,8 +74,8 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
     }
     if (state === 'not_available' || state === 'demo') return null;
     return (
-      <PortalButton variant="primary" icon={busy ? Loader2 : Plus} onClick={onLaunch} disabled={busy} full={full}>
-        {busy ? 'Opening…' : hasData ? 'Invest more' : 'Start investing'}
+      <PortalButton variant="primary" icon={busy ? Loader2 : fund ? undefined : Plus} onClick={onLaunch} disabled={busy} full={full}>
+        {busy ? 'Opening…' : fund ? 'Invest now' : hasData ? 'Invest more' : 'Start investing'}
       </PortalButton>
     );
   };
@@ -128,11 +131,11 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
           onNavigate={onNavigate}
           onOpenBond={() => onNavigate('bonds')}
           onOpenShare={() => onNavigate('unlisted-shares')}
-          fundInvest={<InvestCta full />}
+          fundInvest={<InvestCta full fund />}
           fundsOnly
         />
       ) : tab === 'watchlist' ? (
-        <MfWatchlist fundInvest={<InvestCta full />} onExplore={() => setTab('explore')} />
+        <MfWatchlist fundInvest={<InvestCta full fund />} onExplore={() => setTab('explore')} />
       ) : tab === 'sips' ? (
         <SipsCard sips={data?.sips ?? []} />
       ) : loading && !data ? (
