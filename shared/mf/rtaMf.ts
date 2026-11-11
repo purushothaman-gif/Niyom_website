@@ -247,6 +247,22 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
   return { holdings, sips, totalValue, totalInvested, snapshotDate, navDate, hasData: holdings.length > 0 || sips.length > 0 };
 }
 
+/**
+ * The "as of" line for a registrar MF block. Units come from the registrar
+ * snapshot; values come from the NAV date (the daily AMFI NAV since
+ * 2026-11-12). When the two dates differ both are named, so a feed date is
+ * never mistaken for the pricing date. `fmt` is the surface's date formatter.
+ */
+export function rtaAsOfLabel(
+  d: Pick<RtaMfData, 'snapshotDate' | 'navDate'>,
+  fmt: (iso: string) => string,
+): string | null {
+  const { snapshotDate: units, navDate: nav } = d;
+  if (units && nav && units !== nav) return `units as of ${fmt(units)} · NAV ${fmt(nav)}`;
+  const one = nav ?? units;
+  return one ? `as of ${fmt(one)}` : null;
+}
+
 function valueOf(h: RtaHoldingRow): number {
   if (h.rtaValue != null) return h.rtaValue;
   if (h.navValue != null) return h.navValue;

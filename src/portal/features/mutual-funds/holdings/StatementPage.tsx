@@ -4,6 +4,7 @@ import { Card } from '../../../components/Card';
 import { EmptyState } from '../../../components/EmptyState';
 import { LogoLoader } from '../../../../components/LogoLoader';
 import { useRtaMf } from '../../../hooks/useRtaMf';
+import { rtaAsOfLabel } from '../../../../../shared/mf/rtaMf';
 import { AddExternalFundsCta } from '../AddExternalFundsCta';
 
 /**
@@ -55,6 +56,7 @@ export function StatementPage({
   }
 
   const active = data.sips.filter((s) => s.status === 'active');
+  const asOf = rtaAsOfLabel(data, fmtDate);
 
   return (
     <div className="space-y-5">
@@ -62,7 +64,7 @@ export function StatementPage({
         <div className="flex items-baseline justify-between">
           <p className="text-[11px] uppercase tracking-wider text-text-secondary">Your mutual funds</p>
           <p className="text-[11px] text-text-secondary">
-            From your registrar statement{data.snapshotDate ? ` · ${fmtDate(data.snapshotDate)}` : ''}
+            From your registrar statement{asOf ? ` · ${asOf}` : ''}
           </p>
         </div>
         {data.totalInvested != null ? (

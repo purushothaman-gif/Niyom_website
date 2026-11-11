@@ -3,7 +3,7 @@ import { ArrowLeftRight, Repeat, Wallet } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { LogoLoader } from '../../components/LogoLoader';
 import { fmt, fmtDate } from '../utils';
-import { fetchRtaMf, fetchRtaTransactions, type RtaMfData } from '../../../shared/mf/rtaMf';
+import { fetchRtaMf, fetchRtaTransactions, rtaAsOfLabel, type RtaMfData } from '../../../shared/mf/rtaMf';
 import type { NWTransaction } from '../types';
 
 /**
@@ -55,13 +55,14 @@ export function RtaMfPanel({ clientId }: { clientId: string }) {
 
   const active = data.sips.filter((s) => s.status === 'active');
 
+  const asOf = rtaAsOfLabel(data, fmtDate);
   return shell(
     <div className="space-y-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h3 className="text-sm font-bold text-text-primary">Mutual Funds — registrar feed</h3>
           <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-            From CAMS/KFintech, updated daily{data.snapshotDate ? ` · as of ${fmtDate(data.snapshotDate)}` : ''}
+            From CAMS/KFintech, updated daily{asOf ? ` · ${asOf}` : ''}
           </p>
         </div>
         <div className="text-right">
