@@ -50,6 +50,11 @@ import { ImportedStatements } from './ImportedStatements';
 interface Props {
   onClose: () => void;
   onImported: () => void;
+  /** Open straight on a given step — the hub uses 'upload' for "I have the file". */
+  startAt?: Step;
+  /** The client's PAN, which unlocks a PAN-locked statement on a direct upload
+   *  (our requested CAS and every demat eCAS are PAN-locked). */
+  pan?: string;
 }
 
 /**
@@ -64,11 +69,12 @@ interface Props {
  */
 type Step = 'consent' | 'request' | 'awaiting' | 'upload' | 'done';
 
-export function ImportPortfolioModal({ onClose, onImported }: Props) {
-  const [step, setStep] = useState<Step>('consent');
+export function ImportPortfolioModal({ onClose, onImported, startAt, pan }: Props) {
+  const [step, setStep] = useState<Step>(startAt ?? 'consent');
   /** Set on first navigation, so the async "where to open" answer never yanks
-   *  the screen out from under someone already reading. */
-  const navigated = useRef(false);
+   *  the screen out from under someone already reading. A requested startAt
+   *  counts as an intentional navigation the async must not override. */
+  const navigated = useRef(startAt != null);
   const goTo = (next: Step) => {
     navigated.current = true;
     setStep(next);
@@ -79,7 +85,7 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
    * which we already hold. Kept internally and never shown: every request we
    * place is PAN-locked, so there is no password for the client to set or type.
    */
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState(pan ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [outcome, setOutcome] = useState<CasImportOutcome | null>(null);
@@ -87,11 +93,13 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
   const [consents, setConsents] = useState<ConsentType[]>([]);
   const [request, setRequest] = useState<CasRequest | null>(null);
   const [email, setEmail] = useState('');
-  /** True until the first load resolves, so no interim step ever flashes. */
-  const [initializing, setInitializing] = useState(true);
+  /** True until the first load resolves, so no interim step ever flashes. When
+   *  the caller fixes the opening step there is nothing to resolve. */
+  const [initializing, setInitializing] = useState(startAt == null);
   /** A returning client sees the upload screen only after requesting; this
-   *  flips when they arrive from the awaiting screen. */
-  const [atUpload, setAtUpload] = useState(false);
+   *  flips when they arrive from the awaiting screen, or when the caller opened
+   *  us straight on upload ("I have the file"). */
+  const [atUpload, setAtUpload] = useState(startAt === 'upload');
 
   /**
    * Where to open. An open request means mid-journey (go to the wait); a prior

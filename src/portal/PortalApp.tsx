@@ -108,6 +108,9 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
    * the wizard is two places for its state to drift.
    */
   const [showImport, setShowImport] = useState(false);
+  /** When the import modal is opened straight on its upload step (hub's "I have
+   *  the file"), vs the default request flow. */
+  const [importStartAt, setImportStartAt] = useState<'upload' | undefined>(undefined);
   const [showDemat, setShowDemat] = useState(false);
   /*
    * The hub is the single door to every import route. It opens straight away
@@ -451,6 +454,12 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
           onClose={() => setShowHub(false)}
           onMutualFunds={() => {
             setShowHub(false);
+            setImportStartAt(undefined);
+            setShowImport(true);
+          }}
+          onUpload={() => {
+            setShowHub(false);
+            setImportStartAt('upload');
             setShowImport(true);
           }}
           onDemat={
@@ -468,7 +477,12 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
 
       {showImport && (
         <ImportPortfolioModal
-          onClose={() => setShowImport(false)}
+          onClose={() => {
+            setShowImport(false);
+            setImportStartAt(undefined);
+          }}
+          startAt={importStartAt}
+          pan={client?.pan ?? undefined}
           onImported={refresh}
         />
       )}

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import {
-  ChevronLeft, ChevronRight, FileText, Landmark, Lock, Mail, PackagePlus, Zap, X,
+  ChevronLeft, ChevronRight, FileText, Landmark, Lock, Mail, PackagePlus, Upload, Zap, X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ConnectInbox } from './ConnectInbox';
@@ -35,6 +35,8 @@ interface Props {
   onClose: () => void;
   /** Opens the mutual-fund CAS request wizard ("email me a fresh CAS"). */
   onMutualFunds: () => void;
+  /** Opens the import modal straight on its upload step ("I have the file"). */
+  onUpload: () => void;
   /** Opens the CDSL demat OTP flow; absent when the server can't fetch demat. */
   onDemat?: () => void;
   /** The client's depository, inferred from their demat account on file. */
@@ -43,7 +45,7 @@ interface Props {
   onImported: () => void;
 }
 
-export function ImportHubModal({ onClose, onMutualFunds, onDemat, depositoryHint, onImported }: Props) {
+export function ImportHubModal({ onClose, onMutualFunds, onUpload, onDemat, depositoryHint, onImported }: Props) {
   const [screen, setScreen] = useState<Screen>('choose');
   const [depo, setDepo] = useState<Depository | null>(depositoryHint ?? null);
 
@@ -118,6 +120,7 @@ export function ImportHubModal({ onClose, onMutualFunds, onDemat, depositoryHint
                   primary
                 />
               }
+              onUpload={onUpload}
               onImported={onImported}
             />
           )}
@@ -150,6 +153,7 @@ export function ImportHubModal({ onClose, onMutualFunds, onDemat, depositoryHint
                   />
                 ) : null
               }
+              onUpload={onUpload}
               onImported={onImported}
             />
           )}
@@ -291,10 +295,12 @@ function DepoOption({
 function MethodsScreen({
   lead,
   getItForMe,
+  onUpload,
   onImported,
 }: {
   lead: string;
   getItForMe: ReactNode;
+  onUpload: () => void;
   onImported: () => void;
 }) {
   return (
@@ -309,6 +315,12 @@ function MethodsScreen({
 
       <div className="space-y-2.5">
         <SectionLabel>I have the statement</SectionLabel>
+        <MethodRow
+          icon={Upload}
+          title="Upload a PDF"
+          body="Already have the statement? Upload it — we open PAN-locked files for you."
+          onClick={onUpload}
+        />
         <ForwardCasCard onImported={onImported} />
       </div>
     </div>
