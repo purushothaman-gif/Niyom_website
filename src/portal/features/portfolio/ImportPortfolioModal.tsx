@@ -94,6 +94,11 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
    * might not do.
    */
   const [autoSubmit, setAutoSubmit] = useState(false);
+  /**
+   * The statement opens with the client's PAN (a value we already hold), so the
+   * upload step shows no password field and nothing is asked of the client.
+   */
+  const [autoUnlock, setAutoUnlock] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [outcome, setOutcome] = useState<CasImportOutcome | null>(null);
@@ -123,10 +128,18 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
         if (latest) setRequest(latest);
         if (latest?.requestedEmail) setEmail(latest.requestedEmail);
         if (latest && isOpenRequest(latest.status)) {
-          const saved = casPasswordStore.load(latest.requestId);
-          if (saved) {
-            setGenerated(saved);
-            setPassword((p) => p || saved);
+          if (latest.passwordIsPan && latest.pan) {
+            // Reopened in a fresh tab: a PAN-locked statement needs nothing we
+            // stored, so the upload step still opens it with no password.
+            const pan = latest.pan;
+            setPassword((prev) => prev || pan);
+            setAutoUnlock(true);
+          } else {
+            const saved = casPasswordStore.load(latest.requestId);
+            if (saved) {
+              setGenerated(saved);
+              setPassword((prev) => prev || saved);
+            }
           }
         }
         if (navigated.current) return;
@@ -154,11 +167,20 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
     });
     setBusy(false);
     if (!r.ok) return setError(r.error);
-    setGenerated(pw);
-    setPassword(pw);
-    casPasswordStore.save(r.request.requestId, pw);
-    // Placed for them: there is no form to show, only the wait.
+
     const placed = r.request.submitted === true;
+    if (placed && r.request.passwordIsPan && r.request.form.pan) {
+      // Locked with the client's own PAN — the upload opens with a value we
+      // already hold, so the client never sees or sets a password.
+      setPassword(r.request.form.pan);
+      setAutoUnlock(true);
+    } else {
+      // Guided flow, or a fallback that needed a generated password: keep it in
+      // this tab so the upload step can fill it in.
+      setGenerated(pw);
+      setPassword(pw);
+      casPasswordStore.save(r.request.requestId, pw);
+    }
     if (!placed) setForm(r.request.form);
     setRequest({
       requestId: r.request.requestId,
@@ -244,6 +266,7 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
               setForm(null);
               setGenerated('');
               setPassword('');
+              setAutoUnlock(false);
               goTo('consent');
             }}
           />
@@ -252,8 +275,9 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
         {step === 'upload' && (
           <div className="space-y-5 p-6">
             <p className="text-sm leading-relaxed text-text-muted">
-              Upload the statement exactly as the registrar emailed it, and enter the password you
-              chose when you requested it.
+              {autoUnlock
+                ? 'Upload the PDF CAMS emailed you. We open it for you automatically — there is no password to enter.'
+                : 'Upload the statement exactly as the registrar emailed it, and enter the password you chose when you requested it.'}
             </p>
 
             {lastGood && (
@@ -327,24 +351,26 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
               />
             </label>
 
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                Statement password <span className="text-accent">*</span>
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="The password you set on the CAMS form"
-                autoComplete="off"
-                className="w-full rounded-token-md border border-border bg-bg-base px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-accent"
-              />
-              <p className="mt-1.5 text-xs text-text-faint">
-                {generated && password === generated
-                  ? 'Filled in for you — this is the password we generated for your request.'
-                  : 'This is not your PAN — it is the password set on the CAMS form when the request was made.'}
-              </p>
-            </div>
+            {!autoUnlock && (
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Statement password <span className="text-accent">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="The password you set on the CAMS form"
+                  autoComplete="off"
+                  className="w-full rounded-token-md border border-border bg-bg-base px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-accent"
+                />
+                <p className="mt-1.5 text-xs text-text-faint">
+                  {generated && password === generated
+                    ? 'Filled in for you — this is the password we generated for your request.'
+                    : 'This is not your PAN — it is the password set on the CAMS form when the request was made.'}
+                </p>
+              </div>
+            )}
 
             <div className="flex items-start gap-2 rounded-token-md border border-border bg-bg-base p-3">
               <Lock className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" />
@@ -364,7 +390,7 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
               </button>
               <button
                 onClick={submit}
-                disabled={busy || !file || !password}
+                disabled={busy || !file || (!autoUnlock && !password)}
                 className="press flex items-center gap-2 rounded-token-md px-5 py-2.5 text-sm font-bold text-text-on-accent disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
               >

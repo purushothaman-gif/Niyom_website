@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowRight, Check, Lock } from 'lucide-react';
 import {
+  CAS_AUTO_SUMMARY_COPY,
   CONSENT_COPY,
   IMPORT_CONSENTS,
   consentCopy,
@@ -41,10 +42,19 @@ export function CasConsentStep({
   return (
     <div className="space-y-5 p-6">
       <p className="text-sm leading-relaxed text-text-muted">
-        Before we start, here is exactly what you are agreeing to. You can withdraw any of it
-        later from your profile.
+        {autoSubmit
+          ? 'Here’s what we’ll do. Tap continue to go ahead — you can withdraw this later from your profile.'
+          : 'Before we start, here is exactly what you are agreeing to. You can withdraw any of it later from your profile.'}
       </p>
 
+      {autoSubmit ? (
+        <div className="rounded-token-md border border-accent/20 bg-accent/5 p-4">
+          <p className="text-sm font-semibold text-text-primary">{CAS_AUTO_SUMMARY_COPY.label}</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-text-muted">
+            {CAS_AUTO_SUMMARY_COPY.detail}
+          </p>
+        </div>
+      ) : (
       <ul className="space-y-2.5">
         {IMPORT_CONSENTS.map((c) => {
           const { label, detail, required } = consentCopy(c, autoSubmit);
@@ -85,6 +95,7 @@ export function CasConsentStep({
           );
         })}
       </ul>
+      )}
 
       <div className="flex flex-wrap justify-end gap-3 pt-1">
         <button

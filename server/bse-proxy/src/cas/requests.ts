@@ -139,7 +139,7 @@ function callerClientId(req: Request, bodyClientId?: string): string {
   return id;
 }
 
-const toApi = (r: RequestRow) => ({
+const toApi = (r: RequestRow, extra?: { pan?: string | null; passwordIsPan?: boolean }) => ({
   requestId: r.id,
   status: r.status,
   requestedEmail: r.requested_email,
@@ -152,6 +152,12 @@ const toApi = (r: RequestRow) => ({
   failureReason: r.failure_reason,
   createdAt: r.created_at,
   completedAt: r.completed_at,
+  /** We placed this one (not the guided form); recorded as the vendor channel. */
+  autoSubmitted: r.folio_listing === 'vendor_default',
+  /** The client's own PAN, so a returning client can unlock a PAN-locked PDF. */
+  pan: extra?.pan ?? null,
+  /** True when this PDF opens with the PAN above and needs no typed password. */
+  passwordIsPan: extra?.passwordIsPan ?? false,
 });
 
 export function casRequestRouter(cfg: ProxyConfig): Router {
@@ -230,10 +236,26 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
        * a usable password. Anything less quietly stays guided — an older app
        * build that knows nothing of this keeps working exactly as before.
        */
-      const password = typeof body.password === 'string' ? body.password : '';
+      /*
+       * The password that locks the emailed PDF.
+       *
+       * CAMS accepts the investor's own PAN as that password (its rule is only
+       * ">= 6 chars with two digits", which a PAN meets), so for the common case
+       * the client needs no password at all: the statement unlocks with the PAN
+       * we already hold, and there is nothing to invent, remember, or type. A
+       * KFintech mailback, or a client with no PAN on file, falls back to a
+       * browser-generated password the client would then need.
+       */
+      const panForPassword = (client.pan ?? '').trim().toUpperCase();
+      const canUsePan =
+        cfg.casparserAuthority === 'cams' && /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panForPassword);
+      const browserPassword = typeof body.password === 'string' ? body.password : '';
       const auto =
-        mailbackEnabled(cfg) && body.policyVersion === POLICY_AUTO && password.length > 0;
-      if (auto && !isAcceptablePassword(password)) {
+        mailbackEnabled(cfg) &&
+        body.policyVersion === POLICY_AUTO &&
+        (canUsePan || browserPassword.length > 0);
+      const vendorPassword = canUsePan ? panForPassword : browserPassword;
+      if (auto && !canUsePan && !isAcceptablePassword(browserPassword)) {
         throw new CasError('That password does not meet the registrar’s rules.', 400);
       }
       if (auto && !/^\d{4}-\d{2}-\d{2}$/.test(fromDate)) {
@@ -306,7 +328,7 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
             pan: client.pan,
             fromDate,
             toDate,
-            password,
+            password: vendorPassword,
           });
         } catch (err) {
           // Nothing is on its way, so the request must not sit there looking
@@ -325,6 +347,12 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
         expectedBy: new Date(now.getTime() + EXPECTED_WITHIN_MS).toISOString(),
         /** True when we placed the request; the client has nothing to fill in. */
         submitted: auto,
+        /**
+         * True when the emailed PDF is locked with the client's PAN, so the
+         * upload step can open it automatically with a value we already hold —
+         * no password field, nothing for the client to keep.
+         */
+        passwordIsPan: auto && canUsePan,
         /*
          * What to enter on the CAMS form, in the form's own field order and
          * using its own labels. Sent from the server so the choices that decide
@@ -371,7 +399,25 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
         await sbPatch(cfg, `cas_requests?id=eq.${row.id}`, { status: 'expired' }).catch(() => undefined);
         row.status = 'expired';
       }
-      res.json(toApi(row));
+
+      /*
+       * A request we placed with the PAN as the PDF password can be opened again
+       * in a fresh session — the client's generated password lived only in the
+       * browser tab that made it, but their PAN is always on file. So hand it
+       * back (to the authenticated owner only) and let the upload step unlock
+       * without asking for anything.
+       */
+      const autoSubmitted = row.folio_listing === 'vendor_default';
+      let pan: string | null = null;
+      if (autoSubmitted && cfg.casparserAuthority === 'cams') {
+        const [c] = await sbSelect<{ pan: string | null }>(
+          cfg,
+          `nw_clients?select=pan&id=eq.${encodeURIComponent(clientId)}&limit=1`,
+        );
+        const p = (c?.pan ?? '').trim().toUpperCase();
+        if (/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(p)) pan = p;
+      }
+      res.json(toApi(row, { pan, passwordIsPan: autoSubmitted && pan !== null }));
     } catch (err) {
       next(err);
     }

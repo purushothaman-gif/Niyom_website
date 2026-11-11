@@ -86,6 +86,19 @@ export const CONSENT_COPY: Record<ConsentType, ConsentCopy> = {
  */
 export const CONSENT_POLICY_VERSION_AUTO = 'v2';
 
+/**
+ * The whole auto flow in one plain sentence, for the condensed consent card.
+ * It still covers the same three required consents the server records
+ * (request + import + temporary handling); it just reads as one agreement
+ * instead of three checkboxes. Recorded under policy v2.
+ */
+export const CAS_AUTO_SUMMARY_COPY: ConsentCopy = {
+  label: 'Request and import my statement',
+  detail:
+    'We ask CAMS for your detailed statement — sharing your email and PAN with our statement partner to fetch it — then read the holdings and transactions it contains and show them here. The statement is emailed only to you, and the file itself is never stored.',
+  required: true,
+};
+
 export const CAS_REQUEST_AUTO_COPY: ConsentCopy = {
   label: 'Request my statement for me',
   detail:

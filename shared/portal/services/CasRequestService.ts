@@ -58,6 +58,12 @@ export interface CasRequest {
   failureReason: string | null;
   createdAt: string;
   completedAt: string | null;
+  /** True when we placed this request for the client (not the guided form). */
+  autoSubmitted?: boolean;
+  /** The client's own PAN, when a PAN-locked statement can be reopened with it. */
+  pan?: string | null;
+  /** True when the statement unlocks with the PAN above and needs no password. */
+  passwordIsPan?: boolean;
 }
 
 export interface CasRequestCreated {
@@ -66,6 +72,8 @@ export interface CasRequestCreated {
   expectedBy: string;
   /** True when the server placed the request; there is no form to fill in. */
   submitted?: boolean;
+  /** True when the emailed PDF unlocks with the client's PAN — no password step. */
+  passwordIsPan?: boolean;
   form: CasFormGuidance;
 }
 

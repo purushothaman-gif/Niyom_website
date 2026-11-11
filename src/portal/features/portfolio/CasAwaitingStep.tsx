@@ -52,12 +52,12 @@ export function CasAwaitingStep({
           <MailCheck className="h-7 w-7" />
         </span>
         <h4 className="font-display text-lg font-bold text-text-primary">
-          Your statement is on its way
+          Statement requested
         </h4>
         <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-text-muted">
-          CAMS is emailing it to{' '}
-          <b className="text-text-primary">{request.requestedEmail ?? 'your registered address'}</b>.
-          It usually arrives within five minutes.
+          CAMS will email it to{' '}
+          <b className="text-text-primary">{request.requestedEmail ?? 'your registered address'}</b>{' '}
+          in a few minutes. Open the email, then come back and upload the PDF — we’ll do the rest.
         </p>
       </div>
 

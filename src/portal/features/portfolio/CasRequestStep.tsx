@@ -54,15 +54,15 @@ export function CasRequestStep({
     return (
       <div className="space-y-5 p-6">
         <p className="text-sm leading-relaxed text-text-muted">
-          Which email address are your mutual funds registered against?
-          {autoSubmit &&
-            ' We will request a detailed statement for you, and the registrar will email it to this address.'}
+          {autoSubmit
+            ? 'Confirm the email your mutual funds are registered under, and we’ll request your statement.'
+            : 'Which email address are your mutual funds registered against?'}
         </p>
         <div className="flex items-start gap-2 rounded-token-md border border-accent/15 bg-accent/5 p-3">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
           <p className="text-xs leading-relaxed text-text-muted">
-            Statements are consolidated by <b>email address, not PAN</b>. Folios registered under a
-            different address will be missing, and the file gives no sign that it is incomplete.
+            Use the email your funds are <b>registered under</b>. Funds under a different email
+            won’t appear — you can add a second statement for those afterwards.
           </p>
         </div>
 
