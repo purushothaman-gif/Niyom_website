@@ -16,6 +16,7 @@ import {
   type CasRequest,
 } from '../../services/CasRequestService';
 import type { ConsentType } from '../../types/consent';
+import { casPasswordStore, generateCasPassword } from '../../../../shared/portal/services/casPassword';
 import { CasConsentStep } from './CasConsentStep';
 import { CasRequestStep } from './CasRequestStep';
 import { CasAwaitingStep } from './CasAwaitingStep';
@@ -35,13 +36,12 @@ import { ImportedStatements } from './ImportedStatements';
  *
  * ## Why the first screen is this insistent
  *
- * Four choices on the CAMS form decide whether the resulting file is any use,
- * and all four have a plausible-looking wrong answer:
+ * Three choices on the CAMS form decide whether the resulting file is any use,
+ * and all three have a plausible-looking wrong answer:
  *
  *   Detailed, not Summary   a summary carries no transactions and no advisor
  *                           code, so no capital gains and no real returns.
  *   Earliest start date     returns are computed from the whole history.
- *   Zero-balance folios     funds fully exited still carry realised gains.
  *   The registered email    CAMS consolidates by EMAIL, not PAN, so folios held
  *                           under another address are silently absent — the file
  *                           looks complete and simply is not.
@@ -80,6 +80,13 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
   };
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState('');
+  /**
+   * The password we generated for the open request, if any. Kept apart from
+   * `password` (what is typed at upload) so we can tell the client when the
+   * field was filled in for them — and so they can still overwrite it if they
+   * chose their own on the CAMS page.
+   */
+  const [generated, setGenerated] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [outcome, setOutcome] = useState<CasImportOutcome | null>(null);
@@ -104,6 +111,13 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
         setPrevious(rows);
         if (latest) setRequest(latest);
         if (latest?.requestedEmail) setEmail(latest.requestedEmail);
+        if (latest && isOpenRequest(latest.status)) {
+          const saved = casPasswordStore.load(latest.requestId);
+          if (saved) {
+            setGenerated(saved);
+            setPassword((p) => p || saved);
+          }
+        }
         if (navigated.current) return;
         if (latest && isOpenRequest(latest.status)) setStep('awaiting');
         else if (rows.some((r) => r.status === 'reconciled')) setStep('upload');
@@ -122,6 +136,12 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
     setBusy(false);
     if (!r.ok) return setError(r.error);
     setForm(r.request.form);
+    // Generated here, in the browser, and remembered for this tab only: the
+    // client pastes it into the CAMS form now and never types it again.
+    const pw = generateCasPassword();
+    setGenerated(pw);
+    setPassword(pw);
+    casPasswordStore.save(r.request.requestId, pw);
     setRequest({
       requestId: r.request.requestId,
       status: r.request.status,
@@ -148,6 +168,8 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
     setStep('done');
     // The password has done its job; there is no reason to keep it in memory.
     setPassword('');
+    setGenerated('');
+    if (request) casPasswordStore.clear(request.requestId);
     if (r.outcome.status === 'reconciled') onImported();
   };
 
@@ -180,6 +202,7 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
           <CasRequestStep
             form={form}
             email={email}
+            password={generated}
             onEmailChange={setEmail}
             busy={busy}
             error={error}
@@ -195,8 +218,11 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
             request={request}
             onUpload={() => goTo('upload')}
             onCancelled={() => {
+              if (request) casPasswordStore.clear(request.requestId);
               setRequest(null);
               setForm(null);
+              setGenerated('');
+              setPassword('');
               goTo('consent');
             }}
           />
@@ -293,7 +319,9 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
                 className="w-full rounded-token-md border border-border bg-bg-base px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-accent"
               />
               <p className="mt-1.5 text-xs text-text-faint">
-                This is not your PAN — CAMS let you choose it when you made the request.
+                {generated && password === generated
+                  ? 'Filled in for you — this is the password we generated for your request.'
+                  : 'This is not your PAN — it is the password set on the CAMS form when the request was made.'}
               </p>
             </div>
 

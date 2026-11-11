@@ -64,19 +64,18 @@ const EARLIEST_FROM = '1990-01-01';
 /**
  * Which folio listing we ask for, and the stored key for it.
  *
- * "Transacted folios and folios with balance" rather than the broader "with
- * zero balance folios": because the period runs from EARLIEST_FROM, "transacted
- * in the period" means "transacted ever", so this still captures every folio
- * the client has since exited — where realised capital gains live — alongside
- * everything they still hold, while leaving out folios opened and never funded.
+ * "Without zero balance folios" — the page's own default, and a business
+ * decision (2026-11-11): the import exists to show what a client holds today,
+ * and exited folios add pages of history for funds that are no longer there.
  *
- * The page defaults to "Without zero balance folios", which drops exited folios
- * entirely and makes capital gains impossible to compute. This is a change the
- * client must actively make.
+ * The cost is known and accepted: a folio the client has fully redeemed is not
+ * in the statement at all, so realised capital gains from those folios cannot
+ * be computed from it. Anything that needs them must ask for a different
+ * listing rather than assume this one is complete.
  */
 const FOLIO_LISTING = {
-  key: 'transacted_and_balance',
-  label: 'Transacted folios and folios with balance',
+  key: 'without_zero_balance',
+  label: 'Without zero balance folios',
 } as const;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

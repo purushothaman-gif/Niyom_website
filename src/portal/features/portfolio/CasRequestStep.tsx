@@ -17,6 +17,7 @@ import type { CasFormGuidance } from '../../services/CasRequestService';
 export function CasRequestStep({
   form,
   email,
+  password,
   onEmailChange,
   onSubmitted,
   onBack,
@@ -25,6 +26,8 @@ export function CasRequestStep({
 }: {
   form: CasFormGuidance | null;
   email: string;
+  /** Generated for this request; blank if the client must choose their own. */
+  password: string;
   onEmailChange: (v: string) => void;
   onSubmitted: () => void;
   onBack: () => void;
@@ -105,11 +108,11 @@ export function CasRequestStep({
    * Nothing else — CAMS does not ask for a date of birth, and showing one would
    * send a client hunting for a field that is not there and doubting the rest.
    *
-   * Three of these are choices the page defaults to the WRONG answer for
-   * (Detailed over Summary, Specific Period over Current Financial Year, and
-   * zero-balance folios), so each carries its reason: none can be undone
-   * afterwards, and a client who understands why gets it right more often than
-   * one told to trust us.
+   * Two of these are choices the page defaults to the WRONG answer for
+   * (Detailed over Summary, Specific Period over Current Financial Year), so
+   * each carries its reason: neither can be undone afterwards, and a client who
+   * understands why gets it right more often than one told to trust us. Folio
+   * listing is the page's own default, shown so nobody changes it.
    */
   const rows: {
     key: string;
@@ -136,17 +139,27 @@ export function CasRequestStep({
       key: 'folios',
       label: 'Folio listing',
       value: form.folioListing,
-      why: 'The page defaults to "Without zero balance folios", which leaves out funds you have since sold — and those are exactly the ones your realised capital gains come from.',
+      why: 'Already selected on the page — leave it as it is.',
     },
     { key: 'email', label: 'Email', value: form.email },
     ...(form.pan ? [{ key: 'pan', label: 'PAN', value: form.pan, optional: true }] : []),
+    ...(password
+      ? [
+          {
+            key: 'password',
+            label: 'Password',
+            value: password,
+            why: 'Paste this into both Password and Confirm Password. We made it to fit the CAMS rules and will fill it in for you when you upload the statement.',
+          },
+        ]
+      : []),
   ];
 
   return (
     <div className="space-y-5 p-6">
       <p className="text-sm leading-relaxed text-text-muted">
-        Open the registrar's page and enter these. We have filled in everything we already hold —
-        you only need to choose a password you will remember.
+        Open the registrar's page and enter these exactly. Everything is ready to copy
+        {password ? ' — including the password, so there is nothing to make up or remember.' : '.'}
       </p>
 
       <a
@@ -191,13 +204,15 @@ export function CasRequestStep({
         ))}
       </div>
 
-      <div className="flex items-start gap-2 rounded-token-md border border-accent/15 bg-accent/5 p-3">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-        <p className="text-xs leading-relaxed text-text-muted">
-          CAMS asks you to set a password for the file — <b>it is not your PAN</b>. Remember it;
-          you will type it here to open the statement.
-        </p>
-      </div>
+      {!password && (
+        <div className="flex items-start gap-2 rounded-token-md border border-accent/15 bg-accent/5 p-3">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+          <p className="text-xs leading-relaxed text-text-muted">
+            CAMS asks you to set a password for the file — <b>it is not your PAN</b>. Remember it;
+            you will type it here to open the statement.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-wrap justify-end gap-3 pt-1">
         <button
