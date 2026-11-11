@@ -248,3 +248,99 @@ export function mapParseToDemat(parse: ParsedCas): MappedCas {
     accounts,
   };
 }
+
+/* ------------------------------- persistence ------------------------------ */
+
+import { randomUUID } from 'node:crypto';
+import { sbInsert, sbSelect } from './db.js';
+
+export interface StoreResult {
+  importId: string;
+  duplicate: boolean;
+  holdings: number;
+  byClass: Record<string, number>;
+  totalValue: number | null;
+  statementDate: string | null;
+}
+
+/**
+ * Write a parsed eCAS into the demat_* tables.
+ *
+ * Shared by the OTP route and inbox sync so both store identically. Re-importing
+ * the same snapshot (same client, depository and statement date) is a no-op.
+ * demat_mf is still excluded upstream in mapParseToDemat.
+ */
+export async function storeDematParse(
+  cfg: ProxyConfig,
+  args: { clientId: string; pan: string | null; mapped: MappedCas; source: string; createdBy?: string | null },
+): Promise<StoreResult> {
+  const { clientId, mapped, source } = args;
+  const totalValue = mapped.totalValue;
+  const statementDate = mapped.statementDate;
+
+  if (statementDate && mapped.casType) {
+    const [dupe] = await sbSelect<{ id: string }>(
+      cfg,
+      `demat_imports?select=id&client_id=eq.${encodeURIComponent(clientId)}` +
+        `&cas_type=eq.${encodeURIComponent(mapped.casType)}` +
+        `&statement_date=eq.${encodeURIComponent(statementDate)}&status=eq.parsed&limit=1`,
+    );
+    if (dupe) return { importId: dupe.id, duplicate: true, holdings: 0, byClass: {}, totalValue, statementDate };
+  }
+
+  const importId = randomUUID();
+  const holdingCount = mapped.accounts.reduce((n, a) => n + a.holdings.length, 0);
+
+  await sbInsert(cfg, 'demat_imports', [
+    {
+      id: importId,
+      client_id: clientId,
+      investor_pan: mapped.investorPan ?? args.pan,
+      investor_name: mapped.investorName,
+      source,
+      cas_type: mapped.casType,
+      statement_date: statementDate,
+      status: 'parsed',
+      total_value: totalValue,
+      account_count: mapped.accounts.length,
+      holding_count: holdingCount,
+      created_by: args.createdBy ?? null,
+    },
+  ]);
+
+  const accountRows: Record<string, unknown>[] = [];
+  const holdingRows: Record<string, unknown>[] = [];
+  const byClass: Record<string, number> = {};
+  for (const acc of mapped.accounts) {
+    const accountId = randomUUID();
+    accountRows.push({
+      id: accountId,
+      import_id: importId,
+      client_id: clientId,
+      depository: acc.depository,
+      dp_id: acc.dpId,
+      dp_name: acc.dpName,
+      bo_id: acc.boId,
+      value: acc.value,
+    });
+    for (const h of acc.holdings) {
+      byClass[h.assetClass] = (byClass[h.assetClass] ?? 0) + 1;
+      holdingRows.push({
+        id: randomUUID(),
+        import_id: importId,
+        account_id: accountId,
+        client_id: clientId,
+        asset_class: h.assetClass,
+        isin: h.isin,
+        name: h.name,
+        units: h.units,
+        value: h.value,
+        extra: h.extra,
+      });
+    }
+  }
+  await sbInsert(cfg, 'demat_accounts', accountRows);
+  await sbInsert(cfg, 'demat_holdings', holdingRows);
+
+  return { importId, duplicate: false, holdings: holdingCount, byClass, totalValue, statementDate };
+}

@@ -344,6 +344,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
             onNavigate={navigate}
             onImport={() => setShowImport(true)}
             onConnectDemat={dematEnabled ? () => setShowDemat(true) : undefined}
+            onRefresh={refresh}
             freshness={snapshot.casFreshness}
             hasImportedStatement={hasImportedStatement}
             valuedOn={snapshot.valuedOn}

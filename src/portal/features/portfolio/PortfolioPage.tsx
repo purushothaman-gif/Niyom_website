@@ -10,6 +10,7 @@ import type { PortfolioData } from '../../types';
 import type { CasFreshness, PortalHolding } from '../../types/cas';
 import type { PortalView } from '../../layout/navigation';
 import { ImportPortfolioCard } from './ImportPortfolioCard';
+import { ConnectInbox } from './ConnectInbox';
 import { mfSsoEnabled } from '../../../../shared/platform/env';
 import { fromClientHoldings } from '../../../../shared/portal/investments/model';
 import { InvestmentsBoard } from '../investments/InvestmentsBoard';
@@ -25,6 +26,7 @@ export function PortfolioPage({
   onNavigate,
   onImport,
   onConnectDemat,
+  onRefresh,
   freshness,
   hasImportedStatement = false,
   valuedOn,
@@ -43,6 +45,8 @@ export function PortfolioPage({
   onImport: () => void;
   /** Opens the demat OTP flow; absent (hidden) when the server can't fetch demat. */
   onConnectDemat?: () => void;
+  /** Refresh the portfolio after an inbox sync imports new holdings. */
+  onRefresh?: () => void;
   /** How current the imported mutual fund picture is; absent until one exists. */
   freshness?: CasFreshness;
   hasImportedStatement?: boolean;
@@ -149,6 +153,8 @@ export function PortfolioPage({
           <Upload className="h-4 w-4 shrink-0 text-text-faint" />
         </button>
       )}
+
+      <ConnectInbox onImported={onRefresh ?? (() => {})} />
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">

@@ -20,6 +20,7 @@ import { webhookRouter } from './webhooks.js';
 import { casRequestRouter } from './cas/requests.js';
 import { dematRouter } from './cas/demat.js';
 import { kycRouter } from './cas/kyc.js';
+import { inboxCallbackRouter, inboxRouter } from './cas/inbox.js';
 import {
   toAppOrderResult,
   toAppScheme,
@@ -248,6 +249,10 @@ app.get('/health', async (_req, res) => {
 
 // Public — BSE calls this, so it must sit BEFORE the Supabase-JWT gate.
 mountFeature('/webhooks', 'webhooks', webhookRouter(cfg));
+// Public — the email-provider OAuth redirect lands here with no session; it is
+// tied to the client only by the `state` it carries. Other /cas/inbox/* paths
+// fall through to the authed router below.
+mountFeature('/cas/inbox', 'cas_inbox_callback', inboxCallbackRouter(cfg));
 
 /**
  * Cashfree PAN verification relay. Called server-to-server by the Supabase edge
@@ -638,6 +643,9 @@ mountFeature('/cas/requests', 'cas_requests', casRequestRouter(cfg));
 mountFeature('/cas/demat', 'cas_demat', dematRouter(cfg));
 // KYC (KRA status) + ARN verification for onboarding. Staff-authenticated.
 mountFeature('/cas/kyc', 'cas_kyc', kycRouter(cfg));
+// Email inbox import (connect / sync / disconnect). The public /callback above
+// is a separate router; these need the client's session.
+mountFeature('/cas/inbox', 'cas_inbox', inboxRouter(cfg));
 
 /* ----------------------------- scheme master ------------------------------ */
 

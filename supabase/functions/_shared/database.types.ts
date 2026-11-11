@@ -4590,6 +4590,62 @@ export type Database = {
         }
         Relationships: []
       }
+      inbox_connections: {
+        Row: {
+          client_id: string
+          connected_at: string | null
+          created_at: string | null
+          created_by: string | null
+          email: string | null
+          id: string
+          inbox_token: string | null
+          last_error: string | null
+          last_synced_at: string | null
+          provider: string
+          state: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          client_id: string
+          connected_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          inbox_token?: string | null
+          last_error?: string | null
+          last_synced_at?: string | null
+          provider?: string
+          state?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          client_id?: string
+          connected_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          inbox_token?: string | null
+          last_error?: string | null
+          last_synced_at?: string | null
+          provider?: string
+          state?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_connections_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inc_events: {
         Row: {
           actor_employee_id: string | null

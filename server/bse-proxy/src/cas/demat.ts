@@ -13,15 +13,15 @@
  * as mutual funds are read from cas_*.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import { randomUUID } from 'node:crypto';
 import type { ProxyConfig } from '../config.js';
-import { CasError, sbInsert, sbSelect } from './db.js';
+import { CasError, sbSelect } from './db.js';
 import {
   cdslFetchStart,
   cdslFetchVerify,
   dematFetchEnabled,
   mapParseToDemat,
   smartParseUrl,
+  storeDematParse,
 } from './casparserCdsl.js';
 
 /** New imports per client per rolling day — each verify spends vendor credits. */
@@ -135,84 +135,24 @@ export function dematRouter(cfg: ProxyConfig): Router {
       const parsed = await smartParseUrl(cfg, files[0].url, pan);
       const mapped = mapParseToDemat(parsed);
 
-      // Re-importing the same snapshot is a no-op, not a duplicate.
-      if (mapped.statementDate && mapped.casType) {
-        const [dupe] = await sbSelect<{ id: string }>(
-          cfg,
-          `demat_imports?select=id&client_id=eq.${encodeURIComponent(clientId)}` +
-            `&cas_type=eq.${encodeURIComponent(mapped.casType)}` +
-            `&statement_date=eq.${encodeURIComponent(mapped.statementDate)}` +
-            `&status=eq.parsed&limit=1`,
-        );
-        if (dupe) {
-          return res.json({ importId: dupe.id, duplicate: true, totalValue: mapped.totalValue });
-        }
+      const stored = await storeDematParse(cfg, {
+        clientId,
+        pan,
+        mapped,
+        source: 'cdsl_otp',
+        createdBy: req.caller?.kind === 'staff' ? (req.caller.employeeId ?? null) : null,
+      });
+      if (stored.duplicate) {
+        return res.json({ importId: stored.importId, duplicate: true, totalValue: stored.totalValue });
       }
-
-      const importId = randomUUID();
-      const holdingCount = mapped.accounts.reduce((n, a) => n + a.holdings.length, 0);
-
-      await sbInsert(cfg, 'demat_imports', [
-        {
-          id: importId,
-          client_id: clientId,
-          investor_pan: mapped.investorPan ?? pan,
-          investor_name: mapped.investorName ?? client.full_name,
-          source: 'cdsl_otp',
-          cas_type: mapped.casType,
-          statement_date: mapped.statementDate,
-          status: 'parsed',
-          total_value: mapped.totalValue,
-          account_count: mapped.accounts.length,
-          holding_count: holdingCount,
-          created_by: req.caller?.kind === 'staff' ? (req.caller.employeeId ?? null) : null,
-        },
-      ]);
-
-      // Build children with client-generated ids, so each table inserts once.
-      const accountRows: Record<string, unknown>[] = [];
-      const holdingRows: Record<string, unknown>[] = [];
-      for (const acc of mapped.accounts) {
-        const accountId = randomUUID();
-        accountRows.push({
-          id: accountId,
-          import_id: importId,
-          client_id: clientId,
-          depository: acc.depository,
-          dp_id: acc.dpId,
-          dp_name: acc.dpName,
-          bo_id: acc.boId,
-          value: acc.value,
-        });
-        for (const h of acc.holdings) {
-          holdingRows.push({
-            id: randomUUID(),
-            import_id: importId,
-            account_id: accountId,
-            client_id: clientId,
-            asset_class: h.assetClass,
-            isin: h.isin,
-            name: h.name,
-            units: h.units,
-            value: h.value,
-            extra: h.extra,
-          });
-        }
-      }
-      await sbInsert(cfg, 'demat_accounts', accountRows);
-      await sbInsert(cfg, 'demat_holdings', holdingRows);
-
-      const byClass: Record<string, number> = {};
-      for (const a of mapped.accounts) for (const h of a.holdings) byClass[h.assetClass] = (byClass[h.assetClass] ?? 0) + 1;
-
       res.json({
-        importId,
+        importId: stored.importId,
         status: 'parsed',
-        statementDate: mapped.statementDate,
-        totalValue: mapped.totalValue,
+        statementDate: stored.statementDate,
+        totalValue: stored.totalValue,
         accounts: mapped.accounts.length,
-        holdings: holdingCount,
-        byClass,
+        holdings: stored.holdings,
+        byClass: stored.byClass,
       });
     } catch (err) {
       next(err);
