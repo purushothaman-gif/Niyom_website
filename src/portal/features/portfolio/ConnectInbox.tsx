@@ -62,7 +62,15 @@ export function ConnectInbox({
       setBusy(null);
       return setError(r.error);
     }
-    // Leaves the SPA for the provider's consent screen.
+    // Leaves the SPA for the provider's consent screen and comes back (same tab)
+    // through the proxy's callback, which only links to the portal home. Drop a
+    // flag so, on return, the portal reopens the import hub instead of leaving
+    // the client on the dashboard wondering what to do next.
+    try {
+      sessionStorage.setItem('nw_import_return', '1');
+    } catch {
+      /* private mode — the client just lands on the dashboard, no worse than before */
+    }
     window.location.href = r.oauthUrl;
   };
 
@@ -102,9 +110,16 @@ export function ConnectInbox({
                 Email connected
                 {status.provider ? <span className="font-normal text-text-muted"> · {status.provider}</span> : null}
               </p>
-              <p className="truncate text-xs text-text-muted">
-                {status.email ?? 'We check for new statements when you ask.'}
-              </p>
+              {summary ? (
+                <p className="truncate text-xs text-text-muted">
+                  {status.email ?? 'We check for new statements when you ask.'}
+                </p>
+              ) : (
+                // Freshly connected and not yet pulled — point them at the button.
+                <p className="text-xs font-medium text-accent">
+                  Now tap “Sync now” to bring in your statements.
+                </p>
+              )}
             </>
           ) : (
             <>

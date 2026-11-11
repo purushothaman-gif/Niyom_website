@@ -119,14 +119,29 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
    * for a client arriving on an invite link (?import=1 — what a partner or RM
    * shares), and the flag is stripped so a refresh does not reopen it.
    */
-  const [showHub, setShowHub] = useState(() => {
+  // Returning from the email-connect round trip: ConnectInbox left this flag
+  // before redirecting, so reopen the hub (and guide them to Sync now) instead
+  // of stranding them on the dashboard, which is all the proxy callback links to.
+  const [justConnectedInbox] = useState(() => {
     try {
-      return new URLSearchParams(window.location.search).get('import') === '1';
+      return sessionStorage.getItem('nw_import_return') === '1';
     } catch {
       return false;
     }
   });
+  const [showHub, setShowHub] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('import') === '1' || justConnectedInbox;
+    } catch {
+      return justConnectedInbox;
+    }
+  });
   useEffect(() => {
+    try {
+      sessionStorage.removeItem('nw_import_return');
+    } catch {
+      /* ignore */
+    }
     const params = new URLSearchParams(window.location.search);
     if (!params.has('import')) return;
     params.delete('import');
@@ -482,6 +497,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
           depositoryHint={depositoryHint}
           inboxEnabled={inboxEnabled}
           forwardEnabled={forwardEnabled}
+          justConnectedInbox={justConnectedInbox}
           onImported={refresh}
         />
       )}

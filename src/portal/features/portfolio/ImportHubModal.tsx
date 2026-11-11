@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import {
-  ChevronLeft, ChevronRight, FileText, Landmark, Lock, Mail, PackagePlus, Upload, Zap, X,
+  CheckCircle2, ChevronLeft, ChevronRight, FileText, Landmark, Lock, Mail, PackagePlus, Upload, Zap, X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ConnectInbox } from './ConnectInbox';
@@ -45,6 +45,9 @@ interface Props {
    *  sheet opens at its final size instead of growing as the cards load. */
   inboxEnabled: boolean;
   forwardEnabled: boolean;
+  /** The client just returned from connecting their inbox — show a success
+   *  banner guiding them to Sync now. */
+  justConnectedInbox?: boolean;
   /** Refresh the portfolio after an email route imports something. */
   onImported: () => void;
 }
@@ -57,6 +60,7 @@ export function ImportHubModal({
   depositoryHint,
   inboxEnabled,
   forwardEnabled,
+  justConnectedInbox,
   onImported,
 }: Props) {
   const [screen, setScreen] = useState<Screen>('choose');
@@ -117,6 +121,17 @@ export function ImportHubModal({
         </div>
 
         <div className="space-y-5 p-6">
+          {justConnectedInbox && screen === 'choose' && (
+            <div className="flex items-start gap-2.5 rounded-token-md border border-success-soft/25 bg-success-soft/10 px-3.5 py-3">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success-soft" />
+              <p className="text-xs leading-relaxed text-text-secondary">
+                <span className="font-semibold text-text-primary">Email connected.</span> Open a
+                category below and tap <span className="font-semibold">Sync now</span> to bring in
+                your statements.
+              </p>
+            </div>
+          )}
+
           {screen === 'choose' && (
             <ChooseScreen onMutualFunds={() => setScreen('mf')} onDemat={openDemat} dematOn={!!onDemat} />
           )}
