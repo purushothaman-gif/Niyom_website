@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { computeAll, downsampleNav, parseDate, isoDate, type NavPoint } from "../_shared/mfReturns.ts";
 import { asJson } from '../_shared/json.ts';
 import { dayToIso, readNavSeries, readSchemeMeta, seriesToNavPoints } from '../_shared/amfiNavSeries.ts';
+import { pickScheme, type SchemeCandidate } from '../_shared/curatedFundPick.ts';
 
 /**
  * update-mutual-funds
@@ -37,30 +38,33 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-// Curated funds to track. `match` locates the Regular-Growth plan in the AMFI
-// scheme list; `category` is the top-level bucket the UI filters by; `risk` is
-// a house view (mfapi.in has no risk field). ~50 well-known schemes across
+// Curated funds to track. `match` locates the Regular-Growth plan in our scheme
+// universe; `aka` lists the name(s) the fund trades under TODAY when it has
+// been renamed since it was added here (SEBI's category clean-up renamed most
+// "Bluechip" and "Equity Hybrid" funds) — the scheme code is unchanged, only
+// the label moved. `category` is the top-level bucket the UI filters by; `risk`
+// is a house view (AMFI has no risk field). ~50 well-known schemes across
 // equity, debt and hybrid.
-const TARGETS: { match: string; category: "Equity" | "Debt" | "Hybrid"; risk: string }[] = [
+const TARGETS: { match: string; aka?: string[]; category: "Equity" | "Debt" | "Hybrid"; risk: string }[] = [
   // --- Equity: flexi / multi cap ---
   { match: "Parag Parikh Flexi Cap Fund", category: "Equity", risk: "High" },
   { match: "HDFC Flexi Cap Fund", category: "Equity", risk: "High" },
   { match: "Kotak Flexicap Fund", category: "Equity", risk: "High" },
   { match: "UTI Flexi Cap Fund", category: "Equity", risk: "High" },
-  { match: "Quant Active Fund", category: "Equity", risk: "High" },
+  { match: "Quant Active Fund", aka: ["Quant Multi Cap Fund"], category: "Equity", risk: "High" },
   // --- Equity: large cap / bluechip ---
   { match: "Mirae Asset Large Cap Fund", category: "Equity", risk: "Moderate" },
-  { match: "ICICI Prudential Bluechip Fund", category: "Equity", risk: "Moderate" },
-  { match: "Canara Robeco Bluechip Equity Fund", category: "Equity", risk: "Moderate" },
+  { match: "ICICI Prudential Bluechip Fund", aka: ["ICICI Prudential Large Cap Fund"], category: "Equity", risk: "Moderate" },
+  { match: "Canara Robeco Bluechip Equity Fund", aka: ["Canara Robeco Large Cap Fund"], category: "Equity", risk: "Moderate" },
   { match: "Nippon India Large Cap Fund", category: "Equity", risk: "Moderate" },
-  { match: "SBI Bluechip Fund", category: "Equity", risk: "Moderate" },
-  { match: "Axis Bluechip Fund", category: "Equity", risk: "Moderate" },
+  { match: "SBI Bluechip Fund", aka: ["SBI Large Cap Fund"], category: "Equity", risk: "Moderate" },
+  { match: "Axis Bluechip Fund", aka: ["Axis Large Cap Fund"], category: "Equity", risk: "Moderate" },
   // --- Equity: large & mid / mid cap ---
   { match: "Axis Midcap Fund", category: "Equity", risk: "High" },
-  { match: "Kotak Emerging Equity Fund", category: "Equity", risk: "High" },
-  { match: "HDFC Mid-Cap Opportunities Fund", category: "Equity", risk: "High" },
+  { match: "Kotak Emerging Equity Fund", aka: ["Kotak Mid Cap Fund"], category: "Equity", risk: "High" },
+  { match: "HDFC Mid-Cap Opportunities Fund", aka: ["HDFC Mid Cap Fund"], category: "Equity", risk: "High" },
   { match: "Motilal Oswal Midcap Fund", category: "Equity", risk: "High" },
-  { match: "PGIM India Midcap Opportunities Fund", category: "Equity", risk: "High" },
+  { match: "PGIM India Midcap Opportunities Fund", aka: ["PGIM India Midcap Fund"], category: "Equity", risk: "High" },
   { match: "Mirae Asset Large & Midcap Fund", category: "Equity", risk: "High" },
   // --- Equity: small cap ---
   { match: "SBI Small Cap Fund", category: "Equity", risk: "High" },
@@ -73,23 +77,23 @@ const TARGETS: { match: string; category: "Equity" | "Debt" | "Hybrid"; risk: st
   { match: "Quant ELSS Tax Saver Fund", category: "Equity", risk: "High" },
   { match: "Canara Robeco ELSS Tax Saver", category: "Equity", risk: "Moderate" },
   // --- Equity: value / focused / sectoral ---
-  { match: "ICICI Prudential Value Discovery Fund", category: "Equity", risk: "Moderate" },
-  { match: "SBI Focused Equity Fund", category: "Equity", risk: "High" },
+  { match: "ICICI Prudential Value Discovery Fund", aka: ["ICICI Prudential Value Fund"], category: "Equity", risk: "Moderate" },
+  { match: "SBI Focused Equity Fund", aka: ["SBI Focused Fund"], category: "Equity", risk: "High" },
   { match: "ICICI Prudential Technology Fund", category: "Equity", risk: "High" },
   { match: "Nippon India Pharma Fund", category: "Equity", risk: "High" },
   // --- Equity: index ---
   { match: "UTI Nifty 50 Index Fund", category: "Equity", risk: "Moderate" },
-  { match: "HDFC Index Fund Nifty 50 Plan", category: "Equity", risk: "Moderate" },
+  { match: "HDFC Index Fund Nifty 50 Plan", aka: ["HDFC Nifty 50 Index Fund"], category: "Equity", risk: "Moderate" },
   // --- Debt: corporate bond / banking & PSU ---
   { match: "HDFC Corporate Bond Fund", category: "Debt", risk: "Low" },
   { match: "ICICI Prudential Corporate Bond Fund", category: "Debt", risk: "Low" },
   { match: "Aditya Birla Sun Life Corporate Bond Fund", category: "Debt", risk: "Low" },
   { match: "Kotak Corporate Bond Fund", category: "Debt", risk: "Low" },
   // --- Debt: gilt ---
-  { match: "SBI Magnum Gilt Fund", category: "Debt", risk: "Low" },
+  { match: "SBI Magnum Gilt Fund", aka: ["SBI Gilt Fund"], category: "Debt", risk: "Low" },
   { match: "ICICI Prudential Gilt Fund", category: "Debt", risk: "Low" },
   // --- Debt: short / low duration / liquid ---
-  { match: "HDFC Short Term Debt Fund", category: "Debt", risk: "Low" },
+  { match: "HDFC Short Term Debt Fund", aka: ["HDFC Short Term Fund"], category: "Debt", risk: "Low" },
   { match: "ICICI Prudential Short Term Fund", category: "Debt", risk: "Low" },
   { match: "Axis Liquid Fund", category: "Debt", risk: "Low" },
   { match: "SBI Liquid Fund", category: "Debt", risk: "Low" },
@@ -100,11 +104,11 @@ const TARGETS: { match: string; category: "Equity" | "Debt" | "Hybrid"; risk: st
   { match: "ICICI Prudential Balanced Advantage Fund", category: "Hybrid", risk: "Moderate" },
   { match: "Edelweiss Balanced Advantage Fund", category: "Hybrid", risk: "Moderate" },
   // --- Hybrid: aggressive / equity hybrid ---
-  { match: "SBI Equity Hybrid Fund", category: "Hybrid", risk: "Moderate" },
-  { match: "ICICI Prudential Equity & Debt Fund", category: "Hybrid", risk: "Moderate" },
-  { match: "Canara Robeco Equity Hybrid Fund", category: "Hybrid", risk: "Moderate" },
+  { match: "SBI Equity Hybrid Fund", aka: ["SBI Aggressive Hybrid Fund"], category: "Hybrid", risk: "Moderate" },
+  { match: "ICICI Prudential Equity & Debt Fund", aka: ["ICICI Prudential Aggressive Hybrid Fund"], category: "Hybrid", risk: "Moderate" },
+  { match: "Canara Robeco Equity Hybrid Fund", aka: ["Canara Robeco Aggressive Hybrid Fund"], category: "Hybrid", risk: "Moderate" },
   // --- Hybrid: multi asset / conservative ---
-  { match: "ICICI Prudential Multi-Asset Fund", category: "Hybrid", risk: "Moderate" },
+  { match: "ICICI Prudential Multi-Asset Fund", aka: ["ICICI Prudential Multi Asset Allocation Fund"], category: "Hybrid", risk: "Moderate" },
   { match: "SBI Conservative Hybrid Fund", category: "Hybrid", risk: "Low" },
 ];
 
@@ -126,22 +130,29 @@ function pickSubCategory(schemeCategory?: string): string {
  * table feeds the public MF Research page, so a Direct code here publishes
  * returns no reader could obtain through us. Rule shared via _shared/mfPlan.ts.
  */
+/** How stale a NAV may be before a scheme stops counting as live (as in mf-returns-backfill). */
+const MAX_NAV_AGE_DAYS = 15;
+
 // deno-lint-ignore no-explicit-any
-async function resolveCode(supabase: any, match: string): Promise<number | null> {
+async function resolveCode(supabase: any, target: { match: string; aka?: string[] }): Promise<number | null> {
+  const names = [target.match, ...(target.aka ?? [])];
+  const navFloor = new Date(Date.now() - MAX_NAV_AGE_DAYS * 86_400_000).toISOString().slice(0, 10);
   // mf_scheme_cache holds Regular-Growth schemes only (mf-universe applies the
-  // shared rule on the way in), so a name match here is already the right plan.
-  const { data } = await supabase
-    .from("mf_scheme_cache")
-    .select("scheme_code")
-    .ilike("scheme_name", `%${match.replace(/[%_\\]/g, (c: string) => `\\${c}`)}%`)
-    .limit(200);
-  // Lowest scheme code, as before: the scheme list this used to scan was in
-  // code order and took the first hit, and changing the pick would re-key rows.
-  const codes = ((data ?? []) as { scheme_code: string }[])
-    .map((r) => Number(r.scheme_code))
-    .filter((n) => Number.isFinite(n))
-    .sort((a, b) => a - b);
-  return codes.length ? codes[0] : null;
+  // shared rule on the way in). Candidates: every LIVE scheme from the same
+  // fund house, found by the first word of each name the fund may go by.
+  const firstWords = [...new Set(names.map((n) => n.trim().split(/\s+/)[0]).filter(Boolean))];
+  const candidates: SchemeCandidate[] = [];
+  for (const w of firstWords) {
+    const { data } = await supabase
+      .from("mf_scheme_cache")
+      .select("scheme_code, scheme_name")
+      .ilike("scheme_name", `${w.replace(/[%_\\]/g, (c: string) => `\\${c}`)}%`)
+      .not("current_nav", "is", null)
+      .gte("nav_date", navFloor)
+      .limit(1000);
+    candidates.push(...((data ?? []) as SchemeCandidate[]));
+  }
+  return pickScheme(candidates, names);
 }
 
 /**
@@ -200,7 +211,7 @@ Deno.serve(async (req: Request) => {
 
     // 1–2. Resolve each target to a scheme code from our own scheme universe.
     const resolved = (await Promise.all(
-      TARGETS.map(async (t) => ({ ...t, code: await resolveCode(supabase, t.match) })),
+      TARGETS.map(async (t) => ({ ...t, code: await resolveCode(supabase, t) })),
     )).filter((t): t is typeof t & { code: number } => t.code != null);
 
     // Make sure every curated scheme's AMFI history is queued ahead of the bulk.
@@ -287,7 +298,8 @@ Deno.serve(async (req: Request) => {
       // swallow — cache pre-warm is non-critical
     }
 
-    return json({ success: true, updated: funds.length, warmed, skipped: TARGETS.length - funds.length });
+    const unresolved = TARGETS.filter((t) => !resolved.some((r) => r.match === t.match)).map((t) => t.match);
+    return json({ success: true, updated: funds.length, warmed, codes: funds.map((f) => f.fund_code), skipped: TARGETS.length - funds.length, unresolved });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return json({ success: false, error: message }, 500);
