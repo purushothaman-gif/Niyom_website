@@ -21,6 +21,7 @@ import { casRequestRouter } from './cas/requests.js';
 import { dematRouter } from './cas/demat.js';
 import { kycRouter } from './cas/kyc.js';
 import { inboxCallbackRouter, inboxRouter } from './cas/inbox.js';
+import { inboundRouter, inboundWebhookRouter } from './cas/inbound.js';
 import {
   toAppOrderResult,
   toAppScheme,
@@ -253,6 +254,10 @@ mountFeature('/webhooks', 'webhooks', webhookRouter(cfg));
 // tied to the client only by the `state` it carries. Other /cas/inbox/* paths
 // fall through to the authed router below.
 mountFeature('/cas/inbox', 'cas_inbox_callback', inboxCallbackRouter(cfg));
+// Public — CASParser POSTs here when a forwarded CAS is processed. Unsigned, so
+// it only triggers a re-fetch with our key. Other /cas/inbound/* paths fall
+// through to the authed router below.
+mountFeature('/cas/inbound', 'cas_inbound_webhook', inboundWebhookRouter(cfg));
 
 /**
  * Cashfree PAN verification relay. Called server-to-server by the Supabase edge
@@ -646,6 +651,8 @@ mountFeature('/cas/kyc', 'cas_kyc', kycRouter(cfg));
 // Email inbox import (connect / sync / disconnect). The public /callback above
 // is a separate router; these need the client's session.
 mountFeature('/cas/inbox', 'cas_inbox', inboxRouter(cfg));
+// Forward-to-address email import (ensure / status / check / disable).
+mountFeature('/cas/inbound', 'cas_inbound', inboundRouter(cfg));
 
 /* ----------------------------- scheme master ------------------------------ */
 

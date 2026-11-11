@@ -11,6 +11,7 @@ import type { CasFreshness, PortalHolding } from '../../types/cas';
 import type { PortalView } from '../../layout/navigation';
 import { ImportPortfolioCard } from './ImportPortfolioCard';
 import { ConnectInbox } from './ConnectInbox';
+import { ForwardCasCard } from './ForwardCasCard';
 import { mfSsoEnabled } from '../../../../shared/platform/env';
 import { fromClientHoldings } from '../../../../shared/portal/investments/model';
 import { InvestmentsBoard } from '../investments/InvestmentsBoard';
@@ -155,6 +156,8 @@ export function PortfolioPage({
       )}
 
       <ConnectInbox onImported={onRefresh ?? (() => {})} />
+
+      <ForwardCasCard onImported={onRefresh ?? (() => {})} />
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">

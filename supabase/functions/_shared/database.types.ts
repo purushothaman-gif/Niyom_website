@@ -1148,6 +1148,56 @@ export type Database = {
           },
         ]
       }
+      cas_inbound_email: {
+        Row: {
+          address: string | null
+          client_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          inbound_email_id: string | null
+          last_cursor: string | null
+          last_received_at: string | null
+          reference: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          client_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          inbound_email_id?: string | null
+          last_cursor?: string | null
+          last_received_at?: string | null
+          reference?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          client_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          inbound_email_id?: string | null
+          last_cursor?: string | null
+          last_received_at?: string | null
+          reference?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cas_inbound_email_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cas_requests: {
         Row: {
           cancelled_at: string | null
