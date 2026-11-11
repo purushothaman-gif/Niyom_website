@@ -70,4 +70,11 @@ describe('health assessment', () => {
     const p = assessHealth({ ...ok, tracked_gave_up_24h: 1, tracked_waiting_over_1d: 2 }, now);
     expect(p.map((x) => x.text).join(' ')).toMatch(/1 client-held fund.*could not.*2 client-held fund/s);
   });
+  it('flags client-held funds priced behind the feed as critical', () => {
+    expect(assessHealth({ ...ok, held_stale_navs: 0, held_stale_sample: null }, now)).toEqual([]);
+    const p = assessHealth({ ...ok, held_stale_navs: 2, held_stale_sample: 'Fund A; Fund B' }, now);
+    expect(p).toEqual([
+      { level: 'critical', text: '2 client-held fund(s) are priced more than 3 days behind the latest NAV (Fund A; Fund B).' },
+    ]);
+  });
 });

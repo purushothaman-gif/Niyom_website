@@ -35,6 +35,10 @@ export interface MarketHealthRow {
   tracked_loaded?: number;
   tracked_gave_up_24h?: number;
   tracked_waiting_over_1d?: number;
+  /* Client-held funds priced >3 days behind the latest full AMFI day
+     (registrar holdings by live_nav_date; ISIN holdings by their newest NAV). */
+  held_stale_navs?: number;
+  held_stale_sample?: string | null;
 }
 
 export interface Problem {
@@ -67,6 +71,15 @@ export function assessHealth(h: MarketHealthRow, now = new Date()): Problem[] {
   const waiting = Number(h.tracked_waiting_over_1d ?? 0);
   if (waiting > 0)
     out.push({ level: 'warning', text: `${waiting} client-held fund(s) have been waiting over a day for their NAV history to load.` });
+  // The failure clients actually see: a fund they hold showing an old price
+  // while the feed itself is healthy (registrar funds frozen at the mailback
+  // NAV until 2026-11-12). Critical — it is wrong money on a client screen.
+  const heldStale = Number(h.held_stale_navs ?? 0);
+  if (heldStale > 0)
+    out.push({
+      level: 'critical',
+      text: `${heldStale} client-held fund(s) are priced more than 3 days behind the latest NAV${h.held_stale_sample ? ` (${h.held_stale_sample})` : ''}.`,
+    });
   const masterAgeH = h.master_synced_at ? (now.getTime() - new Date(h.master_synced_at).getTime()) / 3.6e6 : null;
   if (masterAgeH == null || masterAgeH > 72)
     out.push({ level: 'warning', text: 'AMFI scheme master has not synced in over 3 days.' });

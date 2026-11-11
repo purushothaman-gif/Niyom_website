@@ -75,7 +75,7 @@ export function PortfolioPage({
         sips: rta.data?.sips ?? [],
         mfScope: mf.scope,
         casStatementTo: mf.casStatementTo,
-        valuedOn: valuedOn ?? rta.data?.snapshotDate ?? null,
+        valuedOn: valuedOn ?? rta.data?.navDate ?? rta.data?.snapshotDate ?? null,
       });
     } finally {
       setDownloading(false);

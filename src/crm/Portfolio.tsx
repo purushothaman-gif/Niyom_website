@@ -371,15 +371,15 @@ export default function Portfolio({ employee, pageParams }: Props) {
     (async () => {
       const [{ data: fol }, { data: hold }] = await Promise.all([
         supabase.from('mf_rta_folios').select('id, client_id'),
-        supabase.from('mf_rta_holdings').select('folio_id, rta_value, nav_value'),
+        supabase.from('mf_rta_holdings').select('folio_id, live_value, rta_value, nav_value'),
       ]);
       const clientOf = new Map<string, string>();
       for (const fr of (fol as { id: string; client_id: string | null }[]) ?? []) if (fr.client_id) clientOf.set(fr.id, fr.client_id);
       const m = new Map<string, number>();
-      for (const h of (hold as { folio_id: string; rta_value: number | null; nav_value: number | null }[]) ?? []) {
+      for (const h of (hold as { folio_id: string; live_value: number | null; rta_value: number | null; nav_value: number | null }[]) ?? []) {
         const cid = clientOf.get(h.folio_id);
         if (!cid) continue;
-        m.set(cid, (m.get(cid) ?? 0) + Number(h.rta_value ?? h.nav_value ?? 0));
+        m.set(cid, (m.get(cid) ?? 0) + Number(h.live_value ?? h.rta_value ?? h.nav_value ?? 0));
       }
       if (alive) setMfByClient(m);
     })();

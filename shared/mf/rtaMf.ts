@@ -19,9 +19,24 @@ export interface RtaHoldingRow {
   schemeCode: string;
   amcCode: string | null;
   units: number;
+  /**
+   * Current value: units at the newest NAV we have — the daily AMFI NAV for the
+   * resolved ISIN, or the registrar's own when that is newer (mf_rta_holdings
+   * .live_value). Falls back to the registrar's valuation when the scheme could
+   * not be resolved. Every surface reads this, so registrar funds move with the
+   * market daily instead of freezing at the last mailback.
+   */
   rtaValue: number | null;
+  /** The registrar's own valuation (RUPEE_BAL) as of snapshotDate, untouched. */
+  registrarValue: number | null;
+  /** NAV behind rtaValue (live when priced, else the registrar's). */
   nav: number | null;
   navValue: number | null;
+  /** Date of `nav` — the AMFI NAV date when live-priced, else snapshotDate. */
+  navDate: string | null;
+  /** AMFI ISIN resolved from the scheme name, when known. */
+  isin: string | null;
+  /** Date of the registrar snapshot the UNITS come from. */
   snapshotDate: string | null;
   /** Cost of acquisition: the registrar's own valuation cost (WBR53) when we have it — authoritative, and the only source that covers units transferred in from a prior broker — else net purchases−redemptions from the transaction feed, else null. */
   investedCost: number | null;
@@ -62,10 +77,12 @@ export interface RtaMfData {
   totalInvested: number | null;
   /** Most recent holdings snapshot across the client's folios. */
   snapshotDate: string | null;
+  /** Newest NAV date the holdings are valued at (live AMFI price when known). */
+  navDate: string | null;
   hasData: boolean;
 }
 
-const EMPTY: RtaMfData = { holdings: [], sips: [], totalValue: 0, totalInvested: null, snapshotDate: null, hasData: false };
+const EMPTY: RtaMfData = { holdings: [], sips: [], totalValue: 0, totalInvested: null, snapshotDate: null, navDate: null, hasData: false };
 
 // Transaction directions that add to / subtract from invested cost.
 const INFLOW = new Set(['purchase', 'sip', 'switch_in']);
@@ -118,7 +135,7 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
     folioIds.length
       ? db
           .from('mf_rta_holdings')
-          .select('id, folio, scheme_name, scheme_code, amc_code, units, rta_value, nav, nav_value, snapshot_date, invested_cost')
+          .select('id, folio, scheme_name, scheme_code, amc_code, units, rta_value, nav, nav_value, snapshot_date, invested_cost, isin, live_nav, live_nav_date, live_value')
           .in('folio_id', folioIds)
       : Promise.resolve({ data: [], error: null }),
     db
@@ -179,9 +196,12 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
         schemeCode: h.scheme_code,
         amcCode: h.amc_code,
         units: Number(h.units ?? 0),
-        rtaValue: h.rta_value == null ? null : Number(h.rta_value),
-        nav: h.nav == null ? null : Number(h.nav),
+        rtaValue: h.live_value != null ? Number(h.live_value) : h.rta_value == null ? null : Number(h.rta_value),
+        registrarValue: h.rta_value == null ? null : Number(h.rta_value),
+        nav: h.live_nav != null ? Number(h.live_nav) : h.nav == null ? null : Number(h.nav),
         navValue: h.nav_value == null ? null : Number(h.nav_value),
+        navDate: h.live_nav_date ?? h.snapshot_date,
+        isin: h.isin ?? null,
         snapshotDate: h.snapshot_date,
         investedCost: registrarCost != null ? registrarCost : txnCost,
         firstInvestmentDate: agg ? agg.first : null,
@@ -219,7 +239,12 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
     null,
   );
 
-  return { holdings, sips, totalValue, totalInvested, snapshotDate, hasData: holdings.length > 0 || sips.length > 0 };
+  const navDate = holdings.reduce<string | null>(
+    (m, h) => (h.navDate && (!m || h.navDate > m) ? h.navDate : m),
+    null,
+  );
+
+  return { holdings, sips, totalValue, totalInvested, snapshotDate, navDate, hasData: holdings.length > 0 || sips.length > 0 };
 }
 
 function valueOf(h: RtaHoldingRow): number {

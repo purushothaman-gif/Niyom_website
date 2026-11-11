@@ -145,9 +145,10 @@ export default function Dashboard({ employee, onNavigate }: Props) {
 
       // Registrar mutual-fund AUM, RLS-scoped (admins see all, an RM only their
       // own clients' rows).
-      const { data: mfHold } = await supabase.from('mf_rta_holdings').select('rta_value, nav_value');
-      const mfAum = ((mfHold as { rta_value: number | null; nav_value: number | null }[]) ?? [])
-        .reduce((sum, h) => sum + Number(h.rta_value ?? h.nav_value ?? 0), 0);
+      const { data: mfHold } = await supabase.from('mf_rta_holdings').select('live_value, rta_value, nav_value');
+      // live_value = units at the latest AMFI NAV; registrar valuation as fallback.
+      const mfAum = ((mfHold as { live_value: number | null; rta_value: number | null; nav_value: number | null }[]) ?? [])
+        .reduce((sum, h) => sum + Number(h.live_value ?? h.rta_value ?? h.nav_value ?? 0), 0);
 
       setStats({ totalClients: clients.length, totalPortfolio, verifiedClients, monthlyTxns: monthTxns.length, totalEmployees: empCount, mfAum });
       setRecentTxns(txns.slice(0, 5) as NWTransaction[]);

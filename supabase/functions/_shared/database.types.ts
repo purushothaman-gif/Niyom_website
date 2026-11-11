@@ -5955,6 +5955,10 @@ export type Database = {
           folio_id: string
           id: string
           invested_cost: number | null
+          isin: string | null
+          live_nav: number | null
+          live_nav_date: string | null
+          live_value: number | null
           nav: number | null
           nav_value: number | null
           registrar: string
@@ -5972,6 +5976,10 @@ export type Database = {
           folio_id: string
           id?: string
           invested_cost?: number | null
+          isin?: string | null
+          live_nav?: number | null
+          live_nav_date?: string | null
+          live_value?: number | null
           nav?: number | null
           nav_value?: number | null
           registrar: string
@@ -5989,6 +5997,10 @@ export type Database = {
           folio_id?: string
           id?: string
           invested_cost?: number | null
+          isin?: string | null
+          live_nav?: number | null
+          live_nav_date?: string | null
+          live_value?: number | null
           nav?: number | null
           nav_value?: number | null
           registrar?: string
@@ -12134,6 +12146,8 @@ export type Database = {
       }
       mf_market_data_health: {
         Row: {
+          held_stale_navs: number | null
+          held_stale_sample: string | null
           history_cursor: string | null
           history_failures_24h: number | null
           history_floor: string | null
@@ -12980,6 +12994,24 @@ export type Database = {
       mf_rta_brokerage_match: {
         Args: { p_only_unmatched?: boolean }
         Returns: number
+      }
+      mf_rta_implied_nav: {
+        Args: {
+          p_nav: number
+          p_nav_value: number
+          p_rta_value: number
+          p_units: number
+        }
+        Returns: number
+      }
+      mf_rta_live_quote: {
+        Args: { p_feed_nav: number; p_isin: string; p_snapshot: string }
+        Returns: Record<string, unknown>
+      }
+      mf_rta_reprice: { Args: never; Returns: number }
+      mf_rta_resolve_isin: {
+        Args: { p_date: string; p_name: string; p_nav: number }
+        Returns: string
       }
       mf_scheme_name_key: { Args: { p_name: string }; Returns: string }
       mf_scheme_nav_history: { Args: { p_scheme_code: string }; Returns: Json }

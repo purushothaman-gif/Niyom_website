@@ -262,7 +262,7 @@ export const HoldingService = {
       casFlows: cas?.flows ?? [],
       casFreshness: assessCasFreshness(cas?.statementTo ?? null, latestOwnMfTxnDate),
       historyComplete: cas ? cas.historyComplete : true,
-      valuedOn: rta?.snapshotDate ?? valuationDate(merged),
+      valuedOn: rta?.navDate ?? rta?.snapshotDate ?? valuationDate(merged),
       dayChange: portfolioDayChange(merged),
     };
   },
@@ -301,7 +301,7 @@ function toRegistrarMfHolding(clientId: string, h: RtaHoldingRow): PortalHolding
     folio_number: h.folio,
     fund_house: h.amcCode ?? undefined,
     current_nav: h.nav ?? undefined,
-    nav_date: h.snapshotDate ?? undefined,
+    nav_date: h.navDate ?? h.snapshotDate ?? undefined,
   };
 }
 

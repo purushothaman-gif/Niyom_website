@@ -325,6 +325,8 @@ export function fromRtaHoldings(
     nav: number | null;
     navValue: number | null;
     snapshotDate: string | null;
+    navDate?: string | null;
+    isin?: string | null;
   }>,
 ): InvestmentRow[] {
   return holdings
@@ -347,7 +349,8 @@ export function fromRtaHoldings(
         dayChangePct: null,
         source: 'registrar' as const,
         folio: h.folio,
-        navDate: h.snapshotDate,
+        navDate: h.navDate ?? h.snapshotDate,
+        ...(h.isin ? { isin: h.isin } : {}),
       } satisfies InvestmentRow;
     })
     .sort((a, b) => b.value - a.value);
