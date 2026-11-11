@@ -401,6 +401,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
         onRefresh={refresh}
         onChangePassword={() => setShowChangePw(true)}
         onLogout={onLogout}
+        onOpenSmartCas={() => setShowImport(true)}
         hiddenProducts={hiddenProducts}
       >
         {renderView()}

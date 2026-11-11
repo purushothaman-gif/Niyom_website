@@ -45,6 +45,8 @@ interface PortalShellProps {
   onRefresh: () => void;
   onChangePassword: () => void;
   onLogout: () => void;
+  /** Opens the Smart CAS import modal — surfaced under the Mutual Funds menu. */
+  onOpenSmartCas?: () => void;
   /** Product keys switched off for this client; their nav items are dropped. */
   hiddenProducts?: ReadonlySet<string>;
   children: ReactNode;
@@ -59,6 +61,7 @@ export function PortalShell({
   onRefresh,
   onChangePassword,
   onLogout,
+  onOpenSmartCas,
   hiddenProducts = NO_HIDDEN,
   children,
 }: PortalShellProps) {
@@ -126,11 +129,66 @@ export function PortalShell({
 
           {/* Desktop navigation: one link + three menus. */}
           <div ref={navRef} className="hidden min-w-0 flex-1 items-center gap-1 lg:flex">
-            {HEADER_LINKS.filter((i) => i.view && !hiddenProducts.has(i.key)).map((i) => (
-              <TopButton key={i.key} active={i.view === view} onClick={() => go(i.view!)}>
-                {i.label}
-              </TopButton>
-            ))}
+            {HEADER_LINKS.filter((i) => i.view && !hiddenProducts.has(i.key)).map((i) => {
+              /*
+               * Mutual Funds carries a second action — Smart CAS, which imports
+               * funds held elsewhere — so it drops down to the page plus that
+               * action instead of being a plain link. Every other product stays
+               * a single link.
+               */
+              if (i.key === 'mutual-funds' && onOpenSmartCas) {
+                const open = openMenu === 'mutual-funds';
+                const active = view === 'mutual-funds';
+                return (
+                  <div key={i.key} className="relative">
+                    <TopButton
+                      active={active}
+                      onClick={() => setOpenMenu(open ? null : 'mutual-funds')}
+                      aria-expanded={open}
+                      aria-haspopup="menu"
+                    >
+                      {i.label}
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+                      />
+                    </TopButton>
+
+                    {open && (
+                      <div
+                        role="menu"
+                        className="absolute left-0 top-[calc(100%+10px)] z-40 w-[330px] overflow-hidden rounded-token-xl border border-border bg-bg-elevated p-1.5 shadow-token-lg"
+                      >
+                        <MenuRow item={i} active={active} onClick={() => go('mutual-funds')} />
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setOpenMenu(null);
+                            onOpenSmartCas();
+                          }}
+                          className="flex w-full items-start gap-3 rounded-token-md px-2.5 py-2 text-left transition-colors hover:bg-bg-surface"
+                        >
+                          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                          <span className="min-w-0">
+                            <span className="block text-[13px] font-semibold text-text-primary">
+                              Smart CAS
+                            </span>
+                            <span className="block text-[11px] leading-snug text-text-faint">
+                              Bring in mutual funds held with other apps or distributors
+                            </span>
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              return (
+                <TopButton key={i.key} active={i.view === view} onClick={() => go(i.view!)}>
+                  {i.label}
+                </TopButton>
+              );
+            })}
 
             {headerMenus.map((group) => {
               const heading = group.heading!;
