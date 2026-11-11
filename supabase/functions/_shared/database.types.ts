@@ -1441,6 +1441,186 @@ export type Database = {
         }
         Relationships: []
       }
+      demat_accounts: {
+        Row: {
+          bo_id: string | null
+          client_id: string | null
+          created_at: string | null
+          depository: string | null
+          dp_id: string | null
+          dp_name: string | null
+          id: string
+          import_id: string
+          value: number | null
+        }
+        Insert: {
+          bo_id?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          depository?: string | null
+          dp_id?: string | null
+          dp_name?: string | null
+          id?: string
+          import_id: string
+          value?: number | null
+        }
+        Update: {
+          bo_id?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          depository?: string | null
+          dp_id?: string | null
+          dp_name?: string | null
+          id?: string
+          import_id?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demat_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demat_accounts_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "demat_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      demat_holdings: {
+        Row: {
+          account_id: string | null
+          asset_class: string
+          client_id: string | null
+          created_at: string | null
+          extra: Json | null
+          id: string
+          import_id: string
+          isin: string | null
+          name: string
+          units: number | null
+          value: number | null
+        }
+        Insert: {
+          account_id?: string | null
+          asset_class?: string
+          client_id?: string | null
+          created_at?: string | null
+          extra?: Json | null
+          id?: string
+          import_id: string
+          isin?: string | null
+          name: string
+          units?: number | null
+          value?: number | null
+        }
+        Update: {
+          account_id?: string | null
+          asset_class?: string
+          client_id?: string | null
+          created_at?: string | null
+          extra?: Json | null
+          id?: string
+          import_id?: string
+          isin?: string | null
+          name?: string
+          units?: number | null
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demat_holdings_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "demat_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demat_holdings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demat_holdings_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "demat_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      demat_imports: {
+        Row: {
+          account_count: number | null
+          cas_type: string | null
+          client_id: string | null
+          created_at: string | null
+          created_by: string | null
+          error: string | null
+          file_name: string | null
+          file_sha256: string | null
+          holding_count: number | null
+          id: string
+          investor_name: string | null
+          investor_pan: string | null
+          source: string
+          statement_date: string | null
+          status: string
+          total_value: number | null
+        }
+        Insert: {
+          account_count?: number | null
+          cas_type?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          error?: string | null
+          file_name?: string | null
+          file_sha256?: string | null
+          holding_count?: number | null
+          id?: string
+          investor_name?: string | null
+          investor_pan?: string | null
+          source?: string
+          statement_date?: string | null
+          status?: string
+          total_value?: number | null
+        }
+        Update: {
+          account_count?: number | null
+          cas_type?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          error?: string | null
+          file_name?: string | null
+          file_sha256?: string | null
+          holding_count?: number | null
+          id?: string
+          investor_name?: string | null
+          investor_pan?: string | null
+          source?: string
+          statement_date?: string | null
+          status?: string
+          total_value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demat_imports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dsa_debit_note_counters: {
         Row: {
           last_seq: number

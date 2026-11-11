@@ -18,6 +18,7 @@ import { loadConfig } from './config.js';
 import { BseClient, BseError } from './bseClient.js';
 import { webhookRouter } from './webhooks.js';
 import { casRequestRouter } from './cas/requests.js';
+import { dematRouter } from './cas/demat.js';
 import {
   toAppOrderResult,
   toAppScheme,
@@ -631,6 +632,9 @@ app.use(requireCaller);
 // Tracking around the import: intent, consent and status. Deliberately separate
 // from /cas/import, which is the pipeline itself and stays untouched.
 mountFeature('/cas/requests', 'cas_requests', casRequestRouter(cfg));
+// DEMAT holdings import (CDSL eCAS via CASParser). Parallel to /cas/requests,
+// writes the demat_* tables; the portal overlays them onto the board.
+mountFeature('/cas/demat', 'cas_demat', dematRouter(cfg));
 
 /* ----------------------------- scheme master ------------------------------ */
 
