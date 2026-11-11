@@ -90,6 +90,24 @@ export interface PartnerTransactionRow {
   client_price: number | null;
 }
 
+/** A sourced client's registrar-fed systematic plan (SIP / STP / SWP). */
+export interface PartnerSipRow {
+  sip_id: string;
+  scheme_name: string;
+  /** SIP | STP | SWP (the registrar's AUT_TRNTYP). */
+  txn_type: string | null;
+  /** Per-instalment amount. */
+  amount: number | null;
+  /** MONTHLY | WEEKLY | … (the registrar's PERIODICIT). */
+  frequency: string | null;
+  /** Mandate day(s); free text because the registrar can list several. */
+  sip_day: string | null;
+  /** active | paused | ceased (derived). */
+  status: string;
+  from_date: string | null;
+  to_date: string | null;
+}
+
 /**
  * nw_partner_payout_summary() — aggregates over debit notes ONLY.
  *

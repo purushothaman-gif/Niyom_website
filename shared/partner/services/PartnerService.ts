@@ -27,6 +27,7 @@ import type {
   PartnerBankAccount,
   PartnerClientRow,
   PartnerHoldingRow,
+  PartnerSipRow,
   PartnerTransactionRow,
   PartnerPayoutSummary,
   PartnerDebitNote,
@@ -199,6 +200,21 @@ export const PartnerService = {
     // Best-effort: a failure here still shows the client's bond/share history.
     const mfRows = mfErr ? [] : ((mf ?? []) as PartnerTransactionRow[]);
     return [...nonMf, ...mfRows].sort((a, b) => (b.txn_date ?? '').localeCompare(a.txn_date ?? ''));
+  },
+
+  /**
+   * A sourced client's registrar-fed systematic plans (SIP / STP / SWP). Funds
+   * run on the platform only, so this is empty unless MF SSO is on; ownership is
+   * re-checked server-side by the SECURITY DEFINER RPC.
+   */
+  async getClientSips(clientId: string): Promise<PartnerSipRow[]> {
+    if (!mfSsoEnabled() || isDemoSession()) return [];
+    const { data, error } = await supabase.rpc('nw_partner_client_mf_sips', {
+      p_client_id: clientId,
+    });
+    // Best-effort: a failure here must not break the rest of the client view.
+    if (error) return [];
+    return (data ?? []) as PartnerSipRow[];
   },
 
   async getPayoutSummary(): Promise<PartnerPayoutSummary | null> {

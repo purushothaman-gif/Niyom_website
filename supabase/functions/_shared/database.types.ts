@@ -13752,6 +13752,20 @@ export type Database = {
           quantity: number
         }[]
       }
+      nw_partner_client_mf_sips: {
+        Args: { p_client_id: string }
+        Returns: {
+          amount: number
+          frequency: string
+          from_date: string
+          scheme_name: string
+          sip_day: string
+          sip_id: string
+          status: string
+          to_date: string
+          txn_type: string
+        }[]
+      }
       nw_partner_client_mf_transactions: {
         Args: { p_client_id: string }
         Returns: {
