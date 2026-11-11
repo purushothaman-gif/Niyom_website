@@ -16,12 +16,29 @@ import { fmt } from '../../../../crm/utils';
 import { Card } from '../../../components/Card';
 import { Segmented } from '../../../components/Segmented';
 import { SectionHeader } from '../../../components/SectionHeader';
-import type { CatalogNavPoint } from '../../../types/funds';
 import { fmtNav, fmtRet, retColor } from './catalogBits';
-import { historyYears, maxDrawdown, monthsBetween, rollingReturns, sipBacktest, toSeries } from './navMath';
+import {
+  historyYears,
+  maxDrawdown,
+  monthsBetween,
+  rollingReturns,
+  sipBacktest,
+  type NavSample,
+  type Pricing,
+} from './navMath';
 
-const SAMPLED_NOTE =
-  'Replayed on this fund’s published NAV history, sampled at intervals — so figures are close approximations, not statement values. Past performance does not indicate future results.';
+const NOTE: Record<Pricing, string> = {
+  daily:
+    'Replayed on every NAV this fund has published (Regular plan), before exit load and tax. Past performance does not indicate future results.',
+  sampled:
+    'The daily NAV series could not be loaded, so this is replayed on sampled NAV history and the figures are approximate. Past performance does not indicate future results.',
+};
+
+/** The series the tools run on: daily when it could be fetched, else the chart's sample. */
+export interface ToolSeries {
+  samples: NavSample[];
+  pricing: Pricing;
+}
 
 const monthYear = (t: number) => new Date(t).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 
@@ -41,8 +58,8 @@ type Span = '1' | '3' | '5' | 'max';
 
 /* ----------------------------------- SIP ---------------------------------- */
 
-export function SipTools({ navHistory, amount }: { navHistory: CatalogNavPoint[]; amount: number }) {
-  const series = useMemo(() => toSeries(navHistory), [navHistory]);
+export function SipTools({ data, amount }: { data: ToolSeries; amount: number }) {
+  const { samples: series, pricing } = data;
   const years = historyYears(series);
   const spans = useMemo(() => {
     const opts: { value: Span; label: string }[] = [];
@@ -58,8 +75,8 @@ export function SipTools({ navHistory, amount }: { navHistory: CatalogNavPoint[]
   const result = useMemo(() => {
     if (!active) return null;
     const months = active.value === 'max' ? Math.floor(years * 12) : Number(active.value) * 12;
-    return sipBacktest(series, amount, months);
-  }, [series, amount, active, years]);
+    return sipBacktest(series, amount, months, pricing);
+  }, [series, amount, active, years, pricing]);
 
   if (!active || !result) return null;
   const cheaper = result.avgNav < result.lastNav;
@@ -117,7 +134,7 @@ export function SipTools({ navHistory, amount }: { navHistory: CatalogNavPoint[]
         </div>
       </div>
 
-      <p className="mt-3 text-[11px] leading-relaxed text-text-faint">{SAMPLED_NOTE}</p>
+      <p className="mt-3 text-[11px] leading-relaxed text-text-faint">{NOTE[pricing]}</p>
     </Card>
   );
 }
@@ -139,14 +156,18 @@ function Marker({ at, label, tone, below = false }: { at: number; label: string;
 
 /* --------------------------------- Lumpsum -------------------------------- */
 
-export function LumpsumTools({ navHistory, amount }: { navHistory: CatalogNavPoint[]; amount: number }) {
-  const series = useMemo(() => toSeries(navHistory), [navHistory]);
+export function LumpsumTools({ data, amount }: { data: ToolSeries; amount: number }) {
+  const { samples: series, pricing } = data;
   const stats = useMemo(
     () =>
       (['1', '3', '5'] as const)
-        .map((y) => ({ value: y, label: `${y} year${y === '1' ? '' : 's'}`, r: rollingReturns(series, Number(y)) }))
+        .map((y) => ({
+          value: y,
+          label: `${y} year${y === '1' ? '' : 's'}`,
+          r: rollingReturns(series, Number(y), pricing),
+        }))
         .filter((x) => x.r !== null),
-    [series],
+    [series, pricing],
   );
   const [hold, setHold] = useState<'1' | '3' | '5'>('3');
   const active = stats.find((s) => s.value === hold) ?? stats[stats.length - 1];
@@ -162,7 +183,7 @@ export function LumpsumTools({ navHistory, amount }: { navHistory: CatalogNavPoi
         <Card>
           <SectionHeader title="Entry timing" icon={CalendarRange} />
           <p className="-mt-2 mb-4 text-xs leading-relaxed text-text-secondary">
-            The same {fmt(amount)} invested on {active.r.count} different dates in this fund’s history, each held for{' '}
+            The same {fmt(amount)} invested on {active.r.count.toLocaleString('en-IN')} different dates in this fund’s history, each held for{' '}
             {active.label}. The spread is what the entry date alone was worth.
           </p>
 
@@ -187,7 +208,7 @@ export function LumpsumTools({ navHistory, amount }: { navHistory: CatalogNavPoi
           </div>
           <p className="mt-3 text-[11px] leading-relaxed text-text-faint">
             {yrs > 1 ? 'Returns are annualised. ' : ''}
-            {SAMPLED_NOTE}
+            {NOTE[pricing]}
           </p>
         </Card>
       )}
@@ -209,7 +230,7 @@ export function LumpsumTools({ navHistory, amount }: { navHistory: CatalogNavPoi
             A lumpsum carries the whole amount through a fall like this. If that would be hard to hold through, a
             staggered entry or a SIP spreads the entry price.
           </p>
-          <p className="mt-2 text-[11px] leading-relaxed text-text-faint">{SAMPLED_NOTE}</p>
+          <p className="mt-2 text-[11px] leading-relaxed text-text-faint">{NOTE[pricing]}</p>
         </Card>
       )}
     </>

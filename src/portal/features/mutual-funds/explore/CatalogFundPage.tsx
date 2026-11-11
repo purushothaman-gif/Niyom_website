@@ -28,7 +28,8 @@ import { AmcAvatar } from '../components/AmcAvatar';
 import type { InvestGate } from '../MutualFundsModule';
 import { CatalogRiskBadge, fmtNav, fmtRet, retColor, RETURNS_FOOTNOTE } from './catalogBits';
 import { DEFAULT_AMOUNT, ReturnCalculator } from './ReturnCalculator';
-import { LumpsumTools, SipTools } from './InvestTools';
+import { LumpsumTools, SipTools, type ToolSeries } from './InvestTools';
+import { toSeries, type NavSample } from './navMath';
 import { matchingSchemes, planLabel } from './schemeMatch';
 import type { ReturnKey } from './collections';
 
@@ -88,6 +89,27 @@ export function CatalogFundPage({ fund, schemes, gate, onBack, onInvest, platfor
       alive = false;
     };
   }, [fund.amfiCode]);
+
+  // The SIP / lumpsum tools replay history, so they want every NAV, not the
+  // chart's sample. Fetched only when a mode is set; `null` = not available.
+  const [daily, setDaily] = useState<NavSample[] | null | undefined>(undefined);
+  useEffect(() => {
+    if (!investMode) return;
+    let alive = true;
+    setDaily(undefined);
+    MfCatalogService.navDaily(fund.amfiCode).then((d) => alive && setDaily(d));
+    return () => {
+      alive = false;
+    };
+  }, [fund.amfiCode, investMode]);
+
+  const toolSeries = useMemo<ToolSeries | null>(() => {
+    if (daily && daily.length >= 12) return { samples: daily, pricing: 'daily' };
+    // Still loading: wait rather than flash approximate figures first.
+    if (daily === undefined) return null;
+    const sampled = detail ? toSeries(detail.navHistory) : [];
+    return sampled.length >= 12 ? { samples: sampled, pricing: 'sampled' } : null;
+  }, [daily, detail]);
 
   const facts: Array<{ label: string; value: string }> = [
     { label: 'Fund house', value: fund.amc },
@@ -193,12 +215,15 @@ export function CatalogFundPage({ fund, schemes, gate, onBack, onInvest, platfor
 
           <ReturnCalculator key={`${fund.amfiCode}:${investMode ?? 'both'}`} fund={fund} lock={investMode} onAmountChange={setAmount} />
 
-          {investMode === 'sip' && detail && detail.navHistory.length >= 12 && (
-            <SipTools navHistory={detail.navHistory} amount={amount} />
+          {investMode && !toolSeries && daily === undefined && (
+            <Card>
+              <div className="flex h-[120px] items-center justify-center">
+                <LogoLoader size={36} />
+              </div>
+            </Card>
           )}
-          {investMode === 'lumpsum' && detail && detail.navHistory.length >= 12 && (
-            <LumpsumTools navHistory={detail.navHistory} amount={amount} />
-          )}
+          {investMode === 'sip' && toolSeries && <SipTools data={toolSeries} amount={amount} />}
+          {investMode === 'lumpsum' && toolSeries && <LumpsumTools data={toolSeries} amount={amount} />}
 
           <Card>
             <SectionHeader title="Fund facts" />

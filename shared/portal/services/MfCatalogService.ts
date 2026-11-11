@@ -104,4 +104,35 @@ export const MfCatalogService = {
       launchDate: json.meta?.launch_date ?? null,
     };
   },
+
+  /**
+   * EVERY published NAV for one fund, oldest first — what the SIP / lumpsum
+   * tools replay. Separate from `detail` because it is ~20x the size and only
+   * those tools need it. A GET, so the browser caches it for the session.
+   *
+   * Resolves to null (never throws) when the series cannot be had; the tools
+   * then fall back to the sampled chart history and say so.
+   */
+  async navDaily(amfiCode: string): Promise<Array<{ t: number; nav: number }> | null> {
+    if (isDemoClientSession()) return null;
+    try {
+      const anon = getEnv().supabaseAnonKey;
+      const res = await fetch(`${fnUrl('mf-detail')}?code=${encodeURIComponent(amfiCode)}&daily=1`, {
+        headers: anon ? { apikey: anon, Authorization: `Bearer ${anon}` } : {},
+      });
+      if (!res.ok) return null;
+      const json = (await res.json()) as { success?: boolean; navDaily?: { d?: number[]; n?: number[] } };
+      const d = json.navDaily?.d;
+      const n = json.navDaily?.n;
+      if (!json.success || !d || !n || d.length !== n.length || d.length < 2) return null;
+      // Day numbers are UTC calendar days; place each at LOCAL midnight so they
+      // line up with dates built elsewhere in the app.
+      return d.map((day, i) => {
+        const u = new Date(day * 86_400_000);
+        return { t: new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate()).getTime(), nav: n[i] };
+      });
+    } catch {
+      return null;
+    }
+  },
 };

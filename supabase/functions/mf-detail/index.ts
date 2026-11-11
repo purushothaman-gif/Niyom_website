@@ -10,7 +10,17 @@ import { computeAll, downsampleNav, parseDate, isoDate, type NavPoint } from "..
  * browser), computes the full metric spread and returns a chart-ready,
  * downsampled NAV history.
  *
- *   GET ?code=NNNN  →  { success, meta, metrics, navHistory, cached }
+ *   GET ?code=NNNN          →  { success, meta, metrics, navHistory, cached }
+ *   GET ?code=NNNN&daily=1  →  the same, plus navDaily: { d, n } — EVERY
+ *                              published NAV, for the SIP / lumpsum tools that
+ *                              replay history and must not work off a sample.
+ *
+ * The daily series is deliberately NOT stored in `mf_detail_cache`: a long
+ * fund is ~5,000 points and we will not pay database disk for a copy of what
+ * mfapi.in already serves. A daily request therefore always goes upstream, and
+ * the response carries Cache-Control so the browser keeps it for the session.
+ * If upstream is down the cached payload is returned WITHOUT navDaily, and the
+ * caller falls back to the sampled history.
  *
  * Caching: the computed payload is stored in `mf_detail_cache` keyed by scheme
  * code. A fresh hit (< CACHE_TTL_MS) is served instantly without touching
@@ -32,11 +42,37 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const json = (body: unknown, status = 200) =>
+const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json", ...extra },
   });
+
+/** Every NAV, oldest first, as parallel arrays: days since 1970-01-01 and NAV. */
+interface NavDaily {
+  d: number[];
+  n: number[];
+}
+
+function toNavDaily(data: NavPoint[]): NavDaily {
+  const rows: [number, number][] = [];
+  for (const p of data) {
+    const nav = parseFloat(p.nav);
+    const day = Math.round(parseDate(p.date).getTime() / 86_400_000);
+    if (Number.isFinite(nav) && nav > 0 && Number.isFinite(day)) rows.push([day, nav]);
+  }
+  rows.sort((a, b) => a[0] - b[0]);
+  const out: NavDaily = { d: [], n: [] };
+  for (const [day, nav] of rows) {
+    if (out.d[out.d.length - 1] === day) continue; // one NAV per day
+    out.d.push(day);
+    out.n.push(nav);
+  }
+  return out;
+}
+
+// NAV is published once a day; an hour in the browser cache is invisible.
+const DAILY_CACHE = { "Cache-Control": "public, max-age=3600" };
 
 interface SchemeDetail {
   meta: {
@@ -121,7 +157,7 @@ async function writeCache(supabase: any, code: string, payload: DetailPayload): 
   }
 }
 
-async function handle(code: string): Promise<Response> {
+async function handle(code: string, daily = false): Promise<Response> {
   const clean = code.replace(/[^0-9]/g, "");
   if (!clean) return json({ success: false, error: "Missing or invalid scheme code" }, 400);
 
@@ -129,7 +165,8 @@ async function handle(code: string): Promise<Response> {
 
   // 1) Fresh cache hit → serve instantly, no upstream call.
   const cached = await readCache(supabase, clean);
-  if (cached && cached.ageMs < CACHE_TTL_MS) {
+  //    (A daily request needs the full series, which the cache does not hold.)
+  if (!daily && cached && cached.ageMs < CACHE_TTL_MS) {
     return json({ ...cached.payload, cached: true });
   }
 
@@ -166,6 +203,7 @@ async function handle(code: string): Promise<Response> {
 
   await writeCache(supabase, clean, payload);
 
+  if (daily) return json({ ...payload, navDaily: toNavDaily(detail.data), cached: false }, 200, DAILY_CACHE);
   return json({ ...payload, cached: false });
 }
 
@@ -174,12 +212,12 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (req.method === "GET") {
-      const code = new URL(req.url).searchParams.get("code") ?? "";
-      return await handle(code);
+      const params = new URL(req.url).searchParams;
+      return await handle(params.get("code") ?? "", params.get("daily") === "1");
     }
     if (req.method === "POST") {
       const body = await req.json().catch(() => ({}));
-      return await handle(String(body.code ?? ""));
+      return await handle(String(body.code ?? ""), body.daily === true);
     }
     return json({ error: "Method not allowed" }, 405);
   } catch (err) {

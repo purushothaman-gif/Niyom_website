@@ -2,10 +2,14 @@
  * NAV-history maths behind the SIP and lumpsum tools on a fund page.
  * -----------------------------------------------------------------------------
  * Everything here is BACKWARD-looking and computed from the fund's own NAV
- * series — nothing assumes a rate. The series the portal receives is sampled
- * (a few hundred points across the fund's whole life), so a NAV on a given day
- * is linearly interpolated between the two nearest samples. That makes every
- * result an approximation of what the daily series would give; the UI says so.
+ * series — nothing assumes a rate. Two kinds of series reach these functions:
+ *
+ *   daily    every published NAV. A purchase on a date gets the NAV of that
+ *            day, or of the next day one was published (weekends, holidays) —
+ *            which is how a real order is priced. Results are exact.
+ *   sampled  the chart's few hundred points, used only when the daily series
+ *            cannot be fetched. A NAV on a given day is then interpolated
+ *            between the two nearest samples, and the UI says "approximate".
  */
 import { xirr } from '../../../../../shared/portal/services/xirr';
 import type { CatalogNavPoint } from '../../../types/funds';
@@ -28,6 +32,27 @@ export function toSeries(points: CatalogNavPoint[]): NavSample[] {
     })
     .filter((s) => Number.isFinite(s.t) && s.nav > 0)
     .sort((a, b) => a.t - b.t);
+}
+
+/** How a NAV between two points of the series is resolved. */
+export type Pricing = 'daily' | 'sampled';
+
+/** First index whose date is on or after `t` (series.length if none). */
+function indexOnOrAfter(series: NavSample[], t: number): number {
+  let lo = 0;
+  let hi = series.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (series[mid].t < t) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** The NAV an order placed at `t` would get; clamped to the ends of the series. */
+export function priceAt(series: NavSample[], t: number, pricing: Pricing): number {
+  if (pricing === 'sampled') return navAt(series, t);
+  return series[Math.min(indexOnOrAfter(series, t), series.length - 1)].nav;
 }
 
 /** NAV at time `t`, interpolated; clamped to the ends of the series. */
@@ -72,7 +97,12 @@ export interface SipBacktest {
  * of each instalment date and valued at the latest NAV. The first instalment is
  * `months` months before the latest NAV date; there is none on the last day.
  */
-export function sipBacktest(series: NavSample[], monthly: number, months: number): SipBacktest | null {
+export function sipBacktest(
+  series: NavSample[],
+  monthly: number,
+  months: number,
+  pricing: Pricing = 'sampled',
+): SipBacktest | null {
   if (series.length < 2 || monthly <= 0 || months < 1) return null;
   const last = series[series.length - 1];
   const end = new Date(last.t);
@@ -82,7 +112,7 @@ export function sipBacktest(series: NavSample[], monthly: number, months: number
   for (let k = months; k >= 1; k--) {
     const d = new Date(end.getFullYear(), end.getMonth() - k, Math.min(end.getDate(), 28));
     if (d.getTime() < series[0].t) continue;
-    units += monthly / navAt(series, d.getTime());
+    units += monthly / priceAt(series, d.getTime(), pricing);
     flows.push({ amount: -monthly, date: d });
     first = Math.min(first, d.getTime());
   }
@@ -119,14 +149,14 @@ export interface RollingStats {
  * Every lumpsum held for `years`, one per sampled start date: the spread of
  * outcomes that depended only on WHEN the money went in.
  */
-export function rollingReturns(series: NavSample[], years: number): RollingStats | null {
+export function rollingReturns(series: NavSample[], years: number, pricing: Pricing = 'sampled'): RollingStats | null {
   if (series.length < 2) return null;
   const lastT = series[series.length - 1].t;
   const span = years * YEAR;
   const out: number[] = [];
   for (const s of series) {
     if (s.t + span > lastT) break;
-    const growth = navAt(series, s.t + span) / s.nav;
+    const growth = priceAt(series, s.t + span, pricing) / s.nav;
     out.push((Math.pow(growth, 1 / years) - 1) * 100);
   }
   if (out.length < 6) return null;

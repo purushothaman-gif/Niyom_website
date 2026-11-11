@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { maxDrawdown, navAt, rollingReturns, sipBacktest, toSeries } from './navMath';
+import { maxDrawdown, navAt, priceAt, rollingReturns, sipBacktest, toSeries } from './navMath';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 /** Monthly samples from Jan 2020, NAV given by `f(monthIndex)`. */
@@ -17,6 +17,24 @@ describe('navMath', () => {
     expect(s[0].nav).toBe(10);
     expect(navAt(s, (s[0].t + s[1].t) / 2)).toBeCloseTo(11, 5);
     expect(navAt(s, s[2].t + 1e9)).toBe(14);
+  });
+
+  it('daily pricing takes the next published NAV, not an interpolation', () => {
+    const s = monthly(3, (i) => 10 + i * 2);
+    const between = (s[0].t + s[1].t) / 2;
+    expect(priceAt(s, between, 'daily')).toBe(12);
+    expect(priceAt(s, between, 'sampled')).toBeCloseTo(11, 5);
+    expect(priceAt(s, s[1].t, 'daily')).toBe(12);
+    expect(priceAt(s, s[2].t + 1e9, 'daily')).toBe(14);
+  });
+
+  it('a daily-priced SIP buys each instalment at the next NAV', () => {
+    // NAV 10 until the 15th of month 2, then 20: instalments dated the 15th
+    // of months 0 and 1 buy at 10, month 2 at 20.
+    const s = monthly(4, (i) => (i < 2 ? 10 : 20));
+    const r = sipBacktest(s, 1000, 3, 'daily')!;
+    expect(r.instalments).toBe(3);
+    expect(r.units).toBeCloseTo(100 + 100 + 50, 6);
   });
 
   it('a SIP in a flat fund returns exactly what went in', () => {
