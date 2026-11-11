@@ -5674,6 +5674,57 @@ export type Database = {
         }
         Relationships: []
       }
+      mf_nav_series: {
+        Row: {
+          amfi_code: string
+          appended_at: string | null
+          attempts: number
+          cursor_to: string | null
+          d: number[]
+          first_date: string | null
+          last_attempt_at: string | null
+          last_date: string | null
+          last_error: string | null
+          loaded_at: string | null
+          n: number[]
+          priority: number
+          requested_at: string
+          status: string
+        }
+        Insert: {
+          amfi_code: string
+          appended_at?: string | null
+          attempts?: number
+          cursor_to?: string | null
+          d?: number[]
+          first_date?: string | null
+          last_attempt_at?: string | null
+          last_date?: string | null
+          last_error?: string | null
+          loaded_at?: string | null
+          n?: number[]
+          priority?: number
+          requested_at?: string
+          status?: string
+        }
+        Update: {
+          amfi_code?: string
+          appended_at?: string | null
+          attempts?: number
+          cursor_to?: string | null
+          d?: number[]
+          first_date?: string | null
+          last_attempt_at?: string | null
+          last_date?: string | null
+          last_error?: string | null
+          loaded_at?: string | null
+          n?: number[]
+          priority?: number
+          requested_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       mf_nav_tracked: {
         Row: {
           attempts: number
@@ -12976,6 +13027,37 @@ export type Database = {
         Args: { p_isins: string[] }
         Returns: undefined
       }
+      mf_nav_series_append: { Args: never; Returns: number }
+      mf_nav_series_claim: {
+        Args: { p_force?: boolean; p_limit?: number; p_max_priority?: number }
+        Returns: {
+          amfi_code: string
+          cursor_to: string
+          last_date: string
+          points: number
+          status: string
+        }[]
+      }
+      mf_nav_series_enqueue: {
+        Args: { p_codes: string[]; p_priority?: number }
+        Returns: number
+      }
+      mf_nav_series_fail: {
+        Args: { p_code: string; p_error: string }
+        Returns: undefined
+      }
+      mf_nav_series_merge: {
+        Args: {
+          p_code: string
+          p_cursor_to: string
+          p_d: number[]
+          p_done: boolean
+          p_n: number[]
+        }
+        Returns: number
+      }
+      mf_nav_series_seed: { Args: never; Returns: number }
+      mf_nav_series_tick: { Args: never; Returns: number }
       mf_nav_track: {
         Args: { p_isin: string; p_source: string }
         Returns: undefined

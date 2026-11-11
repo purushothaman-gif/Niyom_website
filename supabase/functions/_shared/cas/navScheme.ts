@@ -6,13 +6,18 @@
  * registrar feed, a CRM holding, a deal — a trigger asks for its history and
  * this loads it.
  *
- * ## Why mfapi.in and not AMFI's history report
+ * ## Where the history comes from
  *
- * AMFI serves history by DATE (every scheme for a day), which is what the old
- * universe backfill walked. For one scheme that means thousands of requests.
- * mfapi.in mirrors the same AMFI NAVs keyed by AMFI scheme code and returns a
- * scheme's whole life in one response. AMFI's own daily rows always win: the
- * insert ignores dates nav_daily already has.
+ * AMFI, via `mf_nav_series`: the mf-nav-series function loads each scheme's
+ * history from AMFI's per-scheme feed in the background and keeps it as one
+ * compact row. When that row exists it is copied into nav_daily here with no
+ * outside call at all.
+ *
+ * AMFI's feed is too slow to wait on, so a scheme that is NOT loaded yet is
+ * queued at high priority and — TRANSITIONALLY, until the backfill completes —
+ * fetched from mfapi.in (a mirror of the same AMFI NAVs) so a newly held fund
+ * still gets its history at once. AMFI's own daily rows always win: the insert
+ * ignores dates nav_daily already has.
  */
 import { sbInsert, sbRpc, sbSelect, type SbConfig } from './db.ts';
 
@@ -61,19 +66,59 @@ async function amfiCodeFor(cfg: SbConfig, isin: string): Promise<string | null> 
   return n[0]?.amfi_code ?? null;
 }
 
+/** A loaded AMFI series as nav_daily rows, or null when it is not loaded yet. */
+export function seriesToNavRows(
+  isin: string,
+  amfiCode: string,
+  series: { d: number[]; n: number[] },
+): { isin: string; nav_date: string; nav: number; amfi_code: string }[] {
+  const out: { isin: string; nav_date: string; nav: number; amfi_code: string }[] = [];
+  for (let i = 0; i < series.d.length; i++) {
+    const nav = Number(series.n[i]);
+    if (!Number.isFinite(nav) || nav <= 0) continue;
+    out.push({ isin, nav_date: new Date(series.d[i] * 86_400_000).toISOString().slice(0, 10), nav, amfi_code: amfiCode });
+  }
+  return out;
+}
+
+async function rowsFromSeries(
+  cfg: SbConfig,
+  isin: string,
+  code: string,
+): Promise<{ isin: string; nav_date: string; nav: number; amfi_code: string }[] | null> {
+  const s = await sbSelect<{ d: number[]; n: number[]; status: string }>(
+    cfg, `mf_nav_series?select=d,n,status&amfi_code=eq.${encodeURIComponent(code)}&limit=1`);
+  const row = s[0];
+  if (!row || (row.status !== 'loaded' && row.status !== 'tail') || !row.d?.length) return null;
+  return seriesToNavRows(isin, code, row);
+}
+
+async function rowsFromMfapi(
+  isin: string,
+  code: string,
+): Promise<{ isin: string; nav_date: string; nav: number; amfi_code: string }[]> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
+  const res = await fetch(`https://api.mfapi.in/mf/${encodeURIComponent(code)}`, { signal: ctl.signal })
+    .finally(() => clearTimeout(timer));
+  if (!res.ok) throw new Error(`mfapi.in answered ${res.status}`);
+  const body = (await res.json()) as { data?: { date: string; nav: string }[] };
+  const rows = mfapiToNavRows(isin, code, body.data ?? []);
+  if (!rows.length) throw new Error('mfapi.in returned no history');
+  return rows;
+}
+
 async function loadOne(cfg: SbConfig, isin: string): Promise<SchemeHistoryResult> {
   try {
     const code = await amfiCodeFor(cfg, isin);
     if (!code) throw new Error('no AMFI scheme code known for this ISIN');
 
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(`https://api.mfapi.in/mf/${encodeURIComponent(code)}`, { signal: ctl.signal })
-      .finally(() => clearTimeout(timer));
-    if (!res.ok) throw new Error(`mfapi.in answered ${res.status}`);
-    const body = (await res.json()) as { data?: { date: string; nav: string }[] };
-    const rows = mfapiToNavRows(isin, code, body.data ?? []);
-    if (!rows.length) throw new Error('mfapi.in returned no history');
+    let rows = await rowsFromSeries(cfg, isin, code).catch(() => null);
+    if (!rows) {
+      // Held funds jump the AMFI queue; meanwhile take the mirror's copy.
+      await sbRpc(cfg, 'mf_nav_series_enqueue', { p_codes: [code], p_priority: 2 }).catch(() => undefined);
+      rows = await rowsFromMfapi(isin, code);
+    }
 
     for (let i = 0; i < rows.length; i += 2000) {
       await sbInsert(cfg, 'nav_daily?on_conflict=isin,nav_date', rows.slice(i, i + 2000), {

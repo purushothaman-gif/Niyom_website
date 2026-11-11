@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mfapiDateToIso, mfapiToNavRows } from './navScheme.ts';
+import { mfapiDateToIso, mfapiToNavRows, seriesToNavRows } from './navScheme.ts';
 
 describe('mfapi history → nav_daily rows', () => {
   it('converts dd-mm-yyyy to ISO and rejects junk', () => {
@@ -18,6 +18,17 @@ describe('mfapi history → nav_daily rows', () => {
     ]);
     expect(rows).toEqual([
       { isin: 'INF179K01BB8', nav_date: '2026-11-05', nav: 123.4567, amfi_code: '100123' },
+    ]);
+  });
+});
+
+describe('AMFI series → nav_daily rows', () => {
+  it('turns day numbers into ISO dates and drops unusable NAVs', () => {
+    // 20401 days after 1970-01-01 is 2025-11-09.
+    const rows = seriesToNavRows('INF179K01BB8', '100123', { d: [20401, 20402, 20403], n: [10.5, 0, 11.25] });
+    expect(rows).toEqual([
+      { isin: 'INF179K01BB8', nav_date: '2025-11-09', nav: 10.5, amfi_code: '100123' },
+      { isin: 'INF179K01BB8', nav_date: '2025-11-11', nav: 11.25, amfi_code: '100123' },
     ]);
   });
 });

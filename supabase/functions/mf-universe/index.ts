@@ -11,11 +11,10 @@ import { isRegularGrowth } from "../_shared/mfPlan.ts";
  * Regular, not Direct: NIYOM is an ARN distributor and cannot transact a Direct
  * plan, so a Direct scheme here is one we could never execute, quoted at
  * returns nobody could earn through us. The rule lives in _shared/mfPlan.ts and
- * is shared with the app — do not re-implement it here. mfapi.in
- * is NEVER called from the browser (CORS + payload size); this function is the
- * single server-side proxy, mirroring the nsdl-search convention.
+ * is shared with the app — do not re-implement it here. The list comes from
+ * AMFI's own daily NAV file (already in nav_daily), not from any third party.
  *
- *   { action: "refresh" }        → re-pull the whole AMFI list into the cache.
+ *   { action: "refresh" }        → add schemes new to AMFI's daily file to the cache.
  *   { action: "search", q, ... } → ILIKE search over the cached scheme names.
  *   GET ?q=…                     → same as a search action (handy for the page).
  *
@@ -38,24 +37,14 @@ const json = (body: unknown, status = 200) =>
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 40;
 
-interface SchemeListEntry { schemeCode: number; schemeName: string; }
+/** A full AMFI daily file carries ~12,000 priced ISINs; a partial one, hundreds. */
+const FULL_DAY_ROWS = 5000;
+
+interface MasterRow { amfi_code: string | null; scheme_name: string | null; }
 
 /** Escape LIKE/ILIKE wildcards so user input can't act as a pattern. */
 function escapeLike(s: string): string {
   return s.replace(/[%_\\]/g, (m) => `\\${m}`);
-}
-
-async function getJson<T>(url: string, timeoutMs = 45000): Promise<T | null> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
 }
 
 // deno-lint-ignore no-explicit-any
@@ -68,8 +57,57 @@ function createSupabase() {
 
 async function refresh(): Promise<Response> {
   const supabase = createSupabase();
-  const list = await getJson<SchemeListEntry[]>("https://api.mfapi.in/mf");
-  if (!list) throw new Error("Could not reach mfapi.in scheme list");
+  /*
+   * The scheme list is AMFI's own daily NAV file, which nav-refresh already
+   * loads into nav_daily every night — no third-party list is consulted.
+   *
+   * The daily file and not the scheme master, on purpose: a scheme that has a
+   * NAV dated today is one that exists and is priced. The master also lists
+   * matured closed-ended series, and its closure_date is the NFO closing date,
+   * not a wind-up date, so it cannot tell a live scheme from a dead one.
+   */
+  const latest = await supabase
+    .from("nav_daily")
+    .select("nav_date")
+    .order("nav_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (latest.error) throw latest.error;
+  const newest = latest.data?.nav_date as string | undefined;
+  if (!newest) throw new Error("nav_daily holds no NAVs — nothing to build the scheme list from");
+
+  /*
+   * The newest date is usually a PARTIAL file: funds that report a day late
+   * have not published yet, and weekends carry only a few hundred liquid
+   * funds. Take the most recent day that is a full trading day instead.
+   */
+  let navDate: string | null = null;
+  for (let back = 0; back < 8 && !navDate; back++) {
+    const day = new Date(Date.parse(`${newest}T00:00:00Z`) - back * 86_400_000).toISOString().slice(0, 10);
+    const { count, error } = await supabase
+      .from("nav_daily")
+      .select("isin", { count: "exact", head: true })
+      .eq("nav_date", day);
+    if (error) throw error;
+    if ((count ?? 0) >= FULL_DAY_ROWS) navDate = day;
+  }
+  if (!navDate) throw new Error("no full trading day in nav_daily in the last week");
+
+  const master: MasterRow[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from("nav_daily")
+      .select("amfi_code, scheme_name")
+      .eq("nav_date", navDate)
+      .not("amfi_code", "is", null)
+      .not("scheme_name", "is", null)
+      .order("isin", { ascending: true })
+      .range(from, from + 999);
+    if (error) throw error;
+    master.push(...((data ?? []) as MasterRow[]));
+    if (!data || data.length < 1000) break;
+  }
+  if (!master.length) throw new Error(`AMFI daily file for ${navDate} has no named schemes`);
 
   /*
    * fund_house is deliberately NOT written here.
@@ -85,31 +123,38 @@ async function refresh(): Promise<Response> {
    * night's NAV run. Blank for a day beats wrong all day, and the browse-by-AMC
    * screen filters blanks out rather than inventing a house for them.
    */
-  const rows = list
-    .filter((s) => isRegularGrowth(s.schemeName))
-    .map((s) => {
-      const scheme_name = s.schemeName.replace(/\s*-\s*regular.*$/i, "").trim();
-      return {
-        scheme_code: String(s.schemeCode),
-        scheme_name,
-        search_name: scheme_name.toLowerCase(),
-        last_synced_at: new Date().toISOString(),
-      };
+  const byCode = new Map<string, { scheme_code: string; scheme_name: string; search_name: string; last_synced_at: string }>();
+  for (const s of master) {
+    const code = String(s.amfi_code ?? "");
+    const name = s.scheme_name ?? "";
+    if (!/^[0-9]+$/.test(code) || !name || byCode.has(code)) continue;
+    if (!isRegularGrowth(name)) continue;
+    const scheme_name = name.replace(/\s*-\s*regular.*$/i, "").trim();
+    byCode.set(code, {
+      scheme_code: code,
+      scheme_name,
+      search_name: scheme_name.toLowerCase(),
+      last_synced_at: new Date().toISOString(),
     });
+  }
+  const rows = [...byCode.values()];
 
   // Upsert in chunks to stay within statement limits.
   const CHUNK = 500;
   let upserted = 0;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK);
+    // INSERT-only: a scheme already in the cache keeps the name it has. The
+    // portal joins this catalog to others BY NAME, so re-spelling 9,000 rows
+    // because the list changed source would silently break those joins.
     const { error } = await supabase
       .from("mf_scheme_cache")
-      .upsert(chunk, { onConflict: "scheme_code" });
+      .upsert(chunk, { onConflict: "scheme_code", ignoreDuplicates: true });
     if (error) throw error;
     upserted += chunk.length;
   }
 
-  return json({ success: true, upserted });
+  return json({ success: true, upserted, source: "amfi-daily-file", nav_date: navDate });
 }
 
 async function search(q: string, limit: number): Promise<Response> {

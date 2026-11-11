@@ -2,17 +2,23 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { computeAll, downsampleNav, parseDate, isoDate, type NavPoint } from "../_shared/mfReturns.ts";
 import { asJson } from '../_shared/json.ts';
-import { isRegularGrowth } from '../_shared/mfPlan.ts';
+import { dayToIso, readNavSeries, readSchemeMeta, seriesToNavPoints } from '../_shared/amfiNavSeries.ts';
 
 /**
  * update-mutual-funds
  * -------------------
- * Populates the `mutual_funds` table with REAL fund data from mfapi.in
- * (free, no API key). For a curated set of funds it resolves the AMFI scheme
- * code, pulls the NAV history, and computes real YTD / 6M / 1Y / 3Y / 5Y /
- * since-inception returns plus current NAV, NAV date and 52-week high/low.
+ * Populates the `mutual_funds` table with REAL fund data. For a curated set of
+ * funds it resolves the AMFI scheme code from our own scheme universe
+ * (mf_scheme_cache, itself fed by AMFI's scheme master), reads the scheme's NAV
+ * history from mf_nav_series (AMFI's own NAVs), and computes real YTD / 6M /
+ * 1Y / 3Y / 5Y / since-inception returns plus current NAV, NAV date and
+ * 52-week high/low.
  *
- * mfapi.in does NOT expose AUM or expense ratio, so those columns stay null and
+ * TRANSITIONAL: a scheme whose AMFI history has not been loaded into
+ * mf_nav_series yet still falls back to mfapi.in for that one fetch. That
+ * fallback is removed once the backfill completes.
+ *
+ * AMFI's NAV data does NOT carry AUM or expense ratio, so those columns stay null and
  * are not shown on the MF Research page. `fund_house` (AMC) and an inception
  * `launch_date` (oldest NAV point) ARE derived and stored.
  *
@@ -102,7 +108,6 @@ const TARGETS: { match: string; category: "Equity" | "Debt" | "Hybrid"; risk: st
   { match: "SBI Conservative Hybrid Fund", category: "Hybrid", risk: "Low" },
 ];
 
-interface SchemeListEntry { schemeCode: number; schemeName: string; }
 interface SchemeDetail {
   meta: { scheme_name: string; scheme_category?: string; scheme_type?: string; fund_house?: string };
   data: NavPoint[];
@@ -121,12 +126,53 @@ function pickSubCategory(schemeCategory?: string): string {
  * table feeds the public MF Research page, so a Direct code here publishes
  * returns no reader could obtain through us. Rule shared via _shared/mfPlan.ts.
  */
-function resolveCode(list: SchemeListEntry[], match: string): number | null {
-  const m = match.toLowerCase();
-  const candidates = list.filter(
-    (s) => s.schemeName.toLowerCase().includes(m) && isRegularGrowth(s.schemeName),
-  );
-  return candidates.length ? candidates[0].schemeCode : null;
+// deno-lint-ignore no-explicit-any
+async function resolveCode(supabase: any, match: string): Promise<number | null> {
+  // mf_scheme_cache holds Regular-Growth schemes only (mf-universe applies the
+  // shared rule on the way in), so a name match here is already the right plan.
+  const { data } = await supabase
+    .from("mf_scheme_cache")
+    .select("scheme_code")
+    .ilike("scheme_name", `%${match.replace(/[%_\\]/g, (c: string) => `\\${c}`)}%`)
+    .limit(200);
+  // Lowest scheme code, as before: the scheme list this used to scan was in
+  // code order and took the first hit, and changing the pick would re-key rows.
+  const codes = ((data ?? []) as { scheme_code: string }[])
+    .map((r) => Number(r.scheme_code))
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b);
+  return codes.length ? codes[0] : null;
+}
+
+/**
+ * A scheme's identity and full history: our AMFI series when it is loaded,
+ * otherwise (transitionally) mfapi.in.
+ */
+// deno-lint-ignore no-explicit-any
+async function loadDetail(supabase: any, code: number): Promise<{ detail: SchemeDetail; launch_date: string | null } | null> {
+  const series = await readNavSeries(supabase, String(code));
+  if (series) {
+    // Keep the name/category this fund already shows, if it has been cached.
+    const prior = await supabase.from("mf_detail_cache").select("payload").eq("scheme_code", String(code)).maybeSingle();
+    const priorMeta = (prior.data?.payload as { meta?: SchemeDetail["meta"] } | null)?.meta;
+    const meta = priorMeta?.scheme_name ? priorMeta : await readSchemeMeta(supabase, String(code));
+    return {
+      detail: {
+        meta: {
+          scheme_name: meta.scheme_name,
+          scheme_category: meta.scheme_category ?? undefined,
+          scheme_type: meta.scheme_type ?? undefined,
+          fund_house: meta.fund_house ?? undefined,
+        },
+        data: seriesToNavPoints(series),
+      },
+      launch_date: dayToIso(series.d[0]),
+    };
+  }
+  const detail = await getJson<SchemeDetail>(`https://api.mfapi.in/mf/${code}`);
+  if (!detail || !detail.data?.length) return null;
+  const first = detail.data[detail.data.length - 1];
+  return { detail, launch_date: first ? isoDate(parseDate(first.date)) : null };
 }
 
 async function getJson<T>(url: string, timeoutMs = 12000): Promise<T | null> {
@@ -152,28 +198,24 @@ Deno.serve(async (req: Request) => {
     if (!supabaseUrl || !serviceKey) throw new Error("Missing Supabase environment variables");
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // 1. Whole AMFI scheme list (to resolve codes by fund name). Large payload —
-    //    allow a longer timeout.
-    const list = await getJson<SchemeListEntry[]>("https://api.mfapi.in/mf", 45000);
-    if (!list) throw new Error("Could not reach mfapi.in scheme list");
+    // 1–2. Resolve each target to a scheme code from our own scheme universe.
+    const resolved = (await Promise.all(
+      TARGETS.map(async (t) => ({ ...t, code: await resolveCode(supabase, t.match) })),
+    )).filter((t): t is typeof t & { code: number } => t.code != null);
 
-    // 2. Resolve each target to a scheme code.
-    const resolved = TARGETS
-      .map((t) => ({ ...t, code: resolveCode(list, t.match) }))
-      .filter((t): t is typeof t & { code: number } => t.code != null);
+    // Make sure every curated scheme's AMFI history is queued ahead of the bulk.
+    await supabase.rpc("mf_nav_series_enqueue", { p_codes: resolved.map((t) => String(t.code)), p_priority: 1 })
+      .then(() => undefined, () => undefined);
 
     // 3. Fetch each fund's NAV history in parallel and compute the full metric spread.
     const details = await Promise.all(
       resolved.map(async (t) => {
-        const detail = await getJson<SchemeDetail>(`https://api.mfapi.in/mf/${t.code}`);
-        if (!detail || !detail.data?.length) return null;
+        const loaded = await loadDetail(supabase, t.code);
+        if (!loaded) return null;
+        const { detail, launch_date } = loaded; // inception ≈ oldest NAV point
 
         const metrics = computeAll(detail.data);
         if (!metrics) return null;
-
-        // Inception ≈ oldest NAV point in the history.
-        const first = detail.data[detail.data.length - 1];
-        const launch_date = first ? isoDate(parseDate(first.date)) : null;
 
         const row = {
           fund_name: detail.meta.scheme_name.replace(/\s*-\s*(regular|growth).*$/i, "").trim(),
@@ -223,7 +265,7 @@ Deno.serve(async (req: Request) => {
     );
 
     const ok = details.filter((d): d is NonNullable<typeof d> => d !== null);
-    if (ok.length === 0) throw new Error("No fund data could be computed from mfapi.in");
+    if (ok.length === 0) throw new Error("No fund data could be computed");
 
     const funds = ok.map((d) => d.row);
     const { error } = await supabase.from("mutual_funds").upsert(funds, { onConflict: "fund_code" });

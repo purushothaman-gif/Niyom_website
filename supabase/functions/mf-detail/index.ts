@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { computeAll, downsampleNav, parseDate, isoDate, type NavPoint } from "../_shared/mfReturns.ts";
+import { dayToIso, readNavSeries, readSchemeMeta, requestNavSeries, seriesToNavPoints } from "../_shared/amfiNavSeries.ts";
 
 /**
  * mf-detail
@@ -126,6 +127,16 @@ async function getJson<T>(url: string, timeoutMs = 12000): Promise<T | null> {
   }
 }
 
+/**
+ * A previous payload's meta is kept when there is one, so a fund's name and
+ * category do not shift wording just because the history changed source.
+ */
+// deno-lint-ignore no-explicit-any
+async function schemeMeta(supabase: any, code: string, prior: DetailPayload["meta"] | null): Promise<DetailPayload["meta"]> {
+  if (prior?.scheme_name) return prior;
+  return { ...(await readSchemeMeta(supabase, code)), launch_date: null };
+}
+
 /** Read a cached row; returns the payload plus its age in ms, or null. */
 // deno-lint-ignore no-explicit-any
 async function readCache(supabase: any, code: string): Promise<{ payload: DetailPayload; ageMs: number } | null> {
@@ -170,8 +181,35 @@ async function handle(code: string, daily = false): Promise<Response> {
     return json({ ...cached.payload, cached: true });
   }
 
-  // 2) Miss or stale → refresh from mfapi.in. Its cold fetch for funds with
-  //    long NAV histories can be slow, so allow a generous upstream timeout.
+  // 2) Our own AMFI history (mf_nav_series). One row holds every NAV the
+  //    scheme has published, so metrics, the chart sample and the daily series
+  //    all come from it with no upstream call at all.
+  const series = await readNavSeries(supabase, clean);
+  if (series) {
+    const points = seriesToNavPoints(series);
+    const metrics = computeAll(points);
+    if (metrics) {
+      const launch_date = dayToIso(series.d[0]);
+      const payload: DetailPayload = {
+        success: true,
+        meta: { ...(await schemeMeta(supabase, clean, cached?.payload.meta ?? null)), launch_date },
+        metrics,
+        navHistory: downsampleNav(points, 220),
+      };
+      await writeCache(supabase, clean, payload);
+      if (daily) {
+        return json({ ...payload, navDaily: { d: series.d, n: series.n }, cached: false, source: "amfi" }, 200, DAILY_CACHE);
+      }
+      return json({ ...payload, cached: false, source: "amfi" });
+    }
+  }
+
+  // Not loaded yet: put it at the front of the AMFI queue so the next request
+  // is served from our own data.
+  await requestNavSeries(supabase, clean, 0);
+
+  // 3) TRANSITIONAL — mfapi.in, only for a scheme whose AMFI history has not
+  //    been loaded yet. Removed once the mf_nav_series backfill completes.
   const detail = await getJson<SchemeDetail>(`https://api.mfapi.in/mf/${clean}`, 25000);
   if (!detail || !detail.data?.length) {
     // Upstream unavailable — serve the stale cache if we have one.
