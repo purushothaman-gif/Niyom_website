@@ -168,6 +168,15 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
   const pinPromptDecided = useRef(false);
 
   const client = snapshot.client;
+  // The client's depository, inferred from the demat account on file, so the
+  // import hub can skip the "which depository?" step: CDSL ids are 16 digits,
+  // NSDL ids begin "IN". Null when there's no (or an unrecognised) account.
+  const depositoryHint: 'cdsl' | 'nsdl' | null = (() => {
+    const acct = (client?.demat_account ?? '').replace(/\s/g, '');
+    if (/^\d{16}$/.test(acct)) return 'cdsl';
+    if (/^IN/i.test(acct)) return 'nsdl';
+    return null;
+  })();
   const hasData = !!refreshedAt; // first load completed
 
   useEffect(() => {
@@ -452,6 +461,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
                 }
               : undefined
           }
+          depositoryHint={depositoryHint}
           onImported={refresh}
         />
       )}
