@@ -33,6 +33,7 @@ import { ChangePasswordModal } from './features/profile/ChangePasswordModal';
 import { ImportPortfolioModal } from './features/portfolio/ImportPortfolioModal';
 import { ConnectDematModal } from './features/portfolio/ConnectDematModal';
 import { ImportHubModal } from './features/portfolio/ImportHubModal';
+import { PostConnectSync } from './features/portfolio/PostConnectSync';
 import { DematImportService } from '../../shared/portal/services/DematImportService';
 import { InboxService } from '../../shared/portal/services/InboxService';
 import { InboundEmailService } from '../../shared/portal/services/InboundEmailService';
@@ -122,7 +123,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
   // Returning from the email-connect round trip: ConnectInbox left this flag
   // before redirecting, so reopen the hub (and guide them to Sync now) instead
   // of stranding them on the dashboard, which is all the proxy callback links to.
-  const [justConnectedInbox] = useState(() => {
+  const [justConnectedInbox, setJustConnectedInbox] = useState(() => {
     try {
       return sessionStorage.getItem('nw_import_return') === '1';
     } catch {
@@ -131,9 +132,9 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
   });
   const [showHub, setShowHub] = useState(() => {
     try {
-      return new URLSearchParams(window.location.search).get('import') === '1' || justConnectedInbox;
+      return new URLSearchParams(window.location.search).get('import') === '1';
     } catch {
-      return justConnectedInbox;
+      return false;
     }
   });
   useEffect(() => {
@@ -497,7 +498,6 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
           depositoryHint={depositoryHint}
           inboxEnabled={inboxEnabled}
           forwardEnabled={forwardEnabled}
-          justConnectedInbox={justConnectedInbox}
           onImported={refresh}
         />
       )}
@@ -516,6 +516,17 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
 
       {showDemat && (
         <ConnectDematModal onClose={() => setShowDemat(false)} onImported={refresh} />
+      )}
+
+      {/* Just came back from connecting email — sync for them, then to portfolio. */}
+      {justConnectedInbox && (
+        <PostConnectSync
+          onImported={refresh}
+          onDone={() => {
+            setJustConnectedInbox(false);
+            navigate('portfolio');
+          }}
+        />
       )}
 
       {showActivate && (
