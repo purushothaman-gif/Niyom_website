@@ -30,6 +30,8 @@ import { NotificationsPage } from './features/notifications/NotificationsPage';
 import { SupportPage } from './features/support/SupportPage';
 import { ChangePasswordModal } from './features/profile/ChangePasswordModal';
 import { ImportPortfolioModal } from './features/portfolio/ImportPortfolioModal';
+import { ConnectDematModal } from './features/portfolio/ConnectDematModal';
+import { DematImportService } from '../../shared/portal/services/DematImportService';
 import { IdleWarning } from './components/IdleWarning';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { SetPinPrompt } from './features/profile/SetPinPrompt';
@@ -104,6 +106,17 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
    * the wizard is two places for its state to drift.
    */
   const [showImport, setShowImport] = useState(false);
+  const [showDemat, setShowDemat] = useState(false);
+  // Whether the server can fetch demat holdings; the entry point is hidden
+  // until we know it can, so a client is never offered something that errors.
+  const [dematEnabled, setDematEnabled] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void DematImportService.enabled().then((e) => alive && setDematEnabled(e));
+    return () => {
+      alive = false;
+    };
+  }, []);
   /** A bond/share picked on Explore, opened straight to its detail page. */
   const [openBondId, setOpenBondId] = useState<string | null>(null);
   const [openShareId, setOpenShareId] = useState<string | null>(null);
@@ -330,6 +343,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
           xirrNote={dashboardData?.xirrNote ?? null}
             onNavigate={navigate}
             onImport={() => setShowImport(true)}
+            onConnectDemat={dematEnabled ? () => setShowDemat(true) : undefined}
             freshness={snapshot.casFreshness}
             hasImportedStatement={hasImportedStatement}
             valuedOn={snapshot.valuedOn}
@@ -402,6 +416,10 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
           onClose={() => setShowImport(false)}
           onImported={refresh}
         />
+      )}
+
+      {showDemat && (
+        <ConnectDematModal onClose={() => setShowDemat(false)} onImported={refresh} />
       )}
 
       {showActivate && (

@@ -29,6 +29,7 @@ import { clientSupabase as supabase } from '../../lib/supabase';
 import type { NWClient, NWHolding, NWTransaction } from '../../crm/types';
 import type { CasFreshness, PortalHolding } from '../types/cas';
 import { CasPortfolioService } from './CasPortfolioService';
+import { DematPortfolioService } from './DematPortfolioService';
 import { mfSsoEnabled } from '../../platform/env';
 import {
   applyNav,
@@ -132,7 +133,7 @@ export const HoldingService = {
     // source for funds the client holds AWAY from us (other distributors), which
     // the registrar feed by definition cannot see.
     const mfOnPlatform = mfSsoEnabled();
-    const [clientRes, holdingsRes, txnRes, latestMfRes, cas] = await Promise.all([
+    const [clientRes, holdingsRes, txnRes, latestMfRes, cas, demat] = await Promise.all([
       supabase.from('nw_clients').select('*').eq('id', clientId).maybeSingle(),
       supabase
         .from('nw_holdings')
@@ -164,11 +165,17 @@ export const HoldingService = {
       // the platform path too — not for the funds we service (the registrar feed
       // owns those) but for the held-away ones only a CAS carries.
       CasPortfolioService.getPortfolio(clientId).catch(() => null),
+      // Demat holdings (shares, bonds, G-secs, NPS) from a CDSL eCAS. Best-effort:
+      // a failure leaves the rest of the portfolio intact.
+      DematPortfolioService.getPortfolio(clientId).catch(() => null),
     ]);
 
     const manual = (holdingsRes.data as NWHolding[]) ?? [];
     const latestOwnMfTxnDate = (latestMfRes.data?.txn_date as string) ?? null;
-    const chosen = selectHoldings(manual, cas?.holdings ?? null);
+    const chosen = [
+      ...selectHoldings(manual, cas?.holdings ?? null),
+      ...(demat?.holdings ?? []),
+    ].sort((a, b) => (b.current_value || 0) - (a.current_value || 0));
 
     /*
      * Price everything that carries an ISIN, from either source, in one query.

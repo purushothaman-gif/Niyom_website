@@ -14,23 +14,33 @@
  *   - `dayChange` is null unless a real price move exists (published NAVs for
  *     mutual funds). Nothing is interpolated.
  */
-import type { NWHolding } from '../../crm/types';
+import type { PortalHolding } from '../types/cas';
 
 /** The asset buckets the board tabs on. */
-export type AssetKey = 'mutual_fund' | 'bond' | 'unlisted_share' | 'other';
+export type AssetKey = 'mutual_fund' | 'stock' | 'bond' | 'unlisted_share' | 'other';
 
 export const ASSET_META: Record<AssetKey, { label: string; short: string; color: string }> = {
   mutual_fund: { label: 'Mutual Funds', short: 'MF', color: '#EC4899' },
+  stock: { label: 'Stocks', short: 'Stocks', color: '#2E9E8F' },
   bond: { label: 'Bonds', short: 'Bond', color: '#10B981' },
   unlisted_share: { label: 'Unlisted Shares', short: 'Unlisted', color: '#F59E0B' },
   other: { label: 'Others', short: 'Other', color: '#3B82F6' },
 };
 
-export const ASSET_ORDER: AssetKey[] = ['mutual_fund', 'bond', 'unlisted_share', 'other'];
+export const ASSET_ORDER: AssetKey[] = ['mutual_fund', 'stock', 'bond', 'unlisted_share', 'other'];
 
 export function assetOf(productType: string): AssetKey {
   if (productType === 'mutual_fund') return 'mutual_fund';
-  if (productType === 'secondary_bond' || productType === 'primary_bond') return 'bond';
+  // Listed equities and ETFs from a demat eCAS.
+  if (productType === 'listed_equity' || productType === 'etf') return 'stock';
+  // Corporate bonds and G-secs join our own bond holdings in the Bonds tab.
+  if (
+    productType === 'secondary_bond' ||
+    productType === 'primary_bond' ||
+    productType === 'corporate_bond' ||
+    productType === 'gsec'
+  )
+    return 'bond';
   if (productType === 'unlisted_share') return 'unlisted_share';
   return 'other';
 }
@@ -190,9 +200,7 @@ export function nextPayoutDate(
  * basis; HoldingService sets invested = value for them, which must NOT be read
  * as "0% return".
  */
-export function fromClientHoldings(
-  holdings: Array<NWHolding & { cas?: { ownership?: string } | null }>,
-): InvestmentRow[] {
+export function fromClientHoldings(holdings: PortalHolding[]): InvestmentRow[] {
   return holdings
     .map((h) => {
       const registrar = h.product_type === 'mutual_fund' && String(h.id).startsWith('rta-');
@@ -222,8 +230,9 @@ export function fromClientHoldings(
         asset,
         productType: h.product_type,
         name: h.product_name,
-        sub:
-          asset === 'mutual_fund'
+        sub: h.demat
+          ? h.demat.meta
+          : asset === 'mutual_fund'
             ? h.folio_number ? `Folio ${h.folio_number}` : undefined
             : asset === 'bond'
               ? h.isin || h.issuer_name || undefined
@@ -236,7 +245,7 @@ export function fromClientHoldings(
         ...gainOf(invested, value),
         dayChange: null,
         dayChangePct: null,
-        source: registrar ? 'registrar' : h.cas ? 'statement' : 'niyom',
+        source: h.demat ? 'statement' : registrar ? 'registrar' : h.cas ? 'statement' : 'niyom',
         distributor,
         amc: h.fund_house || null,
         category: h.scheme_type || null,

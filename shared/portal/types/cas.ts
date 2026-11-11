@@ -23,6 +23,7 @@
  * merged.
  */
 import type { NWHolding } from '../../crm/types';
+import type { AssetClass } from './index';
 import type { MfOwnership } from './ownership';
 
 export interface CasHoldingMeta {
@@ -76,8 +77,28 @@ export interface LiveNav {
 }
 
 /** An NWHolding that may carry the statement it came from, and a current price. */
+export interface DematHoldingMeta {
+  source: 'demat';
+  importId: string;
+  importedAt: string;
+  /** The "as on" date of the snapshot; the value is as of then. */
+  statementDate: string | null;
+  isin: string | null;
+  depository: string | null;
+  /** Broad class for the asset-class allocation. */
+  assetClass: AssetClass;
+  /** Human label for the product bucket, e.g. "Stocks", "Bonds", "G-Secs". */
+  label: string;
+  /** Bucket colour, chosen here because these are not CRM product types. */
+  color: string;
+  /** Secondary line for the table (ISIN, coupon, …). */
+  meta?: string;
+}
+
 export interface PortalHolding extends NWHolding {
   cas?: CasHoldingMeta;
+  /** Present when this row came from a demat eCAS rather than a CAS or nw_holdings. */
+  demat?: DematHoldingMeta;
   liveNav?: LiveNav;
 }
 

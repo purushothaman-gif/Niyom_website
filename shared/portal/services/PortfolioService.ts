@@ -35,6 +35,8 @@ const titleCase = (s: string): string =>
 
 /** Broad asset class from product type + (for MF) scheme type. */
 function assetClassOf(h: NWHolding): AssetClass {
+  const demat = (h as PortalHolding).demat;
+  if (demat) return demat.assetClass;
   switch (h.product_type) {
     case 'secondary_bond':
     case 'primary_bond':
@@ -65,13 +67,17 @@ function categoryOf(h: NWHolding): string {
   // Imported funds have no stated category, and bucketing them all as
   // "Uncategorised" would make the breakdown one meaningless slice — the asset
   // class is coarser but true.
+  const demat = (h as PortalHolding).demat;
+  if (demat) return demat.label;
   if (h.product_type === 'mutual_fund') return h.scheme_type ? titleCase(h.scheme_type) : assetClassOf(h);
   if (h.product_type === 'insurance') return h.insurance_type ? titleCase(h.insurance_type) : 'Insurance';
-  return PRODUCT_LABELS[h.product_type];
+  return PRODUCT_LABELS[h.product_type] ?? titleCase(h.product_type);
 }
 
 /** Product-specific secondary line for the holdings table. */
 function metaOf(h: NWHolding): string | undefined {
+  const demat = (h as PortalHolding).demat;
+  if (demat) return demat.meta;
   switch (h.product_type) {
     case 'mutual_fund':
       return h.folio_number ? `Folio ${h.folio_number}` : h.fund_house || undefined;
@@ -99,10 +105,11 @@ export const PortfolioService = {
       .map((pt) => {
         const rows = holdings.filter((h) => h.product_type === pt);
         const value = rows.reduce((s, h) => s + holdingValue(h), 0);
+        const demat = (rows.find((h) => (h as PortalHolding).demat) as PortalHolding | undefined)?.demat;
         return {
           productType: pt,
-          label: PRODUCT_LABELS[pt] ?? pt,
-          color: PRODUCT_CHART_COLORS[pt] ?? '#94a0b3',
+          label: demat?.label ?? PRODUCT_LABELS[pt] ?? pt,
+          color: demat?.color ?? PRODUCT_CHART_COLORS[pt] ?? '#94a0b3',
           value,
           percent: pct(value, netWorth),
           holdings: rows.length,
@@ -190,8 +197,8 @@ export const PortfolioService = {
             (h.product_type === 'mutual_fund' ? MF_OWNERSHIP.heldWithNiyom : undefined),
           cas: h.cas,
           productType: h.product_type,
-          productLabel: PRODUCT_LABELS[h.product_type] ?? h.product_type,
-          productColor: PRODUCT_CHART_COLORS[h.product_type] ?? '#7688A4',
+          productLabel: h.demat?.label ?? PRODUCT_LABELS[h.product_type] ?? h.product_type,
+          productColor: h.demat?.color ?? PRODUCT_CHART_COLORS[h.product_type] ?? '#7688A4',
           name: h.product_name,
           meta: metaOf(h),
           assetClass: assetClassOf(h),

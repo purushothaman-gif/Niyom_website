@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Download, Loader2, Upload, Wallet } from 'lucide-react';
+import { Download, Landmark, Loader2, Upload, Wallet } from 'lucide-react';
 import type { NWClient } from '../../../crm/types';
 import { useMfScope } from '../statement/useMfScope';
 import { useRtaMf } from '../../hooks/useRtaMf';
@@ -24,6 +24,7 @@ export function PortfolioPage({
   xirrNote = null,
   onNavigate,
   onImport,
+  onConnectDemat,
   freshness,
   hasImportedStatement = false,
   valuedOn,
@@ -40,6 +41,8 @@ export function PortfolioPage({
   onNavigate?: (view: PortalView) => void;
   /** Opens the import wizard, which PortalApp owns so both screens share one. */
   onImport: () => void;
+  /** Opens the demat OTP flow; absent (hidden) when the server can't fetch demat. */
+  onConnectDemat?: () => void;
   /** How current the imported mutual fund picture is; absent until one exists. */
   freshness?: CasFreshness;
   hasImportedStatement?: boolean;
@@ -123,6 +126,28 @@ export function PortfolioPage({
           visibleHoldings={holdings.length}
           returnsUnavailable={false}
         />
+      )}
+
+      {/* A lighter, one-tap offer than the mutual-fund statement: a quiet row. */}
+      {onConnectDemat && (
+        <button
+          type="button"
+          onClick={onConnectDemat}
+          className="flex w-full items-center gap-3 rounded-token-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:border-accent/40"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-token-md bg-accent/10">
+            <Landmark className="h-4 w-4 text-accent" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-text-primary">
+              Add your shares, bonds and NPS
+            </span>
+            <span className="block text-xs text-text-muted">
+              Import your demat holdings from CDSL with a one-time password.
+            </span>
+          </span>
+          <Upload className="h-4 w-4 shrink-0 text-text-faint" />
+        </button>
       )}
 
       <div className="flex flex-wrap items-start justify-between gap-3">
