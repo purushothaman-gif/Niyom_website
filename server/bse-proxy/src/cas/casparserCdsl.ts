@@ -6,9 +6,12 @@
  *   2. /v4/cdsl/fetch/:id/verify — the OTP, returns eCAS PDF download URLs
  * then /v4/smart/parse on the latest PDF turns it into holdings.
  *
- * An eCAS covers BOTH depositories (a CDSL statement carries NSDL holdings and
- * vice versa), so one fetch is the client's whole demat picture. It is a
- * holdings SNAPSHOT, not a ledger — there are no transactions to map.
+ * A CDSL eCAS covers BOTH depositories, but ONLY when CDSL is the investor's
+ * first demat account — then CDSL issues the consolidated statement and it
+ * includes their NSDL holdings too. An NSDL-first investor's statement is issued
+ * by NSDL, which CASParser cannot OTP-fetch, so those clients import by email
+ * instead (demat.ts routes them there). It is a holdings SNAPSHOT, not a
+ * ledger — there are no transactions to map.
  *
  * Off unless CASPARSER_API_KEY is set. The PAN doubles as the PDF password
  * (CDSL eCAS is PAN-locked) and is never stored or logged here.

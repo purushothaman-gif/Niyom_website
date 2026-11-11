@@ -32,7 +32,9 @@ export interface DematImportSummary {
   duplicate?: boolean;
 }
 
-export type StartResult = { ok: true; sessionId: string } | { ok: false; error: string };
+export type StartResult =
+  | { ok: true; sessionId: string }
+  | { ok: false; error: string; needsEmail?: boolean };
 export type VerifyResult = { ok: true; summary: DematImportSummary } | { ok: false; error: string };
 
 export const DematImportService = {
@@ -61,6 +63,10 @@ export const DematImportService = {
     try {
       const res = await fetch(`${baseUrl}/cas/demat/fetch`, { method: 'POST', headers, body: '{}' });
       const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      // No CDSL account: the server asks us to route to email import, not OTP.
+      if (res.ok && body.needsEmail === true) {
+        return { ok: false, needsEmail: true, error: 'Your demat account is with NSDL and cannot be fetched automatically.' };
+      }
       if (!res.ok) return { ok: false, error: (body.error as string) || 'We could not start the import.' };
       return { ok: true, sessionId: String(body.sessionId ?? '') };
     } catch {

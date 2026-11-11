@@ -17,7 +17,7 @@ import { DematImportService, type DematImportSummary } from '../../services/Dema
  * Two screens: ask the depository to text the OTP, then enter it. A third shows
  * what came in.
  */
-type Step = 'intro' | 'otp' | 'done';
+type Step = 'intro' | 'otp' | 'needsEmail' | 'done';
 
 export function ConnectDematModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
   const [step, setStep] = useState<Step>('intro');
@@ -32,7 +32,11 @@ export function ConnectDematModal({ onClose, onImported }: { onClose: () => void
     setBusy(true);
     const r = await DematImportService.start();
     setBusy(false);
-    if (!r.ok) return setError(r.error);
+    if (!r.ok) {
+      // NSDL-first client: no OTP rail exists — send them to email import.
+      if (r.needsEmail) return setStep('needsEmail');
+      return setError(r.error);
+    }
     setSessionId(r.sessionId);
     setStep('otp');
   };
@@ -141,6 +145,32 @@ export function ConnectDematModal({ onClose, onImported }: { onClose: () => void
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                 {busy ? 'Reading your statement…' : 'Import holdings'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 'needsEmail' && (
+          <div className="space-y-5 p-6">
+            <div className="flex items-start gap-2 rounded-token-md border border-accent/15 bg-accent/5 p-3">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+              <p className="text-xs leading-relaxed text-text-muted">
+                Your demat account is held with <b>NSDL</b>, which can&apos;t be fetched with an OTP.
+                You can still bring these holdings in — by email.
+              </p>
+            </div>
+            <p className="text-sm leading-relaxed text-text-muted">
+              Close this and use <b>&ldquo;Forward your statements in&rdquo;</b> (or
+              &ldquo;Import statements from your email&rdquo;) on your portfolio screen. Forward your
+              NSDL statement there and we&apos;ll import it automatically.
+            </p>
+            <div className="flex justify-end">
+              <button
+                onClick={onClose}
+                className="press inline-flex items-center justify-center rounded-token-md px-6 py-2.5 text-sm font-bold text-text-on-accent"
+                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+              >
+                Got it
               </button>
             </div>
           </div>

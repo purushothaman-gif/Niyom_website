@@ -91,10 +91,11 @@ export function dematRouter(cfg: ProxyConfig): Router {
       }
       const boId = cdslBoId(client);
       if (!boId) {
-        throw new CasError(
-          'This only works with a CDSL demat account on file. Your relationship manager can help import an NSDL statement.',
-          400,
-        );
+        // No CDSL account on file. A CDSL OTP fetch cannot reach an NSDL-first
+        // investor (CASParser has no NSDL fetch endpoint, and NSDL issues that
+        // client's consolidated statement). Rather than a dead end, tell the UI
+        // to route them to email import, which handles their NSDL eCAS.
+        return res.json({ needsEmail: true });
       }
 
       const { sessionId } = await cdslFetchStart(cfg, { pan, boId, dob: client.dob });
