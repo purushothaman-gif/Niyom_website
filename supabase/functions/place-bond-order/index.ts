@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, json, serviceClient } from "../_shared/onboarding.ts";
-import { emailFooterHtml, emailFooterText, NOTICE_AUTOMATED } from "../_shared/email_footer.ts";
+import { emailFooterHtml, emailFooterText, NOTICE_INTERNAL } from "../_shared/email_footer.ts";
 
 // place-bond-order — a logged-in wealth-portal client places a bond order by
 // quantity (units). Runs public (verify_jwt=false) but requires the client's own
@@ -167,7 +167,7 @@ Open the CRM → Bond Orders to review, adjust the value, and send a Deal Confir
 
 Niyom Wealth Distribution LLP
 
-${emailFooterText({ year, ref: order.ref, notice: NOTICE_AUTOMATED })}`;
+${emailFooterText({ year, ref: order.ref, notice: NOTICE_INTERNAL })}`;
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.7;margin:0;padding:0;background:#f6f6f6;">
@@ -186,7 +186,7 @@ ${emailFooterText({ year, ref: order.ref, notice: NOTICE_AUTOMATED })}`;
     </table>
     <p style="margin:0 0 14px;">Open the CRM → <strong>Bond Orders</strong> to review, adjust the value, and send a Deal Confirmation.</p>
     <p style="margin:18px 0 0;color:#111;font-weight:600;">Niyom Wealth Distribution LLP</p>
-    ${emailFooterHtml({ year, ref: order.ref, notice: NOTICE_AUTOMATED })}
+    ${emailFooterHtml({ year, ref: order.ref, notice: NOTICE_INTERNAL })}
   </div>
 </body></html>`;
 
@@ -196,7 +196,6 @@ ${emailFooterText({ year, ref: order.ref, notice: NOTICE_AUTOMATED })}`;
     body: JSON.stringify({
       from: "Niyom Wealth <support@niyomwealth.com>",
       to,
-      reply_to: client.email || undefined,
       subject,
       html,
       text,

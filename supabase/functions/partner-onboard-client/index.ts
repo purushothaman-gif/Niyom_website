@@ -4,7 +4,7 @@ import {
   corsHeaders, json, serviceClient, NIYOM_DEFAULT_EMPLOYEE_ID,
   normalizePhone, isValidPhone, isValidEmail, isValidPan,
 } from "../_shared/onboarding.ts";
-import { emailFooterHtml, emailFooterText, NOTICE_AUTOMATED } from "../_shared/email_footer.ts";
+import { emailFooterHtml, emailFooterText, NOTICE_INTERNAL } from "../_shared/email_footer.ts";
 
 // partner-onboard-client — a logged-in PARTNER (DSA) creates one of their own
 // clients, so the RM no longer has to key it in. Runs public (verify_jwt=false)
@@ -162,7 +162,7 @@ client login are still pending. Open the CRM to complete KYC and enable the logi
 
 Niyom Wealth Distribution LLP
 
-${emailFooterText({ year, ref: o.clientCode, notice: NOTICE_AUTOMATED })}`;
+${emailFooterText({ year, ref: o.clientCode, notice: NOTICE_INTERNAL })}`;
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.7;margin:0;padding:0;background:#f6f6f6;">
@@ -179,14 +179,14 @@ ${emailFooterText({ year, ref: o.clientCode, notice: NOTICE_AUTOMATED })}`;
     </table>
     <p style="margin:0 0 14px;">The record is created with PAN verified; KYC (bank, demat, documents) and the client login are still pending. Open the CRM to complete KYC and enable the login.</p>
     <p style="margin:18px 0 0;color:#111;font-weight:600;">Niyom Wealth Distribution LLP</p>
-    ${emailFooterHtml({ year, ref: o.clientCode, notice: NOTICE_AUTOMATED })}
+    ${emailFooterHtml({ year, ref: o.clientCode, notice: NOTICE_INTERNAL })}
   </div>
 </body></html>`;
 
   await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: "Niyom Wealth <support@niyomwealth.com>", to, reply_to: o.clientEmail || undefined, subject, html, text }),
+    body: JSON.stringify({ from: "Niyom Wealth <support@niyomwealth.com>", to, subject, html, text }),
   });
 }
 

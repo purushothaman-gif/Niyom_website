@@ -34,7 +34,7 @@
 // RM silently receiving every partner enquiry.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { emailFooterHtml, emailFooterText, NOTICE_AUTOMATED } from '../_shared/email_footer.ts';
+import { emailFooterHtml, emailFooterText, NOTICE_INTERNAL } from '../_shared/email_footer.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -106,7 +106,7 @@ ${v.note ? `\nNote: ${v.note}` : ''}
 Submitted from the mobile app. The lead is in the ADMIN POOL (unassigned) —
 open the CRM → Leads and assign it.
 
-${emailFooterText({ year, ref: v.leadCode, notice: NOTICE_AUTOMATED })}`;
+${emailFooterText({ year, ref: v.leadCode, notice: NOTICE_INTERNAL })}`;
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head>
 <body style="font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.7;margin:0;padding:0;background:#f6f6f6;">
@@ -124,7 +124,7 @@ ${emailFooterText({ year, ref: v.leadCode, notice: NOTICE_AUTOMATED })}`;
     ${v.note ? `<div style="background:#f6f6f6;border-radius:8px;padding:14px 16px;margin:0 0 16px;white-space:pre-wrap;">${esc(v.note)}</div>` : ''}
     <p style="margin:0 0 14px;">Submitted from the mobile app. The lead is in the <strong>admin pool</strong> and is currently unassigned — open the CRM &rarr; <strong>Leads</strong> to assign it.</p>
     <p style="margin:18px 0 0;color:#111;font-weight:600;">Niyom Wealth Distribution LLP</p>
-    ${emailFooterHtml({ year, ref: v.leadCode, notice: NOTICE_AUTOMATED })}
+    ${emailFooterHtml({ year, ref: v.leadCode, notice: NOTICE_INTERNAL })}
   </div>
 </body></html>`;
 
@@ -135,7 +135,6 @@ ${emailFooterText({ year, ref: v.leadCode, notice: NOTICE_AUTOMATED })}`;
       body: JSON.stringify({
         from: 'Niyom Wealth <support@niyomwealth.com>',
         to: [to],
-        reply_to: v.email || undefined,
         subject,
         html,
         text,

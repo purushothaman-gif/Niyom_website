@@ -46,6 +46,19 @@ const GOLD = "#8B7355";
 export const NOTICE_RECIPIENT = "This message is intended for the named recipient only.";
 /** For unattended sends where a human reply goes nowhere. */
 export const NOTICE_AUTOMATED = "This is a system-generated message. Please do not reply.";
+/**
+ * For STAFF-ONLY notifications (a new order, ticket, lead or onboarded client).
+ *
+ * These are addressed to the RM and admin, not the client, and they carry
+ * internal instructions ("Open the CRM → …") plus commercial figures. None of
+ * them sets `reply_to`: Resend's reply_to overrides the From, so pointing it at
+ * the client's address turned one click on Reply into an internal mail — quoted
+ * in full — landing in the client's inbox. Reported 2026-11-11 on an unlisted
+ * share order, where the client's own address sat in reply-to while the body
+ * told the RM which CRM screen to open. Do not re-add reply_to here.
+ */
+export const NOTICE_INTERNAL =
+  "Internal staff notification. Do not reply to or forward this message to the client.";
 /** For sends that carry a PDF (receipt, debit note) — the attachment is covered too. */
 export const NOTICE_ATTACHMENT = "This message and attachment are intended for the named recipient only.";
 
