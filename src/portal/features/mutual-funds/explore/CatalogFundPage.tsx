@@ -27,7 +27,8 @@ import type {
 import { AmcAvatar } from '../components/AmcAvatar';
 import type { InvestGate } from '../MutualFundsModule';
 import { CatalogRiskBadge, fmtNav, fmtRet, retColor, RETURNS_FOOTNOTE } from './catalogBits';
-import { ReturnCalculator } from './ReturnCalculator';
+import { DEFAULT_AMOUNT, ReturnCalculator } from './ReturnCalculator';
+import { LumpsumTools, SipTools } from './InvestTools';
 import { matchingSchemes, planLabel } from './schemeMatch';
 import type { ReturnKey } from './collections';
 
@@ -52,9 +53,16 @@ interface Props {
    * plan picker: a single invest action that opens the platform, signed in.
    */
   platformInvest?: ReactNode;
+  /**
+   * Set when the client arrived having chosen SIP or lumpsum: the page then
+   * shows that calculator and that mode's tools only, not both.
+   */
+  investMode?: 'sip' | 'lumpsum';
 }
 
-export function CatalogFundPage({ fund, schemes, gate, onBack, onInvest, platformInvest }: Props) {
+export function CatalogFundPage({ fund, schemes, gate, onBack, onInvest, platformInvest, investMode }: Props) {
+  const [amount, setAmount] = useState(DEFAULT_AMOUNT[investMode ?? 'sip']);
+  useEffect(() => setAmount(DEFAULT_AMOUNT[investMode ?? 'sip']), [investMode, fund.amfiCode]);
   const [detail, setDetail] = useState<CatalogFundDetail | null>(null);
   const [detailError, setDetailError] = useState(false);
   const [detailLoading, setDetailLoading] = useState(true);
@@ -183,7 +191,14 @@ export function CatalogFundPage({ fund, schemes, gate, onBack, onInvest, platfor
             <p className="mt-3 text-[11px] leading-relaxed text-text-faint">{RETURNS_FOOTNOTE}</p>
           </Card>
 
-          <ReturnCalculator fund={fund} />
+          <ReturnCalculator key={`${fund.amfiCode}:${investMode ?? 'both'}`} fund={fund} lock={investMode} onAmountChange={setAmount} />
+
+          {investMode === 'sip' && detail && detail.navHistory.length >= 12 && (
+            <SipTools navHistory={detail.navHistory} amount={amount} />
+          )}
+          {investMode === 'lumpsum' && detail && detail.navHistory.length >= 12 && (
+            <LumpsumTools navHistory={detail.navHistory} amount={amount} />
+          )}
 
           <Card>
             <SectionHeader title="Fund facts" />
@@ -210,12 +225,18 @@ export function CatalogFundPage({ fund, schemes, gate, onBack, onInvest, platfor
               <p className="mt-0.5 line-clamp-2 text-sm font-bold text-text-primary">{fund.name}</p>
               {fund.minInvestment !== null && (
                 <p className="mt-2 text-[11px] text-text-secondary">
-                  Minimum from {fmt(fund.minInvestment)} · SIP or one-time
+                  Minimum from {fmt(fund.minInvestment)}
+                  {investMode === 'sip' ? ' a month' : investMode === 'lumpsum' ? ' one-time' : ' · SIP or one-time'}
                 </p>
               )}
               <div className="mt-4">{platformInvest}</div>
               <p className="mt-3 text-[11px] leading-relaxed text-text-faint">
-                Opens your investing account, already signed in — choose SIP or one-time there.
+                Opens your investing account, already signed in —{' '}
+                {investMode === 'sip'
+                  ? 'set the SIP amount and date there.'
+                  : investMode === 'lumpsum'
+                    ? 'enter the amount and pay there.'
+                    : 'choose SIP or one-time there.'}
               </p>
             </Card>
           ) : (

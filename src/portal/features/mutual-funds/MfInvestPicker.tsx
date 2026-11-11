@@ -243,6 +243,7 @@ export function MfInvestPicker({ mode, holdings, fundInvest }: Props) {
           onBack={() => setScreen({ name: 'home' })}
           onInvest={() => undefined}
           platformInvest={fundInvest(fund)}
+          investMode={mode}
         />
       );
   }

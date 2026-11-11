@@ -44,13 +44,30 @@ export function lumpsumFutureValue(amount: number, years: number, cagr: number):
   return amount * Math.pow(1 + cagr / 100, years);
 }
 
-export function ReturnCalculator({ fund }: { fund: CatalogFund }) {
-  const [mode, setMode] = useState<Mode>('sip');
-  const [sipAmount, setSipAmount] = useState(5000);
-  const [lumpsumAmount, setLumpsumAmount] = useState(100000);
+export const DEFAULT_AMOUNT: Record<Mode, number> = { sip: 5000, lumpsum: 100000 };
+
+interface Props {
+  fund: CatalogFund;
+  /**
+   * The client has already chosen how they are investing: show that
+   * calculator only, with no toggle to the other one.
+   */
+  lock?: Mode;
+  /** Reports the amount in the locked mode, so sibling tools use the same one. */
+  onAmountChange?: (amount: number) => void;
+}
+
+export function ReturnCalculator({ fund, lock, onAmountChange }: Props) {
+  const [picked, setMode] = useState<Mode>('sip');
+  const mode = lock ?? picked;
+  const [sipAmount, setSipAmount] = useState(DEFAULT_AMOUNT.sip);
+  const [lumpsumAmount, setLumpsumAmount] = useState(DEFAULT_AMOUNT.lumpsum);
 
   const amount = mode === 'sip' ? sipAmount : lumpsumAmount;
-  const setAmount = mode === 'sip' ? setSipAmount : setLumpsumAmount;
+  const setAmount = (n: number) => {
+    (mode === 'sip' ? setSipAmount : setLumpsumAmount)(n);
+    onAmountChange?.(n);
+  };
   const steps = mode === 'sip' ? SIP_STEPS : LUMPSUM_STEPS;
 
   const rows = PERIODS.map((p) => {
@@ -69,18 +86,23 @@ export function ReturnCalculator({ fund }: { fund: CatalogFund }) {
 
   return (
     <Card>
-      <SectionHeader title="Return calculator" icon={Calculator} />
-
-      <Segmented<Mode>
-        options={[
-          { value: 'sip', label: 'Monthly SIP' },
-          { value: 'lumpsum', label: 'One-time' },
-        ]}
-        value={mode}
-        onChange={setMode}
+      <SectionHeader
+        title={lock === 'sip' ? 'SIP calculator' : lock === 'lumpsum' ? 'Lumpsum calculator' : 'Return calculator'}
+        icon={Calculator}
       />
 
-      <div className="mt-5 text-center">
+      {!lock && (
+        <Segmented<Mode>
+          options={[
+            { value: 'sip', label: 'Monthly SIP' },
+            { value: 'lumpsum', label: 'One-time' },
+          ]}
+          value={mode}
+          onChange={setMode}
+        />
+      )}
+
+      <div className={`${lock ? '' : 'mt-5 '}text-center`}>
         <p className="text-[11px] uppercase tracking-wide text-text-faint">
           {mode === 'sip' ? 'Monthly investment' : 'One-time investment'}
         </p>
