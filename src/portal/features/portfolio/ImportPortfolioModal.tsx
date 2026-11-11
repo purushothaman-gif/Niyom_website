@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  AlertCircle, CheckCircle2, Download, FileText, Loader2, Lock, Plus, ShieldCheck, Upload, X,
+  AlertCircle, CheckCircle2, Download, FileText, Loader2, Lock, Plus, RefreshCw, ShieldCheck, Upload, X,
 } from 'lucide-react';
 import { fmtFull } from '../../../crm/utils';
 import { StatusPill } from '../../components/StatusPill';
@@ -99,6 +99,11 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
    * upload step shows no password field and nothing is asked of the client.
    */
   const [autoUnlock, setAutoUnlock] = useState(false);
+  /**
+   * A returning client is offered a fresh request first; manual upload is a
+   * quiet fallback they open on purpose. False keeps the request-first view.
+   */
+  const [manualOpen, setManualOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [outcome, setOutcome] = useState<CasImportOutcome | null>(null);
@@ -215,6 +220,9 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
   };
 
   const lastGood = previous.find((p) => p.status === 'reconciled');
+  // Returning clients see the request-first view until they choose manual upload;
+  // a first-timer (or anyone arriving from the awaiting screen) goes to upload.
+  const showUpload = manualOpen || !lastGood;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4">
@@ -259,7 +267,10 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
         {step === 'awaiting' && request && (
           <CasAwaitingStep
             request={request}
-            onUpload={() => goTo('upload')}
+            onUpload={() => {
+              setManualOpen(true);
+              goTo('upload');
+            }}
             onCancelled={() => {
               if (request) casPasswordStore.clear(request.requestId);
               setRequest(null);
@@ -274,14 +285,6 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
 
         {step === 'upload' && (
           <div className="space-y-4 p-6">
-            {!lastGood && (
-              <p className="text-sm leading-relaxed text-text-muted">
-                {autoUnlock
-                  ? 'Upload the PDF CAMS emailed you. We open it automatically — no password needed.'
-                  : 'Upload the statement CAMS emailed you, and enter the password that was set when it was requested.'}
-              </p>
-            )}
-
             {lastGood && (
               <div className="space-y-2">
                 <ImportedStatements
@@ -301,93 +304,132 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
               </div>
             )}
 
-            {error && (
-              <div className="flex items-start gap-2.5 rounded-token-md border border-danger-soft/20 bg-danger-soft/10 px-3.5 py-3">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger-soft" />
-                <p className="text-sm text-danger-soft">{error}</p>
+            {!showUpload ? (
+              /*
+               * A returning client wants the newest picture, not to go hunting
+               * for a PDF. Lead with requesting a fresh statement; keep manual
+               * upload as a quiet fallback for a file they already hold. No
+               * password here — a requested statement unlocks on its own.
+               */
+              <div className="space-y-3 pt-1">
+                <button
+                  onClick={() => goTo('consent')}
+                  className="press flex w-full flex-col items-center gap-0.5 rounded-token-md px-5 py-3 text-text-on-accent"
+                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+                >
+                  <span className="flex items-center gap-2 text-sm font-bold">
+                    <RefreshCw className="h-4 w-4" />
+                    Request latest CAS
+                  </span>
+                  <span className="text-xs font-medium opacity-80">We’ll ask CAMS for a fresh statement</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setManualOpen(true)}
+                  className="w-full text-center text-xs text-text-faint hover:text-text-muted"
+                >
+                  Already have the statement PDF? Upload it instead
+                </button>
               </div>
-            )}
-
-            <label
-              className={`flex cursor-pointer items-center gap-3 rounded-token-md border px-3.5 py-3 transition-colors ${
-                file ? 'border-success-soft/30 bg-success-soft/5' : 'border-border bg-bg-base hover:border-accent/40'
-              }`}
-            >
-              <span
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-token-sm ${
-                  file ? 'bg-success-soft/10' : 'bg-accent/10'
-                }`}
-              >
-                {file ? (
-                  <CheckCircle2 className="h-4 w-4 text-success-soft" />
-                ) : (
-                  <FileText className="h-4 w-4 text-accent" />
+            ) : (
+              <>
+                {!lastGood && (
+                  <p className="text-sm leading-relaxed text-text-muted">
+                    {autoUnlock
+                      ? 'Upload the PDF CAMS emailed you. We open it automatically — no password needed.'
+                      : 'Upload the statement CAMS emailed you, and enter the password that was set when it was requested.'}
+                  </p>
                 )}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-text-primary">
-                  {file ? file.name : 'Consolidated Account Statement'}
-                </span>
-                <span className="block text-xs text-text-muted">
-                  {file ? 'Tap to choose a different file' : 'The PDF attached to the email from CAMS'}
-                </span>
-              </span>
-              <Upload className="h-4 w-4 shrink-0 text-text-muted" />
-              <input
-                type="file"
-                className="hidden"
-                accept="application/pdf,.pdf"
-                onChange={(e) => {
-                  setFile(e.target.files?.[0] ?? null);
-                  setError('');
-                }}
-              />
-            </label>
 
-            {!autoUnlock && (
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                  Statement password <span className="text-accent">*</span>
+                {error && (
+                  <div className="flex items-start gap-2.5 rounded-token-md border border-danger-soft/20 bg-danger-soft/10 px-3.5 py-3">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger-soft" />
+                    <p className="text-sm text-danger-soft">{error}</p>
+                  </div>
+                )}
+
+                <label
+                  className={`flex cursor-pointer items-center gap-3 rounded-token-md border px-3.5 py-3 transition-colors ${
+                    file ? 'border-success-soft/30 bg-success-soft/5' : 'border-border bg-bg-base hover:border-accent/40'
+                  }`}
+                >
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-token-sm ${
+                      file ? 'bg-success-soft/10' : 'bg-accent/10'
+                    }`}
+                  >
+                    {file ? (
+                      <CheckCircle2 className="h-4 w-4 text-success-soft" />
+                    ) : (
+                      <FileText className="h-4 w-4 text-accent" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-text-primary">
+                      {file ? file.name : 'Consolidated Account Statement'}
+                    </span>
+                    <span className="block text-xs text-text-muted">
+                      {file ? 'Tap to choose a different file' : 'The PDF attached to the email from CAMS'}
+                    </span>
+                  </span>
+                  <Upload className="h-4 w-4 shrink-0 text-text-muted" />
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="application/pdf,.pdf"
+                    onChange={(e) => {
+                      setFile(e.target.files?.[0] ?? null);
+                      setError('');
+                    }}
+                  />
                 </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="The password you set on the CAMS form"
-                  autoComplete="off"
-                  className="w-full rounded-token-md border border-border bg-bg-base px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-accent"
-                />
-                <p className="mt-1.5 text-xs text-text-faint">
-                  {generated && password === generated
-                    ? 'Filled in for you.'
-                    : 'The password set on the CAMS form (not your PAN).'}
+
+                {!autoUnlock && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                      Statement password <span className="text-accent">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="The password you set on the CAMS form"
+                      autoComplete="off"
+                      className="w-full rounded-token-md border border-border bg-bg-base px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-accent"
+                    />
+                    <p className="mt-1.5 text-xs text-text-faint">
+                      {generated && password === generated
+                        ? 'Filled in for you.'
+                        : 'The password set on the CAMS form (not your PAN).'}
+                    </p>
+                  </div>
+                )}
+
+                <p className="flex items-center gap-1.5 text-[11px] text-text-faint">
+                  <Lock className="h-3 w-3 shrink-0" />
+                  Read on our own servers; the file itself is never stored.
                 </p>
-              </div>
+
+                <div className="flex justify-between gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => (lastGood ? setManualOpen(false) : goTo(form ? 'request' : 'consent'))}
+                    className="rounded-token-md border border-border bg-bg-raised px-4 py-2 text-sm text-text-muted"
+                  >
+                    {lastGood ? 'Back' : 'How do I request one?'}
+                  </button>
+                  <button
+                    onClick={submit}
+                    disabled={busy || !file || (!autoUnlock && !password)}
+                    className="press flex items-center gap-2 rounded-token-md px-5 py-2.5 text-sm font-bold text-text-on-accent disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+                  >
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                    {busy ? 'Reading your statement…' : 'Import portfolio'}
+                  </button>
+                </div>
+              </>
             )}
-
-            <p className="flex items-center gap-1.5 text-[11px] text-text-faint">
-              <Lock className="h-3 w-3 shrink-0" />
-              Read on our own servers; the file itself is never stored.
-            </p>
-
-            <div className="flex justify-between gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => goTo(form ? 'request' : 'consent')}
-                className="rounded-token-md border border-border bg-bg-raised px-4 py-2 text-sm text-text-muted"
-              >
-                How do I request one?
-              </button>
-              <button
-                onClick={submit}
-                disabled={busy || !file || (!autoUnlock && !password)}
-                className="press flex items-center gap-2 rounded-token-md px-5 py-2.5 text-sm font-bold text-text-on-accent disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
-              >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                {busy ? 'Reading your statement…' : 'Import portfolio'}
-              </button>
-            </div>
           </div>
         )}
 
