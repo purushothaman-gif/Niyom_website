@@ -4,8 +4,16 @@
  * bearer token and verify record ownership server-side.
  */
 import { clientSupabase as supabase } from '../../lib/supabase';
-import { getEnv } from '../../platform/env';
+import { getEnv, bseProxyBaseUrl } from '../../platform/env';
 import { compressImageFile } from '../../lib/compressImage';
+
+/** Bearer headers for a droplet (BSE-proxy) call made as the signed-in client. */
+async function proxyAuthHeaders(): Promise<Record<string, string> | null> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return null;
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+}
 
 const BUCKET = 'crm-documents';
 
@@ -28,6 +36,67 @@ export const OnboardingService = {
   /** Step 2 — verify PAN and fetch name-as-per-PAN via Cashfree. */
   async verifyPan(clientId: string, pan: string): Promise<{ ok: boolean; name?: string; error?: string }> {
     const { ok, data } = await authedFn('public-pan-verify', { client_id: clientId, pan });
+    return ok ? { ok: true, name: data.name_as_per_pan } : { ok: false, error: data.error };
+  },
+
+  // ── Step 2 (preferred): verify identity via DigiLocker ──────────────────
+  // DigiLocker pulls PAN + name (+ DOB) straight from the government source, so
+  // it replaces the Cashfree PAN step where it is available. The flow: start a
+  // session, the client consents in a popup, we poll digilocker_sessions (RLS
+  // own-read) until it is verified, then promote the result into pan fields.
+
+  /** Is DigiLocker verification available (server has a vendor key)? */
+  async digilockerEnabled(): Promise<boolean> {
+    const baseUrl = bseProxyBaseUrl();
+    if (!baseUrl) return false;
+    const headers = await proxyAuthHeaders();
+    if (!headers) return false;
+    try {
+      const res = await fetch(`${baseUrl}/cas/digilocker/mode`, { headers });
+      if (!res.ok) return false;
+      const body = (await res.json()) as { enabled?: boolean };
+      return body.enabled === true;
+    } catch {
+      return false;
+    }
+  },
+
+  /** Begin a verification; returns the DigiLocker URL for the client to open. */
+  async startDigilocker(): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+    const baseUrl = bseProxyBaseUrl();
+    if (!baseUrl) return { ok: false, error: 'Identity verification is not available here yet.' };
+    const headers = await proxyAuthHeaders();
+    if (!headers) return { ok: false, error: 'Your session has expired. Please sign in again.' };
+    try {
+      const res = await fetch(`${baseUrl}/cas/digilocker/start`, { method: 'POST', headers, body: '{}' });
+      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok || !body.authorizationUrl) {
+        return { ok: false, error: (body.error as string) || 'Could not start verification.' };
+      }
+      return { ok: true, url: String(body.authorizationUrl) };
+    } catch {
+      return { ok: false, error: 'Could not reach the server. Please check your connection.' };
+    }
+  },
+
+  /** The client's latest DigiLocker session state (read under their own RLS). */
+  async digilockerLatest(
+    clientId: string,
+  ): Promise<{ status: string; pan: string | null; name: string | null } | null> {
+    const { data } = await supabase
+      .from('digilocker_sessions')
+      .select('status, dl_pan, dl_name')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return null;
+    return { status: data.status as string, pan: (data.dl_pan as string) ?? null, name: (data.dl_name as string) ?? null };
+  },
+
+  /** Promote a verified DigiLocker identity into the client's PAN fields. */
+  async applyDigilocker(clientId: string): Promise<{ ok: boolean; name?: string; error?: string }> {
+    const { ok, data } = await authedFn('public-digilocker-apply', { client_id: clientId });
     return ok ? { ok: true, name: data.name_as_per_pan } : { ok: false, error: data.error };
   },
 

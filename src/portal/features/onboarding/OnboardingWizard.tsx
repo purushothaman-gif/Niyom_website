@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CreditCard, FileText, Landmark, ShieldCheck, CheckCircle2, AlertCircle,
   ArrowLeft, ArrowRight, Upload, Loader2, Clock, Sparkles, PartyPopper,
+  Fingerprint, ExternalLink,
   type LucideIcon,
 } from 'lucide-react';
 import { clientSupabase as supabase } from '../../../lib/supabase';
@@ -81,7 +82,23 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(kycUnderReview(client));
 
+  // DigiLocker is the preferred PAN-verification method. `null` = still checking
+  // whether it is available; `true` = show it; `false` = fall back to the manual
+  // Cashfree PAN entry so onboarding is never blocked if DigiLocker is off.
+  const [dlEnabled, setDlEnabled] = useState<boolean | null>(null);
+  const [dlWaiting, setDlWaiting] = useState(false);
+  const dlCancelled = useRef(false);
+
   const clientCode = client?.client_code || '';
+
+  useEffect(() => {
+    let alive = true;
+    void OnboardingService.digilockerEnabled().then((on) => alive && setDlEnabled(on));
+    return () => {
+      alive = false;
+      dlCancelled.current = true;
+    };
+  }, []);
 
   // ── Handlers ───────────────────────────────────────────────────────────
   const verifyPan = async () => {
@@ -95,6 +112,54 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
     setPanName(r.name || '');
     onRefresh();
     setStep('products');
+  };
+
+  // Verify identity through DigiLocker: open the consent page in a popup, poll
+  // the client's own session row until it is verified (or fails), then promote
+  // the result into the PAN fields — the same outcome as the Cashfree path.
+  const verifyWithDigilocker = async () => {
+    setError('');
+    dlCancelled.current = false;
+    setDlWaiting(true);
+    // Open the popup synchronously, inside the click, so browsers don't block it
+    // for being opened after an await; we point it at DigiLocker once we have the
+    // URL (and fall back to a full-tab redirect if the popup was blocked).
+    const popup = window.open('', 'niyom-digilocker', 'width=480,height=720');
+    const started = await OnboardingService.startDigilocker();
+    if (!started.ok) {
+      setDlWaiting(false);
+      try { popup?.close(); } catch { /* ignore */ }
+      return setError(started.error);
+    }
+    if (popup) popup.location.href = started.url;
+    else window.open(started.url, '_blank', 'noopener');
+
+    const deadline = Date.now() + 5 * 60 * 1000; // give up after ~5 minutes
+    const poll = async (): Promise<void> => {
+      if (dlCancelled.current) return;
+      if (Date.now() > deadline) {
+        setDlWaiting(false);
+        return setError('Verification timed out. Please try again.');
+      }
+      const latest = await OnboardingService.digilockerLatest(clientId);
+      if (latest?.status === 'verified') {
+        const applied = await OnboardingService.applyDigilocker(clientId);
+        if (dlCancelled.current) return;
+        setDlWaiting(false);
+        try { popup?.close(); } catch { /* popup may be cross-origin */ }
+        if (!applied.ok) return setError(applied.error || 'Could not complete verification.');
+        setPanVerified(true);
+        setPanName(applied.name || '');
+        onRefresh();
+        return setStep('products');
+      }
+      if (latest?.status === 'failed') {
+        setDlWaiting(false);
+        return setError('DigiLocker verification was not completed. Please try again.');
+      }
+      setTimeout(() => void poll(), 3000);
+    };
+    setTimeout(() => void poll(), 3000);
   };
 
   const togglePref = (value: string) => {
@@ -293,28 +358,61 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
         {/* ── PAN ── */}
         {step === 'pan' && (
           <div className="space-y-5">
-            <StepTitle icon={CreditCard} title="Verify your PAN" hint="We verify instantly and fetch your name — no typing needed." />
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted">PAN Number</label>
-              <input
-                value={pan}
-                onChange={(e) => setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
-                placeholder="ABCDE1234F" maxLength={10} disabled={panVerified}
-                className="w-full rounded-token-md border border-border bg-bg-base px-3.5 py-2.5 font-mono text-sm tracking-widest text-text-primary outline-none focus:border-accent disabled:opacity-60"
-              />
-            </div>
-            {panVerified && (
+            <StepTitle
+              icon={dlEnabled ? Fingerprint : CreditCard}
+              title="Verify your identity"
+              hint={dlEnabled
+                ? 'Verify securely with DigiLocker — your PAN and name come straight from the source.'
+                : 'We verify instantly and fetch your name — no typing needed.'}
+            />
+
+            {panVerified ? (
               <div className="rounded-token-md border border-success-soft/20 bg-success-soft/10 p-3.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-success-soft">Verified — Name as per PAN</p>
                 <p className="mt-0.5 text-sm font-semibold text-text-primary">{panName || client?.full_name}</p>
               </div>
+            ) : dlEnabled === null ? (
+              <div className="flex items-center gap-2 py-6 text-sm text-text-muted">
+                <Loader2 className="h-4 w-4 animate-spin" /> Preparing verification…
+              </div>
+            ) : dlEnabled ? (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2.5 rounded-token-md border border-accent/15 bg-accent/5 p-3.5">
+                  <Fingerprint className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                  <p className="text-xs leading-relaxed text-text-muted">
+                    A DigiLocker window will open. Sign in and share your PAN &amp; Aadhaar — we read your
+                    verified identity back automatically. Nothing to type.
+                  </p>
+                </div>
+                {dlWaiting && (
+                  <div className="flex items-center gap-2 rounded-token-md border border-border bg-bg-raised px-3.5 py-2.5 text-xs text-text-muted">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Waiting for you to finish in DigiLocker… keep that window open.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted">PAN Number</label>
+                <input
+                  value={pan}
+                  onChange={(e) => setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+                  placeholder="ABCDE1234F" maxLength={10}
+                  className="w-full rounded-token-md border border-border bg-bg-base px-3.5 py-2.5 font-mono text-sm tracking-widest text-text-primary outline-none focus:border-accent disabled:opacity-60"
+                />
+              </div>
             )}
+
             <div className="flex justify-end">
               {panVerified ? (
                 <NextButton onClick={() => setStep('products')} />
-              ) : (
+              ) : dlEnabled ? (
+                <PrimaryButton onClick={verifyWithDigilocker} busy={dlWaiting} icon={ExternalLink}>
+                  {dlWaiting ? 'Verifying…' : 'Verify with DigiLocker'}
+                </PrimaryButton>
+              ) : dlEnabled === false ? (
                 <PrimaryButton onClick={verifyPan} busy={busy} icon={ShieldCheck}>Verify PAN</PrimaryButton>
-              )}
+              ) : null}
             </div>
           </div>
         )}
