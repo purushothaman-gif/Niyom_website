@@ -63,8 +63,14 @@ export function ImportHubModal({
   justConnectedInbox,
   onImported,
 }: Props) {
-  const [screen, setScreen] = useState<Screen>('choose');
-  const [depo, setDepo] = useState<Depository | null>(depositoryHint ?? null);
+  // Returning from an email connect, land straight on the Stocks & demat sheet,
+  // which carries the connected inbox card with its Sync now button — no need to
+  // make them pick a category again. Default the depository to what we know (or
+  // CDSL) so the sheet is complete; the inbox sync itself is depository-agnostic.
+  const [screen, setScreen] = useState<Screen>(justConnectedInbox ? 'demat' : 'choose');
+  const [depo, setDepo] = useState<Depository | null>(
+    depositoryHint ?? (justConnectedInbox ? 'cdsl' : null),
+  );
 
   const openDemat = () => {
     if (depositoryHint) {
@@ -121,13 +127,12 @@ export function ImportHubModal({
         </div>
 
         <div className="space-y-5 p-6">
-          {justConnectedInbox && screen === 'choose' && (
+          {justConnectedInbox && screen !== 'depository' && (
             <div className="flex items-start gap-2.5 rounded-token-md border border-success-soft/25 bg-success-soft/10 px-3.5 py-3">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success-soft" />
               <p className="text-xs leading-relaxed text-text-secondary">
-                <span className="font-semibold text-text-primary">Email connected.</span> Open a
-                category below and tap <span className="font-semibold">Sync now</span> to bring in
-                your statements.
+                <span className="font-semibold text-text-primary">Email connected.</span> Tap{' '}
+                <span className="font-semibold">Sync now</span> below to bring in your statements.
               </p>
             </div>
           )}
