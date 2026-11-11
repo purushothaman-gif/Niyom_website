@@ -273,12 +273,14 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
         )}
 
         {step === 'upload' && (
-          <div className="space-y-5 p-6">
-            <p className="text-sm leading-relaxed text-text-muted">
-              {autoUnlock
-                ? 'Upload the PDF CAMS emailed you. We open it for you automatically — there is no password to enter.'
-                : 'Upload the statement exactly as the registrar emailed it, and enter the password you chose when you requested it.'}
-            </p>
+          <div className="space-y-4 p-6">
+            {!lastGood && (
+              <p className="text-sm leading-relaxed text-text-muted">
+                {autoUnlock
+                  ? 'Upload the PDF CAMS emailed you. We open it automatically — no password needed.'
+                  : 'Upload the statement CAMS emailed you, and enter the password that was set when it was requested.'}
+              </p>
+            )}
 
             {lastGood && (
               <div className="space-y-2">
@@ -290,21 +292,12 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
                     onImported();
                   }}
                 />
-                {/*
-                 * A CAS covers the folios registered against ONE email address,
-                 * so a client who used two addresses needs two statements. Said
-                 * here because the natural fear is that a second upload wipes
-                 * the first — it does not.
-                 */}
-                <div className="flex items-start gap-2 rounded-token-md border border-accent/15 bg-accent/5 p-3 text-left">
-                  <Plus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-                  <p className="text-xs leading-relaxed text-text-muted">
-                    Have a second statement — say, folios registered under another email address?
-                    Upload it here too. It <span className="font-semibold text-text-primary">adds</span>{' '}
-                    to your portfolio rather than replacing what is already there, and a fund that
-                    appears in both statements is counted once, from whichever statement is newer.
-                  </p>
-                </div>
+                {/* Statements combine, they don't replace — said in one quiet line. */}
+                <p className="flex items-start gap-1.5 text-xs leading-relaxed text-text-faint">
+                  <Plus className="mt-0.5 h-3 w-3 shrink-0" />
+                  Adding another statement — say, folios under a different email — merges in; a fund in
+                  both counts once.
+                </p>
               </div>
             )}
 
@@ -366,19 +359,16 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
                 />
                 <p className="mt-1.5 text-xs text-text-faint">
                   {generated && password === generated
-                    ? 'Filled in for you — this is the password we generated for your request.'
-                    : 'This is not your PAN — it is the password set on the CAMS form when the request was made.'}
+                    ? 'Filled in for you.'
+                    : 'The password set on the CAMS form (not your PAN).'}
                 </p>
               </div>
             )}
 
-            <div className="flex items-start gap-2 rounded-token-md border border-border bg-bg-base p-3">
-              <Lock className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" />
-              <p className="text-xs leading-relaxed text-text-muted">
-                Your statement is read on our own servers and the file itself is never stored. We
-                keep the holdings and transactions it contains, nothing else.
-              </p>
-            </div>
+            <p className="flex items-center gap-1.5 text-[11px] text-text-faint">
+              <Lock className="h-3 w-3 shrink-0" />
+              Read on our own servers; the file itself is never stored.
+            </p>
 
             <div className="flex justify-between gap-3 pt-1">
               <button
