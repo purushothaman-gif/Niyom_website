@@ -1,9 +1,12 @@
 /**
  * Mutual-fund enrichment for the holdings board.
  * -----------------------------------------------------------------------------
- * Registrar feeds identify a fund by its RTA scheme code and a free-text name —
- * no ISIN for CAMS — so we resolve each holding to an AMFI scheme BY NAME
- * against the published NAV table, then read:
+ * A row that already carries an ISIN (CAS rows, console rows, and registrar
+ * rows since 2026-11-12) is looked up BY THAT ISIN — exact, no guessing. Only
+ * rows without one fall back to resolving an AMFI scheme BY NAME against the
+ * published NAV table. (Name matching alone missed funds whose statement name
+ * differs from AMFI's, e.g. "Kotak Infrastructure & Economic Reform Fund
+ * Standard Growth", which then showed no 1-day move.) Either way we read:
  *
  *   - the last two NAVs  → the real 1-day move (applied to the holding's value)
  *   - mf_scheme_cache    → category and the fund's own 1Y / 3Y returns
@@ -81,6 +84,12 @@ export function pickCandidate(name: string, cands: NavRow[]): NavRow | null {
 /** Escape LIKE wildcards and PostgREST or() separators in a user-ish string. */
 const likeSafe = (s: string) => s.replace(/[%_,()]/g, ' ').replace(/\s+/g, '%');
 
+/** A usable AMFI ISIN on the row itself, upper-cased; else null. */
+export function ownIsin(isin: string | null | undefined): string | null {
+  const v = (isin ?? '').trim().toUpperCase();
+  return /^INF[A-Z0-9]{9}$/.test(v) ? v : null;
+}
+
 export async function enrichMutualFunds(db: NiyomDb, rows: InvestmentRow[]): Promise<InvestmentRow[]> {
   const mf = rows.filter((r) => r.asset === 'mutual_fund' && r.name);
   if (!mf.length) return rows;
@@ -90,8 +99,16 @@ export async function enrichMutualFunds(db: NiyomDb, rows: InvestmentRow[]): Pro
     const latestDate = (latest.data?.nav_date as string | undefined) ?? null;
     if (!latestDate) return rows;
 
-    const prefixes = [...new Set(mf.map((r) => prefixOf(coreFundName(r.name))).filter(Boolean) as string[])];
-    if (!prefixes.length) return rows;
+    // Rows with their own ISIN need no name matching at all.
+    const byIsin = new Map<string, string>();
+    for (const r of mf) {
+      const isin = ownIsin(r.isin);
+      if (isin) byIsin.set(r.id, isin);
+    }
+    const byName = mf.filter((r) => !byIsin.has(r.id));
+    const chosen = new Map<string, Pick<NavRow, 'isin' | 'amfi_code'>>();
+
+    const prefixes = [...new Set(byName.map((r) => prefixOf(coreFundName(r.name))).filter(Boolean) as string[])];
     const orClause = prefixes.map((p) => `scheme_name.ilike.${likeSafe(p)}%`).join(',');
 
     // 2. Candidates on the latest date; a fund missing that day (AMC published
@@ -106,39 +123,48 @@ export async function enrichMutualFunds(db: NiyomDb, rows: InvestmentRow[]): Pro
         .limit(2000);
       return (data ?? []) as NavRow[];
     };
-    let cands = await fetchCands(latestDate, latestDate);
-    const chosen = new Map<string, NavRow>();
-    for (const r of mf) {
-      const c = pickCandidate(r.name, cands);
-      if (c) chosen.set(r.id, c);
-    }
-    if (chosen.size < mf.length) {
-      const weekAgo = new Date(new Date(latestDate).getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
-      cands = await fetchCands(weekAgo, latestDate);
-      for (const r of mf) {
-        if (chosen.has(r.id)) continue;
+    if (byName.length && prefixes.length) {
+      let cands = await fetchCands(latestDate, latestDate);
+      for (const r of byName) {
         const c = pickCandidate(r.name, cands);
         if (c) chosen.set(r.id, c);
       }
+      if (byName.some((r) => !chosen.has(r.id))) {
+        const weekAgo = new Date(new Date(latestDate).getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
+        cands = await fetchCands(weekAgo, latestDate);
+        for (const r of byName) {
+          if (chosen.has(r.id)) continue;
+          const c = pickCandidate(r.name, cands);
+          if (c) chosen.set(r.id, c);
+        }
+      }
     }
+    for (const [rowId, isin] of byIsin) chosen.set(rowId, { isin, amfi_code: null });
     if (!chosen.size) return rows;
 
     // 3. Last two NAVs per matched ISIN (pk index on isin, nav_date).
     const isins = [...new Set([...chosen.values()].map((c) => c.isin))];
     const since = new Date(new Date(latestDate).getTime() - 14 * 86_400_000).toISOString().slice(0, 10);
-    const [navRes, cacheRes] = await Promise.all([
-      db.from('nav_daily').select('isin,nav,nav_date').in('isin', isins).gte('nav_date', since).order('nav_date', { ascending: false }),
-      db
-        .from('mf_scheme_cache')
-        .select('scheme_code,amfi_category,category,return_1y,return_3y,fund_house')
-        .in('scheme_code', [...new Set([...chosen.values()].map((c) => c.amfi_code).filter(Boolean) as string[])]),
-    ]);
+    const navRes = await db
+      .from('nav_daily')
+      .select('isin,amfi_code,nav,nav_date')
+      .in('isin', isins)
+      .gte('nav_date', since)
+      .order('nav_date', { ascending: false });
     const navs = new Map<string, Array<{ nav: number; date: string }>>();
-    for (const r of (navRes.data ?? []) as Array<{ isin: string; nav: number | string; nav_date: string }>) {
+    const codeOf = new Map<string, string>();
+    for (const r of (navRes.data ?? []) as Array<{ isin: string; amfi_code: string | null; nav: number | string; nav_date: string }>) {
       const list = navs.get(r.isin) ?? [];
       list.push({ nav: Number(r.nav), date: r.nav_date });
       navs.set(r.isin, list);
+      if (r.amfi_code && !codeOf.has(r.isin)) codeOf.set(r.isin, r.amfi_code);
     }
+    // ISIN-looked-up rows learn their AMFI code from the NAV rows.
+    for (const c of chosen.values()) if (!c.amfi_code) c.amfi_code = codeOf.get(c.isin) ?? null;
+    const cacheRes = await db
+      .from('mf_scheme_cache')
+      .select('scheme_code,amfi_category,category,return_1y,return_3y,fund_house')
+      .in('scheme_code', [...new Set([...chosen.values()].map((c) => c.amfi_code).filter(Boolean) as string[])]);
     const cache = new Map<string, Record<string, unknown>>();
     for (const c of (cacheRes.data ?? []) as Array<Record<string, unknown>>) cache.set(String(c.scheme_code), c);
 
@@ -158,9 +184,12 @@ export async function enrichMutualFunds(db: NiyomDb, rows: InvestmentRow[]): Pro
     return rows.map((r) => {
       const m = matches.get(r.id);
       if (!m || !(m.lastNav > 0)) return r;
-      // Sanity: the registrar's own price must agree with the matched scheme.
-      const ownPrice = r.price ?? (r.units ? r.value / r.units : null);
-      if (ownPrice && ownPrice > 0 && Math.abs(m.lastNav / ownPrice - 1) > 0.15) return r;
+      // Sanity, for name matches only: the holding's own price must agree with
+      // the matched scheme. An ISIN lookup is exact and needs no such check.
+      if (!byIsin.has(r.id)) {
+        const ownPrice = r.price ?? (r.units ? r.value / r.units : null);
+        if (ownPrice && ownPrice > 0 && Math.abs(m.lastNav / ownPrice - 1) > 0.15) return r;
+      }
       const c = m.amfiCode ? cache.get(m.amfiCode) : undefined;
       const movePct = m.prevNav && m.prevNav > 0 ? (m.lastNav / m.prevNav - 1) * 100 : null;
       const dayChange = movePct != null ? r.value - r.value / (1 + movePct / 100) : null;
