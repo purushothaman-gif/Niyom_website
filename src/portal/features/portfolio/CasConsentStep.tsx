@@ -1,101 +1,33 @@
-import { useState } from 'react';
-import { ArrowRight, Check, Lock } from 'lucide-react';
-import {
-  CAS_AUTO_SUMMARY_COPY,
-  CONSENT_COPY,
-  IMPORT_CONSENTS,
-  consentCopy,
-  hasRequiredConsents,
-  type ConsentType,
-} from '../../types/consent';
+import { ArrowRight } from 'lucide-react';
+import { CAS_AUTO_SUMMARY_COPY, requiredConsents, type ConsentType } from '../../types/consent';
 
 /**
- * What the client is authorising, asked once and asked plainly.
+ * What the client is agreeing to, in one plain card.
  *
- * The required items are shown ticked and locked rather than hidden. Hiding
- * them would be quicker, but a client who has never been told that we read
- * their whole statement — including funds bought elsewhere — has not really
- * agreed to it. The optional one is genuinely optional and starts unticked.
- *
- * All wording comes from `types/consent.ts` against a pinned policy version, so
- * what a past consent recorded stays recoverable.
+ * We always place the statement request for the client through our service
+ * provider, so there is one thing to agree to, not a checklist. The granular
+ * consents are still recorded server-side (policy v2); this is their wording.
+ * Shown before anything happens and withdrawable later from the profile.
  */
 export function CasConsentStep({
   onContinue,
   onClose,
-  autoSubmit = false,
 }: {
-  /** True when we place the request for the client — changes what they agree to. */
-  autoSubmit?: boolean;
   onContinue: (granted: ConsentType[]) => void;
   onClose: () => void;
 }) {
-  const [granted, setGranted] = useState<ConsentType[]>(
-    IMPORT_CONSENTS.filter((c) => CONSENT_COPY[c].required),
-  );
-
-  const toggle = (c: ConsentType) => {
-    if (CONSENT_COPY[c].required) return; // locked on purpose
-    setGranted((g) => (g.includes(c) ? g.filter((x) => x !== c) : [...g, c]));
-  };
-
   return (
     <div className="space-y-5 p-6">
       <p className="text-sm leading-relaxed text-text-muted">
-        {autoSubmit
-          ? 'Here’s what we’ll do. Tap continue to go ahead — you can withdraw this later from your profile.'
-          : 'Before we start, here is exactly what you are agreeing to. You can withdraw any of it later from your profile.'}
+        Here’s what we’ll do. Continue to go ahead — you can withdraw this later from your profile.
       </p>
 
-      {autoSubmit ? (
-        <div className="rounded-token-md border border-accent/20 bg-accent/5 p-4">
-          <p className="text-sm font-semibold text-text-primary">{CAS_AUTO_SUMMARY_COPY.label}</p>
-          <p className="mt-1.5 text-xs leading-relaxed text-text-muted">
-            {CAS_AUTO_SUMMARY_COPY.detail}
-          </p>
-        </div>
-      ) : (
-      <ul className="space-y-2.5">
-        {IMPORT_CONSENTS.map((c) => {
-          const { label, detail, required } = consentCopy(c, autoSubmit);
-          const on = granted.includes(c);
-          return (
-            <li key={c}>
-              <button
-                type="button"
-                onClick={() => toggle(c)}
-                disabled={required}
-                className={`flex w-full items-start gap-3 rounded-token-md border p-3.5 text-left transition-colors ${
-                  on ? 'border-accent/35 bg-selected' : 'border-border bg-bg-base hover:border-accent/30'
-                } ${required ? 'cursor-default' : ''}`}
-              >
-                <span
-                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ${
-                    on ? 'border-accent bg-accent text-on-accent' : 'border-border-strong'
-                  }`}
-                >
-                  {on && <Check className="h-3 w-3" strokeWidth={3} />}
-                </span>
-                <span className="min-w-0">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-text-primary">{label}</span>
-                    {required && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-text-faint">
-                        <Lock className="h-2.5 w-2.5" />
-                        Required
-                      </span>
-                    )}
-                  </span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-text-muted">
-                    {detail}
-                  </span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      )}
+      <div className="rounded-token-md border border-accent/20 bg-accent/5 p-4">
+        <p className="text-sm font-semibold text-text-primary">{CAS_AUTO_SUMMARY_COPY.label}</p>
+        <p className="mt-1.5 text-xs leading-relaxed text-text-muted">
+          {CAS_AUTO_SUMMARY_COPY.detail}
+        </p>
+      </div>
 
       <div className="flex flex-wrap justify-end gap-3 pt-1">
         <button
@@ -106,9 +38,8 @@ export function CasConsentStep({
           Not now
         </button>
         <button
-          onClick={() => onContinue(granted)}
-          disabled={!hasRequiredConsents(granted)}
-          className="press flex items-center gap-2 rounded-token-md px-5 py-2.5 text-sm font-bold text-text-on-accent disabled:opacity-50"
+          onClick={() => onContinue(requiredConsents())}
+          className="press flex items-center gap-2 rounded-token-md px-5 py-2.5 text-sm font-bold text-text-on-accent"
           style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
         >
           Continue

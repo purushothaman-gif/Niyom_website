@@ -12,11 +12,9 @@ import {
 import {
   CasRequestService,
   isOpenRequest,
-  type CasFormGuidance,
   type CasRequest,
 } from '../../services/CasRequestService';
 import { CONSENT_POLICY_VERSION_AUTO, type ConsentType } from '../../types/consent';
-import { casPasswordStore, generateCasPassword } from '../../../../shared/portal/services/casPassword';
 import { CasConsentStep } from './CasConsentStep';
 import { CasRequestStep } from './CasRequestStep';
 import { CasAwaitingStep } from './CasAwaitingStep';
@@ -68,88 +66,56 @@ type Step = 'consent' | 'request' | 'awaiting' | 'upload' | 'done';
 
 export function ImportPortfolioModal({ onClose, onImported }: Props) {
   const [step, setStep] = useState<Step>('consent');
-  /**
-   * Set as soon as the client navigates, so the asynchronous "have they done
-   * this before?" answer can never yank the screen out from under someone who
-   * has already started reading or typing.
-   */
+  /** Set on first navigation, so the async "where to open" answer never yanks
+   *  the screen out from under someone already reading. */
   const navigated = useRef(false);
   const goTo = (next: Step) => {
     navigated.current = true;
     setStep(next);
   };
   const [file, setFile] = useState<File | null>(null);
+  /**
+   * The password that unlocks the emailed statement — always the client's PAN,
+   * which we already hold. Kept internally and never shown: every request we
+   * place is PAN-locked, so there is no password for the client to set or type.
+   */
   const [password, setPassword] = useState('');
-  /**
-   * The password we generated for the open request, if any. Kept apart from
-   * `password` (what is typed at upload) so we can tell the client when the
-   * field was filled in for them — and so they can still overwrite it if they
-   * chose their own on the CAMS page.
-   */
-  const [generated, setGenerated] = useState('');
-  /**
-   * Whether the server will place the request for the client. Decided before
-   * the consent screen is read, because it changes what they are agreeing to;
-   * false until we hear otherwise, since the guided flow promises nothing we
-   * might not do.
-   */
-  const [autoSubmit, setAutoSubmit] = useState(false);
-  /**
-   * The statement opens with the client's PAN (a value we already hold), so the
-   * upload step shows no password field and nothing is asked of the client.
-   */
-  const [autoUnlock, setAutoUnlock] = useState(false);
-  /**
-   * A returning client is offered a fresh request first; manual upload is a
-   * quiet fallback they open on purpose. False keeps the request-first view.
-   */
-  const [manualOpen, setManualOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [outcome, setOutcome] = useState<CasImportOutcome | null>(null);
   const [previous, setPrevious] = useState<CasImportRecord[]>([]);
   const [consents, setConsents] = useState<ConsentType[]>([]);
   const [request, setRequest] = useState<CasRequest | null>(null);
-  const [form, setForm] = useState<CasFormGuidance | null>(null);
   const [email, setEmail] = useState('');
+  /** True until the first load resolves, so no interim step ever flashes. */
+  const [initializing, setInitializing] = useState(true);
+  /** A returning client sees the upload screen only after requesting; this
+   *  flips when they arrive from the awaiting screen. */
+  const [atUpload, setAtUpload] = useState(false);
 
   /**
-   * Where to open.
-   *
-   * An open request means they are mid-journey and want to know what happened to
-   * it, not to start again. A previous successful import means they know the
-   * drill and are holding a file. Only a genuine first-timer sees consent first.
+   * Where to open. An open request means mid-journey (go to the wait); a prior
+   * import means they know the drill (go to the request-again screen); a genuine
+   * first-timer starts at consent. Nothing is shown until this resolves.
    */
   useEffect(() => {
     let alive = true;
-    void CasRequestService.mode().then((m) => {
-      // Never flip the wording under someone who is already past consent.
-      if (alive && !navigated.current) setAutoSubmit(m.autoSubmit);
-    });
     void Promise.all([CasImportService.listImports(), CasRequestService.latest()]).then(
       ([rows, latest]) => {
         if (!alive) return;
         setPrevious(rows);
         if (latest) setRequest(latest);
         if (latest?.requestedEmail) setEmail(latest.requestedEmail);
-        if (latest && isOpenRequest(latest.status)) {
-          if (latest.passwordIsPan && latest.pan) {
-            // Reopened in a fresh tab: a PAN-locked statement needs nothing we
-            // stored, so the upload step still opens it with no password.
-            const pan = latest.pan;
-            setPassword((prev) => prev || pan);
-            setAutoUnlock(true);
-          } else {
-            const saved = casPasswordStore.load(latest.requestId);
-            if (saved) {
-              setGenerated(saved);
-              setPassword((prev) => prev || saved);
-            }
-          }
+        // A PAN-locked open request reopens with no stored secret needed.
+        if (latest && isOpenRequest(latest.status) && latest.passwordIsPan && latest.pan) {
+          const pan = latest.pan;
+          setPassword((prev) => prev || pan);
         }
-        if (navigated.current) return;
-        if (latest && isOpenRequest(latest.status)) setStep('awaiting');
-        else if (rows.some((r) => r.status === 'reconciled')) setStep('upload');
+        if (!navigated.current) {
+          if (latest && isOpenRequest(latest.status)) setStep('awaiting');
+          else if (rows.some((r) => r.status === 'reconciled')) setStep('upload');
+        }
+        setInitializing(false);
       },
     );
     return () => {
@@ -157,36 +123,28 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
     };
   }, []);
 
-  /** Consent granted → create the tracked request and fetch the form values. */
+  /**
+   * Consent granted -> place the request for the client. We always request it
+   * on their behalf (PAN-locked), so there is nothing for them to fill in on a
+   * registrar's website and no password to remember.
+   */
   const startRequest = async () => {
     setError('');
     setBusy(true);
-    // Generated here, in the browser, and remembered for this tab only. In the
-    // guided flow the client pastes it into the CAMS form; when we place the
-    // request it travels with it. Either way they never type it again.
-    const pw = generateCasPassword();
     const r = await CasRequestService.start({
       email: email.trim(),
       consents,
-      ...(autoSubmit ? { policyVersion: CONSENT_POLICY_VERSION_AUTO, password: pw } : {}),
+      policyVersion: CONSENT_POLICY_VERSION_AUTO,
     });
     setBusy(false);
     if (!r.ok) return setError(r.error);
-
-    const placed = r.request.submitted === true;
-    if (placed && r.request.passwordIsPan && r.request.form.pan) {
-      // Locked with the client's own PAN — the upload opens with a value we
-      // already hold, so the client never sees or sets a password.
-      setPassword(r.request.form.pan);
-      setAutoUnlock(true);
-    } else {
-      // Guided flow, or a fallback that needed a generated password: keep it in
-      // this tab so the upload step can fill it in.
-      setGenerated(pw);
-      setPassword(pw);
-      casPasswordStore.save(r.request.requestId, pw);
+    if (!r.request.submitted) {
+      return setError(
+        'We could not request your statement automatically. Please contact your relationship manager.',
+      );
     }
-    if (!placed) setForm(r.request.form);
+    // The emailed PDF is locked with the client's PAN; we open it for them.
+    setPassword(r.request.form.pan || '');
     setRequest({
       requestId: r.request.requestId,
       status: r.request.status,
@@ -199,12 +157,11 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
       createdAt: new Date().toISOString(),
       completedAt: null,
     });
-    if (placed) goTo('awaiting');
+    goTo('awaiting');
   };
 
   const submit = async () => {
     if (!file) return setError('Choose the statement you received by email.');
-    if (!password) return setError('Enter the password you set when you requested the statement.');
     setError('');
     setBusy(true);
     const r = await CasImportService.importStatement(file, password, request?.requestId ?? null);
@@ -212,17 +169,11 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
     if (!r.ok) return setError(r.error);
     setOutcome(r.outcome);
     setStep('done');
-    // The password has done its job; there is no reason to keep it in memory.
     setPassword('');
-    setGenerated('');
-    if (request) casPasswordStore.clear(request.requestId);
     if (r.outcome.status === 'reconciled') onImported();
   };
 
   const lastGood = previous.find((p) => p.status === 'reconciled');
-  // Returning clients see the request-first view until they choose manual upload;
-  // a first-timer (or anyone arriving from the awaiting screen) goes to upload.
-  const showUpload = manualOpen || !lastGood;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4">
@@ -237,212 +188,168 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
           </button>
         </div>
 
-        {step === 'consent' && (
-          <CasConsentStep
-            autoSubmit={autoSubmit}
-            onContinue={(granted) => {
-              setConsents(granted);
-              goTo('request');
-            }}
-            onClose={onClose}
-          />
-        )}
-
-        {step === 'request' && (
-          <CasRequestStep
-            form={form}
-            email={email}
-            password={generated}
-            autoSubmit={autoSubmit}
-            onEmailChange={setEmail}
-            busy={busy}
-            error={error}
-            // Before the request exists this creates it; afterwards it means
-            // "I've filled in the CAMS form" and moves on to waiting.
-            onSubmitted={() => (form ? goTo('awaiting') : void startRequest())}
-            onBack={() => goTo('consent')}
-          />
-        )}
-
-        {step === 'awaiting' && request && (
-          <CasAwaitingStep
-            request={request}
-            onUpload={() => {
-              setManualOpen(true);
-              goTo('upload');
-            }}
-            onCancelled={() => {
-              if (request) casPasswordStore.clear(request.requestId);
-              setRequest(null);
-              setForm(null);
-              setGenerated('');
-              setPassword('');
-              setAutoUnlock(false);
-              goTo('consent');
-            }}
-          />
-        )}
-
-        {step === 'upload' && (
-          <div className="space-y-4 p-6">
-            {lastGood && (
-              <div className="space-y-2">
-                <ImportedStatements
-                  statements={previous}
-                  onChanged={() => {
-                    void CasImportService.listImports().then(setPrevious);
-                    // The portfolio behind the modal has to reload too.
-                    onImported();
-                  }}
-                />
-                {/* Statements combine, they don't replace — said in one quiet line. */}
-                <p className="flex items-start gap-1.5 text-xs leading-relaxed text-text-faint">
-                  <Plus className="mt-0.5 h-3 w-3 shrink-0" />
-                  Adding another statement — say, folios under a different email — merges in; a fund in
-                  both counts once.
-                </p>
-              </div>
+        {initializing ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-5 w-5 animate-spin text-text-faint" />
+          </div>
+        ) : (
+          <>
+            {step === 'consent' && (
+              <CasConsentStep
+                onContinue={(granted) => {
+                  setConsents(granted);
+                  goTo('request');
+                }}
+                onClose={onClose}
+              />
             )}
 
-            {!showUpload ? (
-              /*
-               * A returning client wants the newest picture, not to go hunting
-               * for a PDF. Lead with requesting a fresh statement; keep manual
-               * upload as a quiet fallback for a file they already hold. No
-               * password here — a requested statement unlocks on its own.
-               */
-              <div className="space-y-3 pt-1">
-                <button
-                  onClick={() => goTo('consent')}
-                  className="press flex w-full flex-col items-center gap-0.5 rounded-token-md px-5 py-3 text-text-on-accent"
-                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
-                >
-                  <span className="flex items-center gap-2 text-sm font-bold">
-                    <RefreshCw className="h-4 w-4" />
-                    Request latest CAS
-                  </span>
-                  <span className="text-xs font-medium opacity-80">We’ll ask CAMS for a fresh statement</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setManualOpen(true)}
-                  className="w-full text-center text-xs text-text-faint hover:text-text-muted"
-                >
-                  Already have the statement PDF? Upload it instead
-                </button>
-              </div>
-            ) : (
-              <>
-                {!lastGood && (
-                  <p className="text-sm leading-relaxed text-text-muted">
-                    {autoUnlock
-                      ? 'Upload the PDF CAMS emailed you. We open it automatically — no password needed.'
-                      : 'Upload the statement CAMS emailed you, and enter the password that was set when it was requested.'}
-                  </p>
-                )}
+            {step === 'request' && (
+              <CasRequestStep
+                email={email}
+                onEmailChange={setEmail}
+                busy={busy}
+                error={error}
+                onSubmitted={() => void startRequest()}
+                onBack={() => goTo('consent')}
+              />
+            )}
 
-                {error && (
-                  <div className="flex items-start gap-2.5 rounded-token-md border border-danger-soft/20 bg-danger-soft/10 px-3.5 py-3">
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger-soft" />
-                    <p className="text-sm text-danger-soft">{error}</p>
-                  </div>
-                )}
+            {step === 'awaiting' && request && (
+              <CasAwaitingStep
+                request={request}
+                onUpload={() => {
+                  setAtUpload(true);
+                  goTo('upload');
+                }}
+                onCancelled={() => {
+                  setRequest(null);
+                  setPassword('');
+                  setAtUpload(false);
+                  goTo(lastGood ? 'upload' : 'consent');
+                }}
+              />
+            )}
 
-                <label
-                  className={`flex cursor-pointer items-center gap-3 rounded-token-md border px-3.5 py-3 transition-colors ${
-                    file ? 'border-success-soft/30 bg-success-soft/5' : 'border-border bg-bg-base hover:border-accent/40'
-                  }`}
-                >
-                  <span
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-token-sm ${
-                      file ? 'bg-success-soft/10' : 'bg-accent/10'
-                    }`}
-                  >
-                    {file ? (
-                      <CheckCircle2 className="h-4 w-4 text-success-soft" />
-                    ) : (
-                      <FileText className="h-4 w-4 text-accent" />
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-text-primary">
-                      {file ? file.name : 'Consolidated Account Statement'}
-                    </span>
-                    <span className="block text-xs text-text-muted">
-                      {file ? 'Tap to choose a different file' : 'The PDF attached to the email from CAMS'}
-                    </span>
-                  </span>
-                  <Upload className="h-4 w-4 shrink-0 text-text-muted" />
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="application/pdf,.pdf"
-                    onChange={(e) => {
-                      setFile(e.target.files?.[0] ?? null);
-                      setError('');
-                    }}
-                  />
-                </label>
-
-                {!autoUnlock && (
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                      Statement password <span className="text-accent">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="The password you set on the CAMS form"
-                      autoComplete="off"
-                      className="w-full rounded-token-md border border-border bg-bg-base px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-accent"
+            {step === 'upload' && (
+              <div className="space-y-4 p-6">
+                {lastGood && (
+                  <div className="space-y-2">
+                    <ImportedStatements
+                      statements={previous}
+                      onChanged={() => {
+                        void CasImportService.listImports().then(setPrevious);
+                        onImported();
+                      }}
                     />
-                    <p className="mt-1.5 text-xs text-text-faint">
-                      {generated && password === generated
-                        ? 'Filled in for you.'
-                        : 'The password set on the CAMS form (not your PAN).'}
+                    <p className="flex items-start gap-1.5 text-xs leading-relaxed text-text-faint">
+                      <Plus className="mt-0.5 h-3 w-3 shrink-0" />
+                      Requesting another statement — say, folios under a different email — merges in; a
+                      fund in both counts once.
                     </p>
                   </div>
                 )}
 
-                <p className="flex items-center gap-1.5 text-[11px] text-text-faint">
-                  <Lock className="h-3 w-3 shrink-0" />
-                  Read on our own servers; the file itself is never stored.
-                </p>
-
-                <div className="flex justify-between gap-3 pt-1">
+                {lastGood && !atUpload ? (
+                  // Returning client: the only action is a fresh request. No
+                  // manual upload, no password.
                   <button
-                    type="button"
-                    onClick={() => (lastGood ? setManualOpen(false) : goTo(form ? 'request' : 'consent'))}
-                    className="rounded-token-md border border-border bg-bg-raised px-4 py-2 text-sm text-text-muted"
-                  >
-                    {lastGood ? 'Back' : 'How do I request one?'}
-                  </button>
-                  <button
-                    onClick={submit}
-                    disabled={busy || !file || (!autoUnlock && !password)}
-                    className="press flex items-center gap-2 rounded-token-md px-5 py-2.5 text-sm font-bold text-text-on-accent disabled:opacity-50"
+                    onClick={() => goTo('consent')}
+                    className="press flex w-full flex-col items-center gap-0.5 rounded-token-md px-5 py-3 text-text-on-accent"
                     style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
                   >
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                    {busy ? 'Reading your statement…' : 'Import portfolio'}
+                    <span className="flex items-center gap-2 text-sm font-bold">
+                      <RefreshCw className="h-4 w-4" />
+                      Request latest CAS
+                    </span>
+                    <span className="text-xs font-medium opacity-80">
+                      We’ll ask CAMS for a fresh statement
+                    </span>
                   </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+                ) : (
+                  <>
+                    <p className="text-sm leading-relaxed text-text-muted">
+                      Upload the PDF CAMS emailed you. We open it automatically — there is nothing to
+                      type.
+                    </p>
 
-        {step === 'done' && outcome && (
-          <Result
-            outcome={outcome}
-            onClose={onClose}
-            onAnother={() => {
-              setOutcome(null);
-              setFile(null);
-              goTo('upload');
-            }}
-          />
+                    {error && (
+                      <div className="flex items-start gap-2.5 rounded-token-md border border-danger-soft/20 bg-danger-soft/10 px-3.5 py-3">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger-soft" />
+                        <p className="text-sm text-danger-soft">{error}</p>
+                      </div>
+                    )}
+
+                    <label
+                      className={`flex cursor-pointer items-center gap-3 rounded-token-md border px-3.5 py-3 transition-colors ${
+                        file ? 'border-success-soft/30 bg-success-soft/5' : 'border-border bg-bg-base hover:border-accent/40'
+                      }`}
+                    >
+                      <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-token-sm ${
+                          file ? 'bg-success-soft/10' : 'bg-accent/10'
+                        }`}
+                      >
+                        {file ? (
+                          <CheckCircle2 className="h-4 w-4 text-success-soft" />
+                        ) : (
+                          <FileText className="h-4 w-4 text-accent" />
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-text-primary">
+                          {file ? file.name : 'Consolidated Account Statement'}
+                        </span>
+                        <span className="block text-xs text-text-muted">
+                          {file ? 'Tap to choose a different file' : 'The PDF attached to the email from CAMS'}
+                        </span>
+                      </span>
+                      <Upload className="h-4 w-4 shrink-0 text-text-muted" />
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="application/pdf,.pdf"
+                        onChange={(e) => {
+                          setFile(e.target.files?.[0] ?? null);
+                          setError('');
+                        }}
+                      />
+                    </label>
+
+                    <p className="flex items-center gap-1.5 text-[11px] text-text-faint">
+                      <Lock className="h-3 w-3 shrink-0" />
+                      Read on our own servers; the file itself is never stored.
+                    </p>
+
+                    <div className="flex justify-end gap-3 pt-1">
+                      <button
+                        onClick={submit}
+                        disabled={busy || !file}
+                        className="press flex items-center gap-2 rounded-token-md px-5 py-2.5 text-sm font-bold text-text-on-accent disabled:opacity-50"
+                        style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
+                      >
+                        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                        {busy ? 'Reading your statement…' : 'Import portfolio'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {step === 'done' && outcome && (
+              <Result
+                outcome={outcome}
+                onClose={onClose}
+                onAnother={() => {
+                  setOutcome(null);
+                  setFile(null);
+                  setAtUpload(false);
+                  goTo('upload');
+                }}
+              />
+            )}
+          </>
         )}
       </div>
     </div>
