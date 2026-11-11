@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Users, ChevronDown, ChevronRight, Loader2, UserPlus } from 'lucide-react';
+import { Users, ChevronDown, ChevronRight, Loader2, UserPlus, Repeat } from 'lucide-react';
 import { Card } from '../../../portal/components/Card';
 import { EmptyState } from '../../../portal/components/EmptyState';
 import { StatusPill } from '../../../portal/components/StatusPill';
@@ -8,9 +8,15 @@ import { PartnerService } from '../../services/PartnerService';
 import { OnboardClientModal } from './OnboardClientModal';
 import { mfSsoEnabled } from '../../../../shared/platform/env';
 import { fromPartnerHoldings } from '../../../../shared/portal/investments/model';
+import { sipFrequencyLabel, sipPlanLabel } from '../../../../shared/mf/sipLabels';
 import { InvestmentsBoard } from '../../../portal/features/investments/InvestmentsBoard';
 import { useInvestmentRows } from '../../../portal/features/investments/useInvestmentRows';
-import type { PartnerClientRow, PartnerHoldingRow, PartnerTransactionRow } from '../../types';
+import type {
+  PartnerClientRow,
+  PartnerHoldingRow,
+  PartnerSipRow,
+  PartnerTransactionRow,
+} from '../../types';
 import type { ProductType } from '../../../crm/types';
 
 interface Props {
@@ -20,6 +26,17 @@ interface Props {
 }
 
 const productLabel = (t: string) => PRODUCT_LABELS[t as ProductType] ?? t;
+
+/** MONTHLY -> Monthly; leaves short all-caps plan codes (SIP/STP/SWP) alone. */
+const titleCase = (s: string | null | undefined) =>
+  !s ? '' : s.length <= 3 ? s : s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+
+const sipStatusTone = (status: string): 'success' | 'warning' | 'muted' => {
+  const s = (status || '').toLowerCase();
+  if (s === 'active') return 'success';
+  if (s === 'paused') return 'warning';
+  return 'muted';
+};
 
 /**
  * Clients this partner sourced, each expandable to their complete portfolio.
@@ -124,6 +141,7 @@ function ClientRow({
 }) {
   const [holdings, setHoldings] = useState<PartnerHoldingRow[] | null>(null);
   const [txns, setTxns] = useState<PartnerTransactionRow[] | null>(null);
+  const [sips, setSips] = useState<PartnerSipRow[] | null>(null);
   const [loading, setLoading] = useState(false);
 
   // The fetch is guarded by a ref, not by `holdings`, and `holdings` is NOT a
@@ -141,16 +159,19 @@ function ClientRow({
     Promise.all([
       PartnerService.getClientPortfolio(client.client_id),
       PartnerService.getClientTransactions(client.client_id),
+      PartnerService.getClientSips(client.client_id),
     ])
-      .then(([h, t]) => {
+      .then(([h, t, s]) => {
         if (cancelled) return;
         setHoldings(h);
         setTxns(t);
+        setSips(s);
       })
       .catch(() => {
         if (cancelled) return;
         setHoldings([]);
         setTxns([]);
+        setSips([]);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -220,6 +241,59 @@ function ClientRow({
                   <EmptyState icon={Users} title="No holdings recorded" compact />
                 )}
               </section>
+
+              {sips && sips.length > 0 && (
+                <section>
+                  <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                    <Repeat className="h-3.5 w-3.5 text-text-muted" /> Systematic plans
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[580px] text-sm">
+                      <thead>
+                        <tr className="border-b border-border-subtle text-[11px] uppercase tracking-wider text-text-faint">
+                          <th className="pb-2 text-left font-semibold">Scheme</th>
+                          <th className="pb-2 text-left font-semibold">Plan</th>
+                          <th className="pb-2 text-right font-semibold">Instalment</th>
+                          <th className="pb-2 text-left font-semibold">Frequency</th>
+                          <th className="pb-2 text-left font-semibold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-subtle">
+                        {sips.map((s) => (
+                          <tr key={s.sip_id}>
+                            <td className="py-2.5 pr-3">
+                              <p className="font-medium text-text-primary">{s.scheme_name}</p>
+                              {(s.from_date || s.to_date) && (
+                                <p className="text-[11px] text-text-secondary">
+                                  {s.from_date || '—'}
+                                  {s.to_date ? ` → ${s.to_date}` : ''}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-2.5 pr-3">
+                              <span className="text-text-secondary">{sipPlanLabel(s.txn_type)}</span>
+                              {s.sip_day && (
+                                <p className="text-[11px] text-text-faint">Day {s.sip_day}</p>
+                              )}
+                            </td>
+                            <td className="py-2.5 pr-3 text-right tabular-nums font-medium text-text-primary">
+                              {s.amount != null ? fmt(Number(s.amount)) : '—'}
+                            </td>
+                            <td className="py-2.5 pr-3 text-text-secondary">
+                              {sipFrequencyLabel(s.frequency) || '—'}
+                            </td>
+                            <td className="py-2.5">
+                              <StatusPill tone={sipStatusTone(s.status)}>
+                                {titleCase(s.status) || 'Active'}
+                              </StatusPill>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
 
               {txns && txns.length > 0 && (
                 <section>
