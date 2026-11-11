@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { clientSupabase as supabase } from '../lib/supabase';
-import { Lock, Eye, EyeOff, ArrowRight, ChevronLeft, AlertTriangle, CreditCard, Mail, Home, ShieldCheck, RotateCcw, CheckCircle2 } from 'lucide-react';
-import { ThemeToggle } from '../theme/ThemeToggle';
-import { HeroBackground } from '../components/HeroBackground';
+import { Lock, Eye, EyeOff, ArrowRight, ChevronLeft, AlertTriangle, CreditCard, Mail, KeyRound, ShieldCheck, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { AuthHeading, AuthShell, AuthSubmit, AuthTabs } from './shared/AuthShell';
 import { PinInput } from '../components/PinInput';
 import { getDeviceId, listProfiles, removeProfile, type PinProfile } from '../lib/pinDevice';
 import { passwordChecks, passwordError } from '../lib/passwordPolicy';
@@ -372,84 +371,39 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
     onLogin(data.client_id, data.password_changed !== false);
   };
 
+  /** Password ⇄ emailed code. Both views carry it, so switching is one tap. */
+  const methodTabs = (
+    <AuthTabs
+      value={view === 'otp_login' ? 'otp' : 'password'}
+      options={[
+        { key: 'password', label: 'PAN & password' },
+        { key: 'otp', label: 'Email code' },
+      ]}
+      onChange={(k) => {
+        setError('');
+        if (k === 'otp') {
+          setOtpStage('email');
+          setOtpCode('');
+          setView('otp_login');
+        } else {
+          setView('login');
+        }
+      }}
+    />
+  );
+
   return (
-    <>
-    <div className="min-h-screen flex relative" style={{ background: 'var(--bg-base)' }}>
-      <div className="absolute top-4 right-4 z-20"><ThemeToggle variant="icon" /></div>
-      {/* Left panel — animated brand rail (matches the public site heroes) */}
-      <div data-theme="dark" className="hidden lg:flex w-[420px] flex-shrink-0 p-10 relative overflow-hidden" style={{ borderRight: '1px solid var(--border-subtle)' }}>
-        <HeroBackground />
-        <div className="relative z-10 flex flex-col justify-between w-full">
-        <div className="flex items-center gap-3">
-          <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-10 w-auto object-contain" />
-          <div>
-            <p className="font-bold text-sm" style={{ color: 'var(--accent-soft)' }}>Niyom Wealth</p>
-            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Client Portal</p>
-          </div>
-        </div>
-
-        <div className="space-y-8">
-          <div>
-            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--accent)' }}>Your Wealth, At A Glance</p>
-            <h2 className="text-3xl font-bold leading-tight text-text-primary">Manage your investments securely</h2>
-            <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-              Access your portfolio, track your holdings, and stay updated on your financial journey with Niyom Wealth.
-            </p>
-          </div>
-          {[
-            { label: 'Secure Access', desc: 'Your PAN number is your unique login ID' },
-            { label: 'Portfolio Visibility', desc: 'View your holdings and investment performance' },
-            { label: 'Confidential', desc: 'All data is encrypted and accessible only by you' },
-          ].map(f => (
-            <div key={f.label} className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: 'rgba(var(--accent-rgb),0.1)', border: '1px solid rgba(var(--accent-rgb),0.15)' }}>
-                <div className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-text-primary">{f.label}</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>{f.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="space-y-3">
-          <div className="p-4 rounded-xl" style={{ background: 'rgba(var(--accent-rgb),0.05)', border: '1px solid rgba(var(--accent-rgb),0.1)' }}>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              <span style={{ color: 'var(--accent)' }}>Login ID:</span> Your PAN number (e.g. ABCDE1234F). Your credentials were set up by your relationship manager.
-            </p>
-          </div>
-          <a href="/" className="flex items-center gap-2 text-xs transition-colors" style={{ color: 'var(--text-secondary)' }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
-            <Home className="w-3.5 h-3.5" />
-            Back to Niyom Wealth home
-          </a>
-        </div>
-        </div>
-      </div>
-
-      {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md space-y-8">
+    <AuthShell portal="client">
 
           {view === 'pin' && (
             <>
-              <div>
-                <div className="flex items-center gap-3 mb-6 lg:hidden">
-                  <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-8 w-auto object-contain" />
-                  <p className="font-bold text-sm" style={{ color: 'var(--accent-soft)' }}>Niyom Wealth</p>
-                </div>
-                <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--accent)' }}>Client Portal</p>
-                <h1 className="text-3xl font-bold text-text-primary">
-                  {activeProfile ? 'Welcome back' : 'Choose your account'}
-                </h1>
-                <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-                  {activeProfile
-                    ? 'Enter the 4-digit PIN you set on this device.'
-                    : 'More than one account uses a PIN on this device.'}
-                </p>
-              </div>
+              <AuthHeading
+                eyebrow="Client Portal"
+                title={activeProfile ? `Welcome back, ${activeProfile.name.split(' ')[0]}` : 'Choose your account'}
+                sub={activeProfile
+                  ? 'Enter the 4-digit PIN you set on this device.'
+                  : 'More than one account uses a PIN on this device.'}
+              />
 
               {/*
                 Whose account this is, before a single digit is typed. On a
@@ -533,15 +487,9 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
 
           {view === 'login' && (
             <>
-              <div>
-                <div className="flex items-center gap-3 mb-6 lg:hidden">
-                  <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-8 w-auto object-contain" />
-                  <p className="font-bold text-sm" style={{ color: 'var(--accent-soft)' }}>Niyom Wealth</p>
-                </div>
-                <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--accent)' }}>Client Portal</p>
-                <h1 className="text-3xl font-bold text-text-primary">Welcome Back</h1>
-                <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>Sign in using your PAN number and password.</p>
-              </div>
+              <AuthHeading eyebrow="Client Portal" title="Welcome back" sub="Sign in to see your portfolio." />
+
+              {methodTabs}
 
               {lockoutMsg && (
                 <div className="p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
@@ -611,53 +559,34 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
                   </button>
                 </div>
 
-                <button type="submit" disabled={loading || !!lockoutMsg}
-                  className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
-                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
-                  {loading ? 'Signing in...' : <><span>Sign In</span><ArrowRight className="w-4 h-4" /></>}
-                </button>
+                <AuthSubmit loading={loading} disabled={!!lockoutMsg} loadingLabel="Signing in…">
+                  <span>Sign In</span><ArrowRight className="w-4 h-4" />
+                </AuthSubmit>
               </form>
 
-              {/* New to Niyom Wealth? — compact acquisition CTA. */}
-              <div className="flex items-center gap-3 rounded-xl p-4"
-                style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-text-primary">New to Niyom Wealth?</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Open a free account in minutes — just name, mobile &amp; email.</p>
-                </div>
+              {profiles.length > 0 && (
                 <button
-                  onClick={() => onInvestNow?.()}
-                  className="group flex flex-shrink-0 items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold text-on-accent whitespace-nowrap transition-all"
-                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
-                  Sign up now
-                  <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-1" />
+                  type="button"
+                  onClick={() => { setView('pin'); setError(''); setPinError(''); setPinReset((n) => n + 1); }}
+                  className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+                  style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
+                >
+                  <KeyRound className="w-4 h-4" style={{ color: 'var(--accent)' }} /> Use your PIN instead
                 </button>
-              </div>
+              )}
 
-              {/* Return path for clients still completing KYC (no password yet). */}
-              <button type="button" onClick={() => { setView('otp_login'); setError(''); setOtpStage('email'); setOtpEmail(''); setOtpCode(''); }}
-                className="group w-full flex items-center gap-3 p-4 rounded-xl text-left transition-all"
-                style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.1)'; e.currentTarget.style.borderColor = 'var(--accent)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.06)'; e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.25)'; }}>
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(var(--accent-rgb),0.12)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
-                  <ShieldCheck className="w-4.5 h-4.5" style={{ color: 'var(--accent)' }} />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Already started your application?</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Continue with a one-time code emailed to you — no password needed.</p>
-                </div>
-                <ArrowRight className="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-hover:translate-x-1" style={{ color: 'var(--accent)' }} />
-              </button>
-
-              <div className="text-center">
-                <a href="/" className="inline-flex items-center gap-1.5 text-xs transition-colors" style={{ color: 'var(--border-stronger)' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--border-stronger)')}>
-                  <Home className="w-3.5 h-3.5" />
-                  Back to main website
-                </a>
-              </div>
+              {/* One quiet line, so Sign In stays the only strong element. */}
+              <p className="text-center text-xs" style={{ color: 'var(--text-secondary)' }}>
+                New to Niyom Wealth?{' '}
+                <button
+                  type="button"
+                  onClick={() => onInvestNow?.()}
+                  className="font-semibold inline-flex items-center gap-1"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Open a free account <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </p>
             </>
           )}
 
@@ -810,20 +739,15 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
 
           {view === 'otp_login' && (
             <>
-              <div>
-                <button onClick={() => { setView('login'); setError(''); }} className="flex items-center gap-1.5 text-xs mb-6 transition-colors" style={{ color: 'var(--text-muted)' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-faint)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}>
-                  <ChevronLeft className="w-3.5 h-3.5" /> Back to Login
-                </button>
-                <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--accent)' }}>Continue Your Application</p>
-                <h1 className="text-3xl font-bold text-text-primary">{otpStage === 'email' ? 'Sign in with OTP' : 'Enter your OTP'}</h1>
-                <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-                  {otpStage === 'email'
-                    ? "Enter your registered email — we'll send you a code. No password needed."
-                    : <>We sent a 6-digit code to <span className="text-text-primary">{otpMasked || 'your email'}</span>.</>}
-                </p>
-              </div>
+              <AuthHeading
+                eyebrow="Client Portal"
+                title={otpStage === 'email' ? 'Sign in with a code' : 'Enter your code'}
+                sub={otpStage === 'email'
+                  ? 'We email a 6-digit code to your registered address. No password needed — this is also the way back in if you are still completing your application.'
+                  : <>We sent a 6-digit code to <span className="text-text-primary">{otpMasked || 'your email'}</span>.</>}
+              />
+
+              {methodTabs}
 
               {error && (
                 <div className="p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
@@ -885,9 +809,6 @@ export default function ClientLogin({ onLogin, onInvestNow, startOtp = false }: 
             </>
           )}
 
-        </div>
-      </div>
-    </div>
-    </>
+    </AuthShell>
   );
 }

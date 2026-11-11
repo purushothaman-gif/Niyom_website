@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { partnerSupabase as supabase } from '../lib/supabase';
-import { Lock, Eye, EyeOff, ArrowRight, AlertTriangle, CreditCard, Home, ChevronLeft, Mail, CheckCircle2, KeyRound, Handshake } from 'lucide-react';
-import { ThemeToggle } from '../theme/ThemeToggle';
-import { HeroBackground } from '../components/HeroBackground';
+import { Lock, Eye, EyeOff, ArrowRight, AlertTriangle, CreditCard, ChevronLeft, Mail, CheckCircle2, KeyRound } from 'lucide-react';
+import { AuthHeading, AuthShell, AuthSubmit } from './shared/AuthShell';
 import { PinInput } from '../components/PinInput';
 import { passwordChecks, passwordError } from '../lib/passwordPolicy';
 import { getDeviceId, listSurfaceProfiles, removeSurfaceProfile, type SurfaceProfile } from '../lib/pinDevice';
@@ -302,82 +301,18 @@ export default function PartnerLogin({ onLogin }: Props) {
   };
 
   return (
-    <div className="min-h-screen flex relative" style={{ background: 'var(--bg-base)' }}>
-      <div className="absolute top-4 right-4 z-20"><ThemeToggle variant="icon" /></div>
-
-      {/* Left panel — animated brand rail (matches the client portal login) */}
-      <div data-theme="dark" className="hidden lg:flex w-[420px] flex-shrink-0 p-10 relative overflow-hidden" style={{ borderRight: '1px solid var(--border-subtle)' }}>
-        <HeroBackground />
-        <div className="relative z-10 flex flex-col justify-between w-full">
-          <div className="flex items-center gap-3">
-            <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-10 w-auto object-contain" />
-            <div>
-              <p className="font-bold text-sm" style={{ color: 'var(--accent-soft)' }}>Niyom Wealth</p>
-              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Partner Portal</p>
-            </div>
-          </div>
-
-          <div className="space-y-8">
-            <div>
-              <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--accent)' }}>Your Business, At A Glance</p>
-              <h2 className="text-3xl font-bold leading-tight text-text-primary">Track your clients and payouts</h2>
-              <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                See the clients you have sourced, download your payout statements, and share your referral link — all in one place.
-              </p>
-            </div>
-            {[
-              { label: 'Secure Access', desc: 'Your PAN number is your unique login ID' },
-              { label: 'Payout Statements', desc: 'Every debit note, its TDS and net payable' },
-              { label: 'Your Clients', desc: 'Portfolios of the clients you introduced' },
-            ].map(f => (
-              <div key={f.label} className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: 'rgba(var(--accent-rgb),0.1)', border: '1px solid rgba(var(--accent-rgb),0.15)' }}>
-                  <div className="w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-text-primary">{f.label}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>{f.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-3">
-            <div className="p-4 rounded-xl" style={{ background: 'rgba(var(--accent-rgb),0.05)', border: '1px solid rgba(var(--accent-rgb),0.1)' }}>
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                <span style={{ color: 'var(--accent)' }}>Login ID:</span> Your PAN number (e.g. ABCDE1234F). Your credentials were set up by your relationship manager.
-              </p>
-            </div>
-            <a href="/" className="flex items-center gap-2 text-xs transition-colors" style={{ color: 'var(--text-secondary)' }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}>
-              <Home className="w-3.5 h-3.5" />
-              Back to Niyom Wealth home
-            </a>
-          </div>
-        </div>
-      </div>
-
-      {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md space-y-8">
-          <div>
-            <div className="flex items-center gap-3 mb-6 lg:hidden">
-              <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-8 w-auto object-contain" />
-              <p className="font-bold text-sm" style={{ color: 'var(--accent-soft)' }}>Niyom Wealth</p>
-            </div>
-            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--accent)' }}>Partner Portal</p>
-            <h1 className="text-3xl font-bold text-text-primary">
-              {view === 'pin' ? 'Welcome Back' : view === 'forgot' ? 'Password Reset' : 'Partner Sign In'}
-            </h1>
-            <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-              {view === 'pin'
-                ? (activeProfile ? `Enter your PIN, ${activeProfile.name.split(' ')[0]}.` : 'Enter your 4-digit PIN for this device.')
-                : view === 'forgot'
-                  ? (forgotStep === 'pan' ? 'Enter your PAN. We’ll email a 6-digit code.' : forgotStep === 'code' ? 'Enter the 6-digit code from your email.' : 'Choose a new password.')
-                  : 'Sign in using your PAN number and password.'}
-            </p>
-          </div>
+    <AuthShell portal="partner">
+          <AuthHeading
+            eyebrow="Partner Portal"
+            title={view === 'pin'
+              ? (activeProfile ? `Welcome back, ${activeProfile.name.split(' ')[0]}` : 'Welcome back')
+              : view === 'forgot' ? 'Password reset' : 'Partner sign in'}
+            sub={view === 'pin'
+              ? 'Enter the 4-digit PIN you set on this device.'
+              : view === 'forgot'
+                ? (forgotStep === 'pan' ? 'Enter your PAN. We’ll email a 6-digit code.' : forgotStep === 'code' ? 'Enter the 6-digit code from your email.' : 'Choose a new password.')
+                : 'Sign in with your PAN and password to open your book.'}
+          />
 
           {lockoutMsg && (
             <div className="p-4 rounded-xl flex items-center gap-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
@@ -487,45 +422,26 @@ export default function PartnerLogin({ onLogin }: Props) {
                   </button>
                 </div>
 
-                <button type="submit" disabled={loading || !!lockoutMsg}
-                  className="w-full py-3.5 rounded-xl font-bold text-sm text-on-accent disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
-                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
-                  {loading ? 'Signing in…' : <><span>Sign In</span><ArrowRight className="w-4 h-4" /></>}
-                </button>
+                <AuthSubmit loading={loading} disabled={!!lockoutMsg} loadingLabel="Signing in…">
+                  <span>Sign In</span><ArrowRight className="w-4 h-4" />
+                </AuthSubmit>
               </form>
 
               {profiles.length > 0 && (
                 <button type="button" onClick={() => { setView('pin'); setError(''); setPinReset(n => n + 1); }}
-                  className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2" style={{ background: 'var(--bg-raised)', color: 'var(--text-faint)', border: '1px solid var(--border)' }}>
-                  <KeyRound className="w-4 h-4" /> Use your PIN instead
+                  className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2" style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+                  <KeyRound className="w-4 h-4" style={{ color: 'var(--accent)' }} /> Use your PIN instead
                 </button>
               )}
 
               {/* Become a partner — company-direct self-onboarding. No ref code, so
-                  public-partner-onboard-start maps the signup to the house account. */}
-              <div className="rounded-xl p-4" style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
-                <div className="flex items-start gap-3">
-                  <Handshake className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-text-primary">Not a partner yet?</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                      Join Niyom Wealth as a distribution partner. Register in a few minutes,
-                      then start sourcing clients and earning payouts.
-                    </p>
-                    <a
-                      href="/partner-onboarding"
-                      className="mt-2.5 text-xs font-semibold inline-flex items-center gap-1.5"
-                      style={{ color: 'var(--accent)' }}
-                    >
-                      Become a Partner <ArrowRight className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
-                Looking for your investment portfolio?{' '}
-                <a href="/client-login" style={{ color: 'var(--accent)' }}>Client sign in</a>
+                  public-partner-onboard-start maps the signup to the house account.
+                  One quiet line, so Sign In stays the only strong element. */}
+              <p className="text-center text-xs" style={{ color: 'var(--text-secondary)' }}>
+                Not a partner yet?{' '}
+                <a href="/partner-onboarding" className="font-semibold inline-flex items-center gap-1" style={{ color: 'var(--accent)' }}>
+                  Become a partner <ArrowRight className="w-3.5 h-3.5" />
+                </a>
               </p>
             </>
           )}
@@ -636,8 +552,6 @@ export default function PartnerLogin({ onLogin }: Props) {
               )}
             </>
           )}
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   );
 }
