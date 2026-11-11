@@ -34,6 +34,8 @@ import { ImportPortfolioModal } from './features/portfolio/ImportPortfolioModal'
 import { ConnectDematModal } from './features/portfolio/ConnectDematModal';
 import { ImportHubModal } from './features/portfolio/ImportHubModal';
 import { DematImportService } from '../../shared/portal/services/DematImportService';
+import { InboxService } from '../../shared/portal/services/InboxService';
+import { InboundEmailService } from '../../shared/portal/services/InboundEmailService';
 import { IdleWarning } from './components/IdleWarning';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { SetPinPrompt } from './features/profile/SetPinPrompt';
@@ -134,9 +136,16 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
   // Whether the server can fetch demat holdings; the entry point is hidden
   // until we know it can, so a client is never offered something that errors.
   const [dematEnabled, setDematEnabled] = useState(false);
+  // The two email import routes probe the same way. Resolving all three up front
+  // (not inside the import hub) means the hub opens at its final size instead of
+  // growing as each self-checking card pops in a second later.
+  const [inboxEnabled, setInboxEnabled] = useState(false);
+  const [forwardEnabled, setForwardEnabled] = useState(false);
   useEffect(() => {
     let alive = true;
     void DematImportService.enabled().then((e) => alive && setDematEnabled(e));
+    void InboxService.enabled().then((e) => alive && setInboxEnabled(e));
+    void InboundEmailService.enabled().then((e) => alive && setForwardEnabled(e));
     return () => {
       alive = false;
     };
@@ -471,6 +480,8 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
               : undefined
           }
           depositoryHint={depositoryHint}
+          inboxEnabled={inboxEnabled}
+          forwardEnabled={forwardEnabled}
           onImported={refresh}
         />
       )}

@@ -10,8 +10,16 @@ import { InboundEmailService, type InboundCheck } from '../../../../shared/porta
  * is created lazily, on the client's first tap, so we never mint one for a
  * client who never uses it.
  */
-export function ForwardCasCard({ onImported }: { onImported: () => void }) {
-  const [ready, setReady] = useState(false);
+export function ForwardCasCard({
+  onImported,
+  preEnabled,
+}: {
+  onImported: () => void;
+  /** The caller already confirmed the server offers this, so render the card
+   *  shell at once (no null flash while it re-checks) and just load the status. */
+  preEnabled?: boolean;
+}) {
+  const [ready, setReady] = useState(!!preEnabled);
   const [address, setAddress] = useState<string | null>(null);
   const [lastReceivedAt, setLastReceivedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState<'create' | 'check' | null>(null);
@@ -21,18 +29,21 @@ export function ForwardCasCard({ onImported }: { onImported: () => void }) {
 
   useEffect(() => {
     let alive = true;
-    void InboundEmailService.enabled().then(async (on) => {
-      if (!alive || !on) return;
+    void (async () => {
+      if (!preEnabled) {
+        const on = await InboundEmailService.enabled();
+        if (!alive || !on) return;
+      }
       const s = await InboundEmailService.status();
       if (!alive) return;
       setAddress(s.address);
       setLastReceivedAt(s.lastReceivedAt ?? null);
       setReady(true);
-    });
+    })();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [preEnabled]);
 
   if (!ready) return null;
 

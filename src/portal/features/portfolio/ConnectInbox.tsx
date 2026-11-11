@@ -19,8 +19,16 @@ const PROVIDERS = [
   { value: 'zoho', label: 'Zoho' },
 ];
 
-export function ConnectInbox({ onImported }: { onImported: () => void }) {
-  const [ready, setReady] = useState(false);
+export function ConnectInbox({
+  onImported,
+  preEnabled,
+}: {
+  onImported: () => void;
+  /** The caller already confirmed the server offers this, so render the card
+   *  shell at once (no null flash while it re-checks) and just load the status. */
+  preEnabled?: boolean;
+}) {
+  const [ready, setReady] = useState(!!preEnabled);
   const [status, setStatus] = useState<InboxStatus>({ connected: false });
   const [provider, setProvider] = useState('gmail');
   const [busy, setBusy] = useState<'connect' | 'sync' | 'disconnect' | null>(null);
@@ -29,17 +37,20 @@ export function ConnectInbox({ onImported }: { onImported: () => void }) {
 
   useEffect(() => {
     let alive = true;
-    void InboxService.enabled().then(async (on) => {
-      if (!alive || !on) return;
+    void (async () => {
+      if (!preEnabled) {
+        const on = await InboxService.enabled();
+        if (!alive || !on) return;
+      }
       const s = await InboxService.status();
       if (!alive) return;
       setStatus(s);
       setReady(true);
-    });
+    })();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [preEnabled]);
 
   if (!ready) return null;
 

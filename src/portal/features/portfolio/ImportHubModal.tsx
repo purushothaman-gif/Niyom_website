@@ -41,11 +41,24 @@ interface Props {
   onDemat?: () => void;
   /** The client's depository, inferred from their demat account on file. */
   depositoryHint?: Depository | null;
+  /** Whether the server offers the two email routes, resolved up front so the
+   *  sheet opens at its final size instead of growing as the cards load. */
+  inboxEnabled: boolean;
+  forwardEnabled: boolean;
   /** Refresh the portfolio after an email route imports something. */
   onImported: () => void;
 }
 
-export function ImportHubModal({ onClose, onMutualFunds, onUpload, onDemat, depositoryHint, onImported }: Props) {
+export function ImportHubModal({
+  onClose,
+  onMutualFunds,
+  onUpload,
+  onDemat,
+  depositoryHint,
+  inboxEnabled,
+  forwardEnabled,
+  onImported,
+}: Props) {
   const [screen, setScreen] = useState<Screen>('choose');
   const [depo, setDepo] = useState<Depository | null>(depositoryHint ?? null);
 
@@ -121,6 +134,8 @@ export function ImportHubModal({ onClose, onMutualFunds, onUpload, onDemat, depo
                 />
               }
               onUpload={onUpload}
+              inboxEnabled={inboxEnabled}
+              forwardEnabled={forwardEnabled}
               onImported={onImported}
             />
           )}
@@ -154,6 +169,8 @@ export function ImportHubModal({ onClose, onMutualFunds, onUpload, onDemat, depo
                 ) : null
               }
               onUpload={onUpload}
+              inboxEnabled={inboxEnabled}
+              forwardEnabled={forwardEnabled}
               onImported={onImported}
             />
           )}
@@ -296,22 +313,28 @@ function MethodsScreen({
   lead,
   getItForMe,
   onUpload,
+  inboxEnabled,
+  forwardEnabled,
   onImported,
 }: {
   lead: string;
   getItForMe: ReactNode;
   onUpload: () => void;
+  inboxEnabled: boolean;
+  forwardEnabled: boolean;
   onImported: () => void;
 }) {
   return (
     <div className="space-y-5">
       <p className="text-sm leading-relaxed text-text-muted">{lead}</p>
 
-      <div className="space-y-2.5">
-        <SectionLabel>Get it for me</SectionLabel>
-        {getItForMe}
-        <ConnectInbox onImported={onImported} />
-      </div>
+      {(getItForMe || inboxEnabled) && (
+        <div className="space-y-2.5">
+          <SectionLabel>Get it for me</SectionLabel>
+          {getItForMe}
+          {inboxEnabled && <ConnectInbox preEnabled onImported={onImported} />}
+        </div>
+      )}
 
       <div className="space-y-2.5">
         <SectionLabel>I have the statement</SectionLabel>
@@ -321,7 +344,7 @@ function MethodsScreen({
           body="Already have the statement? Upload it — we open PAN-locked files for you."
           onClick={onUpload}
         />
-        <ForwardCasCard onImported={onImported} />
+        {forwardEnabled && <ForwardCasCard preEnabled onImported={onImported} />}
       </div>
     </div>
   );
