@@ -77,7 +77,8 @@ export function ConnectDematModal({ onClose, onImported }: { onClose: () => void
           <div className="space-y-5 p-6">
             <p className="text-sm leading-relaxed text-text-muted">
               We’ll bring in everything you hold in demat — shares, bonds, government securities and
-              NPS — straight from CDSL. It covers both CDSL and NSDL accounts.
+              NPS — straight from CDSL by OTP. Hold with NSDL instead? We’ll point you to forward
+              your statement, which we import just the same.
             </p>
             <div className="flex items-start gap-2 rounded-token-md border border-accent/15 bg-accent/5 p-3">
               <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
