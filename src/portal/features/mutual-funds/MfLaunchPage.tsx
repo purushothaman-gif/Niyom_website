@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, Hourglass, Loader2, Plus, ShieldCheck, TrendingUp } from 'lucide-react';
+import { ChevronRight, Hourglass, Loader2, Plus, Repeat, ShieldCheck, TrendingUp, Wallet } from 'lucide-react';
 import { PortalButton } from '../../ui/kit';
 import { fromClientHoldings } from '../../../../shared/portal/investments/model';
 import { InvestmentsBoard } from '../investments/InvestmentsBoard';
@@ -15,6 +15,7 @@ import type { PortalHolding } from '../../types/cas';
 import { ExploreHub } from '../explore/ExploreHub';
 import { MfWatchlist } from './MfWatchlist';
 import { AddExternalFundsCta } from './AddExternalFundsCta';
+import { isFundHeld } from './heldFund';
 
 type MfTab = 'explore' | 'dashboard' | 'sips' | 'watchlist';
 
@@ -55,9 +56,9 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
   const statusNote = STATUS_NOTE[state];
 
   // `fund` = the button sits on one fund's detail page (Explore / Watchlist).
-  // There the label is about THAT fund, which the client may not hold, so it
-  // must not say "Invest more" just because they hold some other fund.
-  const InvestCta = ({ full = false, fund = false }: { full?: boolean; fund?: boolean }) => {
+  // There the label is about THAT fund: "Invest more" only when the client
+  // holds it, never just because they hold some other fund.
+  const InvestCta = ({ full = false, fund }: { full?: boolean; fund?: 'held' | 'new' }) => {
     if (state === 'kyc_incomplete') {
       return (
         <PortalButton variant="primary" onClick={() => onNavigate('onboarding')} full={full}>
@@ -74,9 +75,26 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
     }
     if (state === 'not_available' || state === 'demo') return null;
     return (
-      <PortalButton variant="primary" icon={busy ? Loader2 : fund ? undefined : Plus} onClick={onLaunch} disabled={busy} full={full}>
-        {busy ? 'Opening…' : fund ? 'Invest now' : hasData ? 'Invest more' : 'Start investing'}
+      <PortalButton variant="primary" icon={busy ? Loader2 : fund === 'new' ? undefined : Plus} onClick={onLaunch} disabled={busy} full={full}>
+        {busy ? 'Opening…' : fund === 'new' ? 'Invest now' : fund === 'held' || hasData ? 'Invest more' : 'Start investing'}
       </PortalButton>
+    );
+  };
+
+  // Top-right shortcuts. A client picks a fund and invests from its page; these
+  // are for the one who arrives knowing HOW they want to invest. Both open the
+  // investing account — the SIP / one-time choice is made there.
+  const QuickActions = () => {
+    if (gated) return <InvestCta />;
+    return (
+      <>
+        <PortalButton variant="primary" icon={busy ? Loader2 : Repeat} onClick={onLaunch} disabled={busy}>
+          Start a SIP
+        </PortalButton>
+        <PortalButton variant="secondary" icon={Wallet} onClick={onLaunch} disabled={busy}>
+          Invest lumpsum (one-time)
+        </PortalButton>
+      </>
     );
   };
 
@@ -90,7 +108,7 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
   return (
     <div className="space-y-5">
       {/* Groww-style sub-navigation */}
-      <div className="-mt-1 flex items-center justify-between gap-3 border-b border-border">
+      <div className="-mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border">
         <nav className="flex gap-1">
           {tabs.map((t) => (
             <button
@@ -106,8 +124,8 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
             </button>
           ))}
         </nav>
-        <div className="hidden pb-2 sm:block">
-          <InvestCta />
+        <div className="flex flex-wrap items-center gap-2 pb-2">
+          <QuickActions />
         </div>
       </div>
 
@@ -131,11 +149,11 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
           onNavigate={onNavigate}
           onOpenBond={() => onNavigate('bonds')}
           onOpenShare={() => onNavigate('unlisted-shares')}
-          fundInvest={<InvestCta full fund />}
+          fundInvest={(f) => <InvestCta full fund={isFundHeld(f.name, mfHoldings) ? 'held' : 'new'} />}
           fundsOnly
         />
       ) : tab === 'watchlist' ? (
-        <MfWatchlist fundInvest={<InvestCta full fund />} onExplore={() => setTab('explore')} />
+        <MfWatchlist fundInvest={(f) => <InvestCta full fund={isFundHeld(f.name, mfHoldings) ? 'held' : 'new'} />} onExplore={() => setTab('explore')} />
       ) : tab === 'sips' ? (
         <SipsCard sips={data?.sips ?? []} />
       ) : loading && !data ? (

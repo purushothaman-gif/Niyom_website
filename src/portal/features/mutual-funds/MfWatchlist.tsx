@@ -4,9 +4,10 @@ import { useMfCatalog } from '../../hooks/useMfCatalog';
 import { WatchlistTab } from '../../watchlist/Watchlist';
 import { FundCard } from '../explore/cards';
 import { CatalogFundPage } from './explore/CatalogFundPage';
+import type { CatalogFund } from '../../types/funds';
 
 /** Mutual Funds → Watchlist: starred funds, each opening its research page. */
-export function MfWatchlist({ fundInvest, onExplore }: { fundInvest: ReactNode; onExplore: () => void }) {
+export function MfWatchlist({ fundInvest, onExplore }: { fundInvest: (fund: CatalogFund) => ReactNode; onExplore: () => void }) {
   const catalog = useMfCatalog();
   const [open, setOpen] = useState<string | null>(null);
 
@@ -31,7 +32,7 @@ export function MfWatchlist({ fundInvest, onExplore }: { fundInvest: ReactNode; 
         gate={null}
         onBack={() => setOpen(null)}
         onInvest={() => undefined}
-        platformInvest={fundInvest}
+        platformInvest={fundInvest(fund)}
       />
     );
   }

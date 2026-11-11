@@ -18,6 +18,7 @@ import { ExploreHub, type ExploreScreen } from './features/explore/ExploreHub';
 import { WatchlistProvider } from './watchlist/Watchlist';
 import { MarketWatchView } from './features/market/MarketWatchView';
 import { useMfLaunch } from './features/mutual-funds/useMfLaunch';
+import { isFundHeld } from './features/mutual-funds/heldFund';
 import { BondsModule } from './features/bonds/BondsModule';
 import { SharesModule } from './features/shares/SharesModule';
 import { TransactionsPage } from './features/transactions/TransactionsPage';
@@ -192,7 +193,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
     [hasData, snapshot.holdings],
   );
 
-  const fundInvestButton = (
+  const fundInvestButton = (fund: { name: string }) => (
             <button
               type="button"
               onClick={() =>
@@ -210,7 +211,9 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
                 ? 'Complete KYC to invest'
                 : mf.state === 'opening'
                   ? 'Opening…'
-                  : 'Invest now'}
+                  : isFundHeld(fund.name, snapshot.holdings)
+                    ? 'Invest more'
+                    : 'Invest now'}
             </button>
   );
 

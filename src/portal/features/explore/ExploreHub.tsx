@@ -155,7 +155,7 @@ interface Props {
   onOpenBond: (id: string) => void;
   onOpenShare: (id: string) => void;
   /** The invest action shown on a fund page (opens the MF platform). */
-  fundInvest: ReactNode;
+  fundInvest: (fund: CatalogFund) => ReactNode;
   /** Mutual Funds page variant: no self-link to Mutual Funds in the tools list. */
   fundsOnly?: boolean;
   /**
@@ -292,7 +292,7 @@ export function ExploreHub({
           gate={null}
           onBack={() => setScreen({ name: 'home' })}
           onInvest={() => undefined}
-          platformInvest={fundInvest}
+          platformInvest={fundInvest(fund)}
         />
       );
   }
