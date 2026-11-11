@@ -22,6 +22,7 @@ import { dematRouter } from './cas/demat.js';
 import { kycRouter } from './cas/kyc.js';
 import { inboxCallbackRouter, inboxRouter } from './cas/inbox.js';
 import { inboundRouter, inboundWebhookRouter } from './cas/inbound.js';
+import { digilockerCallbackRouter, digilockerRouter } from './cas/digilocker.js';
 import {
   toAppOrderResult,
   toAppScheme,
@@ -258,6 +259,8 @@ mountFeature('/cas/inbox', 'cas_inbox_callback', inboxCallbackRouter(cfg));
 // it only triggers a re-fetch with our key. Other /cas/inbound/* paths fall
 // through to the authed router below.
 mountFeature('/cas/inbound', 'cas_inbound_webhook', inboundWebhookRouter(cfg));
+// Public — DigiLocker redirects the browser here after consent (no session).
+mountFeature('/cas/digilocker', 'cas_digilocker_callback', digilockerCallbackRouter(cfg));
 
 /**
  * Cashfree PAN verification relay. Called server-to-server by the Supabase edge
@@ -648,6 +651,8 @@ mountFeature('/cas/requests', 'cas_requests', casRequestRouter(cfg));
 mountFeature('/cas/demat', 'cas_demat', dematRouter(cfg));
 // KYC (KRA status) + ARN verification for onboarding. Staff-authenticated.
 mountFeature('/cas/kyc', 'cas_kyc', kycRouter(cfg));
+// DigiLocker identity verification (RM-initiated). Staff/own-client authed.
+mountFeature('/cas/digilocker', 'cas_digilocker', digilockerRouter(cfg));
 // Email inbox import (connect / sync / disconnect). The public /callback above
 // is a separate router; these need the client's session.
 mountFeature('/cas/inbox', 'cas_inbox', inboxRouter(cfg));

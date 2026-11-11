@@ -9,6 +9,7 @@ import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships
 import { Search, Eye, Pencil, Trash2, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog, Users } from 'lucide-react';
 import { ClientProfileExtrasModal } from './ClientProfileExtras';
 import { KycCheck } from './KycCheck';
+import { DigilockerCheck } from './DigilockerCheck';
 import { mfSsoEnabled } from '../../shared/platform/env';
 import { clientCodeOrClause } from '../../shared/crm/clientCode';
 
@@ -852,6 +853,9 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                   initialCompliant={editClient.kra_compliant ?? null}
                   checkedAt={editClient.kra_checked_at ?? null}
                 />
+              </div>
+              <div className="col-span-2">
+                <DigilockerCheck clientId={editClient.id} />
               </div>
               <InlineField label="Gender">
                 {/* Required by BSE StAR MF to register a UCC. Existing clients

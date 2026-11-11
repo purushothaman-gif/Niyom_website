@@ -52,6 +52,31 @@ async function post<T>(path: string, body: Record<string, unknown>): Promise<Res
   }
 }
 
+async function get<T>(path: string): Promise<Res<T>> {
+  const base = proxyBaseUrl();
+  if (!base) return { ok: false, error: 'Verification is not configured here.' };
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return { ok: false, error: 'Your session has expired. Please sign in again.' };
+  try {
+    const res = await fetch(`${base}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) return { ok: false, error: (json.error as string) || 'The check could not be completed.' };
+    return { ok: true, data: json as unknown as T };
+  } catch {
+    return { ok: false, error: 'We could not reach the verification service.' };
+  }
+}
+
+export interface DigilockerStatus {
+  status: string; // none | pending | verified | failed
+  name?: string | null;
+  pan?: string | null;
+  aadhaarMasked?: string | null;
+  nameMatch?: boolean | null;
+  verifiedAt?: string | null;
+}
+
 export const KycService = {
   /** Whether KYC/ARN checks are available (the server has a vendor key). */
   async enabled(): Promise<boolean> {
@@ -79,5 +104,22 @@ export const KycService = {
   /** Verify an AMFI ARN before onboarding a partner. Stateless. */
   verifyArn(arn: string): Promise<Res<ArnResult>> {
     return post<ArnResult>('/cas/kyc/arn-verify', { arn });
+  },
+
+  /** Whether DigiLocker verification is available. */
+  async digilockerEnabled(): Promise<boolean> {
+    const r = await get<{ enabled?: boolean }>('/cas/digilocker/mode');
+    return r.ok && r.data.enabled === true;
+  },
+
+  /** Start a DigiLocker session; returns a link to send the client. */
+  startDigilocker(clientId: string): Promise<Res<{ authorizationUrl: string }>> {
+    return post<{ authorizationUrl: string }>('/cas/digilocker/start', { clientId });
+  },
+
+  /** The client's latest DigiLocker verification. */
+  async digilockerStatus(clientId: string): Promise<DigilockerStatus> {
+    const r = await get<DigilockerStatus>(`/cas/digilocker/status?clientId=${encodeURIComponent(clientId)}`);
+    return r.ok ? r.data : { status: 'none' };
   },
 };

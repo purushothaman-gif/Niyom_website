@@ -1671,6 +1671,71 @@ export type Database = {
           },
         ]
       }
+      digilocker_sessions: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          created_by: string | null
+          dl_aadhaar_masked: string | null
+          dl_dob: string | null
+          dl_name: string | null
+          dl_pan: string | null
+          error: string | null
+          id: string
+          name_match: boolean | null
+          result: Json | null
+          session_id: string | null
+          state: string | null
+          status: string
+          updated_at: string | null
+          verified_at: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          created_by?: string | null
+          dl_aadhaar_masked?: string | null
+          dl_dob?: string | null
+          dl_name?: string | null
+          dl_pan?: string | null
+          error?: string | null
+          id?: string
+          name_match?: boolean | null
+          result?: Json | null
+          session_id?: string | null
+          state?: string | null
+          status?: string
+          updated_at?: string | null
+          verified_at?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          dl_aadhaar_masked?: string | null
+          dl_dob?: string | null
+          dl_name?: string | null
+          dl_pan?: string | null
+          error?: string | null
+          id?: string
+          name_match?: boolean | null
+          result?: Json | null
+          session_id?: string | null
+          state?: string | null
+          status?: string
+          updated_at?: string | null
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "digilocker_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "nw_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dsa_debit_note_counters: {
         Row: {
           last_seq: number
