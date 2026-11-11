@@ -8,6 +8,7 @@ import { ProductAccessEditor } from './ProductAccess';
 import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
 import { Search, Eye, Pencil, Trash2, Download, X, CheckCircle2, AlertCircle, Filter, FolderOpen, KeyRound, ShieldCheck, ShieldOff, Handshake, ArrowRight, Landmark, Star, Plus, UserCog, Users } from 'lucide-react';
 import { ClientProfileExtrasModal } from './ClientProfileExtras';
+import { KycCheck } from './KycCheck';
 import { mfSsoEnabled } from '../../shared/platform/env';
 import { clientCodeOrClause } from '../../shared/crm/clientCode';
 
@@ -843,6 +844,15 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                   className="w-full px-3 py-2 rounded-xl text-sm text-text-primary outline-none" style={inputStyle} />
                 <EditDupWarn msg={editDupWarnings.pan} />
               </InlineField>
+              <div className="col-span-2">
+                <KycCheck
+                  clientId={editClient.id}
+                  pan={editForm.pan ?? editClient.pan}
+                  initialStatus={editClient.kra_status ?? null}
+                  initialCompliant={editClient.kra_compliant ?? null}
+                  checkedAt={editClient.kra_checked_at ?? null}
+                />
+              </div>
               <InlineField label="Gender">
                 {/* Required by BSE StAR MF to register a UCC. Existing clients
                     predate the field, so it is blank until set here. */}

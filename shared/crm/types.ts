@@ -18,6 +18,12 @@ export interface NWEmployee {
 }
 
 export interface NWClient {
+  // KRA KYC verdict from the KYC PAN Status check (distinct from kyc_status,
+  // which is our own onboarding workflow state). Null until first checked.
+  kra_status?: string | null;
+  kra_compliant?: boolean | null;
+  kra_active?: string | null;
+  kra_checked_at?: string | null;
   id: string;
   client_code: string;
   employee_id: string | null;

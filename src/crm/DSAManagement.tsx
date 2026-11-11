@@ -6,6 +6,7 @@ import { prepareUploadFile } from '../components/PdfPasswordPrompt';
 import { ProductAccessEditor } from './ProductAccess';
 import { NWEmployee, NWDSA, NWDSABankAccount } from './types';
 import { PartnerOnboardLinks } from './PartnerOnboardLinks';
+import { ArnCheck } from './ArnCheck';
 import { isPasswordStrong, passwordChecks, passwordError } from '../lib/passwordPolicy';
 import {
   Handshake, Plus, X, Upload, CheckCircle2, AlertCircle,
@@ -709,6 +710,9 @@ export default function DSAManagement({ employee }: Props) {
 
       {/* Partner self-onboarding links (copy-paste) */}
       <PartnerOnboardLinks employee={employee} />
+
+      {/* Verify a partner's ARN before onboarding */}
+      <ArnCheck />
 
       {/* Feedback */}
       {success && (
