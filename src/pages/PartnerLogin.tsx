@@ -311,7 +311,7 @@ export default function PartnerLogin({ onLogin }: Props) {
               ? 'Enter the 4-digit PIN you set on this device.'
               : view === 'forgot'
                 ? (forgotStep === 'pan' ? 'Enter your PAN. We’ll email a 6-digit code.' : forgotStep === 'code' ? 'Enter the 6-digit code from your email.' : 'Choose a new password.')
-                : 'Sign in with your PAN and password to open your book.'}
+                : 'Sign in with your PAN and password to open your workspace.'}
           />
 
           {lockoutMsg && (

@@ -4,8 +4,9 @@
  * Both logins used to carry their own copy of the same two-column layout, and
  * the brand column argued for the product with three generic bullet points.
  * This puts the layout in one place and replaces the bullets with a picture of
- * what is behind the door: a portfolio for a client, an earnings book for a
- * partner.
+ * what is behind the door: a portfolio for a client, a growing client book for
+ * a partner. The partner side talks about growth and tooling, never about
+ * commissions — that is deliberate.
  *
  * The preview figures are illustrative and say so on the card. Everything in
  * the trust strip is a checkable fact (the ARN is the one printed on the site
@@ -13,7 +14,7 @@
  * decorate with claims.
  */
 import type { ReactNode } from 'react';
-import { Home, Loader2, Lock, ShieldCheck, TrendingUp, Users, Wallet } from 'lucide-react';
+import { Home, Loader2, Lock, Share2, ShieldCheck, TrendingUp, UserPlus, Users } from 'lucide-react';
 import { ThemeToggle } from '../../theme/ThemeToggle';
 import { HeroBackground } from '../../components/HeroBackground';
 import { SUPPORT_EMAIL } from '../../../shared/support/contact';
@@ -32,8 +33,8 @@ const COPY: Record<AuthPortal, { label: string; eyebrow: string; headline: strin
   partner: {
     label: 'Partner Portal',
     eyebrow: 'Your business, at a glance',
-    headline: 'Your clients, your book, your payouts',
-    sub: 'Sell bonds and unlisted shares, track every client you sourced, and sign your payout statements.',
+    headline: 'Grow your practice on a tech-first platform',
+    sub: 'Onboard clients digitally, share ready-made offers in a tap, and watch your whole client book in real time.',
   },
 };
 
@@ -340,18 +341,18 @@ function PortfolioPreview() {
 
 function PartnerPreview() {
   const rows = [
-    { icon: Users, label: 'Clients sourced', value: '42 · 37 active' },
-    { icon: Wallet, label: 'Paid to date', value: '₹3,61,130' },
-    { icon: TrendingUp, label: 'Client book value', value: '₹6.8 Cr' },
+    { icon: Users, label: 'Clients on your book', value: '42 · 37 active' },
+    { icon: UserPlus, label: 'Digital onboarding', value: 'From your portal' },
+    { icon: Share2, label: 'Offers ready to share', value: 'Links & images' },
   ];
   return (
     <PreviewCard>
       <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-        Earnings raised this FY
+        Client book value
       </p>
-      <p className="mt-1 font-display text-3xl font-bold tabular-nums text-text-primary">₹4,85,200</p>
-      <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-        Net of TDS · latest statement ready to sign
+      <p className="mt-1 font-display text-3xl font-bold tabular-nums text-text-primary">₹6.8 Cr</p>
+      <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold" style={{ color: '#4FC59A' }}>
+        <TrendingUp className="h-3.5 w-3.5" /> Growing across bonds, funds and unlisted shares
       </p>
       <ul className="mt-4 divide-y" style={{ borderTop: '1px dashed rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.08)' }}>
         {rows.map((r) => (
