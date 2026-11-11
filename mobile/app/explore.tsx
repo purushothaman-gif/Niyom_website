@@ -180,7 +180,7 @@ export default function Explore() {
   return (
     <Screen padded={false} onRefresh={reload} refreshing={snapshotLoading && !!refreshedAt}>
       <View style={gutter}>
-        <ScreenHeader title="Explore" subtitle="Popular bonds, funds and shares." showBack />
+        <ScreenHeader title="Explore" subtitle="Popular bonds, mutual funds and shares." showBack />
       </View>
 
       <View style={{ gap: space[7] }}>
@@ -239,9 +239,9 @@ export default function Explore() {
 
         {showFunds && !mfOnPlatform && (catalog.loading || popFunds.length > 0) ? (
           <Rail
-            title="Popular Funds"
+            title="Popular Mutual Funds"
             icon={Sparkles}
-            more="All funds"
+            more="All mutual funds"
             onMore={() => router.push('/(client)/invest')}
           >
             {catalog.loading ? (

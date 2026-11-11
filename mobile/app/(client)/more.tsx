@@ -68,7 +68,7 @@ const GROUPS: { heading: string; items: Item[] }[] = [
   {
     heading: 'Discover',
     items: [
-      { label: 'Explore', description: 'Popular bonds, funds and shares', icon: Compass, href: '/explore' },
+      { label: 'Explore', description: 'Popular bonds, mutual funds and shares', icon: Compass, href: '/explore' },
       { label: 'Market Watch', description: 'Indices, gold, the rupee and fund movers', icon: Activity, href: '/market-watch' },
       { label: 'Fixed Deposits', description: 'Assured returns', icon: PiggyBank, comingSoon: true, product: 'fixed-deposits' },
       { label: 'Insurance', description: 'Protection for your family', icon: ShieldCheck, comingSoon: true, product: 'insurance' },

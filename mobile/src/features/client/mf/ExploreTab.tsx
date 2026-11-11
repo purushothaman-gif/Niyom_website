@@ -139,7 +139,7 @@ export function ExploreTab({
 
       {/* ---------------------------- Top by 3Y --------------------------- */}
       {popular.length > 0 ? (
-        <Shelf title="Popular funds" onSeeAll={onOpenAll} funds={popular} />
+        <Shelf title="Popular mutual funds" onSeeAll={onOpenAll} funds={popular} />
       ) : null}
 
       {/* ---------------------------- Collections ------------------------- */}

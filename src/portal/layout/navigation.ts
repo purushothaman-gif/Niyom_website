@@ -136,7 +136,7 @@ export const NAV_GROUPS: NavGroup[] = [
         view: 'explore',
         key: 'explore',
         label: 'Explore',
-        description: 'Popular bonds, funds and shares',
+        description: 'Popular bonds, mutual funds and shares',
         icon: Compass,
       },
       {

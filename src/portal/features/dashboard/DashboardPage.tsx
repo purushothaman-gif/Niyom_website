@@ -100,7 +100,7 @@ export function DashboardPage({
           <div className="flex items-end justify-between gap-3">
             <div>
               <h2 className="font-display text-2xl font-bold tracking-tight text-text-primary">Explore</h2>
-              <p className="mt-0.5 text-sm text-text-secondary">Popular bonds, funds and unlisted shares — picked for you.</p>
+              <p className="mt-0.5 text-sm text-text-secondary">Popular bonds, mutual funds and unlisted shares — picked for you.</p>
             </div>
             <button
               type="button"

@@ -318,7 +318,7 @@ export function ExploreHub({
       : []),
     ...(showFunds
       ? fundsOnly
-        ? [{ key: 'all', label: 'Browse all funds', icon: TrendingUp, onClick: () => setScreen({ name: 'all' }) }]
+        ? [{ key: 'all', label: 'Browse all mutual funds', icon: TrendingUp, onClick: () => setScreen({ name: 'all' }) }]
         : [{ key: 'mf', label: 'Mutual Funds', icon: TrendingUp, onClick: () => onNavigate('mutual-funds') }]
       : []),
     { key: 'portfolio', label: 'My Portfolio', icon: LineChart, onClick: () => onNavigate('portfolio') },
@@ -347,7 +347,7 @@ export function ExploreHub({
         )}
 
         {showFunds && (
-          <Rail title="Popular Funds" icon={Sparkles} more="All Mutual Funds" onMore={() => setScreen({ name: 'all' })}>
+          <Rail title="Popular Mutual Funds" icon={Sparkles} more="All Mutual Funds" onMore={() => setScreen({ name: 'all' })}>
             {catalog.loading ? (
               <RailSkeleton />
             ) : (
@@ -387,7 +387,7 @@ export function ExploreHub({
         )}
 
         {!embedded && showFunds && !catalog.loading && funds.length > 0 && (
-          <Rail title="Find a fund" icon={Search}>
+          <Rail title="Find a mutual fund" icon={Search}>
             <label className="flex items-center gap-2 rounded-token-xl border border-border bg-bg-elevated px-4 py-3 shadow-token-card focus-within:border-accent">
               <Search className="h-4 w-4 text-text-faint" />
               <input

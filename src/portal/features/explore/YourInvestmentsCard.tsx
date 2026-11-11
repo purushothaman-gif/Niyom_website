@@ -37,7 +37,7 @@ export function YourInvestmentsCard({
               <Sprout className="h-8 w-8 text-accent" />
             </span>
             <p className="mt-4 font-display text-base font-bold text-text-primary">You haven&rsquo;t invested yet</p>
-            <p className="mt-1 text-xs text-text-secondary">Pick a bond or a fund to get started.</p>
+            <p className="mt-1 text-xs text-text-secondary">Pick a bond or a mutual fund to get started.</p>
           </div>
         ) : (
           <>
