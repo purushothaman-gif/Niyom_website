@@ -10,6 +10,7 @@
 
 import type { CsvTable } from './csv.ts';
 import type { RtaSipStage } from './wbr49.ts';
+import { normalizeSipFrequency, normalizeSipPlan } from './sipNormalize.ts';
 
 const txt = (s: string | undefined): string | null => (s && s.trim() ? s.trim() : null);
 
@@ -100,9 +101,9 @@ export function parseKfSip(table: CsvTable, registrar = 'KFINTECH', snapshotDate
       amc_code: txt(row['Fund Code']),
       holder_name: txt(row['Investor Name']),
       pan: pan(row.PAN),
-      txn_type: txt(row.Trtype) ?? txt(row.SipType),
+      txn_type: normalizeSipPlan(txt(row.Trtype) ?? txt(row.SipType)),
       amount: num(row.Amount),
-      frequency: txt(row.Frequency),
+      frequency: normalizeSipFrequency(row.Frequency),
       sip_day: null, // WSREG carries no explicit mandate day
       payment_mode: txt(row['SIP Mode']),
       from_date,

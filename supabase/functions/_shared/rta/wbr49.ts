@@ -11,6 +11,7 @@
 // an STP target. Every other field we read has a unique name.
 
 import { dbfDate, dbfNumber, type DbfTable } from './dbf.ts';
+import { normalizeSipFrequency, normalizeSipPlan } from './sipNormalize.ts';
 
 export interface RtaSipStage {
   registrar: string;
@@ -119,9 +120,9 @@ export function parseWbr49(table: DbfTable, registrar = 'CAMS', snapshotDate: st
       amc_code: txt(row.AMC_CODE),
       holder_name: txt(row.INV_NAME),
       pan: pan(row.PAN),
-      txn_type: txt(row.AUT_TRNTYP),
+      txn_type: normalizeSipPlan(row.AUT_TRNTYP),
       amount: dbfNumber(row.AUTO_AMOUN),
-      frequency: txt(row.PERIODICIT),
+      frequency: normalizeSipFrequency(row.PERIODICIT),
       sip_day: txt(row.PERIOD_DAY),
       payment_mode: txt(row.PAYMENT_MO),
       from_date,

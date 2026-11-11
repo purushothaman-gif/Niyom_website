@@ -8,7 +8,6 @@ import { PartnerService } from '../../services/PartnerService';
 import { OnboardClientModal } from './OnboardClientModal';
 import { mfSsoEnabled } from '../../../../shared/platform/env';
 import { fromPartnerHoldings } from '../../../../shared/portal/investments/model';
-import { sipFrequencyLabel, sipPlanLabel } from '../../../../shared/mf/sipLabels';
 import { InvestmentsBoard } from '../../../portal/features/investments/InvestmentsBoard';
 import { useInvestmentRows } from '../../../portal/features/investments/useInvestmentRows';
 import type {
@@ -271,7 +270,7 @@ function ClientRow({
                               )}
                             </td>
                             <td className="py-2.5 pr-3">
-                              <span className="text-text-secondary">{sipPlanLabel(s.txn_type)}</span>
+                              <span className="text-text-secondary">{s.txn_type || 'SIP'}</span>
                               {s.sip_day && (
                                 <p className="text-[11px] text-text-faint">Day {s.sip_day}</p>
                               )}
@@ -280,7 +279,7 @@ function ClientRow({
                               {s.amount != null ? fmt(Number(s.amount)) : '—'}
                             </td>
                             <td className="py-2.5 pr-3 text-text-secondary">
-                              {sipFrequencyLabel(s.frequency) || '—'}
+                              {s.frequency || '—'}
                             </td>
                             <td className="py-2.5">
                               <StatusPill tone={sipStatusTone(s.status)}>

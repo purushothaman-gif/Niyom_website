@@ -46,7 +46,7 @@ describe('parseKfSip', () => {
     const s = parseKfSip(table([row(base)]), 'KFINTECH', '2026-11-03')[0];
     expect(s).toMatchObject({
       registrar: 'KFINTECH', folio: '1234567890', scheme_code: 'ACB', amc_code: '128',
-      sip_ref: '1234567890|ACB|778899', txn_type: 'SIP', amount: 5000, frequency: 'MONTHLY',
+      sip_ref: '1234567890|ACB|778899', txn_type: 'SIP', amount: 5000, frequency: 'Monthly',
       pan: 'ABCPR1234F', from_date: '2026-01-05', to_date: '2031-01-05', reg_date: '2025-12-20',
       bank: 'HDFC BANK', status: 'active', target_scheme_code: null,
     });

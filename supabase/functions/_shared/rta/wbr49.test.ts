@@ -36,7 +36,7 @@ describe('parseWbr49', () => {
     const s = sips[0];
     expect(s).toMatchObject({
       registrar: 'CAMS', folio: '91234567 / 0', scheme_code: 'B123', sip_ref: '55501',
-      txn_type: 'SIP', amount: 5000, frequency: 'MONTH', sip_day: '5', pan: 'ABCPR1234F',
+      txn_type: 'SIP', amount: 5000, frequency: 'Monthly', sip_day: '5', pan: 'ABCPR1234F',
       from_date: '2026-01-05', to_date: '2031-01-05', reg_date: '2025-12-20',
       top_up_amount: 500, amc_code: 'B', status: 'active', snapshot_date: '2026-11-03',
     });
