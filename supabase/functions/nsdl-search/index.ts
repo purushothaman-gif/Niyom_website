@@ -104,18 +104,27 @@ Deno.serve(async (req: Request) => {
     if (!supabaseUrl || !supabaseKey) throw new Error("Missing Supabase environment variables");
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // --- 1) Cache-first ------------------------------------------------------
+    // --- 1) Cache-first (+ our own masters, in parallel) ---------------------
     const esc = escapeLike(query);
     let cacheQ = supabase.from("nsdl_securities").select("isin,name,security_name,security_type,isin_status,nsdl_id");
     cacheQ = mode === "isin"
       ? cacheQ.ilike("isin", `${esc}%`)
       : cacheQ.or(`name.ilike.%${esc}%,security_name.ilike.%${esc}%`);
-    const { data: cached, error: cacheErr } = await cacheQ.limit(limit);
+    const [{ data: cached, error: cacheErr }, masters] = await Promise.all([
+      cacheQ.limit(limit),
+      searchMasters(supabase, mode, esc, limit),
+    ]);
     if (cacheErr) throw cacheErr;
 
     if (cached && cached.length > 0) {
-      const results = (cached as Security[]).sort(activeFirst);
+      const results = withMasters((cached as Security[]).sort(activeFirst), masters);
       return json({ results, source: "cache", count: results.length }, 200);
+    }
+
+    // A full ISIN we hold in our own master needs no NSDL round-trip (NSDL's
+    // directory doesn't list every ISIN, so this would miss on every keystroke).
+    if (mode === "isin" && masters.some((m) => m.isin === query)) {
+      return json({ results: masters, source: "master", count: masters.length }, 200);
     }
 
     // --- 2) Cache miss → NSDL live ------------------------------------------
@@ -129,6 +138,7 @@ Deno.serve(async (req: Request) => {
     } catch (err) {
       // Upstream down and nothing cached — degrade softly so the form stays usable.
       await logUpdate(supabase, "error", 0, `nsdl fetch failed: ${(err as Error).message}`);
+      if (masters.length > 0) return json({ results: masters, source: "master", count: masters.length }, 200);
       return json({ results: [], source: "degraded", count: 0 }, 200);
     }
 
@@ -148,13 +158,71 @@ Deno.serve(async (req: Request) => {
 
     await logUpdate(supabase, "success", mapped.length, null);
 
-    const results = mapped.sort(activeFirst);
-    return json({ results, source: "nsdl", count: results.length }, 200);
+    const results = withMasters(mapped.sort(activeFirst), masters);
+    return json({ results, source: mapped.length > 0 ? "nsdl" : (masters.length > 0 ? "master" : "nsdl"), count: results.length }, 200);
   } catch (error) {
     console.error("nsdl-search error:", error);
     return json({ results: [], source: "degraded", error: (error as Error).message }, 500);
   }
 });
+
+// NSDL's public directory does not list every ISIN (e.g. INE926R07076), so a
+// bond or unlisted share we already hold in our own masters must still be
+// findable. security_type carries BOND / EQUITY SHARES so the deal form derives
+// the Product Type exactly as it does for an NSDL pick. isin_status stays blank:
+// it is NSDL's status and we have none for these rows. A master failure must
+// never break the search, so errors degrade to "no master rows".
+async function searchMasters(
+  supabase: ReturnType<typeof createClient>,
+  mode: "name" | "isin",
+  esc: string,
+  limit: number,
+): Promise<Security[]> {
+  try {
+    let bondQ = supabase.from("bm_bonds").select("isin,bond_name,active_status");
+    bondQ = mode === "isin" ? bondQ.ilike("isin", `${esc}%`) : bondQ.ilike("bond_name", `%${esc}%`);
+    let shareQ = supabase.from("us_shares").select("isin,company_name");
+    shareQ = mode === "isin" ? shareQ.ilike("isin", `${esc}%`) : shareQ.ilike("company_name", `%${esc}%`);
+
+    const [bonds, shares] = await Promise.all([
+      bondQ.order("active_status", { ascending: true }).limit(limit),
+      shareQ.limit(limit),
+    ]);
+    if (bonds.error) console.error("bm_bonds search error:", bonds.error.message);
+    if (shares.error) console.error("us_shares search error:", shares.error.message);
+
+    const out: Security[] = [];
+    for (const b of (bonds.data ?? []) as { isin: string | null; bond_name: string | null }[]) {
+      const isin = String(b.isin ?? "").trim().toUpperCase();
+      const name = String(b.bond_name ?? "").trim();
+      if (!isin || !name) continue;
+      out.push({ isin, name, security_name: name, security_type: "BOND · Niyom bond master", isin_status: "", nsdl_id: "bm" });
+    }
+    for (const s of (shares.data ?? []) as { isin: string | null; company_name: string | null }[]) {
+      const isin = String(s.isin ?? "").trim().toUpperCase();
+      const name = String(s.company_name ?? "").trim();
+      if (!isin || !name) continue;
+      out.push({ isin, name, security_name: name, security_type: "EQUITY SHARES · Niyom unlisted master", isin_status: "", nsdl_id: "us" });
+    }
+    return out;
+  } catch (err) {
+    console.error("master search error:", (err as Error).message);
+    return [];
+  }
+}
+
+// Master rows NSDL doesn't know about go first (they are our own inventory);
+// where NSDL has the same ISIN its row wins, since it carries the live status.
+function withMasters(nsdl: Security[], masters: Security[]): Security[] {
+  const seen = new Set(nsdl.map((r) => r.isin));
+  const extras: Security[] = [];
+  for (const m of masters) {
+    if (seen.has(m.isin)) continue;
+    seen.add(m.isin);
+    extras.push(m);
+  }
+  return [...extras, ...nsdl];
+}
 
 function json(payload: unknown, status: number): Response {
   return new Response(JSON.stringify(payload), {
