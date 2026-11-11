@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, Hourglass, Loader2, Plus, ShieldCheck, TrendingUp } from 'lucide-react';
+import { ChevronRight, Hourglass, Loader2, Plus, Repeat, ShieldCheck, TrendingUp, Wallet } from 'lucide-react';
 import { PortalButton } from '../../ui/kit';
 import { fromClientHoldings } from '../../../../shared/portal/investments/model';
 import { InvestmentsBoard } from '../investments/InvestmentsBoard';
@@ -88,8 +88,6 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'sips', label: 'SIPs' },
     { key: 'watchlist', label: 'Watchlist' },
-    { key: 'start-sip', label: 'Start a SIP' },
-    { key: 'lumpsum', label: 'Invest lumpsum (one-time)' },
   ];
 
   return (
@@ -111,11 +109,15 @@ export function MfLaunchPage({ clientId, state, onLaunch, onNavigate, holdings =
             </button>
           ))}
         </nav>
-        {gated && (
-          <div className="pb-2">
-            <InvestCta />
-          </div>
-        )}
+        {/* Not tabs: these open the SIP / lumpsum fund pickers in place. */}
+        <div className="flex flex-wrap items-center gap-2 pb-2">
+          <PortalButton variant={tab === 'lumpsum' ? 'secondary' : 'primary'} icon={Repeat} onClick={() => setTab('start-sip')}>
+            Start a SIP
+          </PortalButton>
+          <PortalButton variant={tab === 'lumpsum' ? 'primary' : 'secondary'} icon={Wallet} onClick={() => setTab('lumpsum')}>
+            Invest lumpsum (one-time)
+          </PortalButton>
+        </div>
       </div>
 
       {statusNote && (
