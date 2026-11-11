@@ -4,10 +4,16 @@
  * ## What a request is, and what it is not
  *
  * A row in `cas_requests` records that a client set out to import a statement:
- * which period, to which email, at what time. It does NOT mean we asked CAMS for
- * anything, and this module contains no code that could.
+ * which period, to which email, at what time. By default it does NOT mean we
+ * asked CAMS for anything.
  *
- * That is a regulatory boundary, not an unfinished feature. CAMS publishes no
+ * One exception, added 2026-11-11 and off unless configured: when the client
+ * has agreed to the v2 consent wording, the request is placed for them through
+ * a vendor's mailback API (see generator.ts). This module still never drives
+ * the registrar's website, and the statement is still emailed only to the
+ * investor.
+ *
+ * The background that made the guided flow the default: CAMS publishes no
  * distributor-facing CAS API; MF Central's was withdrawn from third-party apps
  * by AMFI in September 2025; and the Account Aggregator route requires the
  * requesting entity to be regulated by RBI/SEBI/IRDAI/PFRDA, which an AMFI ARN
@@ -27,6 +33,19 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import type { ProxyConfig } from '../config.js';
 import { CasError, sbInsert, sbPatch, sbSelect } from './db.js';
 import { randomUUID } from 'node:crypto';
+import { isAcceptablePassword, mailbackEnabled, requestCasMailback } from './generator.js';
+
+/**
+ * Consent wording versions. v1 says the client requests the statement
+ * themselves; v2 says we place the request for them through a service
+ * provider. An automatic request is only ever made against v2 — the version is
+ * what proves the client was told.
+ */
+const POLICY_GUIDED = 'v1';
+const POLICY_AUTO = 'v2';
+
+/** Requests per client per rolling day once we are the ones placing them. */
+const MAX_AUTO_PER_DAY = 4;
 
 /**
  * How long we wait before treating a statement as lost.
@@ -139,6 +158,14 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
   const router = Router();
 
   /**
+   * Whether this server can place requests itself. Asked before the consent
+   * screen, because which wording the client must be shown depends on it.
+   */
+  router.get('/mode', (_req: Request, res: Response) => {
+    res.json({ autoSubmit: mailbackEnabled(cfg), policyVersion: mailbackEnabled(cfg) ? POLICY_AUTO : POLICY_GUIDED });
+  });
+
+  /**
    * Start a request.
    *
    * Returns the exact values the client must enter on the CAMS form, taken from
@@ -153,6 +180,10 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
         email?: string;
         statementFrom?: string;
         consents?: string[];
+        /** The wording the client was shown. Only 'v2' permits an automatic request. */
+        policyVersion?: string;
+        /** One-time PDF password, generated in the browser. Never stored. */
+        password?: string;
       };
       const clientId = callerClientId(req, body.clientId);
 
@@ -193,6 +224,41 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
       const fromDate = body.statementFrom ?? EARLIEST_FROM;
       const toDate = now.toISOString().slice(0, 10);
 
+      /*
+       * Automatic only when all three hold: the server is configured for it,
+       * the client was shown the wording that says we will do it, and there is
+       * a usable password. Anything less quietly stays guided — an older app
+       * build that knows nothing of this keeps working exactly as before.
+       */
+      const password = typeof body.password === 'string' ? body.password : '';
+      const auto =
+        mailbackEnabled(cfg) && body.policyVersion === POLICY_AUTO && password.length > 0;
+      if (auto && !isAcceptablePassword(password)) {
+        throw new CasError('That password does not meet the registrar’s rules.', 400);
+      }
+      if (auto && !/^\d{4}-\d{2}-\d{2}$/.test(fromDate)) {
+        throw new CasError('That start date is not valid.', 400);
+      }
+      if (auto) {
+        /*
+         * Each automatic request costs money and sends a registrar email to
+         * whatever address was typed. A client retrying a wrong address needs a
+         * few goes; nobody needs more than that in a day.
+         */
+        const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+        const recent = await sbSelect<{ id: string }>(
+          cfg,
+          `cas_requests?select=id&client_id=eq.${encodeURIComponent(clientId)}` +
+            `&created_at=gte.${encodeURIComponent(since)}&limit=${MAX_AUTO_PER_DAY}`,
+        );
+        if (recent.length >= MAX_AUTO_PER_DAY) {
+          throw new CasError(
+            'You have requested a statement several times today. Please try again tomorrow, or ask your relationship manager for help.',
+            429,
+          );
+        }
+      }
+
       await sbInsert(cfg, 'cas_requests', [
         {
           id: requestId,
@@ -202,7 +268,8 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
           statement_from: fromDate,
           statement_to: toDate,
           statement_type: 'detailed',
-          folio_listing: FOLIO_LISTING.key,
+          // The vendor API has no folio-listing option; do not claim one.
+          folio_listing: auto ? 'vendor_default' : FOLIO_LISTING.key,
           expected_by: new Date(now.getTime() + EXPECTED_WITHIN_MS).toISOString(),
           created_by: req.caller?.kind === 'staff' ? (req.caller.employeeId ?? null) : null,
         },
@@ -222,17 +289,42 @@ export function casRequestRouter(cfg: ProxyConfig): Router {
           request_id: requestId,
           consent_type,
           granted: true,
-          policy_version: 'v1',
+          policy_version: auto ? POLICY_AUTO : POLICY_GUIDED,
           ip: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ?? req.ip ?? null,
           user_agent: String(req.headers['user-agent'] ?? '').slice(0, 500),
-          evidence: { surface: 'portal_import_wizard' },
+          evidence: {
+            surface: 'portal_import_wizard',
+            channel: auto ? 'vendor_mailback' : 'guided_form',
+          },
         })),
       );
+
+      if (auto) {
+        try {
+          await requestCasMailback(cfg, {
+            email: requestedEmail,
+            pan: client.pan,
+            fromDate,
+            toDate,
+            password,
+          });
+        } catch (err) {
+          // Nothing is on its way, so the request must not sit there looking
+          // as though something is.
+          await sbPatch(cfg, `cas_requests?id=eq.${requestId}`, {
+            status: 'failed',
+            failure_reason: 'Automatic request was not accepted.',
+          }).catch(() => undefined);
+          throw err;
+        }
+      }
 
       res.json({
         requestId,
         status: 'awaiting_statement',
         expectedBy: new Date(now.getTime() + EXPECTED_WITHIN_MS).toISOString(),
+        /** True when we placed the request; the client has nothing to fill in. */
+        submitted: auto,
         /*
          * What to enter on the CAMS form, in the form's own field order and
          * using its own labels. Sent from the server so the choices that decide

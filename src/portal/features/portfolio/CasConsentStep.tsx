@@ -3,6 +3,7 @@ import { ArrowRight, Check, Lock } from 'lucide-react';
 import {
   CONSENT_COPY,
   IMPORT_CONSENTS,
+  consentCopy,
   hasRequiredConsents,
   type ConsentType,
 } from '../../types/consent';
@@ -21,7 +22,10 @@ import {
 export function CasConsentStep({
   onContinue,
   onClose,
+  autoSubmit = false,
 }: {
+  /** True when we place the request for the client — changes what they agree to. */
+  autoSubmit?: boolean;
   onContinue: (granted: ConsentType[]) => void;
   onClose: () => void;
 }) {
@@ -43,7 +47,7 @@ export function CasConsentStep({
 
       <ul className="space-y-2.5">
         {IMPORT_CONSENTS.map((c) => {
-          const { label, detail, required } = CONSENT_COPY[c];
+          const { label, detail, required } = consentCopy(c, autoSubmit);
           const on = granted.includes(c);
           return (
             <li key={c}>

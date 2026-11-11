@@ -64,7 +64,15 @@ export interface CasRequestCreated {
   requestId: string;
   status: CasRequestStatus;
   expectedBy: string;
+  /** True when the server placed the request; there is no form to fill in. */
+  submitted?: boolean;
   form: CasFormGuidance;
+}
+
+/** Whether the server places requests itself, and the consent wording that goes with it. */
+export interface CasRequestMode {
+  autoSubmit: boolean;
+  policyVersion: string;
 }
 
 export type CasRequestResponse =
@@ -83,6 +91,31 @@ async function authHeaders(): Promise<Record<string, string> | null> {
 
 export const CasRequestService = {
   /**
+   * Can the server place the request for the client?
+   *
+   * Asked before the consent screen because the answer decides which wording
+   * the client must be shown. Any failure reads as "no": the guided flow is the
+   * safe default, and it never promises something we then do not do.
+   */
+  async mode(): Promise<CasRequestMode> {
+    const guided: CasRequestMode = { autoSubmit: false, policyVersion: 'v1' };
+    const baseUrl = proxyBaseUrl();
+    if (!baseUrl) return guided;
+    const headers = await authHeaders();
+    if (!headers) return guided;
+    try {
+      const res = await fetch(`${baseUrl}/cas/requests/mode`, { headers });
+      if (!res.ok) return guided;
+      const body = (await res.json()) as Partial<CasRequestMode>;
+      return body.autoSubmit === true
+        ? { autoSubmit: true, policyVersion: String(body.policyVersion ?? 'v2') }
+        : guided;
+    } catch {
+      return guided;
+    }
+  },
+
+  /**
    * Begin a tracked request.
    *
    * `email` is worth letting the client override even though we hold one: a CAS
@@ -93,6 +126,13 @@ export const CasRequestService = {
   async start(args: {
     email: string;
     consents: ConsentType[];
+    /** The consent wording the client was shown. Omitted = v1 (guided). */
+    policyVersion?: string;
+    /**
+     * One-time PDF password. Sent only so the server can pass it on when it
+     * places the request itself; it is not stored there.
+     */
+    password?: string;
   }): Promise<CasRequestResponse> {
     const baseUrl = proxyBaseUrl();
     if (!baseUrl) return { ok: false, error: 'Portfolio import is not enabled here yet.' };
@@ -103,7 +143,12 @@ export const CasRequestService = {
       const res = await fetch(`${baseUrl}/cas/requests`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ email: args.email, consents: args.consents }),
+        body: JSON.stringify({
+          email: args.email,
+          consents: args.consents,
+          ...(args.policyVersion ? { policyVersion: args.policyVersion } : {}),
+          ...(args.password ? { password: args.password } : {}),
+        }),
       });
       const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) {

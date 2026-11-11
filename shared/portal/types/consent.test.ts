@@ -11,6 +11,8 @@ import {
   CONSENT,
   CONSENT_COPY,
   CONSENT_POLICY_VERSION,
+  CONSENT_POLICY_VERSION_AUTO,
+  consentCopy,
   IMPORT_CONSENTS,
   hasRequiredConsents,
   requiredConsents,
@@ -70,5 +72,24 @@ describe('consent copy', () => {
     // The temp-storage consent is the one making a promise about our own
     // behaviour, so it must actually say what we do.
     expect(CONSENT_COPY[CONSENT.tempStorage].detail.toLowerCase()).toContain('never stored');
+  });
+});
+
+describe('automatic-request wording', () => {
+  it('is a separate policy version from the guided wording', () => {
+    // v1 says "you will request it yourself". A consent stored as v1 must never
+    // be read as agreement to us placing the request.
+    expect(CONSENT_POLICY_VERSION_AUTO).toMatch(/^v\d+$/);
+    expect(CONSENT_POLICY_VERSION_AUTO).not.toBe(CONSENT_POLICY_VERSION);
+  });
+
+  it('changes only the request consent, and says who the data goes to', () => {
+    const auto = consentCopy(CONSENT.casRequest, true);
+    expect(auto).not.toEqual(CONSENT_COPY[CONSENT.casRequest]);
+    expect(auto.required).toBe(true);
+    expect(auto.detail.toLowerCase()).toContain('service provider');
+    expect(auto.detail).toContain('PAN');
+    expect(consentCopy(CONSENT.casRequest, false)).toEqual(CONSENT_COPY[CONSENT.casRequest]);
+    expect(consentCopy(CONSENT.tempStorage, true)).toEqual(CONSENT_COPY[CONSENT.tempStorage]);
   });
 });

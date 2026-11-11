@@ -74,6 +74,29 @@ export const CONSENT_COPY: Record<ConsentType, ConsentCopy> = {
   },
 };
 
+/**
+ * The wording used when WE place the statement request for the client, through
+ * a service provider, instead of sending them to the registrar's website.
+ *
+ * It is a different promise from v1's "you will request it yourself", so it is
+ * a different policy version rather than an edit: a v1 row must keep meaning
+ * what it said. Which one a client sees depends on whether the server can place
+ * requests (`CasRequestService.mode`), and the version travels with the request
+ * so the stored consent names the text that was actually on screen.
+ */
+export const CONSENT_POLICY_VERSION_AUTO = 'v2';
+
+export const CAS_REQUEST_AUTO_COPY: ConsentCopy = {
+  label: 'Request my statement for me',
+  detail:
+    'We place the request with the registrar on your behalf through our service provider, sharing your email address, PAN and a one-time file password with them. The statement is emailed only to you.',
+  required: true,
+};
+
+/** The copy for a consent under a given mode — only the request differs. */
+export const consentCopy = (type: ConsentType, autoSubmit: boolean): ConsentCopy =>
+  autoSubmit && type === CONSENT.casRequest ? CAS_REQUEST_AUTO_COPY : CONSENT_COPY[type];
+
 /** The consents the import wizard asks for, in the order they are shown. */
 export const IMPORT_CONSENTS: ConsentType[] = [
   CONSENT.casRequest,

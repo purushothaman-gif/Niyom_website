@@ -18,6 +18,7 @@ export function CasRequestStep({
   form,
   email,
   password,
+  autoSubmit = false,
   onEmailChange,
   onSubmitted,
   onBack,
@@ -28,6 +29,8 @@ export function CasRequestStep({
   email: string;
   /** Generated for this request; blank if the client must choose their own. */
   password: string;
+  /** True when we place the request ourselves; the form screen is never shown. */
+  autoSubmit?: boolean;
   onEmailChange: (v: string) => void;
   onSubmitted: () => void;
   onBack: () => void;
@@ -52,6 +55,8 @@ export function CasRequestStep({
       <div className="space-y-5 p-6">
         <p className="text-sm leading-relaxed text-text-muted">
           Which email address are your mutual funds registered against?
+          {autoSubmit &&
+            ' We will request a detailed statement for you, and the registrar will email it to this address.'}
         </p>
         <div className="flex items-start gap-2 rounded-token-md border border-accent/15 bg-accent/5 p-3">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
@@ -96,7 +101,7 @@ export function CasRequestStep({
             style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Continue
+            {autoSubmit ? (busy ? 'Sending request…' : 'Send CAS request') : 'Continue'}
           </button>
         </div>
       </div>

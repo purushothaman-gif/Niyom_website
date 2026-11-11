@@ -15,7 +15,7 @@ import {
   type CasFormGuidance,
   type CasRequest,
 } from '../../services/CasRequestService';
-import type { ConsentType } from '../../types/consent';
+import { CONSENT_POLICY_VERSION_AUTO, type ConsentType } from '../../types/consent';
 import { casPasswordStore, generateCasPassword } from '../../../../shared/portal/services/casPassword';
 import { CasConsentStep } from './CasConsentStep';
 import { CasRequestStep } from './CasRequestStep';
@@ -87,6 +87,13 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
    * chose their own on the CAMS page.
    */
   const [generated, setGenerated] = useState('');
+  /**
+   * Whether the server will place the request for the client. Decided before
+   * the consent screen is read, because it changes what they are agreeing to;
+   * false until we hear otherwise, since the guided flow promises nothing we
+   * might not do.
+   */
+  const [autoSubmit, setAutoSubmit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [outcome, setOutcome] = useState<CasImportOutcome | null>(null);
@@ -105,6 +112,10 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
    */
   useEffect(() => {
     let alive = true;
+    void CasRequestService.mode().then((m) => {
+      // Never flip the wording under someone who is already past consent.
+      if (alive && !navigated.current) setAutoSubmit(m.autoSubmit);
+    });
     void Promise.all([CasImportService.listImports(), CasRequestService.latest()]).then(
       ([rows, latest]) => {
         if (!alive) return;
@@ -132,16 +143,23 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
   const startRequest = async () => {
     setError('');
     setBusy(true);
-    const r = await CasRequestService.start({ email: email.trim(), consents });
+    // Generated here, in the browser, and remembered for this tab only. In the
+    // guided flow the client pastes it into the CAMS form; when we place the
+    // request it travels with it. Either way they never type it again.
+    const pw = generateCasPassword();
+    const r = await CasRequestService.start({
+      email: email.trim(),
+      consents,
+      ...(autoSubmit ? { policyVersion: CONSENT_POLICY_VERSION_AUTO, password: pw } : {}),
+    });
     setBusy(false);
     if (!r.ok) return setError(r.error);
-    setForm(r.request.form);
-    // Generated here, in the browser, and remembered for this tab only: the
-    // client pastes it into the CAMS form now and never types it again.
-    const pw = generateCasPassword();
     setGenerated(pw);
     setPassword(pw);
     casPasswordStore.save(r.request.requestId, pw);
+    // Placed for them: there is no form to show, only the wait.
+    const placed = r.request.submitted === true;
+    if (!placed) setForm(r.request.form);
     setRequest({
       requestId: r.request.requestId,
       status: r.request.status,
@@ -154,6 +172,7 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
       createdAt: new Date().toISOString(),
       completedAt: null,
     });
+    if (placed) goTo('awaiting');
   };
 
   const submit = async () => {
@@ -190,6 +209,7 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
 
         {step === 'consent' && (
           <CasConsentStep
+            autoSubmit={autoSubmit}
             onContinue={(granted) => {
               setConsents(granted);
               goTo('request');
@@ -203,6 +223,7 @@ export function ImportPortfolioModal({ onClose, onImported }: Props) {
             form={form}
             email={email}
             password={generated}
+            autoSubmit={autoSubmit}
             onEmailChange={setEmail}
             busy={busy}
             error={error}

@@ -95,6 +95,12 @@ export interface ProxyConfig {
   cashfreePgSecret: string | null;
   cashfreePgEnv: 'production' | 'sandbox';
   cashfreePgApiVersion: string;
+  /* --- CASParser CAS Generator (automatic CAS mailback requests). Optional:
+   * with no key the /cas/requests route only ever returns the guided form.
+   * See cas/generator.ts for what is and is not sent. */
+  casparserApiKey: string | null;
+  /** Which registrar sends the mailback. Either covers both RTAs. */
+  casparserAuthority: 'cams' | 'kfintech';
 }
 
 export function loadConfig(): ProxyConfig {
@@ -149,5 +155,10 @@ export function loadConfig(): ProxyConfig {
         ? 'production'
         : 'sandbox',
     cashfreePgApiVersion: process.env.CASHFREE_API_VERSION?.trim() || '2022-09-01',
+    casparserApiKey: process.env.CASPARSER_API_KEY?.trim() || null,
+    casparserAuthority:
+      (process.env.CASPARSER_AUTHORITY ?? '').trim().toLowerCase() === 'kfintech'
+        ? 'kfintech'
+        : 'cams',
   };
 }
