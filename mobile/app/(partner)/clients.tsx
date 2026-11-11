@@ -10,7 +10,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
-import { Search, Users } from 'lucide-react-native';
+import { Search, UserPlus, Users } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { fmt } from '@shared/crm/utils';
 import { PartnerService } from '@shared/partner/services/PartnerService';
@@ -23,6 +23,8 @@ import { Card } from '@/ui/Card';
 import { Text } from '@/ui/Text';
 import { Delta } from '@/ui/Money';
 import { Input } from '@/ui/Input';
+import { Button } from '@/ui/Button';
+import { InviteImportCard } from '@/features/partner/onboard/InviteImportCard';
 import { EmptyState, ErrorState, KpiStat, SkeletonScreen, StatusPill } from '@/ui/kit';
 
 export default function PartnerClients() {
@@ -53,6 +55,14 @@ export default function PartnerClients() {
       <ScreenHeader
         title="My Clients"
         subtitle="The clients you have sourced, and how their portfolios are doing."
+        action={
+          <Button
+            label="Onboard"
+            size="sm"
+            icon={UserPlus}
+            onPress={() => router.push('/partner-onboard-client')}
+          />
+        }
       />
 
       {loading && !data ? (
@@ -63,7 +73,7 @@ export default function PartnerClients() {
         <EmptyState
           icon={Users}
           title="No clients yet"
-          message="Clients you introduce to Niyom will appear here once they are onboarded."
+          message="Onboard your first client with their PAN, or pass a prospect to your RM as a lead."
         />
       ) : (
         <View style={{ gap: space[5] }}>
@@ -90,6 +100,8 @@ export default function PartnerClients() {
             autoCorrect={false}
             returnKeyType="search"
           />
+
+          <InviteImportCard />
 
           {clients.length === 0 ? (
             <EmptyState icon={Search} title="No matches" message="Nothing matches that search." />

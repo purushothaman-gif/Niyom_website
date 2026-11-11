@@ -26,7 +26,14 @@ import { Text } from '@/ui/Text';
 import { Button } from '@/ui/Button';
 import { Input } from '@/ui/Input';
 
-const PRODUCTS = ['Mutual Funds', 'Bonds', 'Fixed Deposits', 'Insurance', 'Not sure yet'];
+const PRODUCTS = [
+  'Mutual Funds',
+  'Bonds',
+  'Unlisted Shares',
+  'Fixed Deposits',
+  'Insurance',
+  'Not sure yet',
+];
 
 export default function PartnerSubmitLead() {
   const p = usePalette();

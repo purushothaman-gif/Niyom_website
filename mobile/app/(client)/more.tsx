@@ -10,8 +10,10 @@
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import {
+  Activity,
   ArrowLeftRight,
   Bell,
+  Compass,
   FileText,
   FolderClosed,
   Gem,
@@ -28,6 +30,8 @@ import {
 import { space } from '@/design/tokens';
 import { usePalette } from '@/design/ThemeProvider';
 import { useAuth } from '@/features/auth/AuthContext';
+import { useProductAccess } from '@/features/client/useProductAccess';
+import type { ProductKey } from '@shared/lib/productAccess';
 import { Screen } from '@/ui/Screen';
 import { Card } from '@/ui/Card';
 import { Text } from '@/ui/Text';
@@ -41,6 +45,8 @@ interface Item {
   icon: LucideIcon;
   href?: string;
   comingSoon?: boolean;
+  /** Hidden when an admin or RM has switched this product off for the client. */
+  product?: ProductKey;
 }
 
 const GROUPS: { heading: string; items: Item[] }[] = [
@@ -55,10 +61,17 @@ const GROUPS: { heading: string; items: Item[] }[] = [
   {
     heading: 'Invest',
     items: [
-      { label: 'Bonds', description: 'Fixed income, at your approved pricing', icon: Landmark, href: '/bonds' },
-      { label: 'Fixed Deposits', description: 'Assured returns', icon: PiggyBank, comingSoon: true },
-      { label: 'Insurance', description: 'Protection for your family', icon: ShieldCheck, comingSoon: true },
-      { label: 'Alternate Investments', description: 'Unlisted shares and more', icon: Gem, comingSoon: true },
+      { label: 'Bonds', description: 'Fixed income, at your approved pricing', icon: Landmark, href: '/bonds', product: 'bonds' },
+      { label: 'Unlisted Shares', description: 'Pre-IPO and unlisted companies', icon: Gem, href: '/shares', product: 'unlisted-shares' },
+    ],
+  },
+  {
+    heading: 'Discover',
+    items: [
+      { label: 'Explore', description: 'Popular bonds, funds and shares', icon: Compass, href: '/explore' },
+      { label: 'Market Watch', description: 'Indices, gold, the rupee and fund movers', icon: Activity, href: '/market-watch' },
+      { label: 'Fixed Deposits', description: 'Assured returns', icon: PiggyBank, comingSoon: true, product: 'fixed-deposits' },
+      { label: 'Insurance', description: 'Protection for your family', icon: ShieldCheck, comingSoon: true, product: 'insurance' },
     ],
   },
   {
@@ -91,13 +104,18 @@ const GROUPS: { heading: string; items: Item[] }[] = [
 export default function More() {
   const p = usePalette();
   const { signOut } = useAuth();
+  const { isEnabled } = useProductAccess();
+  const groups = GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => !i.product || isEnabled(i.product)),
+  })).filter((g) => g.items.length > 0);
 
   return (
     <Screen tabBarInset>
       <ScreenHeader title="More" />
 
       <View style={{ gap: space[6] }}>
-        {GROUPS.map((group) => (
+        {groups.map((group) => (
           <View key={group.heading}>
             <Text variant="overline" tone="muted" caps style={{ marginBottom: space[3] }}>
               {group.heading}

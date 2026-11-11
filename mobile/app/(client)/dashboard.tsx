@@ -23,6 +23,8 @@ import { fmt, fmtFull, PRODUCT_LABELS } from '@shared/crm/utils';
 import { buildDashboardData } from '@shared/portal/services/dashboardModel';
 import { useClientSnapshot } from '@shared/portal/hooks/useClientSnapshot';
 import { mfSsoEnabled } from '@shared/platform/env';
+import { fromClientHoldings, summarise } from '@shared/portal/investments/model';
+import { useRtaMf } from '@shared/portal/hooks/useRtaMf';
 import { radius, space } from '@/design/tokens';
 import { usePalette, useTheme } from '@/design/ThemeProvider';
 import { useClientId } from '@/features/auth/AuthContext';
@@ -30,10 +32,13 @@ import { SetPinPrompt } from '@/features/client/SetPinPrompt';
 import { Screen } from '@/ui/Screen';
 import { Card } from '@/ui/Card';
 import { Text } from '@/ui/Text';
-import { Money, Delta } from '@/ui/Money';
+import { Money } from '@/ui/Money';
 import { DonutChart, DonutLegend } from '@/ui/DonutChart';
 import { ErrorState, KpiStat, ListRow, SectionHeader, SkeletonScreen, StatusPill } from '@/ui/kit';
 import { GreetingHeader } from '@/features/client/GreetingHeader';
+import { SummaryCard } from '@/features/client/investments/InvestmentsBoard';
+import { ImportHubBanner, SipsCard, TopHoldingsCard } from '@/features/client/investments/DashboardCards';
+import { useInvestmentRows } from '@/features/client/investments/useInvestmentRows';
 
 export default function Dashboard() {
   const clientId = useClientId();
@@ -46,6 +51,13 @@ export default function Dashboard() {
   const hasData = !!refreshedAt;
   const data = useMemo(() => (hasData ? buildDashboardData(snapshot) : null), [hasData, snapshot]);
   const client = snapshot.client;
+  // The board's rows, for the hero totals and the top-holdings card. The
+  // registrar MF is already folded into snapshot.holdings — never re-add it.
+  const baseRows = useMemo(() => fromClientHoldings(snapshot.holdings), [snapshot.holdings]);
+  const { rows } = useInvestmentRows('client', baseRows);
+  const summary = useMemo(() => (rows.length ? summarise(rows) : null), [rows]);
+  // Running SIPs as the registrar reports them — for the SIPs card only.
+  const rta = useRtaMf(mfOnPlatform ? clientId : '');
 
   return (
     <Screen onRefresh={refresh} refreshing={loading && hasData} tabBarInset>
@@ -61,48 +73,43 @@ export default function Dashboard() {
         <ErrorState message={error} onRetry={refresh} />
       ) : data ? (
         <View style={{ gap: space[6] }}>
-          {/* ---------------------------- Net worth --------------------------- */}
-          <Animated.View entering={FadeInDown.duration(420)}>
+          {/* -------------------------- Your investments ---------------------- */}
+          {/*
+            Totals from `summarise(rows)`, the board's own arithmetic: invested
+            and returns cover only holdings whose cost is known, so a
+            registrar-fed fund never drags the return toward an invented 0%.
+          */}
+          {summary ? (
+            <SummaryCard
+              label="Total net worth"
+              summary={summary}
+              xirr={data.xirrPercent}
+              xirrCoverage={data.xirrCoveragePct ?? null}
+              xirrNote={data.xirrNote ?? null}
+              onPress={() => router.push('/(client)/portfolio')}
+            />
+          ) : (
             <Card padding={5}>
               <Text variant="overline" tone="muted" caps>
                 Total net worth
               </Text>
-              <Money
-                value={data.summary.netWorth}
-                variant="moneyLarge"
-                animate
-                style={{ marginTop: space[2] }}
-              />
-              <View style={{ marginTop: space[2] }}>
-                <Delta amount={data.summary.gain} percent={data.summary.gainPercent} variant="bodyMedium" />
-              </View>
-
-              <View
-                style={{
-                  flexDirection: 'row',
-                  gap: space[5],
-                  marginTop: space[5],
-                  paddingTop: space[4],
-                  borderTopWidth: 1,
-                  borderTopColor: p.border.subtle,
-                }}
-              >
-                <Stat label="Invested" value={fmt(data.summary.invested)} />
-                <Stat
-                  label="Returns (XIRR)"
-                  /*
-                   * Null is meaningful here — it means "not enough history",
-                   * which is a different statement from a return of zero.
-                   */
-                  value={
-                    data.xirrPercent == null ? '—' : `${data.xirrPercent >= 0 ? '+' : ''}${data.xirrPercent.toFixed(2)}%`
-                  }
-                  tone={data.xirrPercent == null ? undefined : data.xirrPercent >= 0 ? 'success' : 'danger'}
-                />
-                <Stat label="Holdings" value={String(data.summary.holdingsCount)} />
-              </View>
+              <Money value={0} variant="moneyLarge" style={{ marginTop: space[2] }} />
+              <Text variant="small" tone="muted" style={{ marginTop: space[2] }}>
+                Your investments appear here as soon as they settle.
+              </Text>
             </Card>
-          </Animated.View>
+          )}
+
+          {/*
+            Above the fold on purpose: a client who holds funds or shares
+            elsewhere is looking at a partial portfolio and cannot know it.
+          */}
+          {mfOnPlatform ? null : (
+            <ImportHubBanner
+              compact={snapshot.mfSource === 'cas'}
+              onOpen={() => router.push('/import-portfolio')}
+            />
+          )}
 
           {/* --------------------------- Quick actions ------------------------ */}
           <Animated.View entering={FadeInDown.duration(420).delay(60)}>
@@ -119,6 +126,17 @@ export default function Dashboard() {
               <QuickAction icon={ArrowLeftRight} label="Activity" onPress={() => router.push('/transactions')} />
             </View>
           </Animated.View>
+
+          {/* --------------------------- Top holdings ------------------------- */}
+          {rows.length > 0 ? (
+            <Animated.View entering={FadeInDown.duration(420).delay(90)}>
+              <SectionHeader
+                title="Top holdings"
+                action={{ label: 'View all', onPress: () => router.push('/(client)/portfolio') }}
+              />
+              <TopHoldingsCard rows={rows} onOpen={() => router.push('/(client)/portfolio')} />
+            </Animated.View>
+          ) : null}
 
           {/* ---------------------------- Allocation -------------------------- */}
           {data.summary.allocation.length > 0 ? (
@@ -166,7 +184,16 @@ export default function Dashboard() {
                 </View>
               </Card>
             </Animated.View>
-          ) : data.mutualFunds.folioCount > 0 ? (
+          ) : null}
+
+          {mfOnPlatform && (rta.data?.sips.length ?? 0) > 0 ? (
+            <Animated.View entering={FadeInDown.duration(420).delay(200)}>
+              <SectionHeader title="SIPs" />
+              <SipsCard sips={rta.data?.sips ?? []} onOpen={() => router.push('/(client)/invest')} />
+            </Animated.View>
+          ) : null}
+
+          {mfOnPlatform ? null : data.mutualFunds.folioCount > 0 ? (
             <Animated.View entering={FadeInDown.duration(420).delay(180)}>
               <SectionHeader
                 title="Mutual funds"
@@ -226,6 +253,18 @@ export default function Dashboard() {
             </Animated.View>
           ) : null}
 
+          {!snapshot.historyComplete && !mfOnPlatform ? (
+            <Card weight="surface" padding={4} onPress={() => router.push('/import-portfolio')}>
+              <Text variant="caption" tone="secondary">
+                Your return needs your full investing history. The statement you imported begins part-way
+                through, so anything you bought before that is missing from it.{' '}
+                <Text variant="caption" tone="accent">
+                  Import one from the earliest available date.
+                </Text>
+              </Text>
+            </Card>
+          ) : null}
+
           {/* --------------------------- Data provenance ---------------------- */}
           {mfOnPlatform ? null : <View style={{ alignItems: 'center', gap: space[2] }}>
             <StatusPill
@@ -247,35 +286,6 @@ export default function Dashboard() {
       ) : null}
       <SetPinPrompt surface="client" id={clientId} />
     </Screen>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: 'success' | 'danger';
-}) {
-  const p = usePalette();
-  return (
-    <View style={{ flex: 1 }}>
-      <Text variant="caption" tone="muted" caps numberOfLines={1}>
-        {label}
-      </Text>
-      <Text
-        variant="moneySmall"
-        style={{
-          marginTop: 3,
-          color:
-            tone === 'success' ? p.state.successSoft : tone === 'danger' ? p.state.dangerSoft : p.text.primary,
-        }}
-      >
-        {value}
-      </Text>
-    </View>
   );
 }
 

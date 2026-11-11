@@ -1,220 +1,174 @@
 /**
- * My Portfolio — every holding, valued at the latest published NAV.
+ * My Portfolio — the investments board.
  *
- * The rows come from `PortfolioService.buildPortfolioData` in `shared/`, which
- * is also what fills the website's portfolio table, so the value and gain on a
- * holding here are the same numbers by construction.
+ * The same multi-asset board the website's portfolio page shows: every holding
+ * the client has — bought through Niyom, reported by the registrar, or read
+ * from an imported statement — as one list with one set of totals. The rows are
+ * `fromClientHoldings(snapshot.holdings)` and the totals are `summarise`, both
+ * from `shared/portal/investments`, so a figure here is the website's figure by
+ * construction.
  *
- * ## Why the source note is not decoration
+ * ## Unknown cost is not a zero return
  *
- * For mutual funds the app shows EITHER the client's imported statement or the
- * funds Niyom recorded — never both merged, because a fund bought through us
- * appears in each and summing them would double it. Which one is in play
- * changes what "complete" means, so `CasStatusNote` says so plainly rather than
- * leaving someone to wonder why a fund they hold elsewhere is missing.
+ * Registrar-fed mutual funds arrive with units and value but no purchase cost.
+ * The board shows their value and daily move, leaves invested and returns as an
+ * em dash, and totals invested/returns only over holdings whose cost is known —
+ * saying how much of the portfolio that covers.
+ *
+ * ## "All distributors" vs "Through Niyom"
+ *
+ * `snapshot.holdings` is already the complete book, held-away funds included.
+ * The switch only filters that book (`applyMfScope`); it never re-reads or
+ * re-prices, so a fund we service has identical figures in both views.
  */
-import { mfSsoEnabled } from '@shared/platform/env';
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
-import { Search, Upload, Wallet } from 'lucide-react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
-import { fmt, PRODUCT_LABELS } from '@shared/crm/utils';
-import { PortfolioService } from '@shared/portal/services/PortfolioService';
+import { PackagePlus, Search, Wallet } from 'lucide-react-native';
 import { useClientSnapshot } from '@shared/portal/hooks/useClientSnapshot';
-import type { HoldingRow } from '@shared/portal/types';
+import { buildDashboardData } from '@shared/portal/services/dashboardModel';
+import { fromClientHoldings } from '@shared/portal/investments/model';
+import { applyMfScope, isHeldAwayMf, type MfScope } from '@shared/portal/investments/mfScope';
+import { mfSsoEnabled } from '@shared/platform/env';
 import { space } from '@/design/tokens';
-import { usePalette } from '@/design/ThemeProvider';
 import { useClientId } from '@/features/auth/AuthContext';
 import { CasStatusNote } from '@/features/client/CasStatusNote';
-import { HoldingCard } from '@/features/client/HoldingCard';
 import { ScreenHeader } from '@/features/client/ScreenHeader';
+import { InvestmentsBoard } from '@/features/client/investments/InvestmentsBoard';
+import { useInvestmentRows } from '@/features/client/investments/useInvestmentRows';
+import { shortDay } from '@/features/client/investments/format';
 import { Screen } from '@/ui/Screen';
 import { Card } from '@/ui/Card';
 import { Text } from '@/ui/Text';
-import { Money, Delta } from '@/ui/Money';
 import { Input } from '@/ui/Input';
 import { Button } from '@/ui/Button';
 import { EmptyState, ErrorState, Segmented, SkeletonScreen } from '@/ui/kit';
 
-type Filter = 'all' | 'gainers' | 'losers';
-
 export default function Portfolio() {
   const clientId = useClientId();
-  const p = usePalette();
   const { snapshot, loading, error, refreshedAt, refresh } = useClientSnapshot(clientId);
 
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
+  const [scope, setScope] = useState<MfScope>('all');
 
   const hasData = !!refreshedAt;
-  const data = useMemo(
-    () => (hasData ? PortfolioService.buildPortfolioData(snapshot.holdings) : null),
-    [hasData, snapshot.holdings],
+  const holdings = snapshot.holdings;
+  const heldAway = useMemo(() => holdings.filter(isHeldAwayMf), [holdings]);
+  const scoped = useMemo(() => applyMfScope(holdings, scope), [holdings, scope]);
+  const baseRows = useMemo(() => fromClientHoldings(scoped), [scoped]);
+  const { rows, enriching } = useInvestmentRows('client', baseRows);
+  // XIRR covers only holdings whose cash flows explain them; the board shows
+  // the coverage alongside — see dashboardModel.xirrFor.
+  const dash = useMemo(() => (hasData ? buildDashboardData(snapshot) : null), [hasData, snapshot]);
+
+  // The newest statement any held-away fund came from — its units are as of then.
+  const casStatementTo = useMemo(
+    () =>
+      heldAway
+        .map((h) => h.cas?.statementTo ?? '')
+        .filter(Boolean)
+        .sort()
+        .pop() ?? null,
+    [heldAway],
   );
-
-  const rows = useMemo(() => {
-    if (!data) return [];
-    const needle = query.trim().toLowerCase();
-    return data.rows
-      .filter((r) => (filter === 'gainers' ? r.gain > 0 : filter === 'losers' ? r.gain < 0 : true))
-      .filter(
-        (r) =>
-          !needle ||
-          r.name.toLowerCase().includes(needle) ||
-          (r.amc ?? '').toLowerCase().includes(needle) ||
-          (r.meta ?? '').toLowerCase().includes(needle),
-      );
-  }, [data, query, filter]);
-
-  /** Rows grouped under their product, so bonds do not sit among funds. */
-  const groups = useMemo(() => {
-    const byProduct = new Map<string, HoldingRow[]>();
-    for (const row of rows) {
-      const list = byProduct.get(row.productType) ?? [];
-      list.push(row);
-      byProduct.set(row.productType, list);
-    }
-    return [...byProduct.entries()].sort(
-      (a, b) =>
-        b[1].reduce((s, r) => s + r.value, 0) - a[1].reduce((s, r) => s + r.value, 0),
-    );
-  }, [rows]);
+  // The import routes are retired in the app once funds run on the MF platform.
+  const canImport = !mfSsoEnabled();
+  const openImport = () => router.push('/import-portfolio');
 
   return (
     <Screen onRefresh={refresh} refreshing={loading && hasData} tabBarInset>
       <ScreenHeader
         title="My Portfolio"
-        subtitle="Every holding you have with us, valued at the latest published NAV."
+        subtitle="Everything you hold — funds, bonds, shares — valued at the latest price."
       />
 
       {!hasData && loading ? (
         <SkeletonScreen rows={4} />
       ) : error ? (
         <ErrorState message={error} onRetry={refresh} />
-      ) : data ? (
+      ) : holdings.length === 0 ? (
+        /*
+         * An investor with nothing here has almost always invested elsewhere —
+         * an empty portfolio is far more often "we cannot see it yet" than
+         * "there is nothing". So the empty state offers the import.
+         */
+        <EmptyState
+          icon={Wallet}
+          title="Nothing here yet"
+          message={
+            canImport
+              ? 'Holdings you buy through us appear here as they settle. Hold funds or shares elsewhere? Bring them in and see everything in one place.'
+              : 'Holdings you buy through Niyom appear here as they settle.'
+          }
+          action={canImport ? <Button label="Import my portfolio" icon={PackagePlus} onPress={openImport} /> : undefined}
+        />
+      ) : (
         <View style={{ gap: space[5] }}>
-          <Animated.View entering={FadeInDown.duration(400)}>
-            <Card padding={5}>
-              <Text variant="overline" tone="muted" caps>
-                Current value
-              </Text>
-              <Money value={data.summary.netWorth} variant="money" animate style={{ marginTop: space[2] }} />
-              <View style={{ marginTop: space[2] }}>
-                <Delta amount={data.summary.gain} percent={data.summary.gainPercent} variant="bodyMedium" />
-              </View>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  marginTop: space[4],
-                  paddingTop: space[4],
-                  borderTopWidth: 1,
-                  borderTopColor: p.border.subtle,
-                  gap: space[5],
-                }}
-              >
-                <Mini label="Invested" value={fmt(data.summary.invested)} />
-                <Mini label="Holdings" value={String(data.summary.holdingsCount)} />
-                <Mini label="Products" value={String(data.summary.productCount)} />
-              </View>
-            </Card>
-          </Animated.View>
+          {canImport ? (
+            <>
+              <CasStatusNote
+                freshness={snapshot.casFreshness}
+                hasImportedStatement={snapshot.mfSource === 'cas'}
+                valuedOn={snapshot.valuedOn}
+                onImport={openImport}
+              />
+              {snapshot.mfSource === 'cas' ? (
+                <Button
+                  label="Import more — funds, shares or demat"
+                  icon={PackagePlus}
+                  variant="secondary"
+                  size="sm"
+                  onPress={openImport}
+                />
+              ) : null}
+            </>
+          ) : null}
 
-          <CasStatusNote
-            freshness={snapshot.casFreshness}
-            hasImportedStatement={snapshot.mfSource === 'cas'}
-            valuedOn={snapshot.valuedOn}
-            onImport={() => router.push('/import-portfolio')}
+          {/* Mutual fund scope: only meaningful once a statement shows held-away funds. */}
+          {heldAway.length > 0 ? (
+            <Card weight="surface" padding={4}>
+              <Text variant="caption" tone="muted" caps>
+                Mutual funds
+              </Text>
+              <Segmented<MfScope>
+                style={{ marginTop: space[2] }}
+                value={scope}
+                onChange={setScope}
+                options={[
+                  { value: 'all', label: 'All distributors' },
+                  { value: 'niyom', label: 'Through Niyom' },
+                ]}
+              />
+              <Text variant="caption" tone="faint" style={{ marginTop: space[2] }}>
+                {scope === 'all'
+                  ? `Includes ${heldAway.length} fund${heldAway.length > 1 ? 's' : ''} held with other distributors, from your CAS${
+                      casStatementTo ? ` (units as of ${shortDay(casStatementTo)})` : ''
+                    }.`
+                  : `Only funds held through Niyom · ${heldAway.length} fund${heldAway.length > 1 ? 's' : ''} with other distributors hidden.`}
+              </Text>
+            </Card>
+          ) : null}
+
+          <Input
+            icon={Search}
+            placeholder="Search a fund, bond, share or folio"
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
           />
 
-          {data.rows.length === 0 ? (
-            <EmptyState
-              icon={Wallet}
-              title="Nothing here yet"
-              message={
-                mfSsoEnabled()
-                  ? 'Holdings you buy through Niyom appear here. Mutual funds are in your mutual fund account.'
-                  : 'Once you invest through Niyom — or import your statement — your holdings appear here.'
-              }
-              action={
-                mfSsoEnabled() ? undefined : (
-                  <Button
-                    label="Import my statement"
-                    icon={Upload}
-                    onPress={() => router.push('/import-portfolio')}
-                  />
-                )
-              }
-            />
-          ) : (
-            <>
-              <View style={{ gap: space[3] }}>
-                <Input
-                  icon={Search}
-                  placeholder="Search a fund, bond or folio"
-                  value={query}
-                  onChangeText={setQuery}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="search"
-                />
-                <Segmented<Filter>
-                  value={filter}
-                  onChange={setFilter}
-                  options={[
-                    { value: 'all', label: 'All' },
-                    { value: 'gainers', label: 'Gainers' },
-                    { value: 'losers', label: 'Losers' },
-                  ]}
-                />
-              </View>
-
-              {rows.length === 0 ? (
-                <EmptyState
-                  icon={Search}
-                  title="No matches"
-                  message="Nothing in your portfolio matches that. Try a different search or filter."
-                />
-              ) : (
-                groups.map(([productType, list]) => (
-                  <View key={productType} style={{ gap: space[3] }}>
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'baseline',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <Text variant="overline" tone="muted" caps>
-                        {PRODUCT_LABELS[productType as keyof typeof PRODUCT_LABELS] ?? productType}
-                      </Text>
-                      <Text variant="smallMedium" tone="secondary">
-                        {fmt(list.reduce((s, r) => s + r.value, 0))}
-                      </Text>
-                    </View>
-                    {list.map((row, i) => (
-                      <HoldingCard key={row.id} row={row} index={i} />
-                    ))}
-                  </View>
-                ))
-              )}
-            </>
-          )}
+          <InvestmentsBoard
+            rows={rows}
+            enriching={enriching}
+            query={query}
+            xirrPercent={dash?.xirrPercent ?? null}
+            xirrCoveragePct={dash?.xirrCoveragePct ?? null}
+            xirrNote={dash?.xirrNote ?? null}
+          />
         </View>
-      ) : null}
+      )}
     </Screen>
-  );
-}
-
-function Mini({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={{ flex: 1 }}>
-      <Text variant="caption" tone="muted" caps numberOfLines={1}>
-        {label}
-      </Text>
-      <Text variant="moneySmall" style={{ marginTop: 3 }}>
-        {value}
-      </Text>
-    </View>
   );
 }

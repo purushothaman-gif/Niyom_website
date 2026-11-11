@@ -13,7 +13,7 @@
 import { useCallback } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
-import { FileSignature, Users, Wallet } from 'lucide-react-native';
+import { FileSignature, Tag, UserPlus, Users, Wallet } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { fmt } from '@shared/crm/utils';
 import { PartnerService } from '@shared/partner/services/PartnerService';
@@ -22,6 +22,8 @@ import { usePalette } from '@/design/ThemeProvider';
 import { useDsaId } from '@/features/auth/AuthContext';
 import { usePartnerQuery } from '@/features/partner/usePartnerData';
 import { SetPinPrompt } from '@/features/client/SetPinPrompt';
+import { InviteImportCard } from '@/features/partner/onboard/InviteImportCard';
+import { Button } from '@/ui/Button';
 import { Screen } from '@/ui/Screen';
 import { Card } from '@/ui/Card';
 import { Text } from '@/ui/Text';
@@ -96,6 +98,27 @@ export default function PartnerDashboard() {
               </Card>
             </Animated.View>
           ) : null}
+
+          {/* The two things a partner opens the app to DO, ahead of what they
+              open it to read. */}
+          <Animated.View entering={FadeInDown.duration(400).delay(30)} style={{ gap: space[3] }}>
+            <Button
+              label="Onboard a client"
+              icon={UserPlus}
+              fullWidth
+              onPress={() => router.push('/partner-onboard-client')}
+            />
+            <Card padding={4}>
+              <ListRow
+                icon={Tag}
+                title="Sell today"
+                subtitle="Bonds and unlisted shares open now, with your spread"
+                onPress={() => router.push('/partner-sell')}
+                showChevron
+                last
+              />
+            </Card>
+          </Animated.View>
 
           {payout ? (
             <Animated.View entering={FadeInDown.duration(400).delay(60)}>
@@ -195,6 +218,8 @@ export default function PartnerDashboard() {
               </Card>
             </Animated.View>
           ) : null}
+
+          <InviteImportCard />
 
           {profile ? (
             <View style={{ alignItems: 'center' }}>

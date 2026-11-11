@@ -23,6 +23,7 @@ import {
 import { useAuth } from '@/features/auth/AuthContext';
 import { makeTabBar, type TabSpec } from '@/ui/TabBar';
 import { mfSsoEnabled } from '@shared/platform/env';
+import { useProductAccess } from '@/features/client/useProductAccess';
 
 const TABS: TabSpec[] = [
   { name: 'dashboard', label: 'Home', icon: LayoutDashboard },
@@ -36,6 +37,9 @@ const TabBar = makeTabBar(TABS);
 // SIPs live on the MF platform once the switch is on; the route stays (it
 // redirects) but the tab goes.
 const MF_PLATFORM_TAB_BAR = makeTabBar(TABS.filter((t) => t.name !== 'sip'));
+// Mutual funds switched off for this client (admin / RM product access): both
+// fund tabs go. The server refuses the orders regardless; this is the menu.
+const NO_MF_TAB_BAR = makeTabBar(TABS.filter((t) => t.name !== 'invest' && t.name !== 'sip'));
 
 export default function ClientLayout() {
   const { session, restoring } = useAuth();
@@ -45,7 +49,12 @@ export default function ClientLayout() {
     if (session?.surface !== 'client') router.replace('/');
   }, [session, restoring]);
 
-  const Bar = useMemo(() => (mfSsoEnabled() ? MF_PLATFORM_TAB_BAR : TabBar), []);
+  const { isEnabled } = useProductAccess();
+  const mfOn = isEnabled('mutual-funds');
+  const Bar = useMemo(
+    () => (!mfOn ? NO_MF_TAB_BAR : mfSsoEnabled() ? MF_PLATFORM_TAB_BAR : TabBar),
+    [mfOn],
+  );
 
   if (session?.surface !== 'client') return null;
 

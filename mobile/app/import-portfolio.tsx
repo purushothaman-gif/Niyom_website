@@ -1,5 +1,10 @@
 /**
- * Importing an existing mutual fund portfolio from a CAS.
+ * Importing an existing portfolio — the app's "Import my portfolio" hub.
+ *
+ * The mutual fund CAS flow below is the main road. Under it, on the first step,
+ * sit the hub's other routes (demat by CDSL OTP, forward-by-email) from
+ * `features/client/investments/ImportRoutes`, each hidden when the server does
+ * not offer it.
  *
  * ## Why this is two steps and not one
  *
@@ -62,6 +67,7 @@ import { usePalette } from '@/design/ThemeProvider';
 import { useClientSnapshot } from '@shared/portal/hooks/useClientSnapshot';
 import { useClientId } from '@/features/auth/AuthContext';
 import { ScreenHeader } from '@/features/client/ScreenHeader';
+import { DematFetchCard, ForwardCasCard } from '@/features/client/investments/ImportRoutes';
 import { Screen } from '@/ui/Screen';
 import { Card } from '@/ui/Card';
 import { Text } from '@/ui/Text';
@@ -82,7 +88,7 @@ export default function ImportPortfolio() {
 function ImportPortfolioScreen() {
   const clientId = useClientId();
   const p = usePalette();
-  const { snapshot } = useClientSnapshot(clientId);
+  const { snapshot, refresh: refreshSnapshot } = useClientSnapshot(clientId);
 
   const [request, setRequest] = useState<CasRequest | null>(null);
   const [imports, setImports] = useState<CasImportRecord[]>([]);
@@ -284,7 +290,7 @@ function ImportPortfolioScreen() {
     <Screen>
       <ScreenHeader
         title="Import your portfolio"
-        subtitle="Bring in funds you hold elsewhere from your Consolidated Account Statement."
+        subtitle="Everything you own, in one place — funds, shares, bonds and demat held elsewhere."
         showBack
       />
 
@@ -343,6 +349,26 @@ function ImportPortfolioScreen() {
                   />
                 </View>
               </Card>
+
+              {/*
+                The import hub's other routes, as on the website. Each card
+                hides itself when the server does not offer that route.
+              */}
+              <DematFetchCard onImported={refreshSnapshot} />
+              <ForwardCasCard
+                onImported={() => {
+                  refreshSnapshot();
+                  void load();
+                }}
+              />
+
+              <View style={{ flexDirection: 'row', gap: space[2], paddingHorizontal: space[1] }}>
+                <Lock size={13} color={p.text.faint} style={{ marginTop: 2 }} />
+                <Text variant="caption" tone="faint" style={{ flex: 1 }}>
+                  Read-only. We read your statements to show your holdings and never store the files or your
+                  statement password. Nothing here can move or sell your investments.
+                </Text>
+              </View>
             </Animated.View>
           ) : null}
 

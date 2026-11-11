@@ -11,10 +11,12 @@ import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import {
+  Activity,
   Building2,
   Check,
   Copy,
   CreditCard,
+  Gem,
   KeyRound,
   Landmark,
   LogOut,
@@ -25,7 +27,9 @@ import {
   Share2,
   Sun,
   SunMoon,
+  Tag,
   UserPlus,
+  UserRoundPlus,
 } from 'lucide-react-native';
 import { PartnerService } from '@shared/partner/services/PartnerService';
 import { buildReferralUrl } from '@shared/marketing/marketingConstants';
@@ -33,6 +37,7 @@ import { space } from '@/design/tokens';
 import { useTheme, type ThemePreference } from '@/design/ThemeProvider';
 import { useAuth } from '@/features/auth/AuthContext';
 import { usePartnerQuery } from '@/features/partner/usePartnerData';
+import { useProductAccess } from '@/features/partner/useProductAccess';
 import { ScreenHeader } from '@/features/client/ScreenHeader';
 import { Screen } from '@/ui/Screen';
 import { Card } from '@/ui/Card';
@@ -43,6 +48,7 @@ import { ErrorState, ListRow, Segmented, SkeletonScreen, StatusPill } from '@/ui
 export default function PartnerAccount() {
   const { signOut } = useAuth();
   const { theme: p, preference, setPreference } = useTheme();
+  const { isEnabled } = useProductAccess();
 
   const load = useCallback(
     () => Promise.all([
@@ -229,12 +235,46 @@ export default function PartnerAccount() {
               Business
             </Text>
             <Card padding={4}>
+              {isEnabled('bonds') ? (
+                <ListRow
+                  icon={Landmark}
+                  title="Bonds"
+                  subtitle="Offer fixed income at your own spread"
+                  showChevron
+                  onPress={() => router.push('/partner-bonds')}
+                />
+              ) : null}
+              {isEnabled('unlisted-shares') ? (
+                <ListRow
+                  icon={Gem}
+                  title="Unlisted Shares"
+                  subtitle="Offer pre-IPO shares at your own spread"
+                  showChevron
+                  onPress={() => router.push('/partner-shares')}
+                />
+              ) : null}
+              {isEnabled('bonds') || isEnabled('unlisted-shares') ? (
+                <ListRow
+                  icon={Tag}
+                  title="Sell today"
+                  subtitle="What is open, and what you earn on it"
+                  showChevron
+                  onPress={() => router.push('/partner-sell')}
+                />
+              ) : null}
               <ListRow
-                icon={Landmark}
-                title="Bonds"
-                subtitle="Offer fixed income at your own spread"
+                icon={Activity}
+                title="Market Watch"
+                subtitle="Indices, gold, the rupee and fund movers"
                 showChevron
-                onPress={() => router.push('/partner-bonds')}
+                onPress={() => router.push('/partner-market-watch')}
+              />
+              <ListRow
+                icon={UserRoundPlus}
+                title="Onboard a client"
+                subtitle="Open an account for your own client"
+                showChevron
+                onPress={() => router.push('/partner-onboard-client')}
               />
               <ListRow
                 icon={UserPlus}

@@ -14,22 +14,24 @@
  * `nw_partner_client_transactions`, which project columns explicitly — RLS
  * grants rows, not columns, so a table read would leak all of it.
  */
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { ArrowDownLeft, ArrowUpRight, Wallet } from 'lucide-react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
-import { fmt, fmtFull, fmtDate } from '@shared/crm/utils';
+import { fmtFull, fmtDate } from '@shared/crm/utils';
 import { PartnerService } from '@shared/partner/services/PartnerService';
+import { fromPartnerHoldings } from '@shared/portal/investments/model';
+import { mfSsoEnabled } from '@shared/platform/env';
 import { radius, space } from '@/design/tokens';
 import { usePalette } from '@/design/ThemeProvider';
 import { usePartnerQuery } from '@/features/partner/usePartnerData';
 import { ScreenHeader } from '@/features/client/ScreenHeader';
+import { InvestmentsBoard } from '@/features/client/investments/InvestmentsBoard';
+import { useInvestmentRows } from '@/features/client/investments/useInvestmentRows';
 import { Screen } from '@/ui/Screen';
 import { Card } from '@/ui/Card';
 import { Text } from '@/ui/Text';
-import { Money, Delta } from '@/ui/Money';
-import { EmptyState, ErrorState, KpiStat, SkeletonScreen } from '@/ui/kit';
+import { EmptyState, ErrorState, SkeletonScreen } from '@/ui/kit';
 
 export default function PartnerClientDetail() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -47,9 +49,17 @@ export default function PartnerClientDetail() {
   const { data, loading, error, refresh } = usePartnerQuery(load, [clientId]);
   const [holdings, txns] = data ?? [null, null];
 
-  const invested = (holdings ?? []).reduce((s, h) => s + (h.invested_amount || 0), 0);
-  const current = (holdings ?? []).reduce((s, h) => s + (h.current_value || 0), 0);
-  const gain = current - invested;
+  /*
+   * The same board the website's partner portal shows for a client. Once
+   * mutual funds run on the MF platform their rows come from the registrar
+   * feed, which carries no purchase cost — `fromPartnerHoldings` then leaves
+   * invested and returns unknown rather than reading them as 0%.
+   */
+  const base = useMemo(
+    () => fromPartnerHoldings(holdings ?? [], { registrarMf: mfSsoEnabled() }),
+    [holdings],
+  );
+  const { rows, enriching } = useInvestmentRows('partner', base);
 
   return (
     <Screen onRefresh={refresh} refreshing={loading && !!data}>
@@ -65,71 +75,19 @@ export default function PartnerClientDetail() {
         <ErrorState message={error} onRetry={refresh} />
       ) : (
         <View style={{ gap: space[5] }}>
-          <Card padding={5}>
-            <Text variant="overline" tone="muted" caps>
-              Current value
-            </Text>
-            <Money value={current} variant="money" animate style={{ marginTop: space[2] }} />
-            {invested > 0 ? (
-              <View style={{ marginTop: space[2] }}>
-                <Delta amount={gain} percent={(gain / invested) * 100} variant="bodyMedium" />
-              </View>
-            ) : null}
-            <View style={{ flexDirection: 'row', gap: space[3], marginTop: space[4] }}>
-              <KpiStat label="Invested" value={fmt(invested)} />
-              <KpiStat label="Holdings" value={String((holdings ?? []).length)} />
-            </View>
-          </Card>
-
-          {/* ------------------------------ holdings ---------------------- */}
-          <View style={{ gap: space[3] }}>
-            <Text variant="overline" tone="muted" caps>
-              Holdings
-            </Text>
-            {(holdings ?? []).length === 0 ? (
+          <InvestmentsBoard
+            rows={rows}
+            enriching={enriching}
+            title="Holdings"
+            compact
+            emptyState={
               <EmptyState
                 icon={Wallet}
                 title="No holdings yet"
                 message="This client has not invested through Niyom yet."
               />
-            ) : (
-              (holdings ?? []).map((h, i) => (
-                <Animated.View
-                  key={h.holding_id}
-                  entering={FadeInDown.duration(340).delay(Math.min(i, 10) * 40)}
-                >
-                  <Card padding={4}>
-                    <View style={{ flexDirection: 'row', gap: space[3] }}>
-                      <View style={{ flex: 1 }}>
-                        <Text variant="bodyMedium" numberOfLines={2}>
-                          {h.product_name}
-                        </Text>
-                        <Text variant="caption" tone="muted" style={{ marginTop: 2 }}>
-                          {humanise(h.product_type)}
-                          {h.quantity
-                            ? ` · ${h.quantity.toLocaleString('en-IN', { maximumFractionDigits: 3 })} units`
-                            : ''}
-                        </Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text variant="moneySmall">{fmt(h.current_value)}</Text>
-                        {h.invested_amount > 0 ? (
-                          <View style={{ marginTop: 2 }}>
-                            <Delta
-                              amount={h.gain_loss}
-                              percent={(h.gain_loss / h.invested_amount) * 100}
-                              variant="caption"
-                              showAmount={false}
-                            />
-                          </View>
-                        ) : null}
-                      </View>
-                    </View>
-                  </Card>
-                </Animated.View>
-              ))
-            )}
-          </View>
+            }
+          />
 
           {/* ---------------------------- transactions -------------------- */}
           {(txns ?? []).length > 0 ? (

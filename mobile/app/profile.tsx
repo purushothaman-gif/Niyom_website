@@ -7,8 +7,15 @@
  * them and the record is already theirs. The reason is the screen, not the
  * data: a profile page is the one people hold up to show someone something
  * else, and it is read over shoulders on trains. The full value is never a tap
- * away either — changing either is an RM's job, which is also why nothing on
- * this screen is editable.
+ * away either.
+ *
+ * ## What can be changed here
+ *
+ * Contact details, nominees and bank accounts — each on its own screen, each
+ * confirmed with a code emailed to the registered address and applied by the
+ * `client-profile-update` edge function (which logs it and alerts the RM). A
+ * NEW bank account waits for the RM's approval before it is used. PAN, name
+ * and date of birth stay read-only: those are KYC facts, not preferences.
  *
  * ## The PIN section is the part that earns its place
  *
@@ -18,7 +25,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
   Building2,
@@ -29,16 +36,20 @@ import {
   Mail,
   MapPin,
   Moon,
+  Pencil,
   Phone,
+  Plus,
   ScanFace,
   ShieldCheck,
   Smartphone,
   Sun,
   SunMoon,
   UserRound,
+  Users,
 } from 'lucide-react-native';
 import { fmtDate } from '@shared/crm/utils';
 import { ProfileService } from '@shared/portal/services/ProfileService';
+import { ProfileEditService, type Nominee } from '@shared/portal/services/ProfileEditService';
 import { useClientSnapshot } from '@shared/portal/hooks/useClientSnapshot';
 import type { NWClientBankAccount } from '@shared/crm/types';
 import { space } from '@/design/tokens';
@@ -59,6 +70,7 @@ export default function Profile() {
   const { snapshot, loading, error, refreshedAt, refresh } = useClientSnapshot(clientId);
 
   const [banks, setBanks] = useState<NWClientBankAccount[]>([]);
+  const [nominees, setNominees] = useState<Nominee[] | null>(null);
   const [pinSet, setPinSet] = useState(false);
   const [bioSet, setBioSet] = useState(false);
   const [bioKind, setBioKind] = useState<'face' | 'fingerprint'>('fingerprint');
@@ -66,9 +78,15 @@ export default function Profile() {
   const client = snapshot.client;
   const hasData = !!refreshedAt;
 
-  useEffect(() => {
-    void ProfileService.getBankAccounts(clientId).then(setBanks).catch(() => setBanks([]));
-  }, [clientId]);
+  // Reloaded every time the screen regains focus, so a change made on one of
+  // the edit screens is showing by the time the client lands back here.
+  useFocusEffect(
+    useCallback(() => {
+      void ProfileService.getBankAccounts(clientId).then(setBanks).catch(() => setBanks([]));
+      void ProfileEditService.getNominees(clientId).then(setNominees).catch(() => setNominees([]));
+      refresh();
+    }, [clientId, refresh]),
+  );
 
   const refreshDeviceState = useCallback(async () => {
     const [pin, bio, types] = await Promise.all([
@@ -117,7 +135,31 @@ export default function Profile() {
     ]);
   };
 
-  const primaryBank = banks.find((b) => b.is_primary) ?? banks[0];
+  // Fall back to the primary-bank mirror on the client record if the table is empty.
+  const bankList: NWClientBankAccount[] =
+    banks.length === 0 && client?.bank_account
+      ? [
+          {
+            id: 'primary',
+            client_id: clientId,
+            account_number: client.bank_account,
+            ifsc: client.bank_ifsc ?? '',
+            bank_name: client.bank_name ?? '',
+            holder_name: client.full_name,
+            label: '',
+            is_primary: true,
+            created_at: '',
+            updated_at: '',
+          },
+        ]
+      : banks;
+  const usableCount = bankList.filter(isUsable).length;
+
+  const bankAction = (kind: 'bank_delete' | 'bank_primary', a: NWClientBankAccount) =>
+    router.push({
+      pathname: '/profile-edit-bank',
+      params: { action: kind, id: a.id, label: `${a.bank_name || 'Bank'} ${maskAccount(a.account_number)}` },
+    } as never);
 
   return (
     <Screen onRefresh={refresh} refreshing={loading && hasData}>
@@ -201,9 +243,15 @@ export default function Profile() {
                 last
               />
             </Card>
-            <Text variant="caption" tone="faint" style={{ marginTop: space[2] }}>
-              Your relationship manager updates these — contact them to change anything.
-            </Text>
+            <View style={{ marginTop: space[3] }}>
+              <Button
+                label="Edit mobile, email & address"
+                icon={Pencil}
+                variant="secondary"
+                size="sm"
+                onPress={() => router.push('/profile-edit-contact' as never)}
+              />
+            </View>
           </Section>
 
           {/* ------------------------------- KYC --------------------------- */}
@@ -214,17 +262,121 @@ export default function Profile() {
                 icon={UserRound}
                 title="Date of birth"
                 subtitle={client.dob ? fmtDate(client.dob) : '—'}
-                last={!primaryBank}
+                last
               />
-              {primaryBank ? (
+            </Card>
+          </Section>
+
+          {/* ----------------------------- nominees ------------------------ */}
+          <Section title="Nominees">
+            <Card padding={4}>
+              {nominees === null ? (
+                <ListRow icon={Users} title="Loading…" last />
+              ) : nominees.length === 0 ? (
                 <ListRow
-                  icon={Building2}
-                  title={primaryBank.bank_name || 'Bank account'}
-                  subtitle={`${maskAccount(primaryBank.account_number)} · ${primaryBank.ifsc}`}
+                  icon={Users}
+                  title="No nominees yet"
+                  subtitle="Add who should receive your investments — it takes a minute."
                   last
                 />
-              ) : null}
+              ) : (
+                nominees.map((n, i) => (
+                  <ListRow
+                    key={n.id ?? i}
+                    icon={UserRound}
+                    title={n.full_name}
+                    subtitle={[n.relationship, n.dob ? fmtDate(n.dob) : null].filter(Boolean).join(' · ')}
+                    value={`${n.share_percent}%`}
+                    last={i === nominees.length - 1}
+                  />
+                ))
+              )}
             </Card>
+            <View style={{ marginTop: space[3] }}>
+              <Button
+                label={nominees?.length ? 'Edit nominees' : 'Add nominees'}
+                icon={nominees?.length ? Pencil : Plus}
+                variant="secondary"
+                size="sm"
+                onPress={() => router.push('/profile-edit-nominees' as never)}
+              />
+            </View>
+          </Section>
+
+          {/* ------------------------------- bank -------------------------- */}
+          <Section title="Bank accounts">
+            {bankList.length === 0 ? (
+              <Card padding={4}>
+                <ListRow icon={Building2} title="No bank account on file" last />
+              </Card>
+            ) : (
+              <View style={{ gap: space[3] }}>
+                {bankList.map((a) => {
+                  const st = statusOf(a);
+                  const note = (a as { review_note?: string | null }).review_note;
+                  const lastUsable = isUsable(a) && usableCount <= 1;
+                  return (
+                    <Card key={a.id} padding={4}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
+                        <Building2 size={20} color={p.text.muted} />
+                        <View style={{ flex: 1 }}>
+                          <Text variant="bodyMedium" numberOfLines={1}>
+                            {a.bank_name || 'Bank account'}
+                          </Text>
+                          <Text variant="caption" tone="muted" style={{ marginTop: 2 }}>
+                            {maskAccount(a.account_number)} · {a.ifsc || '—'}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: space[2], marginTop: space[3], flexWrap: 'wrap' }}>
+                        {a.is_primary ? <StatusPill tone="accent" label="Primary" /> : null}
+                        {st === 'pending' ? <StatusPill tone="warning" label="Awaiting RM approval" /> : null}
+                        {st === 'rejected' ? <StatusPill tone="danger" label="Not approved" /> : null}
+                        {st === 'verified' ? <StatusPill tone="success" label="Approved" /> : null}
+                      </View>
+                      {st === 'rejected' && note ? (
+                        <Text variant="caption" tone="danger" style={{ marginTop: space[2] }}>
+                          Reason: {note}
+                        </Text>
+                      ) : null}
+                      {a.id !== 'primary' ? (
+                        <View style={{ flexDirection: 'row', gap: space[2], marginTop: space[3] }}>
+                          {!a.is_primary && isUsable(a) ? (
+                            <Button
+                              label="Make primary"
+                              variant="secondary"
+                              size="sm"
+                              onPress={() => bankAction('bank_primary', a)}
+                            />
+                          ) : null}
+                          <Button
+                            label={st === 'pending' ? 'Withdraw' : 'Remove'}
+                            variant="ghost"
+                            size="sm"
+                            disabled={lastUsable}
+                            onPress={() => bankAction('bank_delete', a)}
+                          />
+                        </View>
+                      ) : null}
+                      {a.id !== 'primary' && lastUsable ? (
+                        <Text variant="caption" tone="faint" style={{ marginTop: space[2] }}>
+                          At least one approved bank account must stay on your profile.
+                        </Text>
+                      ) : null}
+                    </Card>
+                  );
+                })}
+              </View>
+            )}
+            <View style={{ marginTop: space[3] }}>
+              <Button
+                label="Add bank account"
+                icon={Plus}
+                variant="secondary"
+                size="sm"
+                onPress={() => router.push('/profile-edit-bank' as never)}
+              />
+            </View>
           </Section>
 
           {/* ---------------------------- security ------------------------- */}
@@ -316,6 +468,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </View>
   );
 }
+
+const statusOf = (a: unknown) =>
+  String((a as { verification_status?: string }).verification_status ?? '');
+/** In use: not awaiting approval and not rejected. */
+const isUsable = (a: unknown) => !['pending', 'rejected', 'failed'].includes(statusOf(a));
 
 /** "ANAND KRISHNAMURTHY" → "AK". */
 function initials(name: string): string {

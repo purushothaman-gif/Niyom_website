@@ -28,5 +28,7 @@
     "expo-env.d.ts",
     "../shared/**/*.ts"
   ],
-  "exclude": ["node_modules", ".expo", "dist"]
+  // shared/mail is the email renderer shared with the Deno edge functions: it
+  // uses Deno-style `.ts` import paths and the app never imports it.
+  "exclude": ["node_modules", ".expo", "dist", "../shared/mail"]
 }
