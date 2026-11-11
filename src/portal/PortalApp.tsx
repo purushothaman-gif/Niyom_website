@@ -31,6 +31,7 @@ import { SupportPage } from './features/support/SupportPage';
 import { ChangePasswordModal } from './features/profile/ChangePasswordModal';
 import { ImportPortfolioModal } from './features/portfolio/ImportPortfolioModal';
 import { ConnectDematModal } from './features/portfolio/ConnectDematModal';
+import { ImportHubModal } from './features/portfolio/ImportHubModal';
 import { DematImportService } from '../../shared/portal/services/DematImportService';
 import { IdleWarning } from './components/IdleWarning';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
@@ -107,6 +108,25 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
    */
   const [showImport, setShowImport] = useState(false);
   const [showDemat, setShowDemat] = useState(false);
+  /*
+   * The hub is the single door to every import route. It opens straight away
+   * for a client arriving on an invite link (?import=1 — what a partner or RM
+   * shares), and the flag is stripped so a refresh does not reopen it.
+   */
+  const [showHub, setShowHub] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('import') === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('import')) return;
+    params.delete('import');
+    const qs = params.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  }, []);
   // Whether the server can fetch demat holdings; the entry point is hidden
   // until we know it can, so a client is never offered something that errors.
   const [dematEnabled, setDematEnabled] = useState(false);
@@ -314,6 +334,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
             onNavigate={navigate}
             onActivateProducts={() => setShowActivate(true)}
             onImport={() => setShowImport(true)}
+            onOpenImportHub={() => setShowHub(true)}
             hasImportedStatement={hasImportedStatement}
             dayChange={snapshot.dayChange}
             historyComplete={snapshot.historyComplete}
@@ -343,8 +364,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
           xirrNote={dashboardData?.xirrNote ?? null}
             onNavigate={navigate}
             onImport={() => setShowImport(true)}
-            onConnectDemat={dematEnabled ? () => setShowDemat(true) : undefined}
-            onRefresh={refresh}
+            onOpenImportHub={() => setShowHub(true)}
             freshness={snapshot.casFreshness}
             hasImportedStatement={hasImportedStatement}
             valuedOn={snapshot.valuedOn}
@@ -403,6 +423,7 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
         onChangePassword={() => setShowChangePw(true)}
         onLogout={onLogout}
         onOpenSmartCas={() => setShowImport(true)}
+        onOpenImportHub={() => setShowHub(true)}
         hiddenProducts={hiddenProducts}
       >
         {renderView()}
@@ -411,6 +432,25 @@ export default function PortalApp({ clientId, onLogout, onIdleLogout }: PortalAp
 
       {showChangePw && (
         <ChangePasswordModal clientId={clientId} onClose={() => setShowChangePw(false)} />
+      )}
+
+      {showHub && (
+        <ImportHubModal
+          onClose={() => setShowHub(false)}
+          onMutualFunds={() => {
+            setShowHub(false);
+            setShowImport(true);
+          }}
+          onDemat={
+            dematEnabled
+              ? () => {
+                  setShowHub(false);
+                  setShowDemat(true);
+                }
+              : undefined
+          }
+          onImported={refresh}
+        />
       )}
 
       {showImport && (

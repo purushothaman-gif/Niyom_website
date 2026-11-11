@@ -27,8 +27,7 @@ import { QuickActions } from './sections/QuickActions';
 import { SupportCard } from './sections/SupportCard';
 import { OnboardingChecklistCard } from '../onboarding/OnboardingChecklistCard';
 import { ActivateProductsCard } from './sections/ActivateProductsCard';
-import { ImportPortfolioCard } from '../portfolio/ImportPortfolioCard';
-import { AddExternalFundsCta } from '../mutual-funds/AddExternalFundsCta';
+import { ImportHubBanner } from '../portfolio/ImportHubBanner';
 import { onboardingIncomplete, canActivateMoreProducts } from '../onboarding/onboardingSteps';
 
 interface DashboardPageProps {
@@ -45,6 +44,8 @@ interface DashboardPageProps {
   onActivateProducts: () => void;
   /** Opens the import wizard, owned by PortalApp. */
   onImport: () => void;
+  /** Opens the import hub — every route for bringing outside holdings in. */
+  onOpenImportHub: () => void;
   /** Value change across the last published NAV move; null until there is one. */
   dayChange?: number | null;
   /** False when the imported statement starts mid-history, so no return is shown. */
@@ -72,12 +73,12 @@ export function DashboardPage({
   onNavigate,
   onActivateProducts,
   onImport,
+  onOpenImportHub,
   hasImportedStatement = false,
   historyComplete = true,
   statementFrom = null,
 }: DashboardPageProps) {
   const firstName = client?.full_name?.split(' ')[0] || 'Investor';
-  const { summary } = data;
   // MF holdings + SIPs for the dashboard card only. The headline totals already
   // include the registrar MF (folded into the snapshot in HoldingService), so
   // this must not be re-added to any total.
@@ -139,6 +140,13 @@ export function DashboardPage({
       )}
 
       {/*
+        The import offer sits above the fold on purpose: a client who holds
+        funds or shares elsewhere is looking at a partial portfolio and has no
+        way to know it. Full-size until something is imported, one row after.
+      */}
+      <ImportHubBanner onOpen={onOpenImportHub} compact={hasImportedStatement} />
+
+      {/*
         Groww-style: discovery on the left (bonds, then mutual funds, then
         unlisted shares), the client's own money in the right-hand column.
       */}
@@ -152,25 +160,12 @@ export function DashboardPage({
           ) : (
             <MutualFundSummaryCard mf={data.mutualFunds} onViewAll={() => onNavigate('mutual-funds')} />
           )}
-          {/* Persistent Smart CAS entry once a statement has been imported — the
-              big prompt below only shows to a client who has never imported one. */}
-          {hasImportedStatement && <AddExternalFundsCta onAdd={onImport} />}
           <RecentTransactionsCard
             transactions={data.recentTransactions}
             onViewAll={() => onNavigate('transactions')}
           />
         </aside>
       </div>
-
-      {/* Importing a CAS brings in funds held away from us, which is valuable on
-          the platform path too now that held-away funds fold into the portfolio. */}
-      {!hasImportedStatement && (
-        <ImportPortfolioCard
-          onImport={onImport}
-          visibleHoldings={summary.holdingsCount}
-          returnsUnavailable={data.xirrPercent === null && summary.netWorth > 0}
-        />
-      )}
 
       {!historyComplete && (
         <p className="rounded-token-lg border border-border-subtle bg-bg-surface px-4 py-3 text-[11px] leading-relaxed text-text-secondary">

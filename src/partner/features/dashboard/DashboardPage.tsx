@@ -32,6 +32,7 @@ import { inr } from '../../../lib/money';
 import { Card } from '../../../portal/components/Card';
 import { StatusPill } from '../../../portal/components/StatusPill';
 import { OnboardClientModal } from '../clients/OnboardClientModal';
+import { InviteImportCard } from '../clients/InviteImportCard';
 import type { PartnerSnapshot } from '../../hooks/usePartnerSnapshot';
 import type { PartnerView } from '../../layout/navigation';
 import { InvestmentsBoard } from '../../../portal/features/investments/InvestmentsBoard';
@@ -142,6 +143,8 @@ export function DashboardPage({ snapshot, onNavigate, onOnboarded, hidden = NONE
           </div>
         </Card>
       )}
+
+      <InviteImportCard />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* ------------------------------------------------ left */}

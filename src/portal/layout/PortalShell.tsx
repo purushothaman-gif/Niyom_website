@@ -13,7 +13,7 @@
  * with content and no name.
  */
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { ChevronDown, KeyRound, LogOut, MoreHorizontal, RefreshCw, Sparkles, X } from 'lucide-react';
+import { ChevronDown, KeyRound, LogOut, MoreHorizontal, PackagePlus, RefreshCw, Sparkles, X } from 'lucide-react';
 import { isDemoClientSession } from '../../../shared/portal/demo/demoClient';
 import type { NWClient } from '../../crm/types';
 import { ThemeToggle } from '../../theme/ThemeToggle';
@@ -47,6 +47,8 @@ interface PortalShellProps {
   onLogout: () => void;
   /** Opens the Smart CAS import modal — surfaced under the Mutual Funds menu. */
   onOpenSmartCas?: () => void;
+  /** Opens the import hub; shown as a standing button in the header. */
+  onOpenImportHub?: () => void;
   /** Product keys switched off for this client; their nav items are dropped. */
   hiddenProducts?: ReadonlySet<string>;
   children: ReactNode;
@@ -62,6 +64,7 @@ export function PortalShell({
   onChangePassword,
   onLogout,
   onOpenSmartCas,
+  onOpenImportHub,
   hiddenProducts = NO_HIDDEN,
   children,
 }: PortalShellProps) {
@@ -229,6 +232,23 @@ export function PortalShell({
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-1">
+            {/*
+              On every screen, not just the dashboard: the moment a client
+              notices something missing is rarely while they are on the page
+              that happens to carry the banner.
+            */}
+            {onOpenImportHub && (
+              <button
+                type="button"
+                onClick={onOpenImportHub}
+                aria-label="Import my portfolio"
+                title="Import my portfolio"
+                className="press mr-1 inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-xs font-bold text-accent transition-colors hover:border-accent/70 xl:px-3.5"
+              >
+                <PackagePlus className="h-4 w-4" />
+                <span className="hidden xl:inline">Import portfolio</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={onRefresh}
