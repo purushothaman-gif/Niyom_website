@@ -8062,6 +8062,11 @@ export type Database = {
           gender: string | null
           id: string
           investment_preferences: string[]
+          kra_active: string | null
+          kra_checked_at: string | null
+          kra_compliant: boolean | null
+          kra_detail: Json | null
+          kra_status: string | null
           kyc_submitted_at: string | null
           notes: string | null
           onboarding_status: string
@@ -8107,6 +8112,11 @@ export type Database = {
           gender?: string | null
           id?: string
           investment_preferences?: string[]
+          kra_active?: string | null
+          kra_checked_at?: string | null
+          kra_compliant?: boolean | null
+          kra_detail?: Json | null
+          kra_status?: string | null
           kyc_submitted_at?: string | null
           notes?: string | null
           onboarding_status?: string
@@ -8152,6 +8162,11 @@ export type Database = {
           gender?: string | null
           id?: string
           investment_preferences?: string[]
+          kra_active?: string | null
+          kra_checked_at?: string | null
+          kra_compliant?: boolean | null
+          kra_detail?: Json | null
+          kra_status?: string | null
           kyc_submitted_at?: string | null
           notes?: string | null
           onboarding_status?: string

@@ -19,6 +19,7 @@ import { BseClient, BseError } from './bseClient.js';
 import { webhookRouter } from './webhooks.js';
 import { casRequestRouter } from './cas/requests.js';
 import { dematRouter } from './cas/demat.js';
+import { kycRouter } from './cas/kyc.js';
 import {
   toAppOrderResult,
   toAppScheme,
@@ -635,6 +636,8 @@ mountFeature('/cas/requests', 'cas_requests', casRequestRouter(cfg));
 // DEMAT holdings import (CDSL eCAS via CASParser). Parallel to /cas/requests,
 // writes the demat_* tables; the portal overlays them onto the board.
 mountFeature('/cas/demat', 'cas_demat', dematRouter(cfg));
+// KYC (KRA status) + ARN verification for onboarding. Staff-authenticated.
+mountFeature('/cas/kyc', 'cas_kyc', kycRouter(cfg));
 
 /* ----------------------------- scheme master ------------------------------ */
 
