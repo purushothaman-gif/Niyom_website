@@ -195,7 +195,9 @@ export default function MfAccountQueue({ employee }: { employee: NWEmployee }) {
                         style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
                         <FileText className="h-3.5 w-3.5" /> {tab === 'needs_details' ? 'Complete details' : 'Account sheet'}
                       </button>
-                      {tab === 'ready' && (confirming === c.id ? (
+                      {/* Also offered on "Needs details": a client opened on the platform
+                          before this queue existed may still have gaps in our record. */}
+                      {tab !== 'opened' && (confirming === c.id ? (
                         <>
                           <button type="button" disabled={busyId === c.id} onClick={() => void setOpened(c.id, true)}
                             className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold disabled:opacity-50"
@@ -208,7 +210,7 @@ export default function MfAccountQueue({ employee }: { employee: NWEmployee }) {
                         <button type="button" onClick={() => setConfirming(c.id)}
                           className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold"
                           style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Mark opened
+                          <CheckCircle2 className="h-3.5 w-3.5" /> {tab === 'ready' ? 'Mark opened' : 'Already opened'}
                         </button>
                       ))}
                       {tab === 'opened' && c.mf_platform_opened_via === 'staff' && (
