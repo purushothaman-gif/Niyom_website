@@ -34,7 +34,10 @@ import { mfSsoEnabled } from '../../platform/env';
 import {
   applyNav,
   assessCasFreshness,
+  folioIsinKey,
+  normFolio,
   portfolioDayChange,
+  registrarRowsSupersededByCas,
   selectHoldings,
   toNavQuotes,
   valuationDate,
@@ -207,19 +210,41 @@ export const HoldingService = {
     // can never see — priced live by ISIN, so "external funds" actually appear.
     const stripped = withoutMutualFunds(snapshot);
     const rta = await fetchRtaMf(supabase, clientId).catch(() => null);
-    const registrarMf = (rta?.holdings ?? []).map((h) => toRegistrarMfHolding(clientId, h));
+    const rtaAll = rta?.holdings ?? [];
 
-    // Dedupe held-away rows against the registrar feed by folio, so a fund we
-    // service is never also pulled from the CAS (is_ours should already exclude
-    // it; the folio check is a belt-and-braces guard against a stale ARN match).
-    const registrarFolios = new Set(registrarMf.map((h) => normFolioKey(h.folio_number)));
-    const heldAwaySrc = (cas?.holdings ?? []).filter(
-      (h) =>
-        h.product_type === 'mutual_fund' &&
-        h.cas != null &&
-        !h.cas.isOurs &&
-        !registrarFolios.has(normFolioKey(h.folio_number ?? h.cas.folioNumber)),
+    /*
+     * A registrar mailback can lag or under-report a folio (an incomplete
+     * transfer-in, a partial snapshot). Where the client's own reconciled CAS is
+     * newer and shows MORE units for the same folio + scheme, the CAS is the
+     * truth — so that registrar row is dropped and its CAS twin shown instead,
+     * priced live by ISIN. One-directional: the CAS only ever adds units it can
+     * see, so a registrar row that is genuinely ahead is kept.
+     */
+    const superseded = registrarRowsSupersededByCas(
+      rtaAll.map((h) => ({ folio: h.folio, isin: h.isin, units: h.units, snapshotDate: h.snapshotDate })),
+      (cas?.holdings ?? [])
+        .filter((h) => h.product_type === 'mutual_fund' && h.cas != null)
+        .map((h) => ({
+          folioNumber: h.folio_number ?? h.cas!.folioNumber,
+          isin: h.cas!.isin ?? h.isin ?? null,
+          units: Number(h.quantity) || h.cas!.units,
+          statementTo: h.cas!.statementTo,
+          isOurs: h.cas!.isOurs,
+        })),
     );
+    const rtaKept = rtaAll.filter((h) => !superseded.has(folioIsinKey(h.folio, h.isin)));
+    const registrarMf = rtaKept.map((h) => toRegistrarMfHolding(clientId, h));
+
+    // Held-away funds the registrar never sees: CAS schemes not serviced under
+    // our ARN (is_ours = false) and not already in the kept registrar feed, PLUS
+    // the folios a newer CAS just superseded above (now sourced from the CAS).
+    const registrarFolios = new Set(registrarMf.map((h) => normFolio(h.folio_number)));
+    const heldAwaySrc = (cas?.holdings ?? []).filter((h) => {
+      if (h.product_type !== 'mutual_fund' || h.cas == null) return false;
+      const key = folioIsinKey(h.folio_number ?? h.cas.folioNumber, h.cas.isin ?? h.isin);
+      if (superseded.has(key)) return true;
+      return !h.cas.isOurs && !registrarFolios.has(normFolio(h.folio_number ?? h.cas.folioNumber));
+    });
     const heldAwayQuotes = await loadNavQuotes(heldAwaySrc.map((h) => h.cas?.isin ?? h.isin ?? ''));
     const heldAway = heldAwaySrc.map((h) => applyNav(h, heldAwayQuotes.get(h.cas?.isin ?? h.isin ?? '')));
 
@@ -232,16 +257,18 @@ export const HoldingService = {
       .select('txn_type, consolidated_amount, txn_date, product_type')
       .eq('client_id', clientId)
       .neq('product_type', 'mutual_fund');
-    const rtaHoldings = rta?.holdings ?? [];
+    // Only the KEPT registrar rows feed the return — a superseded fund now counts
+    // on the held-away (CAS) side, so its registrar value and flows are left out
+    // here to avoid pricing the same fund on both sides.
     const regValue = (h: RtaHoldingRow) => h.rtaValue ?? h.navValue ?? (h.nav != null ? h.units * h.nav : 0);
-    const reconciled = rtaHoldings.filter((h) => h.reconciled && h.flows.length);
+    const reconciled = rtaKept.filter((h) => h.reconciled && h.flows.length);
     const nonMfValue = stripped.holdings.reduce((t, h) => t + (Number(h.current_value) || 0), 0);
     const xirrBasis = {
       transactions: ((allTxns ?? []) as { txn_type: 'buy' | 'sell'; consolidated_amount: number; txn_date: string }[]),
       extraFlows: reconciled.flatMap((h) => h.flows),
       value: nonMfValue + reconciled.reduce((t, h) => t + regValue(h), 0),
       excludedValue:
-        rtaHoldings.filter((h) => !(h.reconciled && h.flows.length)).reduce((t, h) => t + regValue(h), 0) +
+        rtaKept.filter((h) => !(h.reconciled && h.flows.length)).reduce((t, h) => t + regValue(h), 0) +
         heldAway.reduce((t, h) => t + (Number(h.current_value) || 0), 0),
     };
 
@@ -267,10 +294,6 @@ export const HoldingService = {
     };
   },
 };
-
-/** Folio compared without spacing or case, to dedupe registrar vs CAS rows. */
-const normFolioKey = (f: string | null | undefined): string =>
-  (f ?? '').replace(/\s+/g, '').toUpperCase();
 
 /**
  * A registrar-fed mutual-fund holding as a PortalHolding. When the transaction

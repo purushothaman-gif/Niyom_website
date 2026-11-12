@@ -725,3 +725,55 @@ describe('hasCompleteHistory — segregated portfolios do not truncate a history
     expect(hasCompleteHistory([{ id: 'a', units: 100 }], [{ scheme_id: 'a', units: 40 }])).toBe(false);
   });
 });
+
+import { folioIsinKey, normFolio, registrarRowsSupersededByCas } from './model';
+
+describe('normFolio / folioIsinKey', () => {
+  it('ignores a CAS "/product" suffix so a folio lines up across sources', () => {
+    expect(normFolio('499493733685/0')).toBe('499493733685');
+    expect(normFolio('499493733685')).toBe('499493733685');
+    expect(folioIsinKey('79989178251/0', 'inf769k01010')).toBe(
+      folioIsinKey('79989178251', 'INF769K01010'),
+    );
+  });
+});
+
+describe('registrarRowsSupersededByCas', () => {
+  // Francis Hendry's real shape: the registrar snapshot (4 Nov) under-reports two
+  // folios the newer CAS (12 Nov) shows in full.
+  const registrar = [
+    { folio: '79989178251', isin: 'INF769K01010', units: 9.462, snapshotDate: '2026-11-04' },
+    { folio: '499493733685', isin: 'INF204K01489', units: 3.493, snapshotDate: '2026-11-04' },
+  ];
+  const cas = [
+    { folioNumber: '79989178251/0', isin: 'INF769K01010', units: 27.567, statementTo: '2026-11-12', isOurs: true },
+    { folioNumber: '499493733685/0', isin: 'INF204K01489', units: 10.259, statementTo: '2026-11-12', isOurs: true },
+  ];
+
+  it('supersedes a stale registrar folio a newer CAS shows more units for', () => {
+    const s = registrarRowsSupersededByCas(registrar, cas);
+    expect(s.has(folioIsinKey('79989178251', 'INF769K01010'))).toBe(true);
+    expect(s.has(folioIsinKey('499493733685', 'INF204K01489'))).toBe(true);
+    expect(s.size).toBe(2);
+  });
+
+  it('keeps the registrar when the CAS is older', () => {
+    const olderCas = cas.map((c) => ({ ...c, statementTo: '2026-10-01' }));
+    expect(registrarRowsSupersededByCas(registrar, olderCas).size).toBe(0);
+  });
+
+  it('keeps the registrar when it holds as many or more units (no downward override)', () => {
+    const fewerCas = cas.map((c) => ({ ...c, units: 1 }));
+    expect(registrarRowsSupersededByCas(registrar, fewerCas).size).toBe(0);
+  });
+
+  it('never supersedes a held-away (not is_ours) fund', () => {
+    const away = cas.map((c) => ({ ...c, isOurs: false }));
+    expect(registrarRowsSupersededByCas(registrar, away).size).toBe(0);
+  });
+
+  it('supersedes when the registrar has no snapshot date but the CAS does', () => {
+    const noDate = registrar.map((r) => ({ ...r, snapshotDate: null }));
+    expect(registrarRowsSupersededByCas(noDate, cas).size).toBe(2);
+  });
+});
