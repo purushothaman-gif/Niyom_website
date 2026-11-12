@@ -107,6 +107,24 @@ function monthEndSyncNow() { runSync(MONTH_END_LOOKBACK, 'month-end (manual)'); 
 /** The daily job. Also safe to run by hand. */
 function syncNow() { runSync(LOOKBACK, 'daily'); }
 
+/**
+ * Un-finish recent KFintech feed emails so the next run retries them.
+ *
+ * The old link-fetch dropped KFintech reports silently and still marked them
+ * Done, so they will never be retried on their own. Run this once after pasting
+ * this version (then run `syncNow`) to pull the reports that were skipped —
+ * including a client's missed holdings/transactions. Defaults to the last 20
+ * days; pass a Gmail age like '30d' to widen it.
+ */
+function reprocessKfintech(age) {
+  var label = GmailApp.getUserLabelByName(DONE_LABEL);
+  if (!label) return;
+  var threads = GmailApp.search('from:distributorcare@kfintech.com label:' +
+    DONE_LABEL.toLowerCase() + ' newer_than:' + (age || '20d'), 0, 200);
+  threads.forEach(function (t) { t.removeLabel(label); });
+  Logger.log('Cleared Done from %s KFintech thread(s); run syncNow to retry.', threads.length);
+}
+
 function runSync(lookback, kind) {
   var label = GmailApp.getUserLabelByName(DONE_LABEL) || GmailApp.createLabel(DONE_LABEL);
   var url = ingestUrl();
@@ -125,7 +143,30 @@ function runSync(lookback, kind) {
       var allHandled = true;
       thread.getMessages().forEach(function (msg) {
         if (sender.subjectMatch && !sender.subjectMatch.test(msg.getSubject() || '')) return;
-        var feeds = sender.mode === 'link' ? linkFeeds(msg) : attachmentFeeds(msg);
+        var feeds;
+        if (sender.mode === 'link') {
+          var link = linkFeeds(msg);
+          feeds = link.feeds;
+          /*
+           * A report email that carries DATA but yielded no file is NOT handled:
+           * it must not be labelled Done (so the next run retries it), and it
+           * must raise a problem. This is the gap that let KFintech stall
+           * silently — the download link started returning an HTML interstitial,
+           * the old code dropped it with no ZIP, and marked the mail Done anyway.
+           * A genuine "No data found" email yields nothing and is fine to finish.
+           */
+          if (feeds.length === 0) {
+            if (!link.noData) {
+              totals.errors++; allHandled = false;
+              problems.push((msg.getSubject() || 'KFintech report') + ': no file fetched — ' + (link.note || 'download link gave no ZIP'));
+            } else {
+              totals.skipped++;
+            }
+            return;
+          }
+        } else {
+          feeds = attachmentFeeds(msg);
+        }
         feeds.forEach(function (feed) {
           totals.files++;
           try {
@@ -181,27 +222,85 @@ function attachmentFeeds(msg) {
   return out;
 }
 
-/** KFintech: follow the email's download link(s) and return the fetched ZIP(s).
-    The body has several scdelivery links (report, product-codes, a tracking
-    pixel); we take the /c/ links that aren't the product-codes one and keep the
-    response only if it's actually a ZIP (starts with the "PK" magic). */
+/**
+ * KFintech: follow the email's download link and return the fetched ZIP.
+ *
+ * Returns { feeds, noData, note }:
+ *   - feeds: [{name, bytes}] on success (one report per email), else []
+ *   - noData: true for a "No data found" email (nothing to fetch — finish it)
+ *   - note: why no file came back, for the alert, when it was a data report
+ *
+ * The body has several scdelivery links (the report, product-codes, a tracking
+ * pixel on /o/); we take the /c/ report link — preferring the one right before
+ * "to download the report" — and keep the response only if it is really a ZIP
+ * (the "PK" magic). Some links now answer with an HTML interstitial that carries
+ * the real file URL, so that is followed once before giving up.
+ */
 function linkFeeds(msg) {
-  var html = msg.getBody() || '';
-  var hrefs = html.match(/https:\/\/scdelivery\.kfintech\.com\/c\/\?[^"'\s<>]+/g) || [];
-  var out = [];
-  for (var i = 0; i < hrefs.length; i++) {
-    var href = hrefs[i].replace(/&amp;/g, '&');
-    if (/GVODPEFT|QSPEDPEF|epxompbet/.test(href)) continue; // encoded "FUNCODES/PRODCODE/downloads"
-    var resp = UrlFetchApp.fetch(href, { followRedirects: true, muteHttpExceptions: true });
-    if (resp.getResponseCode() !== 200) continue;
-    var bytes = resp.getContent();
-    if (bytes.length > 2 && bytes[0] === 80 && bytes[1] === 75) { // 'PK'
-      out.push({ name: reportName(msg, href), bytes: bytes });
-      break; // one report per email
+  if (isNoData(msg)) return { feeds: [], noData: true, note: 'no data found' };
+  var urls = downloadUrls(msg.getBody() || '');
+  var note = urls.length ? '' : 'no download link in email';
+  for (var i = 0; i < urls.length; i++) {
+    var got = fetchZip(urls[i]);
+    if (got.bytes) return { feeds: [{ name: reportName(msg, urls[i]), bytes: got.bytes }], noData: false, note: '' };
+    note = got.note;
+  }
+  return { feeds: [], noData: false, note: note };
+}
+
+/** A "No data found for the given period" email — nothing to download. */
+function isNoData(msg) {
+  return /no\s*data\s*found/i.test(msg.getPlainBody() || msg.getBody() || '');
+}
+
+/** The report download URL(s) from the email HTML, the real report link first. */
+function downloadUrls(html) {
+  // Product-codes and the /downloads path are decoy links (Caesar+1 encoded
+  // "FUNCODES"/"PRODCODE"/"downloads"); the tracking pixel is on /o/ not /c/.
+  var keep = function (h) { return !/GVODPEFT|QSPEDPEF|epxompbet/.test(h); };
+  var find = function (s) {
+    return (s.match(/https:\/\/scdelivery\.kfintech\.com\/c\/\?[^"'\s<>]+/g) || [])
+      .map(function (h) { return h.replace(/&amp;/g, '&'); })
+      .filter(keep);
+  };
+  var all = find(html);
+  // Prefer the link immediately before "to download the report".
+  var marker = html.search(/to\s*download\s*the\s*report/i);
+  if (marker > -1) {
+    var pref = find(html.slice(0, marker));
+    if (pref.length) {
+      var best = pref[pref.length - 1];
+      all = [best].concat(all.filter(function (h) { return h !== best; }));
     }
   }
-  return out;
+  return all;
 }
+
+/** Fetch one download link; {bytes} when it resolves to a ZIP, else {note}. */
+function fetchZip(url) {
+  var opts = { followRedirects: true, muteHttpExceptions: true,
+    headers: { 'User-Agent': 'Mozilla/5.0 (NiyomRTA)' } };
+  var resp = UrlFetchApp.fetch(url, opts);
+  if (resp.getResponseCode() !== 200) return { note: 'HTTP ' + resp.getResponseCode() };
+  var bytes = resp.getContent();
+  if (isZip(bytes)) return { bytes: bytes };
+  // An HTML interstitial sometimes stands in for the file — follow the file URL
+  // it names (the S3/dss link) once. '<' = 60.
+  var ct = (resp.getHeaders()['Content-Type'] || resp.getHeaders()['content-type'] || '').toLowerCase();
+  if (ct.indexOf('html') > -1 || (bytes.length && bytes[0] === 60)) {
+    var body = resp.getContentText();
+    var next = (body.match(/https?:\/\/[^"'\s<>]+\.(?:zip|kmfs)[^"'\s<>]*/i) ||
+                body.match(/https?:\/\/[^"'\s<>]*(?:dss\.kfintech\.com|amazonaws\.com|s3[^"'\s<>]*)[^"'\s<>]+/i) || [])[0];
+    if (next) {
+      var r2 = UrlFetchApp.fetch(next.replace(/&amp;/g, '&'), opts);
+      if (r2.getResponseCode() === 200 && isZip(r2.getContent())) return { bytes: r2.getContent() };
+    }
+    return { note: 'link returned HTML, no file URL inside' };
+  }
+  return { note: 'not a ZIP (content-type ' + (ct || '?') + ')' };
+}
+
+function isZip(bytes) { return bytes && bytes.length > 2 && bytes[0] === 80 && bytes[1] === 75; } // 'PK'
 
 /** A filename hint for the log (the pipeline reads the real member name inside). */
 function reportName(msg, href) {
