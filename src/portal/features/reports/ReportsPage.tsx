@@ -15,6 +15,7 @@ import {
 import { fmt } from '../../../crm/utils';
 import type { NWClient, NWHolding } from '../../../crm/types';
 import type { HoldingRow } from '../../../../shared/portal/types';
+import type { ElssLockInLot } from '../../../../shared/portal/services/cas/elssLockIn';
 import { Card } from '../../components/Card';
 import { KpiStat } from '../../components/KpiStat';
 import { ComingSoonBadge } from '../../components/StatusPill';
@@ -27,6 +28,13 @@ import {
   exportHoldingsXlsx,
   exportTransactionsXlsx,
 } from '../../services/exporters';
+import {
+  downloadDematPdf,
+  downloadElssHoldingsPdf,
+  downloadElssLockInPdf,
+  downloadHoldingsPdf,
+  downloadTransactionsPdf,
+} from './reportDocs';
 import { computeElssLockIn, isElssName, mergeElssSources } from '../../services/cas/elssLockIn';
 import { fetchRegistrarElssSources } from '../../services/cas/registrarElss';
 import { useTransactions } from '../../hooks/useTransactions';
@@ -41,24 +49,32 @@ const isElss = (r: HoldingRow) =>
   r.productType === 'mutual_fund' && (isElssName(r.name) || isElssName(r.category));
 
 /**
- * The ELSS download, lot-level where we can and a holdings slice otherwise.
- *
- * The richer sheet — every lot with its own three-year unlock date — comes from
- * the CAS gains engine, so it exists only for an imported, complete statement.
- * When there is none (ELSS held on the platform, or a truncated CAS), fall back
- * to the holdings slice so the button never dead-ends.
+ * Resolve the ELSS report's data: lot-level lock-in where we can (the CAS gains
+ * engine or the registrar feed), a plain holdings slice otherwise, so neither
+ * the PDF nor the Excel button ever dead-ends.
  */
-async function downloadElss(clientId: string, elssHoldings: HoldingRow[], client: NWClient | null) {
+async function resolveElss(
+  clientId: string,
+  elssHoldings: HoldingRow[],
+): Promise<{ lots: ElssLockInLot[] } | { holdings: HoldingRow[] }> {
   const [statement, registrar] = await Promise.all([
     CasGainsService.getStatement(clientId).catch(() => null),
     fetchRegistrarElssSources(clientId).catch(() => []),
   ]);
   const lockIn = computeElssLockIn(mergeElssSources(statement?.schemes ?? [], registrar));
-  if (lockIn) {
-    await exportElssLockInXlsx(lockIn.lots, client);
-  } else {
-    await exportElssXlsx(elssHoldings, client);
-  }
+  return lockIn ? { lots: lockIn.lots } : { holdings: elssHoldings };
+}
+
+async function downloadElssPdf(clientId: string, elssHoldings: HoldingRow[], client: NWClient | null) {
+  const r = await resolveElss(clientId, elssHoldings);
+  if ('lots' in r) await downloadElssLockInPdf(r.lots, client);
+  else await downloadElssHoldingsPdf(r.holdings, client);
+}
+
+async function downloadElssExcel(clientId: string, elssHoldings: HoldingRow[], client: NWClient | null) {
+  const r = await resolveElss(clientId, elssHoldings);
+  if ('lots' in r) await exportElssLockInXlsx(r.lots, client);
+  else await exportElssXlsx(r.holdings, client);
 }
 
 interface Props {
@@ -85,6 +101,9 @@ interface ReportDef {
   title: string;
   description: string;
   icon: LucideIcon;
+  /** Primary download — the branded PDF statement. */
+  pdf?: () => Promise<void>;
+  /** Secondary download — the analysable Excel, where one makes sense. */
   action?: () => Promise<void>;
   /** Navigates rather than downloading. */
   open?: () => void;
@@ -92,18 +111,44 @@ interface ReportDef {
   soon?: boolean;
 }
 
-function ReportRow({ report }: { report: ReportDef }) {
+/** A download button that shows its own spinner while the file is built. */
+function DownloadButton({
+  run,
+  label,
+  icon: Icon,
+  primary,
+}: {
+  run: () => Promise<void>;
+  label: string;
+  icon: LucideIcon;
+  primary?: boolean;
+}) {
   const [busy, setBusy] = useState(false);
-  const run = async () => {
-    if (!report.action) return;
+  const onClick = async () => {
     setBusy(true);
     try {
-      await report.action();
+      await run();
     } finally {
       setBusy(false);
     }
   };
+  const tone = primary
+    ? 'border-accent/40 bg-accent/10 text-accent hover:bg-accent/15'
+    : 'border-border bg-bg-surface text-text-secondary hover:border-accent/40 hover:text-accent';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      className={`inline-flex items-center gap-1.5 rounded-token-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${tone}`}
+    >
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
+      {busy ? 'Preparing…' : label}
+    </button>
+  );
+}
 
+function ReportRow({ report }: { report: ReportDef }) {
   return (
     <Card padding="md" className="flex items-start gap-3">
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-token-lg bg-accent/10">
@@ -115,26 +160,21 @@ function ReportRow({ report }: { report: ReportDef }) {
           {report.soon && <ComingSoonBadge />}
         </div>
         <p className="mt-0.5 text-xs text-text-secondary">{report.description}</p>
-        {report.open && (
-          <button
-            type="button"
-            onClick={report.open}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:border-accent/40 hover:text-accent"
-          >
-            <ArrowRight className="h-3.5 w-3.5" />
-            {report.openLabel ?? 'Open'}
-          </button>
-        )}
-        {!report.soon && report.action && (
-          <button
-            type="button"
-            onClick={run}
-            disabled={busy}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            {busy ? 'Preparing…' : 'Download Excel'}
-          </button>
+        {!report.soon && (report.open || report.pdf || report.action) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {report.open && (
+              <button
+                type="button"
+                onClick={report.open}
+                className="inline-flex items-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:border-accent/40 hover:text-accent"
+              >
+                <ArrowRight className="h-3.5 w-3.5" />
+                {report.openLabel ?? 'Open'}
+              </button>
+            )}
+            {report.pdf && <DownloadButton run={report.pdf} label="Download PDF" icon={Download} primary />}
+            {report.action && <DownloadButton run={report.action} label="Excel" icon={FileSpreadsheet} />}
+          </div>
         )}
       </div>
     </Card>
@@ -155,7 +195,7 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
       category: 'Tax',
       title: 'Capital Gains — Mutual Funds',
       description:
-        'Realised gains by financial year, short-term vs long-term, matched FIFO from your imported statement. View on screen or download the Excel.',
+        'Realised gains by financial year, short-term vs long-term, matched FIFO from your imported statement. View on screen, then download the PDF or Excel.',
       icon: PiggyBank,
       open: onOpenCapitalGains,
       openLabel: 'View capital gains',
@@ -169,7 +209,8 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
             description:
               'Your tax-saving ELSS funds — amount invested, and, from an imported statement, each lot’s three-year lock-in and unlock date.',
             icon: ShieldCheck,
-            action: () => downloadElss(clientId, elssRows, client),
+            pdf: () => downloadElssPdf(clientId, elssRows, client),
+            action: () => downloadElssExcel(clientId, elssRows, client),
           },
         ]
       : []),
@@ -179,6 +220,7 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
       title: 'Holdings Statement',
       description: 'A snapshot of everything you hold — funds, bonds, shares — with value and P&L.',
       icon: FileSpreadsheet,
+      pdf: () => downloadHoldingsPdf(holdingRows, client),
       action: () => exportHoldingsXlsx(holdingRows, client),
     },
     ...(dematRows.length
@@ -190,6 +232,7 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
             description:
               'Shares, bonds and other securities from your imported demat statement — with ISIN and depository, as held.',
             icon: Wallet,
+            pdf: () => downloadDematPdf(dematRows, client),
             action: () => exportDematHoldingsXlsx(dematRows, client),
           },
         ]
@@ -198,8 +241,9 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
       key: 'txn',
       category: 'Transactions',
       title: 'Transaction Statement',
-      description: 'Every buy and sell across all products, as an Excel workbook.',
+      description: 'Every buy and sell across all products — as a PDF statement or an Excel workbook.',
       icon: Receipt,
+      pdf: () => downloadTransactionsPdf(txnRows, client),
       action: () => exportTransactionsXlsx(txnRows, client),
     },
     {
@@ -261,8 +305,9 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
       })}
 
       <p className="px-1 text-[11px] text-text-faint">
-        Excel statements are generated on your device from your portfolio data — nothing leaves your
-        browser. Capital gains are worked out from the Consolidated Account Statement you import, so
+        Statements are generated on your device from your portfolio data — nothing leaves your
+        browser. Each report downloads as a branded PDF, with an Excel copy where it helps your CA.
+        Capital gains are worked out from the Consolidated Account Statement you import, so
         import yours first if the page is empty.
         {mfSsoEnabled() ? ' Your mutual fund order history lives in your mutual fund account.' : ''}
       </p>

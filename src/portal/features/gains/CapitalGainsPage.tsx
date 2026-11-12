@@ -25,6 +25,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Download,
+  FileSpreadsheet,
   FileText,
   HelpCircle,
   Loader2,
@@ -44,6 +45,7 @@ import { SectionHeader } from '../../components/SectionHeader';
 import { StatusPill } from '../../components/StatusPill';
 import { CasGainsService, type GainsStatement } from '../../services/CasGainsService';
 import { exportCapitalGainsXlsx, exportElssLockInXlsx } from '../../services/exporters';
+import { downloadCapitalGainsPdf, downloadElssLockInPdf } from '../reports/reportDocs';
 import { displaySchemeName, termLabel, treatmentLabel } from '../../services/cas/gains';
 import {
   computeElssLockIn,
@@ -66,6 +68,7 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
   const [loading, setLoading] = useState(true);
   const [fy, setFy] = useState<string>('');
   const [busy, setBusy] = useState(false);
+  const [busyPdf, setBusyPdf] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -184,7 +187,7 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
     );
   }
 
-  const download = async () => {
+  const downloadExcel = async () => {
     setBusy(true);
     try {
       await exportCapitalGainsXlsx(
@@ -209,6 +212,15 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
       );
     } finally {
       setBusy(false);
+    }
+  };
+
+  const downloadPdf = async () => {
+    setBusyPdf(true);
+    try {
+      await downloadCapitalGainsPdf(rows, fy, client);
+    } finally {
+      setBusyPdf(false);
     }
   };
 
@@ -237,12 +249,21 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
         )}
         <button
           type="button"
-          onClick={download}
-          disabled={busy || !rows.length}
-          className="inline-flex items-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
+          onClick={downloadPdf}
+          disabled={busyPdf || !rows.length}
+          className="inline-flex items-center gap-1.5 rounded-token-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-accent/15 disabled:opacity-50"
         >
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-          {busy ? 'Preparing…' : 'Download Excel'}
+          {busyPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          {busyPdf ? 'Preparing…' : 'Download PDF'}
+        </button>
+        <button
+          type="button"
+          onClick={downloadExcel}
+          disabled={busy || !rows.length}
+          className="inline-flex items-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+          {busy ? 'Preparing…' : 'Excel'}
         </button>
         </div>
       </div>
@@ -422,9 +443,10 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
  */
 function ElssLockInCard({ lockIn, client }: { lockIn: ElssLockIn; client: NWClient | null }) {
   const [busy, setBusy] = useState(false);
+  const [busyPdf, setBusyPdf] = useState(false);
   const showValue = lockIn.currentValue !== null;
 
-  const download = async () => {
+  const downloadExcel = async () => {
     setBusy(true);
     try {
       await exportElssLockInXlsx(lockIn.lots, client);
@@ -433,19 +455,39 @@ function ElssLockInCard({ lockIn, client }: { lockIn: ElssLockIn; client: NWClie
     }
   };
 
+  const downloadPdf = async () => {
+    setBusyPdf(true);
+    try {
+      await downloadElssLockInPdf(lockIn.lots, client);
+    } finally {
+      setBusyPdf(false);
+    }
+  };
+
   return (
     <Card padding="lg">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SectionHeader title="ELSS lock-in · Section 80C" icon={ShieldCheck} />
-        <button
-          type="button"
-          onClick={download}
-          disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
-        >
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-          {busy ? 'Preparing…' : 'Download Excel'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={downloadPdf}
+            disabled={busyPdf}
+            className="inline-flex items-center gap-1.5 rounded-token-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-accent/15 disabled:opacity-50"
+          >
+            {busyPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {busyPdf ? 'Preparing…' : 'Download PDF'}
+          </button>
+          <button
+            type="button"
+            onClick={downloadExcel}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+            {busy ? 'Preparing…' : 'Excel'}
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
