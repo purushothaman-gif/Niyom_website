@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
 import { CasHoldingsPanel } from './CasHoldingsPanel';
+import { DematHoldingsPanel } from './DematHoldingsPanel';
 import { RtaMfPanel } from './mf/RtaMfPanel';
 import { SchemePicker } from './SchemePicker';
 import { supabase } from '../lib/supabase';
@@ -1506,10 +1507,18 @@ export default function Portfolio({ employee, pageParams }: Props) {
         funds bought elsewhere, which is precisely why it must not be counted as
         ours. Read-only for the same reason.
       */}
-      {/* Statement imports retire with the rest of in-house MF on the MF platform. */}
-      {view === 'detail' && clientFilter && !MF_ON_PLATFORM && (
+      {/* Shown with the MF platform on too: the platform only knows funds under
+          our ARN, and this statement is the one place an RM sees the rest. */}
+      {view === 'detail' && clientFilter && (
         <div className="mt-6">
           <CasHoldingsPanel clientId={clientFilter} />
+        </div>
+      )}
+
+      {/* The client's imported demat statement — stocks, ETFs, bonds. */}
+      {view === 'detail' && clientFilter && (
+        <div className="mt-6">
+          <DematHoldingsPanel clientId={clientFilter} />
         </div>
       )}
 
