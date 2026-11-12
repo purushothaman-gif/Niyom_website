@@ -5,10 +5,13 @@ import type { NWClient } from '../../../crm/types';
 import { OnboardingService } from './onboardingService';
 import { ageOn } from '../../../../supabase/functions/_shared/profile/profileRules';
 import {
-  CONTACT_OWNERS, GENDERS, INCOME_SLABS, MAX_MF_NOMINEES, NOMINEE_ID_TYPES, NOMINEE_RELATIONSHIPS,
-  OCCUPATIONS, PEP_STATUSES, WEALTH_SOURCES, validateInvestorProfile, validateNomination,
+  CONTACT_OWNERS, GENDERS, GUARDIAN_RELATIONSHIPS, INCOME_SLABS, MAX_MF_NOMINEES, MAX_PARENT_NAME,
+  NOMINEE_ID_TYPES, NOMINEE_RELATIONSHIPS, OCCUPATIONS, PEP_STATUSES, WEALTH_SOURCES, validateInvestorProfile, validateNomination,
   type MfNomineeInput, type Option,
 } from '../../../../supabase/functions/_shared/profile/investorProfile';
+import { COUNTRIES, isCountryCode } from '../../../../supabase/functions/_shared/profile/countries';
+
+const COUNTRY_OPTIONS: Option[] = COUNTRIES.map((c) => ({ value: c.code, label: c.name }));
 
 /**
  * The investor profile a mutual-fund exchange account needs — asked only of
@@ -41,7 +44,7 @@ type NomineeRow = {
 };
 
 const blankNominee = (share: string): NomineeRow => ({
-  full_name: '', relationship: 'Spouse', dob: '', share_percent: share, id_type: 'pan', id_number: '',
+  full_name: '', relationship: '', dob: '', share_percent: share, id_type: 'pan', id_number: '',
   guardian_name: '', guardian_dob: '', guardian_pan: '', guardian_relationship: '',
 });
 
@@ -98,11 +101,13 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack }: Props
   const [wealthSource, setWealthSource] = useState(client?.wealth_source || '');
   const [pep, setPep] = useState(client?.pep_status || '');
   const [birthPlace, setBirthPlace] = useState(client?.birth_place || '');
-  const [birthCountry, setBirthCountry] = useState(client?.birth_country || 'India');
+  // India is by far the common answer; anything stored before the country
+  // picker existed (free text) falls back to it rather than to a blank.
+  const [birthCountry, setBirthCountry] = useState(isCountryCode(client?.birth_country) ? client.birth_country : 'IND');
   const [taxAbroad, setTaxAbroad] = useState(
     client?.tax_resident_outside_india == null ? '' : client.tax_resident_outside_india ? 'yes' : 'no',
   );
-  const [foreignCountry, setForeignCountry] = useState(client?.foreign_tax_country || '');
+  const [foreignCountry, setForeignCountry] = useState(isCountryCode(client?.foreign_tax_country) ? client.foreign_tax_country : '');
   const [foreignTaxId, setForeignTaxId] = useState(client?.foreign_tax_id || '');
   const [fatherName, setFatherName] = useState(client?.father_name || '');
   const [spouseName, setSpouseName] = useState(client?.spouse_name || '');
@@ -128,7 +133,8 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack }: Props
         if (!alive || !data?.length) return;
         setNominees(data.slice(0, MAX_MF_NOMINEES).map((n) => ({
           full_name: n.full_name || '',
-          relationship: n.relationship || 'Spouse',
+          // An older free-text relationship ("Spouse") has no exchange code — ask again.
+          relationship: (NOMINEE_RELATIONSHIPS as readonly string[]).includes(n.relationship) ? n.relationship : '',
           dob: n.dob || '',
           share_percent: String(Math.round(Number(n.share_percent) || 0) || ''),
           id_type: n.id_type || 'pan',
@@ -136,7 +142,7 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack }: Props
           guardian_name: n.guardian_name || '',
           guardian_dob: n.guardian_dob || '',
           guardian_pan: n.guardian_pan || '',
-          guardian_relationship: n.guardian_relationship || '',
+          guardian_relationship: (GUARDIAN_RELATIONSHIPS as readonly string[]).includes(n.guardian_relationship ?? '') ? n.guardian_relationship! : '',
         })));
         setNomination((cur) => cur || 'nominate');
       });
@@ -213,16 +219,16 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack }: Props
         <Field label="Annual income"><Select value={incomeSlab} onChange={setIncomeSlab} options={INCOME_SLABS} /></Field>
         <Field label="Main source of wealth"><Select value={wealthSource} onChange={setWealthSource} options={WEALTH_SOURCES} /></Field>
         <Field label="Father’s name" optional hint="Father’s or spouse’s name — at least one is needed.">
-          <input className={inputCls} value={fatherName} onChange={(e) => setFatherName(e.target.value)} placeholder="As on your records" />
+          <input className={inputCls} value={fatherName} maxLength={MAX_PARENT_NAME} onChange={(e) => setFatherName(e.target.value)} placeholder="As on your records" />
         </Field>
         <Field label="Spouse’s name" optional>
-          <input className={inputCls} value={spouseName} onChange={(e) => setSpouseName(e.target.value)} placeholder="If married" />
+          <input className={inputCls} value={spouseName} maxLength={MAX_PARENT_NAME} onChange={(e) => setSpouseName(e.target.value)} placeholder="If married" />
         </Field>
         <Field label="Place of birth">
           <input className={inputCls} value={birthPlace} onChange={(e) => setBirthPlace(e.target.value)} placeholder="City or town" />
         </Field>
         <Field label="Country of birth">
-          <input className={inputCls} value={birthCountry} onChange={(e) => setBirthCountry(e.target.value)} placeholder="India" />
+          <Select value={birthCountry} onChange={setBirthCountry} options={COUNTRY_OPTIONS} />
         </Field>
       </div>
 
@@ -236,7 +242,7 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack }: Props
         {taxAbroad === 'yes' && (
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Other country of tax residence">
-              <input className={inputCls} value={foreignCountry} onChange={(e) => setForeignCountry(e.target.value)} placeholder="e.g. Singapore" />
+              <Select value={foreignCountry} onChange={setForeignCountry} options={COUNTRY_OPTIONS.filter((c) => c.value !== 'IND')} />
             </Field>
             <Field label="Tax identification number there">
               <input className={inputCls} value={foreignTaxId} onChange={(e) => setForeignTaxId(e.target.value)} />
@@ -296,6 +302,7 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack }: Props
                     </Field>
                     <Field label="Relationship to you">
                       <select className={inputCls} value={n.relationship} onChange={(e) => upd(i, { relationship: e.target.value })}>
+                        <option value="">Select…</option>
                         {NOMINEE_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
                       </select>
                     </Field>
@@ -328,8 +335,9 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack }: Props
                         <Field label="Guardian’s full name">
                           <input className={inputCls} value={n.guardian_name} onChange={(e) => upd(i, { guardian_name: e.target.value })} />
                         </Field>
-                        <Field label="Guardian’s relationship to nominee">
-                          <input className={inputCls} value={n.guardian_relationship} onChange={(e) => upd(i, { guardian_relationship: e.target.value })} placeholder="e.g. Mother" />
+                        <Field label="Guardian is the nominee’s">
+                          <Select value={n.guardian_relationship} onChange={(v) => upd(i, { guardian_relationship: v })}
+                            options={GUARDIAN_RELATIONSHIPS.map((g) => ({ value: g, label: g }))} />
                         </Field>
                         <Field label="Guardian’s date of birth">
                           <input type="date" className={inputCls} value={n.guardian_dob} onChange={(e) => upd(i, { guardian_dob: e.target.value })} />

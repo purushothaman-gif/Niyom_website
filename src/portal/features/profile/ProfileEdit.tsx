@@ -8,6 +8,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { CheckCircle2, Loader2, Mail, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
 import type { NWClient } from '../../../crm/types';
+import { NOMINEE_RELATIONSHIPS } from '../../../../supabase/functions/_shared/profile/investorProfile';
 import { ProfileEditService, type Nominee, type ProfileChange } from '../../../../shared/portal/services/ProfileEditService';
 
 const inputCls =
@@ -236,11 +237,14 @@ export function EditContactModal({ client, onClose, onSaved }: { client: NWClien
 
 /* ------------------------------------------------------------ nominees */
 
-const RELATIONSHIPS = ['Spouse', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister', 'Grandchild', 'Other'];
+// The exchange's own relationship list, shared with onboarding, so a nominee
+// added here can be sent to BSE as is. Older rows may hold a value that is no
+// longer offered ("Spouse"); it stays selectable for that row until changed.
+const RELATIONSHIPS: readonly string[] = NOMINEE_RELATIONSHIPS;
 
 const blankNominee = (share: number): Nominee => ({
   full_name: '',
-  relationship: 'Spouse',
+  relationship: '',
   dob: null,
   share_percent: share,
   guardian_name: null,
@@ -291,6 +295,8 @@ export function EditNomineesModal({ current, onClose, onSaved }: { current: Nomi
                 </Field>
                 <Field label="Relationship">
                   <select className={inputCls} value={n.relationship} onChange={(e) => upd(i, { relationship: e.target.value })}>
+                    {!n.relationship && <option value="">Select…</option>}
+                    {!!n.relationship && !RELATIONSHIPS.includes(n.relationship) && <option>{n.relationship}</option>}
                     {RELATIONSHIPS.map((r) => (
                       <option key={r}>{r}</option>
                     ))}

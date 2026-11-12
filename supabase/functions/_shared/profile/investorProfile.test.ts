@@ -26,7 +26,7 @@ const profile: InvestorProfileInput = {
   wealth_source: 'salary',
   pep_status: 'no',
   birth_place: '  Chennai ',
-  birth_country: 'India',
+  birth_country: 'ind',
   tax_resident_outside_india: false,
   father_name: 'R Kumar',
   spouse_name: '',
@@ -36,7 +36,7 @@ const profile: InvestorProfileInput = {
 
 const adult: MfNomineeInput = {
   full_name: 'Asha Kumar',
-  relationship: 'Spouse',
+  relationship: 'Wife',
   dob: '1990-04-02',
   share_percent: 100,
   id_type: 'pan',
@@ -58,6 +58,7 @@ describe('validateInvestorProfile', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.birth_place).toBe('Chennai');
+    expect(r.value.birth_country).toBe('IND');
     expect(r.value.spouse_name).toBeNull();
     expect(r.value.foreign_tax_country).toBeNull();
   });
@@ -79,9 +80,23 @@ describe('validateInvestorProfile', () => {
   it('asks for the country and tax number when tax is paid abroad', () => {
     const abroad = { ...profile, tax_resident_outside_india: true };
     expect(validateInvestorProfile(abroad).ok).toBe(false);
-    expect(validateInvestorProfile({ ...abroad, foreign_tax_country: 'Singapore' }).ok).toBe(false);
-    const r = validateInvestorProfile({ ...abroad, foreign_tax_country: 'Singapore', foreign_tax_id: 'S1234567A' });
+    expect(validateInvestorProfile({ ...abroad, foreign_tax_country: 'SGP' }).ok).toBe(false);
+    // "abroad" cannot be India, and a country must be a real code, not free text.
+    expect(validateInvestorProfile({ ...abroad, foreign_tax_country: 'IND', foreign_tax_id: 'S1234567A' }).ok).toBe(false);
+    expect(validateInvestorProfile({ ...abroad, foreign_tax_country: 'Singapore', foreign_tax_id: 'S1234567A' }).ok).toBe(false);
+    const r = validateInvestorProfile({ ...abroad, foreign_tax_country: 'SGP', foreign_tax_id: 'S1234567A' });
     expect(r.ok && r.value.foreign_tax_id).toBe('S1234567A');
+  });
+
+  it('takes the country of birth as a code and the exchange occupations', () => {
+    expect(validateInvestorProfile({ ...profile, birth_country: 'India' }).ok).toBe(false);
+    expect(validateInvestorProfile({ ...profile, occupation: 'doctor' }).ok).toBe(true);
+    expect(validateInvestorProfile({ ...profile, occupation: 'forex_dealer' }).ok).toBe(true);
+  });
+
+  it('keeps a father or spouse name within the exchange limit', () => {
+    const r = validateInvestorProfile({ ...profile, father_name: 'A'.repeat(90) });
+    expect(r.ok && r.value.father_name?.length).toBe(70);
   });
 });
 
@@ -110,6 +125,12 @@ describe('validateNomination', () => {
     expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, share_percent: 60 }, { ...adult, share_percent: 40 }] }, TODAY).ok).toBe(true);
   });
 
+  it('only takes a relationship the exchange has a code for', () => {
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, relationship: 'Spouse' }] }, TODAY).ok).toBe(false);
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, relationship: 'Grandchild' }] }, TODAY).ok).toBe(false);
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, relationship: 'Grand Daughter' }] }, TODAY).ok).toBe(true);
+  });
+
   it('needs a date of birth and an identity document', () => {
     expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, dob: null }] }, TODAY).ok).toBe(false);
     expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, id_type: undefined }] }, TODAY).ok).toBe(false);
@@ -130,6 +151,8 @@ describe('validateNomination', () => {
     expect(validateNomination({ choice: 'nominate', nominees: [{ ...minor, guardian_dob: '1990-04-02', guardian_pan: 'ABCDE1234F' }] }, TODAY).ok).toBe(false);
     // The guardian must be an adult.
     expect(validateNomination({ choice: 'nominate', nominees: [{ ...minor, guardian_dob: '2012-01-01', guardian_pan: 'ABCDE1234F', guardian_relationship: 'Mother' }] }, TODAY).ok).toBe(false);
+    // Only the guardians the exchange recognises.
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...minor, guardian_dob: '1990-04-02', guardian_pan: 'ABCDE1234F', guardian_relationship: 'Aunt' }] }, TODAY).ok).toBe(false);
     const r = validateNomination({ choice: 'nominate', nominees: [{ ...minor, guardian_dob: '1990-04-02', guardian_pan: 'abcde1234f', guardian_relationship: 'Mother' }] }, TODAY);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value.nominees[0]).toMatchObject({ guardian_pan: 'ABCDE1234F', guardian_relationship: 'Mother' });

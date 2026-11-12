@@ -10,6 +10,7 @@ import {
   BANK_ACCOUNT_TYPES, CONTACT_OWNERS, GENDERS, INCOME_SLABS, NOMINEE_ID_TYPES, OCCUPATIONS,
   PEP_STATUSES, WEALTH_SOURCES, labelOf,
 } from '../../supabase/functions/_shared/profile/investorProfile';
+import { countryName } from '../../supabase/functions/_shared/profile/countries';
 
 /** The mutual-fund investor profile the client declared in onboarding. */
 interface InvestorProfile {
@@ -148,9 +149,9 @@ Investor profile, nominees & changes — {clientName}
                     ['Politically exposed', labelOf(PEP_STATUSES, profile.pep_status)],
                     ['Father’s name', profile.father_name || '—'],
                     ['Spouse’s name', profile.spouse_name || '—'],
-                    ['Born in', [profile.birth_place, profile.birth_country].filter(Boolean).join(', ') || '—'],
+                    ['Born in', [profile.birth_place, profile.birth_country ? countryName(profile.birth_country) : null].filter(Boolean).join(', ') || '—'],
                     ['Tax resident abroad', profile.tax_resident_outside_india
-                      ? `Yes — ${profile.foreign_tax_country ?? ''} (${profile.foreign_tax_id ?? ''})`
+                      ? `Yes — ${countryName(profile.foreign_tax_country)} (${profile.foreign_tax_id ?? ''})`
                       : 'No'],
                     ['Mobile belongs to', labelOf(CONTACT_OWNERS, profile.mobile_belongs_to)],
                     ['Email belongs to', labelOf(CONTACT_OWNERS, profile.email_belongs_to)],

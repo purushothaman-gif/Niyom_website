@@ -6,11 +6,13 @@
  * Pure (no Deno, no I/O): the portal uses it to drive the form and the
  * save-profile edge function uses the same rules to decide what is stored.
  *
- * The keys are our own. BSE's code lists are not in this repository, so the
- * mapping from these keys to exchange codes lives in the proxy mapper and can
- * change without touching stored data.
+ * The option lists follow BSE's StAR MF API v2 specification (§7.4 enums,
+ * document "bse-starmfv2-api_2.0.0"), so every value here has exactly one
+ * exchange code. The keys stay our own; the mapping to codes lives in the
+ * proxy mapper and can change without touching stored data.
  */
 import { ageOn, validateNominees, type Check, type NomineeInput } from './profileRules.ts';
+import { isCountryCode } from './countries.ts';
 
 export interface Option { value: string; label: string }
 
@@ -26,6 +28,8 @@ export const OCCUPATIONS: Option[] = [
   { value: 'government_service', label: 'Government service' },
   { value: 'business', label: 'Business' },
   { value: 'professional', label: 'Professional' },
+  { value: 'doctor', label: 'Doctor' },
+  { value: 'forex_dealer', label: 'Forex dealer' },
   { value: 'agriculturist', label: 'Agriculturist' },
   { value: 'retired', label: 'Retired' },
   { value: 'housewife', label: 'Homemaker' },
@@ -83,9 +87,23 @@ export const NOMINEE_ID_TYPES: Option[] = [
   { value: 'driving_licence', label: 'Driving licence' },
 ];
 
+/**
+ * The exchange's own list (§7.4.18), most common first. It has no "Spouse" or
+ * "Grandchild": a husband and a wife, a grandson and a granddaughter, are
+ * different codes, so the form has to ask which.
+ */
 export const NOMINEE_RELATIONSHIPS = [
-  'Spouse', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister', 'Grandchild', 'Other',
+  'Wife', 'Husband', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister',
+  'Grand Son', 'Grand Daughter', 'Grand Father', 'Grand Mother',
+  'Son In Law', 'Daughter In Law', 'Father In Law', 'Mother In Law',
+  'Uncle', 'Aunt', 'Nephew', 'Niece', 'Friend', 'Others',
 ] as const;
+
+/** Who may act for a minor nominee (§7.4.65) — the exchange accepts only these. */
+export const GUARDIAN_RELATIONSHIPS = ['Father', 'Mother', 'Court appointed legal guardian'] as const;
+
+/** Father's / spouse's name: the exchange takes 2 to 70 characters. */
+export const MAX_PARENT_NAME = 70;
 
 /** The exchange registers at most three nominees per account. */
 export const MAX_MF_NOMINEES = 3;
@@ -143,8 +161,8 @@ export function validateInvestorProfile(input: InvestorProfileInput): Check<Inve
 
   const birthPlace = clean(input.birth_place, 60);
   if (birthPlace.length < 2) return { ok: false, error: 'Enter your place of birth (city or town).' };
-  const birthCountry = clean(input.birth_country, 60);
-  if (birthCountry.length < 2) return { ok: false, error: 'Enter your country of birth.' };
+  const birthCountry = String(input.birth_country ?? '').trim().toUpperCase();
+  if (!isCountryCode(birthCountry)) return { ok: false, error: 'Select your country of birth.' };
 
   if (typeof input.tax_resident_outside_india !== 'boolean') {
     return { ok: false, error: 'Tell us whether you pay tax in any country other than India.' };
@@ -152,14 +170,16 @@ export function validateInvestorProfile(input: InvestorProfileInput): Check<Inve
   let foreignCountry: string | null = null;
   let foreignId: string | null = null;
   if (input.tax_resident_outside_india) {
-    foreignCountry = clean(input.foreign_tax_country, 60);
+    foreignCountry = String(input.foreign_tax_country ?? '').trim().toUpperCase();
     foreignId = clean(input.foreign_tax_id, 40);
-    if (foreignCountry.length < 2) return { ok: false, error: 'Enter the other country where you are a tax resident.' };
+    if (!isCountryCode(foreignCountry) || foreignCountry === 'IND') {
+      return { ok: false, error: 'Select the other country where you are a tax resident.' };
+    }
     if (foreignId.length < 3) return { ok: false, error: 'Enter your tax identification number for that country.' };
   }
 
-  const father = clean(input.father_name, 100);
-  const spouse = clean(input.spouse_name, 100);
+  const father = clean(input.father_name, MAX_PARENT_NAME);
+  const spouse = clean(input.spouse_name, MAX_PARENT_NAME);
   if (father.length < 2 && spouse.length < 2) return { ok: false, error: 'Enter your father’s or your spouse’s name.' };
 
   if (!has(CONTACT_OWNERS, input.mobile_belongs_to)) return { ok: false, error: 'Tell us whose mobile number this is.' };
@@ -226,6 +246,9 @@ export function validateNomination(input: NominationInput | null | undefined, to
   for (const [i, n] of list.entries()) {
     const label = `Nominee ${i + 1}`;
     const core = base.value[i];
+    if (!(NOMINEE_RELATIONSHIPS as readonly string[]).includes(core.relationship)) {
+      return { ok: false, error: `${label}: choose the relationship from the list.` };
+    }
     if (!Number.isInteger(core.share_percent)) return { ok: false, error: `${label}: share must be a whole number.` };
     if (!core.dob) return { ok: false, error: `${label}: enter the date of birth.` };
 
@@ -252,8 +275,10 @@ export function validateNomination(input: NominationInput | null | undefined, to
       if (gAge === null || gAge < 18 || gAge > 120) return { ok: false, error: `${label}: enter the guardian's date of birth (an adult).` };
       guardianPan = String(n.guardian_pan ?? '').trim().toUpperCase();
       if (!PAN.test(guardianPan)) return { ok: false, error: `${label}: enter the guardian's PAN.` };
-      guardianRel = clean(n.guardian_relationship, 40);
-      if (guardianRel.length < 2) return { ok: false, error: `${label}: enter the guardian's relationship to the nominee.` };
+      guardianRel = String(n.guardian_relationship ?? '').trim();
+      if (!(GUARDIAN_RELATIONSHIPS as readonly string[]).includes(guardianRel)) {
+        return { ok: false, error: `${label}: choose who the guardian is — father, mother or a court-appointed guardian.` };
+      }
     }
 
     out.push({
