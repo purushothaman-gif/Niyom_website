@@ -1,0 +1,154 @@
+/**
+ * Investor-profile rules.
+ *
+ * Pinned because what passes here is stored as the investor's own regulatory
+ * declaration and later sent to the exchange in their name: a half-filled
+ * profile must not read as complete, an Aadhaar must never be kept in full,
+ * and a minor nominee must not get through without a guardian.
+ */
+import { describe, expect, it } from 'vitest';
+import {
+  MAX_MF_NOMINEES,
+  needsInvestorProfile,
+  validateInvestorProfile,
+  validateMfDetails,
+  validateNomination,
+  type InvestorProfileInput,
+  type MfNomineeInput,
+} from './investorProfile';
+
+const TODAY = new Date('2026-11-12T00:00:00Z');
+
+const profile: InvestorProfileInput = {
+  gender: 'F',
+  occupation: 'professional',
+  income_slab: '10l_25l',
+  wealth_source: 'salary',
+  pep_status: 'no',
+  birth_place: '  Chennai ',
+  birth_country: 'India',
+  tax_resident_outside_india: false,
+  father_name: 'R Kumar',
+  spouse_name: '',
+  mobile_belongs_to: 'self',
+  email_belongs_to: 'spouse',
+};
+
+const adult: MfNomineeInput = {
+  full_name: 'Asha Kumar',
+  relationship: 'Spouse',
+  dob: '1990-04-02',
+  share_percent: 100,
+  id_type: 'pan',
+  id_number: 'abcde1234f',
+};
+
+describe('needsInvestorProfile', () => {
+  it('applies only when mutual funds are chosen', () => {
+    expect(needsInvestorProfile(['bonds', 'mutual_funds'])).toBe(true);
+    expect(needsInvestorProfile(['bonds', 'unlisted_shares'])).toBe(false);
+    expect(needsInvestorProfile([])).toBe(false);
+    expect(needsInvestorProfile(null)).toBe(false);
+  });
+});
+
+describe('validateInvestorProfile', () => {
+  it('accepts a complete profile and tidies free text', () => {
+    const r = validateInvestorProfile(profile);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.birth_place).toBe('Chennai');
+    expect(r.value.spouse_name).toBeNull();
+    expect(r.value.foreign_tax_country).toBeNull();
+  });
+
+  it('rejects each missing declaration rather than assuming a default', () => {
+    for (const key of ['gender', 'occupation', 'income_slab', 'wealth_source', 'pep_status', 'mobile_belongs_to', 'email_belongs_to'] as const) {
+      expect(validateInvestorProfile({ ...profile, [key]: undefined }).ok, key).toBe(false);
+      expect(validateInvestorProfile({ ...profile, [key]: 'not-a-real-option' }).ok, key).toBe(false);
+    }
+    expect(validateInvestorProfile({ ...profile, birth_place: ' ' }).ok).toBe(false);
+    expect(validateInvestorProfile({ ...profile, tax_resident_outside_india: undefined }).ok).toBe(false);
+  });
+
+  it('needs a father or a spouse name, not both', () => {
+    expect(validateInvestorProfile({ ...profile, father_name: '', spouse_name: '' }).ok).toBe(false);
+    expect(validateInvestorProfile({ ...profile, father_name: '', spouse_name: 'A Kumar' }).ok).toBe(true);
+  });
+
+  it('asks for the country and tax number when tax is paid abroad', () => {
+    const abroad = { ...profile, tax_resident_outside_india: true };
+    expect(validateInvestorProfile(abroad).ok).toBe(false);
+    expect(validateInvestorProfile({ ...abroad, foreign_tax_country: 'Singapore' }).ok).toBe(false);
+    const r = validateInvestorProfile({ ...abroad, foreign_tax_country: 'Singapore', foreign_tax_id: 'S1234567A' });
+    expect(r.ok && r.value.foreign_tax_id).toBe('S1234567A');
+  });
+});
+
+describe('validateNomination', () => {
+  it('requires an explicit choice', () => {
+    expect(validateNomination(null, TODAY).ok).toBe(false);
+    expect(validateNomination({ choice: 'maybe' } as never, TODAY).ok).toBe(false);
+    expect(validateNomination({ choice: 'opt_out' }, TODAY)).toEqual({ ok: true, value: { choice: 'opt_out', nominees: [] } });
+  });
+
+  it('accepts one adult nominee and normalises the PAN', () => {
+    const r = validateNomination({ choice: 'nominate', nominees: [adult] }, TODAY);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.nominees[0]).toMatchObject({ id_type: 'pan', id_number: 'ABCDE1234F', guardian_pan: null });
+  });
+
+  it('will not treat "nominate" with nobody listed as a nomination', () => {
+    expect(validateNomination({ choice: 'nominate', nominees: [] }, TODAY).ok).toBe(false);
+  });
+
+  it('enforces the exchange limits: three nominees, whole shares, total 100', () => {
+    const four = Array.from({ length: MAX_MF_NOMINEES + 1 }, () => ({ ...adult, share_percent: 25 }));
+    expect(validateNomination({ choice: 'nominate', nominees: four }, TODAY).ok).toBe(false);
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, share_percent: 33.5 }, { ...adult, share_percent: 66.5 }] }, TODAY).ok).toBe(false);
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, share_percent: 60 }] }, TODAY).ok).toBe(false);
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, share_percent: 60 }, { ...adult, share_percent: 40 }] }, TODAY).ok).toBe(true);
+  });
+
+  it('needs a date of birth and an identity document', () => {
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, dob: null }] }, TODAY).ok).toBe(false);
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, id_type: undefined }] }, TODAY).ok).toBe(false);
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...adult, id_number: 'ABCDE12345' }] }, TODAY).ok).toBe(false);
+  });
+
+  it('never accepts a full Aadhaar number', () => {
+    const aadhaar = { ...adult, id_type: 'aadhaar_last4' };
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...aadhaar, id_number: '123412341234' }] }, TODAY).ok).toBe(false);
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...aadhaar, id_number: '1234 5678 9012' }] }, TODAY).ok).toBe(false);
+    const r = validateNomination({ choice: 'nominate', nominees: [{ ...aadhaar, id_number: '9012' }] }, TODAY);
+    expect(r.ok && r.value.nominees[0].id_number).toBe('9012');
+  });
+
+  it('needs a guardian with a PAN, date of birth and relationship for a minor', () => {
+    const minor: MfNomineeInput = { ...adult, relationship: 'Son', dob: '2015-06-01', guardian_name: 'Asha Kumar' };
+    expect(validateNomination({ choice: 'nominate', nominees: [minor] }, TODAY).ok).toBe(false);
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...minor, guardian_dob: '1990-04-02', guardian_pan: 'ABCDE1234F' }] }, TODAY).ok).toBe(false);
+    // The guardian must be an adult.
+    expect(validateNomination({ choice: 'nominate', nominees: [{ ...minor, guardian_dob: '2012-01-01', guardian_pan: 'ABCDE1234F', guardian_relationship: 'Mother' }] }, TODAY).ok).toBe(false);
+    const r = validateNomination({ choice: 'nominate', nominees: [{ ...minor, guardian_dob: '1990-04-02', guardian_pan: 'abcde1234f', guardian_relationship: 'Mother' }] }, TODAY);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.nominees[0]).toMatchObject({ guardian_pan: 'ABCDE1234F', guardian_relationship: 'Mother' });
+  });
+});
+
+describe('validateMfDetails', () => {
+  const ok = { dob: '1988-01-15', address: '12 Lake View Road, Adyar', bank_ifsc: 'HDFC0001234', bank_account: '123456789012', bank_account_type: 'savings' };
+
+  it('accepts complete details', () => {
+    expect(validateMfDetails(ok, TODAY).ok).toBe(true);
+  });
+
+  it('rejects a missing or under-18 date of birth, a short address, a bad IFSC or account, and no account type', () => {
+    expect(validateMfDetails({ ...ok, dob: '' }, TODAY).ok).toBe(false);
+    expect(validateMfDetails({ ...ok, dob: '2012-01-01' }, TODAY).ok).toBe(false);
+    expect(validateMfDetails({ ...ok, address: 'Adyar' }, TODAY).ok).toBe(false);
+    expect(validateMfDetails({ ...ok, bank_ifsc: 'HDFC1001234' }, TODAY).ok).toBe(false);
+    expect(validateMfDetails({ ...ok, bank_account: '12345' }, TODAY).ok).toBe(false);
+    expect(validateMfDetails({ ...ok, bank_account_type: '' }, TODAY).ok).toBe(false);
+  });
+});

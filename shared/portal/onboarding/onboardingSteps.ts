@@ -55,6 +55,14 @@ export function buildChecklist(client: NWClient | null): ChecklistStep[] {
     { key: 'pan', label: 'PAN Verification', done: !!c?.pan_verified, applicable: true },
     { key: 'bank', label: 'Bank Verification', done: !!c?.bank_verified, applicable: true },
     { key: 'cml', label: 'Demat Proof (CML)', done: !!c?.cml_uploaded, applicable: cmlRequired },
+    // Only for clients who chose mutual funds: the declaration an exchange
+    // account needs (occupation, income, tax residency, nomination).
+    {
+      key: 'investor_profile',
+      label: 'Investor Profile',
+      done: !!c?.investor_profile_completed_at,
+      applicable: !!c?.investment_preferences?.includes('mutual_funds'),
+    },
     { key: 'rm', label: 'RM Approval', done: approved, applicable: true },
     { key: 'ready', label: 'Ready to Invest', done: c?.onboarding_status === 'active', applicable: true },
   ];
@@ -65,6 +73,11 @@ export function checklistProgress(steps: ChecklistStep[]): { done: number; total
   const done = applicable.filter((s) => s.done).length;
   const total = applicable.length;
   return { done, total, percent: total ? Math.round((done / total) * 100) : 0 };
+}
+
+/** A client who chose mutual funds but has not yet given the investor profile. */
+export function investorProfilePending(client: NWClient | null): boolean {
+  return !!client?.investment_preferences?.includes('mutual_funds') && !client.investor_profile_completed_at;
 }
 
 /** Whether the client still has onboarding work to show on the dashboard. */

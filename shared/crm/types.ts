@@ -66,6 +66,24 @@ export interface NWClient {
   investment_preferences: string[];
   onboarding_status: 'account_created' | 'kyc_in_progress' | 'kyc_submitted' | 'kyc_under_review' | 'active';
   kyc_submitted_at: string | null;
+  // Investor profile for mutual funds (see 20261112170000_investor_profile.sql).
+  // Our own keys, not exchange codes; written by public-onboard-save-profile.
+  bank_account_type?: string | null;
+  occupation?: string | null;
+  income_slab?: string | null;
+  wealth_source?: string | null;
+  pep_status?: string | null;
+  birth_place?: string | null;
+  birth_country?: string | null;
+  tax_resident_outside_india?: boolean | null;
+  foreign_tax_country?: string | null;
+  foreign_tax_id?: string | null;
+  father_name?: string | null;
+  spouse_name?: string | null;
+  mobile_belongs_to?: string | null;
+  email_belongs_to?: string | null;
+  nomination_choice?: 'nominate' | 'opt_out' | null;
+  investor_profile_completed_at?: string | null;
   created_at: string;
   updated_at: string;
   employee?: { full_name: string; employee_code: string };

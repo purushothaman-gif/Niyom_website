@@ -154,6 +154,20 @@ export const OnboardingService = {
     return ok ? { ok: true } : { ok: false, error: data.error };
   },
 
+  /**
+   * Investor profile for mutual funds — the FATCA declaration and nomination.
+   * Validated and stored server-side (the columns are closed to the client's
+   * own session), which is also what marks the profile complete.
+   */
+  async saveInvestorProfile(
+    clientId: string,
+    profile: Record<string, unknown>,
+    nomination: Record<string, unknown>,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const { ok, data } = await authedFn('public-onboard-save-profile', { client_id: clientId, profile, nomination });
+    return ok ? { ok: true } : { ok: false, error: data.error };
+  },
+
   /** Step 5 — submit KYC for review with chosen investment preferences. */
   async submit(clientId: string, prefs: string[]): Promise<{ ok: boolean; error?: string }> {
     const { ok, data } = await authedFn('public-onboard-submit', {

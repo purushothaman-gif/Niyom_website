@@ -8119,8 +8119,13 @@ export type Database = {
           dob: string | null
           email: string | null
           full_name: string
+          guardian_dob: string | null
           guardian_name: string | null
+          guardian_pan: string | null
+          guardian_relationship: string | null
           id: string
+          id_number: string | null
+          id_type: string | null
           mobile: string | null
           relationship: string
           share_percent: number
@@ -8134,8 +8139,13 @@ export type Database = {
           dob?: string | null
           email?: string | null
           full_name: string
+          guardian_dob?: string | null
           guardian_name?: string | null
+          guardian_pan?: string | null
+          guardian_relationship?: string | null
           id?: string
+          id_number?: string | null
+          id_type?: string | null
           mobile?: string | null
           relationship: string
           share_percent: number
@@ -8149,8 +8159,13 @@ export type Database = {
           dob?: string | null
           email?: string | null
           full_name?: string
+          guardian_dob?: string | null
           guardian_name?: string | null
+          guardian_pan?: string | null
+          guardian_relationship?: string | null
           id?: string
+          id_number?: string | null
+          id_type?: string | null
           mobile?: string | null
           relationship?: string
           share_percent?: number
@@ -8334,9 +8349,12 @@ export type Database = {
           address: string | null
           avatar_url: string | null
           bank_account: string | null
+          bank_account_type: string | null
           bank_ifsc: string | null
           bank_name: string | null
           bank_verified: boolean
+          birth_country: string | null
+          birth_place: string | null
           bse_ucc: string | null
           bse_ucc_status: string | null
           bse_ucc_synced_at: string | null
@@ -8354,39 +8372,55 @@ export type Database = {
           dp_name: string | null
           dsa_id: string | null
           email: string | null
+          email_belongs_to: string | null
           employee_id: string | null
+          father_name: string | null
+          foreign_tax_country: string | null
+          foreign_tax_id: string | null
           full_name: string
           gender: string | null
           id: string
+          income_slab: string | null
           investment_preferences: string[]
+          investor_profile_completed_at: string | null
           kra_active: string | null
           kra_checked_at: string | null
           kra_compliant: boolean | null
           kra_detail: Json | null
           kra_status: string | null
           kyc_submitted_at: string | null
+          mobile_belongs_to: string | null
+          nomination_choice: string | null
           notes: string | null
+          occupation: string | null
           onboarding_status: string
           pan: string | null
           pan_doc_uploaded: boolean
           pan_name: string | null
           pan_verified: boolean
+          pep_status: string | null
           phone: string | null
           phone_verified: boolean
           pincode: string | null
           portfolio_value: number | null
           sourced_via: string
+          spouse_name: string | null
           state: string | null
+          tax_resident_outside_india: boolean | null
           updated_at: string | null
           verification_status: string
+          wealth_source: string | null
         }
         Insert: {
           address?: string | null
           avatar_url?: string | null
           bank_account?: string | null
+          bank_account_type?: string | null
           bank_ifsc?: string | null
           bank_name?: string | null
           bank_verified?: boolean
+          birth_country?: string | null
+          birth_place?: string | null
           bse_ucc?: string | null
           bse_ucc_status?: string | null
           bse_ucc_synced_at?: string | null
@@ -8404,39 +8438,55 @@ export type Database = {
           dp_name?: string | null
           dsa_id?: string | null
           email?: string | null
+          email_belongs_to?: string | null
           employee_id?: string | null
+          father_name?: string | null
+          foreign_tax_country?: string | null
+          foreign_tax_id?: string | null
           full_name: string
           gender?: string | null
           id?: string
+          income_slab?: string | null
           investment_preferences?: string[]
+          investor_profile_completed_at?: string | null
           kra_active?: string | null
           kra_checked_at?: string | null
           kra_compliant?: boolean | null
           kra_detail?: Json | null
           kra_status?: string | null
           kyc_submitted_at?: string | null
+          mobile_belongs_to?: string | null
+          nomination_choice?: string | null
           notes?: string | null
+          occupation?: string | null
           onboarding_status?: string
           pan?: string | null
           pan_doc_uploaded?: boolean
           pan_name?: string | null
           pan_verified?: boolean
+          pep_status?: string | null
           phone?: string | null
           phone_verified?: boolean
           pincode?: string | null
           portfolio_value?: number | null
           sourced_via?: string
+          spouse_name?: string | null
           state?: string | null
+          tax_resident_outside_india?: boolean | null
           updated_at?: string | null
           verification_status?: string
+          wealth_source?: string | null
         }
         Update: {
           address?: string | null
           avatar_url?: string | null
           bank_account?: string | null
+          bank_account_type?: string | null
           bank_ifsc?: string | null
           bank_name?: string | null
           bank_verified?: boolean
+          birth_country?: string | null
+          birth_place?: string | null
           bse_ucc?: string | null
           bse_ucc_status?: string | null
           bse_ucc_synced_at?: string | null
@@ -8454,31 +8504,44 @@ export type Database = {
           dp_name?: string | null
           dsa_id?: string | null
           email?: string | null
+          email_belongs_to?: string | null
           employee_id?: string | null
+          father_name?: string | null
+          foreign_tax_country?: string | null
+          foreign_tax_id?: string | null
           full_name?: string
           gender?: string | null
           id?: string
+          income_slab?: string | null
           investment_preferences?: string[]
+          investor_profile_completed_at?: string | null
           kra_active?: string | null
           kra_checked_at?: string | null
           kra_compliant?: boolean | null
           kra_detail?: Json | null
           kra_status?: string | null
           kyc_submitted_at?: string | null
+          mobile_belongs_to?: string | null
+          nomination_choice?: string | null
           notes?: string | null
+          occupation?: string | null
           onboarding_status?: string
           pan?: string | null
           pan_doc_uploaded?: boolean
           pan_name?: string | null
           pan_verified?: boolean
+          pep_status?: string | null
           phone?: string | null
           phone_verified?: boolean
           pincode?: string | null
           portfolio_value?: number | null
           sourced_via?: string
+          spouse_name?: string | null
           state?: string | null
+          tax_resident_outside_india?: boolean | null
           updated_at?: string | null
           verification_status?: string
+          wealth_source?: string | null
         }
         Relationships: [
           {

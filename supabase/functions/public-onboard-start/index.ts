@@ -36,6 +36,7 @@ Deno.serve(async (req: Request) => {
     let full_name = (body.full_name || "").trim();
     let pan = (body.pan || "").trim().toUpperCase();
     let dob: string | null = null;
+    let gender: string | null = null;
     let dlSessionId: string | null = null;
 
     const dlToken = typeof body.dl_token === "string" ? body.dl_token.trim() : "";
@@ -46,7 +47,7 @@ Deno.serve(async (req: Request) => {
       const tokenHash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
       const { data: session } = await db
         .from("digilocker_sessions")
-        .select("id, status, dl_pan, dl_name, dl_dob, expires_at, consumed_at")
+        .select("id, status, dl_pan, dl_name, dl_dob, expires_at, consumed_at, result")
         .eq("flow", "signup")
         .eq("signup_token_hash", tokenHash)
         .maybeSingle();
@@ -60,6 +61,10 @@ Deno.serve(async (req: Request) => {
       full_name = String(session.dl_name || "").trim();
       dob = session.dl_dob || null;
       dlSessionId = session.id;
+      // DigiLocker also returns the holder's gender, which the client is never
+      // asked for at signup and an exchange account needs.
+      const g = String((session.result as any)?.identity?.gender ?? "").trim().toUpperCase();
+      gender = g === "M" || g === "F" ? g : g === "T" || g === "O" ? "O" : null;
     }
 
     if (!full_name) return json({ error: "Please enter your full name." }, 400);
@@ -209,6 +214,7 @@ Deno.serve(async (req: Request) => {
       pan_name: full_name,
       pan_verified: true,
       ...(dob ? { dob } : {}),
+      ...(gender ? { gender } : {}),
       verification_status: "pending",
       onboarding_status: "account_created",
       // A partner-referred signup is DSA-sourced from the outset; this is the

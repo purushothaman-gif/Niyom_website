@@ -488,6 +488,11 @@ verify_jwt = false
 [functions.public-onboard-record-doc]
 verify_jwt = false
 
+# Investor profile for mutual funds (FATCA declaration + nomination). Runs with
+# the client's own bearer token and verifies ownership inside the function.
+[functions.public-onboard-save-profile]
+verify_jwt = false
+
 [functions.public-onboard-submit]
 verify_jwt = false
 

@@ -1,0 +1,284 @@
+/**
+ * Investor profile — what a mutual-fund exchange account (BSE StAR MF UCC)
+ * needs beyond name, PAN, address and bank: the FATCA declaration, who the
+ * mobile and email belong to, and the nomination.
+ *
+ * Pure (no Deno, no I/O): the portal uses it to drive the form and the
+ * save-profile edge function uses the same rules to decide what is stored.
+ *
+ * The keys are our own. BSE's code lists are not in this repository, so the
+ * mapping from these keys to exchange codes lives in the proxy mapper and can
+ * change without touching stored data.
+ */
+import { ageOn, validateNominees, type Check, type NomineeInput } from './profileRules.ts';
+
+export interface Option { value: string; label: string }
+
+export const GENDERS: Option[] = [
+  { value: 'M', label: 'Male' },
+  { value: 'F', label: 'Female' },
+  { value: 'O', label: 'Other' },
+];
+
+export const OCCUPATIONS: Option[] = [
+  { value: 'private_sector_service', label: 'Private sector service' },
+  { value: 'public_sector_service', label: 'Public sector service' },
+  { value: 'government_service', label: 'Government service' },
+  { value: 'business', label: 'Business' },
+  { value: 'professional', label: 'Professional' },
+  { value: 'agriculturist', label: 'Agriculturist' },
+  { value: 'retired', label: 'Retired' },
+  { value: 'housewife', label: 'Homemaker' },
+  { value: 'student', label: 'Student' },
+  { value: 'others', label: 'Others' },
+];
+
+export const INCOME_SLABS: Option[] = [
+  { value: 'below_1l', label: 'Below ₹1 lakh' },
+  { value: '1l_5l', label: '₹1 – 5 lakh' },
+  { value: '5l_10l', label: '₹5 – 10 lakh' },
+  { value: '10l_25l', label: '₹10 – 25 lakh' },
+  { value: '25l_1cr', label: '₹25 lakh – 1 crore' },
+  { value: 'above_1cr', label: 'Above ₹1 crore' },
+];
+
+export const WEALTH_SOURCES: Option[] = [
+  { value: 'salary', label: 'Salary' },
+  { value: 'business', label: 'Business income' },
+  { value: 'gift', label: 'Gift' },
+  { value: 'ancestral_property', label: 'Ancestral property' },
+  { value: 'rental_income', label: 'Rental income' },
+  { value: 'prize_money', label: 'Prize money' },
+  { value: 'royalty', label: 'Royalty' },
+  { value: 'others', label: 'Others' },
+];
+
+export const PEP_STATUSES: Option[] = [
+  { value: 'no', label: 'No' },
+  { value: 'yes', label: 'Yes — I am a politically exposed person' },
+  { value: 'related', label: 'I am related to one' },
+];
+
+/** Whose mobile / email this is — the exchange asks for both separately. */
+export const CONTACT_OWNERS: Option[] = [
+  { value: 'self', label: 'Mine' },
+  { value: 'spouse', label: 'My spouse’s' },
+  { value: 'dependent_children', label: 'My dependent child’s' },
+  { value: 'dependent_siblings', label: 'My dependent sibling’s' },
+  { value: 'dependent_parents', label: 'My dependent parent’s' },
+  { value: 'guardian', label: 'My guardian’s' },
+];
+
+export const BANK_ACCOUNT_TYPES: Option[] = [
+  { value: 'savings', label: 'Savings' },
+  { value: 'current', label: 'Current' },
+  { value: 'nre', label: 'NRE' },
+  { value: 'nro', label: 'NRO' },
+];
+
+export const NOMINEE_ID_TYPES: Option[] = [
+  { value: 'pan', label: 'PAN' },
+  { value: 'aadhaar_last4', label: 'Aadhaar (last 4 digits)' },
+  { value: 'passport', label: 'Passport' },
+  { value: 'driving_licence', label: 'Driving licence' },
+];
+
+export const NOMINEE_RELATIONSHIPS = [
+  'Spouse', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister', 'Grandchild', 'Other',
+] as const;
+
+/** The exchange registers at most three nominees per account. */
+export const MAX_MF_NOMINEES = 3;
+
+const PAN = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const IFSC = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+const has = (opts: Option[], v: unknown): v is string => typeof v === 'string' && opts.some((o) => o.value === v);
+const clean = (v: unknown, max: number): string => String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
+
+/** True when this client's product choice calls for the investor profile. */
+export function needsInvestorProfile(prefs: readonly string[] | null | undefined): boolean {
+  return !!prefs?.includes('mutual_funds');
+}
+
+export interface InvestorProfileInput {
+  gender?: string | null;
+  occupation?: string | null;
+  income_slab?: string | null;
+  wealth_source?: string | null;
+  pep_status?: string | null;
+  birth_place?: string | null;
+  birth_country?: string | null;
+  tax_resident_outside_india?: boolean | null;
+  foreign_tax_country?: string | null;
+  foreign_tax_id?: string | null;
+  father_name?: string | null;
+  spouse_name?: string | null;
+  mobile_belongs_to?: string | null;
+  email_belongs_to?: string | null;
+}
+
+export interface InvestorProfile {
+  gender: string;
+  occupation: string;
+  income_slab: string;
+  wealth_source: string;
+  pep_status: string;
+  birth_place: string;
+  birth_country: string;
+  tax_resident_outside_india: boolean;
+  foreign_tax_country: string | null;
+  foreign_tax_id: string | null;
+  father_name: string | null;
+  spouse_name: string | null;
+  mobile_belongs_to: string;
+  email_belongs_to: string;
+}
+
+export function validateInvestorProfile(input: InvestorProfileInput): Check<InvestorProfile> {
+  if (!has(GENDERS, input.gender)) return { ok: false, error: 'Select your gender.' };
+  if (!has(OCCUPATIONS, input.occupation)) return { ok: false, error: 'Select your occupation.' };
+  if (!has(INCOME_SLABS, input.income_slab)) return { ok: false, error: 'Select your annual income range.' };
+  if (!has(WEALTH_SOURCES, input.wealth_source)) return { ok: false, error: 'Select your main source of wealth.' };
+  if (!has(PEP_STATUSES, input.pep_status)) return { ok: false, error: 'Tell us whether you are a politically exposed person.' };
+
+  const birthPlace = clean(input.birth_place, 60);
+  if (birthPlace.length < 2) return { ok: false, error: 'Enter your place of birth (city or town).' };
+  const birthCountry = clean(input.birth_country, 60);
+  if (birthCountry.length < 2) return { ok: false, error: 'Enter your country of birth.' };
+
+  if (typeof input.tax_resident_outside_india !== 'boolean') {
+    return { ok: false, error: 'Tell us whether you pay tax in any country other than India.' };
+  }
+  let foreignCountry: string | null = null;
+  let foreignId: string | null = null;
+  if (input.tax_resident_outside_india) {
+    foreignCountry = clean(input.foreign_tax_country, 60);
+    foreignId = clean(input.foreign_tax_id, 40);
+    if (foreignCountry.length < 2) return { ok: false, error: 'Enter the other country where you are a tax resident.' };
+    if (foreignId.length < 3) return { ok: false, error: 'Enter your tax identification number for that country.' };
+  }
+
+  const father = clean(input.father_name, 100);
+  const spouse = clean(input.spouse_name, 100);
+  if (father.length < 2 && spouse.length < 2) return { ok: false, error: 'Enter your father’s or your spouse’s name.' };
+
+  if (!has(CONTACT_OWNERS, input.mobile_belongs_to)) return { ok: false, error: 'Tell us whose mobile number this is.' };
+  if (!has(CONTACT_OWNERS, input.email_belongs_to)) return { ok: false, error: 'Tell us whose email address this is.' };
+
+  return {
+    ok: true,
+    value: {
+      gender: input.gender,
+      occupation: input.occupation,
+      income_slab: input.income_slab,
+      wealth_source: input.wealth_source,
+      pep_status: input.pep_status,
+      birth_place: birthPlace,
+      birth_country: birthCountry,
+      tax_resident_outside_india: input.tax_resident_outside_india,
+      foreign_tax_country: foreignCountry,
+      foreign_tax_id: foreignId,
+      father_name: father.length >= 2 ? father : null,
+      spouse_name: spouse.length >= 2 ? spouse : null,
+      mobile_belongs_to: input.mobile_belongs_to,
+      email_belongs_to: input.email_belongs_to,
+    },
+  };
+}
+
+export interface MfNomineeInput extends NomineeInput {
+  id_type?: string | null;
+  id_number?: string | null;
+  guardian_dob?: string | null;
+  guardian_pan?: string | null;
+  guardian_relationship?: string | null;
+}
+
+export type NominationInput =
+  | { choice: 'opt_out' }
+  | { choice: 'nominate'; nominees: MfNomineeInput[] };
+
+export type Nomination =
+  | { choice: 'opt_out'; nominees: [] }
+  | { choice: 'nominate'; nominees: MfNomineeInput[] };
+
+/**
+ * A nomination for an exchange account: an explicit choice, and when
+ * nominating, at most three nominees with whole-number shares totalling 100,
+ * each with a date of birth and an identity document, and a guardian with a
+ * PAN and date of birth for a minor.
+ */
+export function validateNomination(input: NominationInput | null | undefined, today = new Date()): Check<Nomination> {
+  if (!input || (input.choice !== 'opt_out' && input.choice !== 'nominate')) {
+    return { ok: false, error: 'Choose whether to add a nominee or opt out of nomination.' };
+  }
+  if (input.choice === 'opt_out') return { ok: true, value: { choice: 'opt_out', nominees: [] } };
+
+  const list = Array.isArray(input.nominees) ? input.nominees : [];
+  if (list.length === 0) return { ok: false, error: 'Add at least one nominee, or opt out of nomination.' };
+  if (list.length > MAX_MF_NOMINEES) return { ok: false, error: `You can add up to ${MAX_MF_NOMINEES} nominees.` };
+
+  // Names, relationship, share total and the guardian's name for a minor.
+  const base = validateNominees(list, today);
+  if (!base.ok) return base;
+
+  const out: MfNomineeInput[] = [];
+  for (const [i, n] of list.entries()) {
+    const label = `Nominee ${i + 1}`;
+    const core = base.value[i];
+    if (!Number.isInteger(core.share_percent)) return { ok: false, error: `${label}: share must be a whole number.` };
+    if (!core.dob) return { ok: false, error: `${label}: enter the date of birth.` };
+
+    if (!has(NOMINEE_ID_TYPES, n.id_type)) return { ok: false, error: `${label}: choose an identity document.` };
+    const rawId = String(n.id_number ?? '').trim().toUpperCase().replace(/\s+/g, '');
+    let idNumber = rawId;
+    if (n.id_type === 'pan') {
+      if (!PAN.test(rawId)) return { ok: false, error: `${label}: enter a valid PAN.` };
+    } else if (n.id_type === 'aadhaar_last4') {
+      // Never the full number — only the last four digits are kept.
+      if (!/^\d{4}$/.test(rawId)) return { ok: false, error: `${label}: enter only the last 4 digits of the Aadhaar.` };
+    } else {
+      if (!/^[A-Z0-9-]{5,20}$/.test(rawId)) return { ok: false, error: `${label}: enter a valid document number.` };
+      idNumber = rawId;
+    }
+
+    let guardianDob: string | null = null;
+    let guardianPan: string | null = null;
+    let guardianRel: string | null = null;
+    const age = ageOn(core.dob, today);
+    if (age !== null && age < 18) {
+      guardianDob = String(n.guardian_dob ?? '').trim();
+      const gAge = guardianDob ? ageOn(guardianDob, today) : null;
+      if (gAge === null || gAge < 18 || gAge > 120) return { ok: false, error: `${label}: enter the guardian's date of birth (an adult).` };
+      guardianPan = String(n.guardian_pan ?? '').trim().toUpperCase();
+      if (!PAN.test(guardianPan)) return { ok: false, error: `${label}: enter the guardian's PAN.` };
+      guardianRel = clean(n.guardian_relationship, 40);
+      if (guardianRel.length < 2) return { ok: false, error: `${label}: enter the guardian's relationship to the nominee.` };
+    }
+
+    out.push({
+      ...core,
+      id_type: n.id_type,
+      id_number: idNumber,
+      guardian_dob: guardianDob,
+      guardian_pan: guardianPan,
+      guardian_relationship: guardianRel,
+    });
+  }
+  return { ok: true, value: { choice: 'nominate', nominees: out } };
+}
+
+/** Details-step rules that only apply when an exchange account is wanted. */
+export function validateMfDetails(d: { dob?: string | null; address?: string | null; bank_ifsc?: string | null; bank_account?: string | null; bank_account_type?: string | null }, today = new Date()): Check<true> {
+  const age = d.dob ? ageOn(d.dob, today) : null;
+  if (age === null || age < 0 || age > 120) return { ok: false, error: 'Enter your date of birth.' };
+  if (age < 18) return { ok: false, error: 'You must be 18 or older to open an investing account here.' };
+  if (clean(d.address, 300).length < 10) return { ok: false, error: 'Enter your full address — at least 10 characters.' };
+  if (!IFSC.test(String(d.bank_ifsc ?? '').trim().toUpperCase())) return { ok: false, error: 'Enter a valid 11-character IFSC (e.g. HDFC0001234).' };
+  if (!/^\d{9,20}$/.test(String(d.bank_account ?? '').trim())) return { ok: false, error: 'Enter your bank account number (9 to 20 digits).' };
+  if (!has(BANK_ACCOUNT_TYPES, d.bank_account_type)) return { ok: false, error: 'Select your bank account type.' };
+  return { ok: true, value: true };
+}
+
+export const labelOf = (opts: Option[], value: string | null | undefined): string =>
+  opts.find((o) => o.value === value)?.label ?? '—';

@@ -15,8 +15,12 @@ import { Segmented } from '../../components/Segmented';
 import { StatusPill } from '../../components/StatusPill';
 import { OnboardingService } from './onboardingService';
 import { PRODUCTS, cmlRequiredFor, kycUnderReview } from './onboardingSteps';
+import { InvestorProfileStep } from './InvestorProfileStep';
+import {
+  BANK_ACCOUNT_TYPES, needsInvestorProfile, validateMfDetails,
+} from '../../../../supabase/functions/_shared/profile/investorProfile';
 
-type StepKey = 'pan' | 'products' | 'details' | 'documents' | 'review';
+type StepKey = 'pan' | 'products' | 'details' | 'profile' | 'documents' | 'review';
 type DocType = 'PAN' | 'CML' | 'BANK';
 
 interface Props {
@@ -26,7 +30,7 @@ interface Props {
   onNavigate: (view: PortalView) => void;
 }
 
-const STEP_LABELS: Record<StepKey, string> = { pan: 'PAN', products: 'Products', details: 'Details', documents: 'Documents', review: 'Review' };
+const STEP_LABELS: Record<StepKey, string> = { pan: 'PAN', products: 'Products', details: 'Details', profile: 'Profile', documents: 'Documents', review: 'Review' };
 
 export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Props) {
   const [pan, setPan] = useState((client?.pan || '').toUpperCase());
@@ -45,6 +49,11 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
   const [bankName, setBankName] = useState(client?.bank_name || '');
   const [bankAccount, setBankAccount] = useState(client?.bank_account || '');
   const [bankIfsc, setBankIfsc] = useState(client?.bank_ifsc || '');
+  const [bankAccountType, setBankAccountType] = useState(client?.bank_account_type || '');
+  // Mutual funds need an exchange account, which asks for more than the other
+  // products: date of birth, bank account type, and the investor profile step.
+  const needsProfile = needsInvestorProfile(prefs);
+  const [profileDone, setProfileDone] = useState(!!client?.investor_profile_completed_at);
   const [demat, setDemat] = useState(client?.demat_account || '');
   const [dpName, setDpName] = useState(client?.dp_name || '');
 
@@ -65,7 +74,9 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
   const dematComplete = !cmlRequired || (!!demat.trim() && !!dpName.trim());
   const detailsComplete =
     !!address.trim() && !!city.trim() && !!stateName.trim() && pincode.trim().length === 6 &&
-    !!bankName.trim() && !!bankAccount.trim() && !!bankIfsc.trim() && dematComplete;
+    !!bankName.trim() && !!bankAccount.trim() && !!bankIfsc.trim() && dematComplete &&
+    (!needsProfile || validateMfDetails({ dob, address, bank_ifsc: bankIfsc, bank_account: bankAccount, bank_account_type: bankAccountType }).ok);
+  const profileComplete = !needsProfile || profileDone;
 
   const initialStep: StepKey = !panVerified
     ? 'pan'
@@ -73,6 +84,8 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
       ? 'products'
       : !detailsComplete
         ? 'details'
+        : !profileComplete
+          ? 'profile'
         : !docsComplete
           ? 'documents'
           : 'review';
@@ -189,7 +202,12 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
     if (!address.trim() || !city.trim() || !stateName.trim()) return setError('Please enter your full address, city and state.');
     if (pincode.trim().length !== 6) return setError('Enter a valid 6-digit pincode.');
     if (!bankName.trim() || !bankAccount.trim() || !bankIfsc.trim()) return setError('Please enter your bank name, account number and IFSC.');
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(bankIfsc.trim().toUpperCase())) return setError('Enter a valid 11-character IFSC (e.g. HDFC0001234).');
     if (cmlRequired && (!demat.trim() || !dpName.trim())) return setError('Demat account number and DP name are required for Bonds / Unlisted Shares.');
+    if (needsProfile) {
+      const mf = validateMfDetails({ dob, address, bank_ifsc: bankIfsc, bank_account: bankAccount, bank_account_type: bankAccountType });
+      if (!mf.ok) return setError(mf.error);
+    }
     // Persist so a later resume restores everything and the RM can raise a deal.
     setBusy(true);
     try {
@@ -203,6 +221,7 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
         bank_name: bankName.trim(),
         bank_account: bankAccount.trim(),
         bank_ifsc: bankIfsc.trim().toUpperCase(),
+        bank_account_type: bankAccountType || null,
         demat_account: demat.trim(),
         dp_name: dpName.trim(),
         // Empty string (not null) when there's no demat — the column is NOT NULL DEFAULT ''.
@@ -211,7 +230,7 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
       onRefresh();
     } catch { /* non-fatal — values still held in wizard state */ }
     setBusy(false);
-    setStep('documents');
+    setStep(needsProfile && !profileDone ? 'profile' : 'documents');
   };
 
   const handleUpload = async (docType: DocType, file: File | null) => {
@@ -233,6 +252,7 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
     setError('');
     if (!panVerified) return setError('Please verify your PAN first.');
     if (!detailsComplete) return setError('Please complete your address, bank and demat details.');
+    if (!profileComplete) return setError('Please complete your investor profile for mutual funds.');
     if (!docsComplete) return setError('Please upload all required documents.');
     setBusy(true);
     const r = await OnboardingService.submit(clientId, prefs);
@@ -254,10 +274,20 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
     window.location.href = '/client-login';
   };
 
-  const stepOptions = (['pan', 'products', 'details', 'documents', 'review'] as StepKey[]).map((k) => ({ value: k, label: STEP_LABELS[k] }));
+  const stepOptions = (['pan', 'products', 'details', ...(needsProfile ? ['profile'] : []), 'documents', 'review'] as StepKey[])
+    .map((k) => ({ value: k, label: STEP_LABELS[k] }));
+
+  // Clients who finished KYC before the investor profile existed (or who were
+  // onboarded by an RM) still owe it if they hold mutual funds as a product.
+  const profileCatchUp = needsProfile && !profileDone ? (
+    <Card className="animate-fadeInUp">
+      <InvestorProfileStep client={client} clientId={clientId} onSaved={() => { setProfileDone(true); onRefresh(); }} />
+    </Card>
+  ) : null;
 
   // ── Terminal states ────────────────────────────────────────────────────
   if (client?.onboarding_status === 'active') {
+    if (profileCatchUp) return <div className="mx-auto max-w-2xl">{profileCatchUp}</div>;
     return (
       <StatusScreen
         icon={PartyPopper}
@@ -305,6 +335,7 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
             </button>
           </Card>
         )}
+        {profileCatchUp}
         <StatusScreen
           icon={Clock}
           tone="warning"
@@ -476,7 +507,7 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
                 />
               </div>
 
-              <WizardField label="Date of Birth" optional>
+              <WizardField label="Date of Birth" required={needsProfile} optional={!needsProfile}>
                 <WizardInput type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
               </WizardField>
 
@@ -513,6 +544,15 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
                     <WizardInput value={bankIfsc} onChange={(e) => setBankIfsc(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11))}
                       placeholder="HDFC0001234" />
                   </WizardField>
+                  <WizardField label="Account Type" required={needsProfile} optional={!needsProfile}>
+                    <select
+                      value={bankAccountType} onChange={(e) => setBankAccountType(e.target.value)}
+                      className="w-full rounded-token-md border border-border bg-bg-base px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-accent"
+                    >
+                      <option value="">Select…</option>
+                      {BANK_ACCOUNT_TYPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </WizardField>
                 </div>
               </div>
 
@@ -545,6 +585,15 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
           </div>
         )}
 
+        {/* ── Investor profile (mutual funds only) ── */}
+        {step === 'profile' && (
+          <InvestorProfileStep
+            client={client} clientId={clientId}
+            onBack={() => setStep('details')}
+            onSaved={() => { setProfileDone(true); onRefresh(); setStep('documents'); }}
+          />
+        )}
+
         {/* ── Documents ── */}
         {step === 'documents' && (
           <div className="space-y-5">
@@ -564,7 +613,7 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
               </p>
             )}
             <div className="flex justify-between">
-              <BackButton onClick={() => setStep('details')} />
+              <BackButton onClick={() => setStep(needsProfile ? 'profile' : 'details')} />
               <NextButton onClick={() => setStep('review')} disabled={!docsComplete} />
             </div>
           </div>
@@ -591,6 +640,13 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
               value={bankName || bankAccount ? `${bankName} · ${bankAccount} · ${bankIfsc}` : '—'}
               onEdit={() => setStep('details')}
             />
+            {needsProfile && (
+              <ReviewRow
+                label="Investor profile (mutual funds)"
+                value={profileDone ? 'Completed' : 'Not completed yet'}
+                onEdit={() => setStep('profile')}
+              />
+            )}
             {(cmlRequired || demat) && (
               <ReviewRow
                 label="Demat"
@@ -622,7 +678,7 @@ export function OnboardingWizard({ client, clientId, onRefresh, onNavigate }: Pr
             </p>
             <div className="flex justify-between">
               <BackButton onClick={() => setStep('documents')} />
-              <PrimaryButton onClick={submit} busy={busy} icon={ShieldCheck} disabled={!panVerified || !detailsComplete || !docsComplete}>
+              <PrimaryButton onClick={submit} busy={busy} icon={ShieldCheck} disabled={!panVerified || !detailsComplete || !profileComplete || !docsComplete}>
                 Submit for Review
               </PrimaryButton>
             </div>
