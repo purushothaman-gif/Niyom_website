@@ -94,8 +94,16 @@ Deno.serve(async (req: Request) => {
      * rejects every real table, which is a trap worth not falling into twice.
      */
     type TableName = keyof Database["public"]["Tables"];
+    /*
+     * supabase-js resolves `.from()`'s row type across the whole table union when
+     * `table` is the `TableName` union rather than one literal, and that
+     * instantiation is deep enough to trip TS2589. We only ever read `count`
+     * here, so the query goes through a loosely typed handle. `table: TableName`
+     * stays, so a typo at a call site is still a compile error.
+     */
+    const db = admin as unknown as { from: (t: string) => any };
     const countOf = async (table: TableName, apply: (q: any) => any) => {
-      const { count } = await apply(admin.from(table).select("id", { count: "exact", head: true }));
+      const { count } = await apply(db.from(table).select("id", { count: "exact", head: true }));
       return count ?? 0;
     };
 
