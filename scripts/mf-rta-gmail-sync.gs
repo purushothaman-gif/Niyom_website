@@ -295,24 +295,37 @@ function directUrl(trackerUrl) {
   return /^https?:\/\/\S+/i.test(real) ? real : null;
 }
 
-/** Fetch one download link; {bytes} when it resolves to a ZIP, else {note}. */
+/** Host part of a URL, for a compact diagnostic. */
+function urlHost(u) { var m = (u || '').match(/^https?:\/\/([^\/?]+)/); return m ? m[1] : '?'; }
+
+/**
+ * Fetch one download link; {bytes} when it resolves to a ZIP, else {note}.
+ *
+ * Tries the decoded dss.kfintech.com URL first (it serves the ZIP directly),
+ * then the /c/ tracker link. The note records, per candidate, the host + HTTP
+ * status + content-type (+ a short HTML snippet) so a failure says exactly what
+ * the registrar returned to this Apps Script run — the only way to tell a real
+ * block/redirect problem apart from an empty feed from the execution log.
+ */
 function fetchZip(url) {
   var opts = { followRedirects: true, muteHttpExceptions: true,
     headers: { 'User-Agent': 'Mozilla/5.0 (NiyomRTA)' } };
-  // Try the decoded dss.kfintech.com URL first (it serves the ZIP directly),
-  // then the tracker link itself as a fallback.
   var direct = directUrl(url);
   var candidates = direct ? [direct, url] : [url];
-  var note = 'no download link';
+  var diag = [];
   for (var c = 0; c < candidates.length; c++) {
-    var resp = UrlFetchApp.fetch(candidates[c], opts);
-    if (resp.getResponseCode() !== 200) { note = 'HTTP ' + resp.getResponseCode(); continue; }
+    var tag = urlHost(candidates[c]);
+    var resp;
+    try { resp = UrlFetchApp.fetch(candidates[c], opts); }
+    catch (e) { diag.push(tag + ' threw ' + e); continue; }
+    var code = resp.getResponseCode();
     var bytes = resp.getContent();
-    if (isZip(bytes)) return { bytes: bytes };
+    if (code === 200 && isZip(bytes)) return { bytes: bytes };
+    var ct = (resp.getHeaders()['Content-Type'] || resp.getHeaders()['content-type'] || '').toLowerCase();
+    var extra = '';
     // An HTML interstitial sometimes stands in for the file — follow the file
     // URL it names (the dss/S3 link) once. '<' = 60.
-    var ct = (resp.getHeaders()['Content-Type'] || resp.getHeaders()['content-type'] || '').toLowerCase();
-    if (ct.indexOf('html') > -1 || (bytes.length && bytes[0] === 60)) {
+    if (code === 200 && (ct.indexOf('html') > -1 || (bytes.length && bytes[0] === 60))) {
       var body = resp.getContentText();
       var next = (body.match(/https?:\/\/[^"'\s<>]+\.(?:zip|kmfs)[^"'\s<>]*/i) ||
                   body.match(/https?:\/\/[^"'\s<>]*(?:dss\.kfintech\.com|amazonaws\.com|s3[^"'\s<>]*)[^"'\s<>]+/i) || [])[0];
@@ -320,12 +333,11 @@ function fetchZip(url) {
         var r2 = UrlFetchApp.fetch(next.replace(/&amp;/g, '&'), opts);
         if (r2.getResponseCode() === 200 && isZip(r2.getContent())) return { bytes: r2.getContent() };
       }
-      note = 'link returned HTML, no file URL inside';
-      continue;
+      extra = ' html="' + body.replace(/\s+/g, ' ').slice(0, 140) + '"';
     }
-    note = 'not a ZIP (content-type ' + (ct || '?') + ')';
+    diag.push(tag + ' HTTP' + code + ' ct=' + (ct || '?') + ' bytes=' + bytes.length + extra);
   }
-  return { note: note };
+  return { note: diag.join(' | ') || 'no download link' };
 }
 
 function isZip(bytes) { return bytes && bytes.length > 2 && bytes[0] === 80 && bytes[1] === 75; } // 'PK'
