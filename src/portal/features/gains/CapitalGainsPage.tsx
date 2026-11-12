@@ -28,7 +28,9 @@ import {
   FileText,
   HelpCircle,
   Loader2,
+  Lock,
   Receipt,
+  ShieldCheck,
   TrendingUp,
   Upload,
 } from 'lucide-react';
@@ -39,9 +41,11 @@ import { KpiStat } from '../../components/KpiStat';
 import { EmptyState } from '../../components/EmptyState';
 import { Segmented } from '../../components/Segmented';
 import { SectionHeader } from '../../components/SectionHeader';
+import { StatusPill } from '../../components/StatusPill';
 import { CasGainsService, type GainsStatement } from '../../services/CasGainsService';
-import { exportCapitalGainsXlsx } from '../../services/exporters';
+import { exportCapitalGainsXlsx, exportElssLockInXlsx } from '../../services/exporters';
 import { displaySchemeName, termLabel, treatmentLabel } from '../../services/cas/gains';
+import { computeElssLockIn, type ElssLockIn } from '../../services/cas/elssLockIn';
 
 interface Props {
   clientId: string;
@@ -85,6 +89,12 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
             .sort((a, b) => (a.sellDate < b.sellDate ? 1 : a.sellDate > b.sellDate ? -1 : 0))
         : [],
     [statement, fy],
+  );
+
+  // ELSS lock-in is about what is still held, so it does not depend on the year.
+  const lockIn = useMemo(
+    () => (statement ? computeElssLockIn(statement.schemes) : null),
+    [statement],
   );
 
   if (loading) {
@@ -149,6 +159,7 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
             }
           />
         </Card>
+        {lockIn && <ElssLockInCard lockIn={lockIn} client={client} />}
         <Exclusions statement={statement} />
       </div>
     );
@@ -273,6 +284,9 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
         </Card>
       )}
 
+      {/* ----------------------------------------------------- ELSS lock-in */}
+      {lockIn && <ElssLockInCard lockIn={lockIn} client={client} />}
+
       {/* ------------------------------------------------------------- rows */}
       <Card padding="lg">
         <SectionHeader title={`Realised gains · FY ${fy}`} icon={FileText} />
@@ -374,6 +388,114 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
         statement — please check it against your CAS before filing.
       </p>
     </div>
+  );
+}
+
+/**
+ * ELSS lock-in, lot by lot.
+ *
+ * An ELSS unit is locked for three years from the day it was bought, and the
+ * clock is per purchase — so a client paying a monthly SIP has a different
+ * unlock date every month. This is the one place that shows it: what is still
+ * locked, what is now free to redeem, and when the rest frees up. The figure
+ * that matters for a Section 80C claim is what was invested, which is why that,
+ * not the current value, leads.
+ */
+function ElssLockInCard({ lockIn, client }: { lockIn: ElssLockIn; client: NWClient | null }) {
+  const [busy, setBusy] = useState(false);
+  const showValue = lockIn.currentValue !== null;
+
+  const download = async () => {
+    setBusy(true);
+    try {
+      await exportElssLockInXlsx(lockIn.lots, client);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card padding="lg">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SectionHeader title="ELSS lock-in · Section 80C" icon={ShieldCheck} />
+        <button
+          type="button"
+          onClick={download}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-token-md border border-border bg-bg-surface px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          {busy ? 'Preparing…' : 'Download Excel'}
+        </button>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <KpiStat label="Still locked" value={fmt(lockIn.lockedInvested)} color="var(--warning)" sub="Invested, cannot redeem yet" />
+        <KpiStat label="Free to redeem" value={fmt(lockIn.freeInvested)} color="var(--success)" sub="Invested, past lock-in" />
+        <KpiStat
+          label="Next unlocks"
+          value={lockIn.nextUnlockDate ? fmtDate(lockIn.nextUnlockDate) : 'All free'}
+          sub={lockIn.nextUnlockDate ? 'Soonest locked lot' : 'Nothing is locked'}
+        />
+      </div>
+
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full min-w-[640px] text-left text-xs">
+          <thead>
+            <tr className="border-b border-border text-[11px] uppercase tracking-wider text-text-secondary">
+              <th className="pb-2 pr-3 font-semibold">Scheme</th>
+              <th className="pb-2 pr-3 font-semibold">Bought</th>
+              <th className="pb-2 pr-3 text-right font-semibold">Units</th>
+              <th className="pb-2 pr-3 text-right font-semibold">Invested</th>
+              {showValue && <th className="pb-2 pr-3 text-right font-semibold">Value</th>}
+              <th className="pb-2 pr-3 font-semibold">Unlocks</th>
+              <th className="pb-2 font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lockIn.lots.map((l, i) => {
+              const isFirstOfScheme = i === 0 || lockIn.lots[i - 1].schemeName !== l.schemeName;
+              return (
+                <tr
+                  key={`${l.schemeName}-${l.buyDate}-${i}`}
+                  className={isFirstOfScheme && i > 0 ? 'border-t border-border' : 'border-b border-border/50'}
+                >
+                  <td className="py-2.5 pr-3">
+                    {isFirstOfScheme && (
+                      <span className="font-medium text-text-primary">{displaySchemeName(l.schemeName)}</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 pr-3 text-text-secondary">{fmtDate(l.buyDate)}</td>
+                  <td className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">{l.units.toFixed(3)}</td>
+                  <td className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">{fmt(l.invested)}</td>
+                  {showValue && (
+                    <td className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">
+                      {l.currentValue === null ? '—' : fmt(l.currentValue)}
+                    </td>
+                  )}
+                  <td className="py-2.5 pr-3 text-text-secondary">{fmtDate(l.unlockDate)}</td>
+                  <td className="py-2.5">
+                    {l.locked ? (
+                      <StatusPill tone="warning">
+                        <Lock className="h-3 w-3" />
+                        {l.daysToUnlock > 0 ? `${l.daysToUnlock} days` : 'Locked'}
+                      </StatusPill>
+                    ) : (
+                      <StatusPill tone="success">Free</StatusPill>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-3 text-[11px] text-text-faint">
+        Each ELSS purchase is locked for three years from its own allotment date, so a monthly SIP
+        unlocks a little each month. Worked out from the still-held units in your imported statement.
+      </p>
+    </Card>
   );
 }
 

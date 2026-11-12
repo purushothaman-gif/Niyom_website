@@ -19,23 +19,43 @@ import { Card } from '../../components/Card';
 import { KpiStat } from '../../components/KpiStat';
 import { ComingSoonBadge } from '../../components/StatusPill';
 import { PortfolioService } from '../../services/PortfolioService';
+import { CasGainsService } from '../../services/CasGainsService';
 import {
   exportDematHoldingsXlsx,
+  exportElssLockInXlsx,
   exportElssXlsx,
   exportHoldingsXlsx,
   exportTransactionsXlsx,
 } from '../../services/exporters';
+import { computeElssLockIn, isElssName } from '../../services/cas/elssLockIn';
 import { useTransactions } from '../../hooks/useTransactions';
 import { mfSsoEnabled } from '../../../../shared/platform/env';
 
 /**
  * ELSS schemes carry an 80C lock-in and need their own statement. A CAS states
- * no scheme category, so match on the name, which reliably carries the ELSS
- * branding ("… ELSS", "… Tax Saver", or the older "… Long Term Equity").
+ * no scheme category, so ELSS is recognised from the name — the same matcher the
+ * lock-in panel uses, imported so the two never disagree.
  */
-const ELSS_RE = /\b(elss|tax[\s-]?saver|tax[\s-]?saving|long[\s-]?term\s+equity)\b/i;
 const isElss = (r: HoldingRow) =>
-  r.productType === 'mutual_fund' && (ELSS_RE.test(r.name) || ELSS_RE.test(r.category ?? ''));
+  r.productType === 'mutual_fund' && (isElssName(r.name) || isElssName(r.category));
+
+/**
+ * The ELSS download, lot-level where we can and a holdings slice otherwise.
+ *
+ * The richer sheet — every lot with its own three-year unlock date — comes from
+ * the CAS gains engine, so it exists only for an imported, complete statement.
+ * When there is none (ELSS held on the platform, or a truncated CAS), fall back
+ * to the holdings slice so the button never dead-ends.
+ */
+async function downloadElss(clientId: string, elssHoldings: HoldingRow[], client: NWClient | null) {
+  const statement = await CasGainsService.getStatement(clientId).catch(() => null);
+  const lockIn = statement ? computeElssLockIn(statement.schemes) : null;
+  if (lockIn) {
+    await exportElssLockInXlsx(lockIn.lots, client);
+  } else {
+    await exportElssXlsx(elssHoldings, client);
+  }
+}
 
 interface Props {
   clientId: string;
@@ -143,9 +163,9 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
             category: 'Tax' as Category,
             title: 'ELSS Statement (Section 80C)',
             description:
-              'Your tax-saving ELSS funds in one sheet — amount invested and current value, as proof for your 80C deduction.',
+              'Your tax-saving ELSS funds — amount invested, and, from an imported statement, each lot’s three-year lock-in and unlock date.',
             icon: ShieldCheck,
-            action: () => exportElssXlsx(elssRows, client),
+            action: () => downloadElss(clientId, elssRows, client),
           },
         ]
       : []),

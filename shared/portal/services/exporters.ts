@@ -10,6 +10,7 @@ import type { NWClient } from '../../crm/types';
 import { fmtDate } from '../../crm/utils';
 import type { HoldingRow } from '../types';
 import type { TransactionRow } from '../types/activity';
+import type { ElssLockInLot } from './cas/elssLockIn';
 import { saveFile, XLSX_MIME } from '../../platform/fileWriter';
 
 const stamp = () => new Date().toISOString().slice(0, 10);
@@ -96,6 +97,44 @@ export async function exportElssXlsx(rows: HoldingRow[], client: NWClient | null
     [header, ...body, [], total],
     'ELSS 80C',
     `niyom_elss_80c_${safeCode(client)}_${stamp()}.xlsx`,
+  );
+}
+
+/**
+ * ELSS lock-in, lot by lot. The lot-level answer to "what can I redeem, and
+ * when?" — each still-held purchase with its own three-year unlock date and
+ * status. One row per lot, because a SIP's instalments unlock on different days
+ * and collapsing them would hide exactly that. Built from the CAS gains engine's
+ * surviving lots, so it exists only where a statement was imported and is whole.
+ */
+export async function exportElssLockInXlsx(lots: ElssLockInLot[], client: NWClient | null) {
+  const header = [
+    'Scheme', 'ISIN', 'Buy Date', 'Units', 'Invested (INR)', 'Current Value (INR)',
+    'Unlock Date', 'Status', 'Days to Unlock',
+  ];
+  const body = lots.map((l) => [
+    l.schemeName,
+    l.isin ?? '',
+    fmtDate(l.buyDate),
+    Number(l.units.toFixed(3)),
+    Number(l.invested.toFixed(2)),
+    l.currentValue === null ? '' : Number(l.currentValue.toFixed(2)),
+    fmtDate(l.unlockDate),
+    l.locked ? 'Locked' : 'Free',
+    l.locked ? l.daysToUnlock : 0,
+  ]);
+  const invested = lots.reduce((s, l) => s + l.invested, 0);
+  const value = lots.reduce((s, l) => s + (l.currentValue ?? 0), 0);
+  const anyValue = lots.some((l) => l.currentValue !== null);
+  await writeSheet(
+    [
+      header,
+      ...body,
+      [],
+      ['Total', '', '', '', Number(invested.toFixed(2)), anyValue ? Number(value.toFixed(2)) : '', '', '', ''],
+    ],
+    'ELSS Lock-in',
+    `niyom_elss_lockin_${safeCode(client)}_${stamp()}.xlsx`,
   );
 }
 
