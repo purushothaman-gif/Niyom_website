@@ -520,13 +520,16 @@ export function mergeStatements(
 }
 
 /* ---------------------------------------------------------------------------
- * Registrar ⇄ CAS reconciliation
+ * Registrar ⇄ CAS split
  *
- * When mutual funds run on the platform the registrar feed is the record for the
- * funds we service — but a mailback can lag or under-report a folio (a partial
- * transfer-in, an incomplete snapshot), while the client's own CAS sees the
- * whole position. These helpers decide, per folio, when the newer CAS should
- * win. Pure, so the decision is unit-tested apart from the database.
+ * When mutual funds run on the platform the registrar feed carries only the
+ * transactions brokered under our ARN — so its units ARE the portion of a folio
+ * we service. A client's CAS shows the WHOLE folio, including units bought
+ * elsewhere (a prior distributor, or before a SIP moved to us). The difference,
+ * per folio, is what the client holds AWAY from us. These helpers key the two
+ * sources together so a part-transferred folio can be split into its "held with
+ * Niyom" and "held away" slices. Pure, so the split is unit-tested apart from
+ * the database.
  * ------------------------------------------------------------------------- */
 
 /** A folio compared across sources: the number before any "/product" suffix, spaceless, upper-cased. */
@@ -539,7 +542,7 @@ export function folioIsinKey(folio: string | null | undefined, isin: string | nu
   return `${normFolio(folio)}\u0000${(isin ?? '').toUpperCase()}`;
 }
 
-/** The registrar fields the reconciliation reads. */
+/** The registrar fields the split reads. */
 export interface RegHoldingLite {
   folio: string | null;
   isin: string | null;
@@ -548,49 +551,17 @@ export interface RegHoldingLite {
   snapshotDate: string | null;
 }
 
-/** The CAS fields the reconciliation reads. */
-export interface CasHoldingLite {
-  folioNumber: string | null;
-  isin: string | null;
-  units: number;
-  /** The date the statement was drawn up to. */
-  statementTo: string | null;
-  /** cas_schemes.is_ours — only funds we service can be superseded. */
-  isOurs: boolean;
-}
-
-const RECON_UNITS_EPSILON = 0.001;
-
 /**
- * Registrar rows a newer CAS supersedes.
- *
- * For a fund we service (is_ours) that appears in BOTH sources for the same
- * folio, the registrar is kept UNLESS the client's reconciled CAS is at least as
- * new AND shows strictly more units — the signature of a registrar mailback that
- * has not captured the full folio. The test is one-directional on purpose: the
- * CAS only ever adds units it can see, never removes them, so a registrar row
- * that is genuinely ahead (e.g. a redemption the CAS predates) is left alone.
- *
- * Returns the set of `folioIsinKey`s whose registrar row should be dropped and
- * sourced from the CAS instead.
+ * Units brokered under our ARN, per folio + scheme, summed from the registrar
+ * feed. This is the Niyom-serviced portion of each folio; a CAS holding's units
+ * beyond it are held away. Summed (not last-write) so multiple feed rows for one
+ * folio+scheme — e.g. a holdings row plus a correction — add up.
  */
-export function registrarRowsSupersededByCas(
-  registrar: RegHoldingLite[],
-  cas: CasHoldingLite[],
-): Set<string> {
-  const casByKey = new Map<string, CasHoldingLite>();
-  for (const c of cas) {
-    if (!c.isOurs) continue;
-    casByKey.set(folioIsinKey(c.folioNumber, c.isin), c);
-  }
-  const superseded = new Set<string>();
+export function sumRegistrarUnits(registrar: RegHoldingLite[]): Map<string, number> {
+  const byKey = new Map<string, number>();
   for (const r of registrar) {
     const key = folioIsinKey(r.folio, r.isin);
-    const c = casByKey.get(key);
-    if (!c) continue;
-    const casAtLeastAsNew =
-      c.statementTo != null && (r.snapshotDate == null || c.statementTo >= r.snapshotDate);
-    if (casAtLeastAsNew && c.units - r.units > RECON_UNITS_EPSILON) superseded.add(key);
+    byKey.set(key, (byKey.get(key) ?? 0) + (Number(r.units) || 0));
   }
-  return superseded;
+  return byKey;
 }

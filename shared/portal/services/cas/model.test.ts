@@ -726,7 +726,7 @@ describe('hasCompleteHistory — segregated portfolios do not truncate a history
   });
 });
 
-import { folioIsinKey, normFolio, registrarRowsSupersededByCas } from './model';
+import { folioIsinKey, normFolio, sumRegistrarUnits } from './model';
 
 describe('normFolio / folioIsinKey', () => {
   it('ignores a CAS "/product" suffix so a folio lines up across sources', () => {
@@ -738,42 +738,38 @@ describe('normFolio / folioIsinKey', () => {
   });
 });
 
-describe('registrarRowsSupersededByCas', () => {
-  // Francis Hendry's real shape: the registrar snapshot (4 Nov) under-reports two
-  // folios the newer CAS (12 Nov) shows in full.
+describe('sumRegistrarUnits — the Niyom-serviced slice of a folio', () => {
+  // Francis Hendry's real shape: the registrar feed (what we broker under our
+  // ARN) carries the SIPs; the CAS shows the whole folio, the excess held away.
   const registrar = [
     { folio: '79989178251', isin: 'INF769K01010', units: 9.462, snapshotDate: '2026-11-04' },
     { folio: '499493733685', isin: 'INF204K01489', units: 3.493, snapshotDate: '2026-11-04' },
   ];
-  const cas = [
-    { folioNumber: '79989178251/0', isin: 'INF769K01010', units: 27.567, statementTo: '2026-11-12', isOurs: true },
-    { folioNumber: '499493733685/0', isin: 'INF204K01489', units: 10.259, statementTo: '2026-11-12', isOurs: true },
-  ];
 
-  it('supersedes a stale registrar folio a newer CAS shows more units for', () => {
-    const s = registrarRowsSupersededByCas(registrar, cas);
-    expect(s.has(folioIsinKey('79989178251', 'INF769K01010'))).toBe(true);
-    expect(s.has(folioIsinKey('499493733685', 'INF204K01489'))).toBe(true);
-    expect(s.size).toBe(2);
+  it('keys brokered units by folio + scheme, matching a CAS "/0" twin', () => {
+    const m = sumRegistrarUnits(registrar);
+    expect(m.get(folioIsinKey('79989178251/0', 'INF769K01010'))).toBeCloseTo(9.462, 3);
+    expect(m.get(folioIsinKey('499493733685/0', 'INF204K01489'))).toBeCloseTo(3.493, 3);
   });
 
-  it('keeps the registrar when the CAS is older', () => {
-    const olderCas = cas.map((c) => ({ ...c, statementTo: '2026-10-01' }));
-    expect(registrarRowsSupersededByCas(registrar, olderCas).size).toBe(0);
+  it('sums multiple feed rows for one folio + scheme', () => {
+    const m = sumRegistrarUnits([
+      { folio: 'F1', isin: 'INFX', units: 5, snapshotDate: null },
+      { folio: 'F1', isin: 'INFX', units: 3, snapshotDate: null },
+    ]);
+    expect(m.get(folioIsinKey('F1', 'INFX'))).toBe(8);
   });
 
-  it('keeps the registrar when it holds as many or more units (no downward override)', () => {
-    const fewerCas = cas.map((c) => ({ ...c, units: 1 }));
-    expect(registrarRowsSupersededByCas(registrar, fewerCas).size).toBe(0);
-  });
-
-  it('never supersedes a held-away (not is_ours) fund', () => {
-    const away = cas.map((c) => ({ ...c, isOurs: false }));
-    expect(registrarRowsSupersededByCas(registrar, away).size).toBe(0);
-  });
-
-  it('supersedes when the registrar has no snapshot date but the CAS does', () => {
-    const noDate = registrar.map((r) => ({ ...r, snapshotDate: null }));
-    expect(registrarRowsSupersededByCas(noDate, cas).size).toBe(2);
+  it('gives the held-away excess as CAS units minus brokered units', () => {
+    const m = sumRegistrarUnits(registrar);
+    // Mirae: 27.567 held, 9.462 brokered → 18.105 held away (the pre-Niyom slice).
+    const mirae = 27.567 - (m.get(folioIsinKey('79989178251/0', 'INF769K01010')) ?? 0);
+    expect(mirae).toBeCloseTo(18.105, 3);
+    // A fund we fully service leaves no excess.
+    const fully = 9.462 - (m.get(folioIsinKey('79989178251', 'INF769K01010')) ?? 0);
+    expect(fully).toBeCloseTo(0, 3);
+    // A fund absent from the feed is entirely held away.
+    const absent = 10 - (m.get(folioIsinKey('NEW', 'INFZ')) ?? 0);
+    expect(absent).toBe(10);
   });
 });

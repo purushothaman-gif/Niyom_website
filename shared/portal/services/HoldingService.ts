@@ -35,15 +35,15 @@ import {
   applyNav,
   assessCasFreshness,
   folioIsinKey,
-  normFolio,
   portfolioDayChange,
-  registrarRowsSupersededByCas,
   selectHoldings,
+  sumRegistrarUnits,
   toNavQuotes,
   valuationDate,
   type CasCashFlow,
   type NavRow,
 } from './cas/model';
+import { MF_OWNERSHIP } from '../types/ownership';
 import { isDemoClientSession, demoSnapshot } from '../demo/demoClient';
 import { fetchRtaMf, fetchRtaTransactions, mergeByDateDesc, type RtaHoldingRow } from '../../mf/rtaMf';
 
@@ -211,42 +211,39 @@ export const HoldingService = {
     const stripped = withoutMutualFunds(snapshot);
     const rta = await fetchRtaMf(supabase, clientId).catch(() => null);
     const rtaAll = rta?.holdings ?? [];
+    // Every registrar row is kept — the feed is the record of what we broker.
+    const registrarMf = rtaAll.map((h) => toRegistrarMfHolding(clientId, h));
 
     /*
-     * A registrar mailback can lag or under-report a folio (an incomplete
-     * transfer-in, a partial snapshot). Where the client's own reconciled CAS is
-     * newer and shows MORE units for the same folio + scheme, the CAS is the
-     * truth — so that registrar row is dropped and its CAS twin shown instead,
-     * priced live by ISIN. One-directional: the CAS only ever adds units it can
-     * see, so a registrar row that is genuinely ahead is kept.
+     * Split each CAS mutual fund into what we broker and what the client holds
+     * away. The registrar feed carries only transactions under our ARN, so its
+     * units ARE the Niyom-serviced portion of a folio; units the CAS shows beyond
+     * that were bought elsewhere (a prior distributor, or before a SIP moved to
+     * us) and are HELD AWAY. The excess is priced live by ISIN and labelled as
+     * such, so a part-transferred folio reads honestly — part "Held with Niyom"
+     * (the registrar row), part "Held away" (this slice) — instead of being shown
+     * entirely as ours or entirely away.
+     *
+     * A fund we fully service yields no excess (registrar = CAS); a fund bought
+     * entirely elsewhere yields all of it (registrar = 0), the ordinary held-away
+     * case. The registrar is never contradicted downward: if it shows more units
+     * than the CAS (a redemption the CAS predates), the excess is nil.
      */
-    const superseded = registrarRowsSupersededByCas(
+    const registrarUnits = sumRegistrarUnits(
       rtaAll.map((h) => ({ folio: h.folio, isin: h.isin, units: h.units, snapshotDate: h.snapshotDate })),
-      (cas?.holdings ?? [])
-        .filter((h) => h.product_type === 'mutual_fund' && h.cas != null)
-        .map((h) => ({
-          folioNumber: h.folio_number ?? h.cas!.folioNumber,
-          isin: h.cas!.isin ?? h.isin ?? null,
-          units: Number(h.quantity) || h.cas!.units,
-          statementTo: h.cas!.statementTo,
-          isOurs: h.cas!.isOurs,
-        })),
     );
-    const rtaKept = rtaAll.filter((h) => !superseded.has(folioIsinKey(h.folio, h.isin)));
-    const registrarMf = rtaKept.map((h) => toRegistrarMfHolding(clientId, h));
-
-    // Held-away funds the registrar never sees: CAS schemes not serviced under
-    // our ARN (is_ours = false) and not already in the kept registrar feed, PLUS
-    // the folios a newer CAS just superseded above (now sourced from the CAS).
-    const registrarFolios = new Set(registrarMf.map((h) => normFolio(h.folio_number)));
-    const heldAwaySrc = (cas?.holdings ?? []).filter((h) => {
-      if (h.product_type !== 'mutual_fund' || h.cas == null) return false;
-      const key = folioIsinKey(h.folio_number ?? h.cas.folioNumber, h.cas.isin ?? h.isin);
-      if (superseded.has(key)) return true;
-      return !h.cas.isOurs && !registrarFolios.has(normFolio(h.folio_number ?? h.cas.folioNumber));
-    });
-    const heldAwayQuotes = await loadNavQuotes(heldAwaySrc.map((h) => h.cas?.isin ?? h.isin ?? ''));
-    const heldAway = heldAwaySrc.map((h) => applyNav(h, heldAwayQuotes.get(h.cas?.isin ?? h.isin ?? '')));
+    const heldAwaySlices = (cas?.holdings ?? [])
+      .filter((h) => h.product_type === 'mutual_fund' && h.cas != null)
+      .map((h) => {
+        const casUnits = Number(h.quantity) || h.cas!.units;
+        const key = folioIsinKey(h.folio_number ?? h.cas!.folioNumber, h.cas!.isin ?? h.isin);
+        return { h, casUnits, excess: casUnits - (registrarUnits.get(key) ?? 0) };
+      })
+      .filter((x) => x.excess > HELD_AWAY_UNIT_EPSILON);
+    const heldAwayQuotes = await loadNavQuotes(heldAwaySlices.map((x) => x.h.cas?.isin ?? x.h.isin ?? ''));
+    const heldAway = heldAwaySlices.map(({ h, casUnits, excess }) =>
+      applyNav(heldAwayHolding(h, excess, casUnits), heldAwayQuotes.get(h.cas?.isin ?? h.isin ?? '')),
+    );
 
     const merged = [...stripped.holdings, ...registrarMf, ...heldAway];
 
@@ -257,18 +254,18 @@ export const HoldingService = {
       .select('txn_type, consolidated_amount, txn_date, product_type')
       .eq('client_id', clientId)
       .neq('product_type', 'mutual_fund');
-    // Only the KEPT registrar rows feed the return — a superseded fund now counts
-    // on the held-away (CAS) side, so its registrar value and flows are left out
-    // here to avoid pricing the same fund on both sides.
+    // The registrar feed (what we broker) drives the return; the held-away
+    // slices sit in excludedValue — they are the same funds' other units, priced
+    // from the CAS with no flows of ours, so they are value without a return.
     const regValue = (h: RtaHoldingRow) => h.rtaValue ?? h.navValue ?? (h.nav != null ? h.units * h.nav : 0);
-    const reconciled = rtaKept.filter((h) => h.reconciled && h.flows.length);
+    const reconciled = rtaAll.filter((h) => h.reconciled && h.flows.length);
     const nonMfValue = stripped.holdings.reduce((t, h) => t + (Number(h.current_value) || 0), 0);
     const xirrBasis = {
       transactions: ((allTxns ?? []) as { txn_type: 'buy' | 'sell'; consolidated_amount: number; txn_date: string }[]),
       extraFlows: reconciled.flatMap((h) => h.flows),
       value: nonMfValue + reconciled.reduce((t, h) => t + regValue(h), 0),
       excludedValue:
-        rtaKept.filter((h) => !(h.reconciled && h.flows.length)).reduce((t, h) => t + regValue(h), 0) +
+        rtaAll.filter((h) => !(h.reconciled && h.flows.length)).reduce((t, h) => t + regValue(h), 0) +
         heldAway.reduce((t, h) => t + (Number(h.current_value) || 0), 0),
     };
 
@@ -294,6 +291,33 @@ export const HoldingService = {
     };
   },
 };
+
+/** Units at or below this count as fully brokered (registrar ≈ CAS). */
+const HELD_AWAY_UNIT_EPSILON = 0.001;
+
+/**
+ * The held-away slice of a CAS fund: the units beyond what the registrar shows
+ * we broker. A clone of the CAS holding trimmed to the excess units, with cost
+ * prorated by the unit share and ownership forced to "held away" — so the Niyom
+ * row (the registrar feed) and this slice never claim the same units, and a
+ * part-transferred folio is not mislabelled as entirely ours. Left to applyNav
+ * at the caller to value the excess units at the latest NAV.
+ */
+function heldAwayHolding(h: PortalHolding, excessUnits: number, casUnits: number): PortalHolding {
+  const fraction = casUnits > 0 ? Math.min(1, excessUnits / casUnits) : 1;
+  return {
+    ...h,
+    id: `${h.id}-away`,
+    quantity: excessUnits,
+    invested_amount: (Number(h.invested_amount) || 0) * fraction,
+    // applyNav recomputes current_value from excessUnits × NAV; this prorated
+    // seed keeps an un-priced row sensible rather than showing the whole folio.
+    current_value: (Number(h.current_value) || 0) * fraction,
+    cas: h.cas
+      ? { ...h.cas, units: excessUnits, isOurs: false, ownership: MF_OWNERSHIP.heldAway }
+      : h.cas,
+  };
+}
 
 /**
  * A registrar-fed mutual-fund holding as a PortalHolding. When the transaction
