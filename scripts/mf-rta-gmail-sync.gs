@@ -6,10 +6,15 @@
  * new feed to the Supabase `mf-rta-ingest` edge function, which decrypts and
  * imports it. Two delivery styles are handled:
  *
- *   - CAMS (donotreply@camsonline.com): the encrypted ZIP is an ATTACHMENT.
+ *   - CAMS (donotreply@camsonline.com): the encrypted ZIP is an ATTACHMENT, so
+ *     the script reads its bytes and posts them straight to the ingest function.
  *   - KFintech (distributorcare@kfintech.com): the email carries a download
- *     LINK; the script follows it (it re-mints a fresh 1-hour S3 URL on each
- *     click, so the run time doesn't matter) and forwards the bytes.
+ *     LINK, and KFintech's WAF ("Request Rejected") blocks this Apps Script run
+ *     (a Google datacenter IP) from fetching it. So the script only DECODES the
+ *     link (the real dss.kfintech.com URL is Caesar(+1)-encoded in its `u` param)
+ *     and ENQUEUEs it; a residential-IP agent on the user's Mac
+ *     (scripts/mf-rta-mac-agent.mjs) drains the queue, downloads the ZIP where
+ *     the WAF allows, and posts the bytes to the same ingest function.
  *
  * The ZIP stays encrypted in flight; the mailback passwords live only as Supabase
  * server secrets (RTA_CAMS_PASSWORD / RTA_KFINTECH_PASSWORD) — never here.
@@ -132,8 +137,8 @@ function runSync(lookback, kind) {
   if (!secret) throw new Error('Set the INGEST_SECRET script property.');
   var anon = prop('ANON_KEY');
 
-  var totals = { run: kind, files: 0, ok: 0, skipped: 0, errors: 0, holdings: 0, sips: 0, txns: 0,
-    brokerageLines: 0, brokerageAmount: 0, schemes: 0, matched: 0 };
+  var totals = { run: kind, files: 0, ok: 0, queued: 0, skipped: 0, errors: 0, holdings: 0, sips: 0,
+    txns: 0, brokerageLines: 0, brokerageAmount: 0, schemes: 0, matched: 0 };
   var problems = [];
 
   SENDERS.forEach(function (sender) {
@@ -143,31 +148,35 @@ function runSync(lookback, kind) {
       var allHandled = true;
       thread.getMessages().forEach(function (msg) {
         if (sender.subjectMatch && !sender.subjectMatch.test(msg.getSubject() || '')) return;
-        var feeds;
+
+        /*
+         * KFintech delivers a download LINK, and its WAF ("Request Rejected")
+         * blocks this Apps Script run (a Google datacenter IP) from fetching it —
+         * as it blocks every server we have. So we do NOT download here: we decode
+         * the direct dss.kfintech.com URL and ENQUEUE it, and a residential-IP
+         * agent (the user's Mac, see scripts/mf-rta-mac-agent.mjs) pulls the queue
+         * and downloads it where the WAF allows. A "No data found" email carries
+         * nothing and is simply finished.
+         */
         if (sender.mode === 'link') {
-          var link = linkFeeds(msg);
-          feeds = link.feeds;
-          /*
-           * A report email that carries DATA but yielded no file is NOT handled:
-           * it must not be labelled Done (so the next run retries it), and it
-           * must raise a problem. This is the gap that let KFintech stall
-           * silently — the download link started returning an HTML interstitial,
-           * the old code dropped it with no ZIP, and marked the mail Done anyway.
-           * A genuine "No data found" email yields nothing and is fine to finish.
-           */
-          if (feeds.length === 0) {
-            if (!link.noData) {
-              totals.errors++; allHandled = false;
-              problems.push((msg.getSubject() || 'KFintech report') + ': no file fetched — ' + (link.note || 'download link gave no ZIP'));
-            } else {
-              totals.skipped++;
-            }
+          if (isNoData(msg)) { totals.skipped++; return; }
+          var urls = downloadUrls(msg.getBody() || '');
+          var direct = urls.length ? directUrl(urls[0]) : null;
+          if (!direct) {
+            totals.errors++; allHandled = false;
+            problems.push((msg.getSubject() || 'KFintech report') + ': no decodable download link');
             return;
           }
-        } else {
-          feeds = attachmentFeeds(msg);
+          var q = enqueue(url, secret, anon, {
+            messageId: msg.getId(), directUrl: direct, trackerUrl: urls[0],
+            reportHint: reportName(msg, direct), registrar: sender.registrar, subject: msg.getSubject() || '',
+          });
+          if (q.ok) totals.queued = (totals.queued || 0) + 1;
+          else { totals.errors++; allHandled = false; problems.push((msg.getSubject() || 'KFintech report') + ': enqueue failed — ' + (q.error || '')); }
+          return;
         }
-        feeds.forEach(function (feed) {
+
+        attachmentFeeds(msg).forEach(function (feed) {
           totals.files++;
           try {
             var res = postZip(url, secret, anon, {
@@ -222,32 +231,6 @@ function attachmentFeeds(msg) {
   return out;
 }
 
-/**
- * KFintech: follow the email's download link and return the fetched ZIP.
- *
- * Returns { feeds, noData, note }:
- *   - feeds: [{name, bytes}] on success (one report per email), else []
- *   - noData: true for a "No data found" email (nothing to fetch — finish it)
- *   - note: why no file came back, for the alert, when it was a data report
- *
- * The body has several scdelivery links (the report, product-codes, a tracking
- * pixel on /o/); we take the /c/ report link — preferring the one right before
- * "to download the report" — and keep the response only if it is really a ZIP
- * (the "PK" magic). Some links now answer with an HTML interstitial that carries
- * the real file URL, so that is followed once before giving up.
- */
-function linkFeeds(msg) {
-  if (isNoData(msg)) return { feeds: [], noData: true, note: 'no data found' };
-  var urls = downloadUrls(msg.getBody() || '');
-  var note = urls.length ? '' : 'no download link in email';
-  for (var i = 0; i < urls.length; i++) {
-    var got = fetchZip(urls[i]);
-    if (got.bytes) return { feeds: [{ name: reportName(msg, urls[i]), bytes: got.bytes }], noData: false, note: '' };
-    note = got.note;
-  }
-  return { feeds: [], noData: false, note: note };
-}
-
 /** A "No data found for the given period" email — nothing to download. */
 function isNoData(msg) {
   return /no\s*data\s*found/i.test(msg.getPlainBody() || msg.getBody() || '');
@@ -295,53 +278,6 @@ function directUrl(trackerUrl) {
   return /^https?:\/\/\S+/i.test(real) ? real : null;
 }
 
-/** Host part of a URL, for a compact diagnostic. */
-function urlHost(u) { var m = (u || '').match(/^https?:\/\/([^\/?]+)/); return m ? m[1] : '?'; }
-
-/**
- * Fetch one download link; {bytes} when it resolves to a ZIP, else {note}.
- *
- * Tries the decoded dss.kfintech.com URL first (it serves the ZIP directly),
- * then the /c/ tracker link. The note records, per candidate, the host + HTTP
- * status + content-type (+ a short HTML snippet) so a failure says exactly what
- * the registrar returned to this Apps Script run — the only way to tell a real
- * block/redirect problem apart from an empty feed from the execution log.
- */
-function fetchZip(url) {
-  var opts = { followRedirects: true, muteHttpExceptions: true,
-    headers: { 'User-Agent': 'Mozilla/5.0 (NiyomRTA)' } };
-  var direct = directUrl(url);
-  var candidates = direct ? [direct, url] : [url];
-  var diag = [];
-  for (var c = 0; c < candidates.length; c++) {
-    var tag = urlHost(candidates[c]);
-    var resp;
-    try { resp = UrlFetchApp.fetch(candidates[c], opts); }
-    catch (e) { diag.push(tag + ' threw ' + e); continue; }
-    var code = resp.getResponseCode();
-    var bytes = resp.getContent();
-    if (code === 200 && isZip(bytes)) return { bytes: bytes };
-    var ct = (resp.getHeaders()['Content-Type'] || resp.getHeaders()['content-type'] || '').toLowerCase();
-    var extra = '';
-    // An HTML interstitial sometimes stands in for the file — follow the file
-    // URL it names (the dss/S3 link) once. '<' = 60.
-    if (code === 200 && (ct.indexOf('html') > -1 || (bytes.length && bytes[0] === 60))) {
-      var body = resp.getContentText();
-      var next = (body.match(/https?:\/\/[^"'\s<>]+\.(?:zip|kmfs)[^"'\s<>]*/i) ||
-                  body.match(/https?:\/\/[^"'\s<>]*(?:dss\.kfintech\.com|amazonaws\.com|s3[^"'\s<>]*)[^"'\s<>]+/i) || [])[0];
-      if (next) {
-        var r2 = UrlFetchApp.fetch(next.replace(/&amp;/g, '&'), opts);
-        if (r2.getResponseCode() === 200 && isZip(r2.getContent())) return { bytes: r2.getContent() };
-      }
-      extra = ' html="' + body.replace(/\s+/g, ' ').slice(0, 140) + '"';
-    }
-    diag.push(tag + ' HTTP' + code + ' ct=' + (ct || '?') + ' bytes=' + bytes.length + extra);
-  }
-  return { note: diag.join(' | ') || 'no download link' };
-}
-
-function isZip(bytes) { return bytes && bytes.length > 2 && bytes[0] === 80 && bytes[1] === 75; } // 'PK'
-
 /** A filename hint for the log (the pipeline reads the real member name inside). */
 function reportName(msg, href) {
   var m = (msg.getSubject() || '').match(/W[A-Z]+\d+/);
@@ -364,4 +300,25 @@ function postZip(url, secret, anon, body) {
   json.error = json.error || ('HTTP ' + code);
   json.ok = false;
   return json;
+}
+
+/**
+ * Queue a KFintech download link for the residential-IP Mac agent to fetch.
+ *
+ * We can't download it from here (Google's IP is WAF-blocked), so the decoded
+ * dss URL + the tracker link are stored in mf_rta_pending_downloads via the
+ * ingest function; the agent drains the queue and posts the bytes back.
+ */
+function enqueue(url, secret, anon, item) {
+  var headers = { 'X-Ingest-Secret': secret };
+  if (anon) headers['apikey'] = anon;
+  var resp = UrlFetchApp.fetch(url, {
+    method: 'post', contentType: 'application/json', headers: headers,
+    payload: JSON.stringify({ enqueue: [item] }), muteHttpExceptions: true,
+  });
+  var code = resp.getResponseCode();
+  var json = {};
+  try { json = JSON.parse(resp.getContentText()); } catch (e) { /* non-JSON */ }
+  if (code >= 200 && code < 300 && json.ok) return json;
+  return { ok: false, error: json.error || ('HTTP ' + code) };
 }

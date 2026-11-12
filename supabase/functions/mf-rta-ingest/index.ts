@@ -46,8 +46,76 @@ Deno.serve(async (req: Request) => {
   const sb = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
   try {
     const body = await req.json().catch(() => null) as
-      | { fileName?: string; dataBase64?: string; registrar?: string; messageId?: string }
+      | {
+          fileName?: string;
+          dataBase64?: string;
+          registrar?: string;
+          messageId?: string;
+          // Queue ops: KFintech delivers a download LINK, and its WAF blocks every
+          // datacenter IP (Apps Script, the droplet, Supabase) with "Request
+          // Rejected". So the script ENQUEUEs the decoded links here, and a
+          // residential-IP agent (the user's Mac) lists them, downloads the ZIP
+          // where the WAF allows it, and posts the bytes back on the normal path.
+          enqueue?: {
+            messageId: string;
+            directUrl: string;
+            trackerUrl?: string;
+            reportHint?: string;
+            registrar?: string;
+            subject?: string;
+          }[];
+          listPending?: boolean;
+          markError?: { messageId: string; error?: string };
+        }
       | null;
+
+    // The queue table is new and not in the generated Database types yet; it is
+    // only ever touched here, so go through a loosely typed handle rather than
+    // regenerating types across the whole app.
+    const queue = () => (sb as unknown as { from: (t: string) => any }).from('mf_rta_pending_downloads');
+
+    // The Mac agent asks for links waiting to be fetched.
+    if (body?.listPending) {
+      const { data } = await queue()
+        .select('message_id, registrar, report_hint, subject, direct_url, tracker_url, attempts')
+        .eq('status', 'pending')
+        .lt('attempts', 8)
+        .order('created_at', { ascending: true })
+        .limit(50);
+      return json({ ok: true, pending: data ?? [] });
+    }
+
+    // The Apps Script enqueues the KFintech links it decoded but cannot fetch.
+    if (body?.enqueue?.length) {
+      const rows = body.enqueue
+        .filter((e) => e?.messageId && e?.directUrl)
+        .map((e) => ({
+          message_id: e.messageId,
+          direct_url: e.directUrl,
+          tracker_url: e.trackerUrl ?? null,
+          report_hint: e.reportHint ?? null,
+          subject: e.subject ?? null,
+          registrar: (e.registrar ?? 'KFINTECH').toUpperCase(),
+        }));
+      if (rows.length) {
+        await queue().upsert(rows, { onConflict: 'message_id', ignoreDuplicates: true });
+      }
+      return json({ ok: true, enqueued: rows.length });
+    }
+
+    // The Mac agent reports a download it could not complete, so we can retry /
+    // surface it rather than lose it.
+    if (body?.markError?.messageId) {
+      const { data: row } = await queue()
+        .select('attempts')
+        .eq('message_id', body.markError.messageId)
+        .maybeSingle();
+      await queue()
+        .update({ attempts: ((row?.attempts as number) ?? 0) + 1, error: body.markError.error ?? null })
+        .eq('message_id', body.markError.messageId);
+      return json({ ok: true });
+    }
+
     if (!body?.dataBase64) throw new RtaError('No file was supplied.', 400);
     const registrar = (body.registrar ?? 'CAMS').toUpperCase() === 'KFINTECH' ? 'KFINTECH' : 'CAMS';
 
@@ -74,6 +142,12 @@ Deno.serve(async (req: Request) => {
       importedBy: null,
       dedupe: true,
     });
+    // When the Mac agent fed in a queued link's bytes, close the queue row.
+    if (body.messageId) {
+      await queue()
+        .update({ status: 'done', fetched_at: new Date().toISOString(), error: null })
+        .eq('message_id', body.messageId);
+    }
     return json(result);
   } catch (e) {
     const status = e instanceof RtaError ? e.status : 500;
