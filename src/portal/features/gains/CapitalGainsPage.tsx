@@ -45,7 +45,13 @@ import { StatusPill } from '../../components/StatusPill';
 import { CasGainsService, type GainsStatement } from '../../services/CasGainsService';
 import { exportCapitalGainsXlsx, exportElssLockInXlsx } from '../../services/exporters';
 import { displaySchemeName, termLabel, treatmentLabel } from '../../services/cas/gains';
-import { computeElssLockIn, type ElssLockIn } from '../../services/cas/elssLockIn';
+import {
+  computeElssLockIn,
+  mergeElssSources,
+  type ElssLockIn,
+  type ElssLockInSource,
+} from '../../services/cas/elssLockIn';
+import { fetchRegistrarElssSources } from '../../services/cas/registrarElss';
 
 interface Props {
   clientId: string;
@@ -56,6 +62,7 @@ interface Props {
 
 export function CapitalGainsPage({ clientId, client, onImport }: Props) {
   const [statement, setStatement] = useState<GainsStatement | null>(null);
+  const [registrarSources, setRegistrarSources] = useState<ElssLockInSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [fy, setFy] = useState<string>('');
   const [busy, setBusy] = useState(false);
@@ -63,10 +70,15 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    CasGainsService.getStatement(clientId)
-      .then((s) => {
+    Promise.all([
+      CasGainsService.getStatement(clientId).catch(() => null),
+      // ELSS lock-in for a client whose funds run on the platform, with no CAS.
+      fetchRegistrarElssSources(clientId).catch(() => [] as ElssLockInSource[]),
+    ])
+      .then(([s, reg]) => {
         if (!alive) return;
         setStatement(s);
+        setRegistrarSources(reg);
         // Open on the most recent year that actually has a sale in it.
         if (s?.financialYears.length) setFy(s.financialYears[0]);
       })
@@ -92,9 +104,12 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
   );
 
   // ELSS lock-in is about what is still held, so it does not depend on the year.
+  // Both sources feed one overlay: the CAS lots where a statement was imported,
+  // the registrar lots otherwise. A fund in both is counted once, CAS first —
+  // it carries the real cost and grandfathering.
   const lockIn = useMemo(
-    () => (statement ? computeElssLockIn(statement.schemes) : null),
-    [statement],
+    () => computeElssLockIn(mergeElssSources(statement?.schemes ?? [], registrarSources)),
+    [statement, registrarSources],
   );
 
   if (loading) {
@@ -109,25 +124,29 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
   }
 
   if (!statement) {
+    // Even without a CAS, a client's registrar feed can show their ELSS lock-in.
     return (
-      <Card padding="lg">
-        <EmptyState
-          icon={Receipt}
-          title="No statement imported yet"
-          hint="Import your Consolidated Account Statement and your capital gains are worked out from it automatically."
-        />
-        {onImport && (
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={onImport}
-              className="rounded-token-md bg-accent px-4 py-2 text-xs font-semibold text-on-accent"
-            >
-              Import my portfolio
-            </button>
-          </div>
-        )}
-      </Card>
+      <div className="space-y-5">
+        {lockIn && <ElssLockInCard lockIn={lockIn} client={client} />}
+        <Card padding="lg">
+          <EmptyState
+            icon={Receipt}
+            title={lockIn ? 'Import a statement for full capital gains' : 'No statement imported yet'}
+            hint="Your realised capital gains are worked out from an imported Consolidated Account Statement — import yours and they appear here automatically."
+          />
+          {onImport && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={onImport}
+                className="rounded-token-md bg-accent px-4 py-2 text-xs font-semibold text-on-accent"
+              >
+                Import my portfolio
+              </button>
+            </div>
+          )}
+        </Card>
+      </div>
     );
   }
 

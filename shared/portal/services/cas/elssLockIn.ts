@@ -22,10 +22,27 @@
  * perfect: a tax-saver that hides its nature in its name would be missed. If
  * certainty is ever needed, a curated ISIN set would slot in alongside this.
  */
-import type { SchemeGains } from './gains';
+import type { OpenLot } from './gains';
 
 /** The lock-in period, in years, under the ELSS notification (s.80C). */
 const LOCK_IN_YEARS = 3;
+
+/**
+ * The slice of a computed scheme the lock-in overlay needs. Both the CAS gains
+ * engine's `SchemeGains` and the registrar-feed adapter produce this shape, so
+ * one overlay serves both sources — see [[registrarElss]].
+ */
+export interface ElssLockInSource {
+  schemeName: string;
+  isin: string | null;
+  /** False when the lots cannot be trusted (truncated history / unreconciled feed). */
+  complete: boolean;
+  openLots: OpenLot[];
+  openCost: number;
+  openUnits: number;
+  /** Unrealised gain at the latest NAV, or null when none is known. */
+  unrealised: number | null;
+}
 
 /** A still-held purchase and where it stands against its three-year lock. */
 export interface ElssLockInLot {
@@ -73,6 +90,23 @@ export function isElssName(name: string | null | undefined): boolean {
   return !!name && ELSS_RE.test(name);
 }
 
+/**
+ * Combine the two lot sources into one list, counting a fund once.
+ *
+ * A client can have both an imported CAS and a registrar feed for the same ELSS
+ * scheme. The CAS copy wins — it carries the real cost and any grandfathering —
+ * so a registrar source is dropped when a complete CAS source shares its ISIN.
+ */
+export function mergeElssSources(
+  cas: ElssLockInSource[],
+  registrar: ElssLockInSource[],
+): ElssLockInSource[] {
+  const casElssIsins = new Set(
+    cas.filter((s) => s.complete && isElssName(s.schemeName) && s.isin).map((s) => s.isin as string),
+  );
+  return [...cas, ...registrar.filter((r) => !r.isin || !casElssIsins.has(r.isin))];
+}
+
 const day = (d: string) => d.slice(0, 10);
 const UNIT_EPSILON = 0.001;
 
@@ -104,7 +138,7 @@ function daysBetween(from: string, to: string): number {
  * clock. Returns null when the client holds no ELSS lots we can date — nothing
  * to show rather than an empty panel.
  */
-export function computeElssLockIn(schemes: SchemeGains[], now: Date = new Date()): ElssLockIn | null {
+export function computeElssLockIn(schemes: ElssLockInSource[], now: Date = new Date()): ElssLockIn | null {
   const today = todayUtc(now);
   const lots: ElssLockInLot[] = [];
   const schemeNames = new Set<string>();

@@ -27,7 +27,8 @@ import {
   exportHoldingsXlsx,
   exportTransactionsXlsx,
 } from '../../services/exporters';
-import { computeElssLockIn, isElssName } from '../../services/cas/elssLockIn';
+import { computeElssLockIn, isElssName, mergeElssSources } from '../../services/cas/elssLockIn';
+import { fetchRegistrarElssSources } from '../../services/cas/registrarElss';
 import { useTransactions } from '../../hooks/useTransactions';
 import { mfSsoEnabled } from '../../../../shared/platform/env';
 
@@ -48,8 +49,11 @@ const isElss = (r: HoldingRow) =>
  * to the holdings slice so the button never dead-ends.
  */
 async function downloadElss(clientId: string, elssHoldings: HoldingRow[], client: NWClient | null) {
-  const statement = await CasGainsService.getStatement(clientId).catch(() => null);
-  const lockIn = statement ? computeElssLockIn(statement.schemes) : null;
+  const [statement, registrar] = await Promise.all([
+    CasGainsService.getStatement(clientId).catch(() => null),
+    fetchRegistrarElssSources(clientId).catch(() => []),
+  ]);
+  const lockIn = computeElssLockIn(mergeElssSources(statement?.schemes ?? [], registrar));
   if (lockIn) {
     await exportElssLockInXlsx(lockIn.lots, client);
   } else {
