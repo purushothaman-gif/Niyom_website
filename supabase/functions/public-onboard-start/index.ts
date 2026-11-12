@@ -17,19 +17,55 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const full_name = (body.full_name || "").trim();
     const email = (body.email || "").trim().toLowerCase();
     const phone = normalizePhone(body.phone || "");
-    // PAN was verified (name-as-per-PAN fetched) at the first step by
-    // public-onboard-pan-verify; the client's name comes from that verify.
-    const pan = (body.pan || "").trim().toUpperCase();
+    const db = serviceClient();
+
+    // Two ways in, and they are NOT equally strong:
+    //
+    //  - DigiLocker (`dl_token`): the visitor signed in to DigiLocker and shared
+    //    their PAN. The PAN, name and DOB are read from the server-side session
+    //    row the consent callback wrote — nothing identity-bearing is taken from
+    //    this request — so the PAN is proven to belong to this visitor.
+    //  - Manual PAN (`pan` + `full_name`): the first screen looked the PAN up
+    //    with Cashfree (public-onboard-pan-verify). That proves the PAN exists,
+    //    not who typed it. The shipped mobile app and the web fallback use this.
+    //
+    // mf-sso-login relies on the difference: only a DigiLocker-verified client
+    // may open the investing platform before staff approval.
+    let full_name = (body.full_name || "").trim();
+    let pan = (body.pan || "").trim().toUpperCase();
+    let dob: string | null = null;
+    let dlSessionId: string | null = null;
+
+    const dlToken = typeof body.dl_token === "string" ? body.dl_token.trim() : "";
+    if (dlToken) {
+      const DL_EXPIRED = "Your DigiLocker verification has expired. Please verify again.";
+      if (!/^[0-9a-f]{64}$/.test(dlToken)) return json({ error: DL_EXPIRED, dl_expired: true }, 400);
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(dlToken));
+      const tokenHash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      const { data: session } = await db
+        .from("digilocker_sessions")
+        .select("id, status, dl_pan, dl_name, dl_dob, expires_at, consumed_at")
+        .eq("flow", "signup")
+        .eq("signup_token_hash", tokenHash)
+        .maybeSingle();
+      const live = session
+        && session.status === "verified"
+        && !session.consumed_at
+        && session.expires_at
+        && Date.parse(session.expires_at) > Date.now();
+      if (!live) return json({ error: DL_EXPIRED, dl_expired: true }, 400);
+      pan = String(session.dl_pan || "").trim().toUpperCase();
+      full_name = String(session.dl_name || "").trim();
+      dob = session.dl_dob || null;
+      dlSessionId = session.id;
+    }
 
     if (!full_name) return json({ error: "Please enter your full name." }, 400);
     if (!isValidPan(pan)) return json({ error: "Please verify your PAN first." }, 400);
     if (!isValidPhone(phone)) return json({ error: "Enter a valid 10-digit mobile number." }, 400);
     if (!isValidEmail(email)) return json({ error: "Enter a valid email address." }, 400);
-
-    const db = serviceClient();
 
     // If an account already exists for this mobile/email, don't create a second
     // one — send them down the "continue your application" (OTP login) path.
@@ -172,6 +208,7 @@ Deno.serve(async (req: Request) => {
       pan,
       pan_name: full_name,
       pan_verified: true,
+      ...(dob ? { dob } : {}),
       verification_status: "pending",
       onboarding_status: "account_created",
       // A partner-referred signup is DSA-sourced from the outset; this is the
@@ -184,6 +221,18 @@ Deno.serve(async (req: Request) => {
     // 23505 = the unique PAN index caught a concurrent signup for the same PAN.
     if (clientErr?.code === "23505") return json({ error: PAN_TAKEN }, 409);
     if (clientErr) throw clientErr;
+
+    // Tie the DigiLocker session to the client it created and retire the token.
+    // This link is what mf-sso-login looks for, and it makes the row visible to
+    // the client's own session (RLS own-read) like any wizard-started session.
+    if (dlSessionId) {
+      const { error: linkErr } = await db
+        .from("digilocker_sessions")
+        .update({ client_id: client.id, consumed_at: new Date().toISOString(), name_match: true })
+        .eq("id", dlSessionId)
+        .is("consumed_at", null);
+      if (linkErr) console.error("digilocker session link failed (client already created):", linkErr.message);
+    }
 
     // Provision / link a Supabase auth user for the client (reuses the
     // create-client-login approach: reuse an existing auth user by email, else
@@ -250,6 +299,7 @@ Deno.serve(async (req: Request) => {
         + `${refKind === "employee" ? ` Referred by this employee's link (${refCode}).` : ""}`
         + `${refKind === "company" ? ` Arrived through NIYOM's own channel.` : ""}`
         + `${refKind === "dsa" ? ` Referred by partner link (${refCode})${refDsaId ? " — client mapped to that DSA for payout." : " — partner inactive, no DSA mapping applied."}` : ""}`
+        + `${dlSessionId ? " PAN verified via DigiLocker." : " PAN entered manually (Cashfree lookup)."}`
         + ` Mobile OTP sent; KYC pending.`,
     }]);
 

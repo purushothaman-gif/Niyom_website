@@ -68,14 +68,28 @@ Deno.serve(async (req: Request) => {
     if (!client || client.client_auth_user_id !== user.id) return json({ error: "Unauthorized" }, 403);
 
     const pan = (client.pan ?? "").trim().toUpperCase();
-    // The PAN is trusted only once staff have approved the client
-    // (onboarding_status 'active', which a client cannot set — nw_clients guard
-    // trigger). pan_verified alone is NOT enough: at self-signup it only means
-    // the PAN exists (Cashfree lookup), not that the person who typed it owns
-    // it, and this function hands back a sign-in link to that PAN's investing
-    // account. Signing in before approval returns once signup proves ownership
-    // (DigiLocker).
-    const panTrusted = client.onboarding_status === "active";
+    // This function hands back a sign-in link to the PAN's investing account, so
+    // the PAN must be proven to belong to this client. Two things prove it:
+    //
+    //  - staff approved the client (onboarding_status 'active', which a client
+    //    cannot set — nw_clients guard trigger), or
+    //  - the client shared this exact PAN through DigiLocker: a verified
+    //    digilocker_sessions row linked to them. Those rows are written by the
+    //    service role only, so a client cannot forge one.
+    //
+    // pan_verified alone is NOT proof: on the manual signup path it only means
+    // the PAN exists (Cashfree lookup), not that the person who typed it owns it.
+    let panTrusted = client.onboarding_status === "active";
+    if (pan && !panTrusted) {
+      const { data: proof } = await db
+        .from("digilocker_sessions")
+        .select("id")
+        .eq("client_id", client_id)
+        .eq("status", "verified")
+        .eq("dl_pan", pan)
+        .limit(1);
+      panTrusted = !!(proof && proof.length > 0);
+    }
     if (!pan || !panTrusted) {
       await log({ caller_type: "client", caller_auth_id: user.id, client_id, outcome: "kyc_incomplete" });
       return json({ status: "kyc_incomplete" });

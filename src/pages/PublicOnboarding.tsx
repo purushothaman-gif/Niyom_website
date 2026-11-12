@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   User, Phone, Mail, ShieldCheck, ArrowLeft, ArrowRight, CheckCircle2,
-  AlertCircle, Clock, Sparkles, RotateCcw, Home, CreditCard, type LucideIcon,
+  AlertCircle, Clock, Sparkles, RotateCcw, Home, CreditCard, ExternalLink, type LucideIcon,
 } from 'lucide-react';
 import { clientSupabase as supabase } from '../lib/supabase';
+import { bseProxyBaseUrl } from '../../shared/platform/env';
 import { BrandFilm } from '../components/BrandFilm';
 
 interface Props {
@@ -57,6 +58,55 @@ async function callFn<T = any>(name: string, payload: unknown): Promise<{ ok: bo
   return { ok: res.ok, data };
 }
 
+/**
+ * DigiLocker at signup.
+ *
+ * The visitor has no account yet, so the proxy identifies them only by a random
+ * token it hands back when the session starts. The token lives in
+ * sessionStorage across the full-page trip to DigiLocker and back (signup
+ * opens in its own tab, so the store survives). The verified PAN and name never
+ * come through the browser: public-onboard-start redeems the token server-side.
+ * A same-tab redirect is used rather than a popup because popups are unreliable
+ * on phones, where most signups happen.
+ */
+const DL_TOKEN_KEY = 'nw_signup_dl';
+
+function readDlToken(): string | null {
+  try { return sessionStorage.getItem(DL_TOKEN_KEY); } catch { return null; }
+}
+function clearDlToken() {
+  try { sessionStorage.removeItem(DL_TOKEN_KEY); } catch { /* private mode */ }
+}
+/** True when this page load is the return leg from DigiLocker. */
+function returningFromDigilocker(): boolean {
+  try { return new URLSearchParams(window.location.search).has('dl'); } catch { return false; }
+}
+
+interface DlStatus { status: string; name?: string | null; panMasked?: string | null; alreadyRegistered?: boolean }
+
+/** Call one of the proxy's public DigiLocker routes. Never throws. */
+async function callDigilocker<T>(path: string, body?: unknown): Promise<{ ok: boolean; data: T | null }> {
+  const base = bseProxyBaseUrl();
+  if (!base) return { ok: false, data: null };
+  const ctrl = new AbortController();
+  // Starting a session waits on the vendor; the other two are quick lookups.
+  const timer = setTimeout(() => ctrl.abort(), path === 'public-start' ? 30_000 : 6_000);
+  try {
+    const res = await fetch(`${base}/cas/digilocker/${path}`, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    const data = (await res.json().catch(() => null)) as T | null;
+    return { ok: res.ok, data };
+  } catch {
+    return { ok: false, data: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Small presentational helpers (match the app's token design language) ──
 function Field({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: React.ReactNode }) {
   return (
@@ -94,8 +144,64 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
   const [busy, setBusy] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // DigiLocker is the preferred way to verify the PAN. `null` = still finding
+  // out; `false` (off, capped, or the server unreachable) leaves the manual PAN
+  // entry, so signup is never blocked by it.
+  const [dlEnabled, setDlEnabled] = useState<boolean | null>(null);
+  // Set once DigiLocker has verified this visitor; redeemed by public-onboard-start.
+  const [dlToken, setDlToken] = useState('');
+  const [panMasked, setPanMasked] = useState('');
+  const [manualPan, setManualPan] = useState(false);
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+
+  // On load: pick up a DigiLocker verification this tab started (the return leg
+  // of the redirect), then learn whether DigiLocker is on offer at all.
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const stored = readDlToken();
+      if (stored) {
+        const returning = returningFromDigilocker();
+        let settled = false;
+        // The callback stores the result before it redirects here, so this is
+        // normally final on the first read; the retries cover a slow write.
+        for (let attempt = 0; attempt < 5 && alive && !settled; attempt++) {
+          const { data } = await callDigilocker<DlStatus>('public-status', { token: stored });
+          if (!alive) return;
+          if (data?.status === 'verified' && data.name) {
+            settled = true;
+            if (data.alreadyRegistered) {
+              clearDlToken();
+              setError('This PAN is already registered. Please sign in using "Already started your application?" below.');
+            } else {
+              setDlToken(stored);
+              setFullName(data.name);
+              setPanMasked(data.panMasked || '');
+              setView('form');
+            }
+          } else if (data?.status === 'pending' && returning) {
+            await new Promise((r) => setTimeout(r, 2000));
+          } else {
+            settled = true;
+            clearDlToken();
+            if (returning) {
+              setManualPan(true);
+              setError('DigiLocker verification was not completed. You can try again, or enter your PAN below.');
+            }
+          }
+        }
+        if (alive && !settled) {
+          clearDlToken();
+          setManualPan(true);
+          setError('We could not confirm your DigiLocker verification. You can try again, or enter your PAN below.');
+        }
+      }
+      const { ok, data } = await callDigilocker<{ enabled?: boolean }>('public-mode');
+      if (alive) setDlEnabled(ok && data?.enabled === true);
+    })();
+    return () => { alive = false; };
+  }, []);
 
   // Persist referral attribution on arrival and record the click. Never blocks
   // or fails the page: this is marketing telemetry sitting in front of a signup
@@ -118,6 +224,8 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
     if (refCode) {
       try { sessionStorage.setItem(REF_ATTR_KEY, JSON.stringify(attr)); } catch { /* private mode */ }
     }
+    // Coming back from DigiLocker reloads this page; that is not a second click.
+    if (returningFromDigilocker()) return;
     callFn('mkt-track-click', attr).catch(() => { /* tracking is never load-bearing */ });
   }, [refCode, contentNo, platform]);
 
@@ -155,6 +263,40 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
     setView('form');
   };
 
+  // ── Step 1 (preferred): verify through DigiLocker ──────────────────────
+  // Leaves the page for DigiLocker and comes back to /onboarding?dl=1, where
+  // the load effect above reads the outcome with the stored token.
+  const handleDigilocker = async () => {
+    setError('');
+    setBusy(true);
+    const { ok, data } = await callDigilocker<{ authorizationUrl?: string; token?: string; error?: string }>('public-start', {});
+    const url = data?.authorizationUrl || '';
+    if (!ok || !data?.token || !url.startsWith('https://')) {
+      setBusy(false);
+      setManualPan(true);
+      return setError(data?.error || 'DigiLocker is not available right now. Please enter your PAN below.');
+    }
+    try {
+      sessionStorage.setItem(DL_TOKEN_KEY, data.token);
+    } catch {
+      // Without the token there is no way to pick the result up on return.
+      setBusy(false);
+      setManualPan(true);
+      return setError('Your browser is blocking storage for this site. Please enter your PAN below.');
+    }
+    window.location.assign(url);
+  };
+
+  /** Back to the first screen, dropping whichever verification was in hand. */
+  const resetVerification = () => {
+    clearDlToken();
+    setDlToken('');
+    setPanMasked('');
+    setFullName('');
+    setView('pan');
+    setError('');
+  };
+
   // ── Step 2: create the free account + trigger OTP ──────────────────────
   const handleCreate = async () => {
     setError('');
@@ -162,13 +304,21 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
     setBusy(true);
     const attr = readAttribution();
     const { ok, data } = await callFn('public-onboard-start', {
-      full_name: fullName.trim(), pan, phone, email: email.trim().toLowerCase(),
+      // DigiLocker: the server reads the PAN and name from the verified session.
+      ...(dlToken ? { dl_token: dlToken } : { full_name: fullName.trim(), pan }),
+      phone, email: email.trim().toLowerCase(),
       // Optional referral attribution. The server resolves the code and falls
       // back to the default owner if it is unknown or absent.
       ...(attr ? { ref: attr.ref, cnt: attr.cnt, pl: attr.pl } : {}),
     });
     setBusy(false);
+    if (data?.dl_expired) {
+      resetVerification();
+      return setError(data?.error || 'Your DigiLocker verification has expired. Please verify again.');
+    }
     if (!ok && !data?.already_exists) return setError(data?.error || 'Could not create your account. Please try again.');
+    // The account exists now and the token is spent.
+    if (ok && !data?.already_exists) clearDlToken();
     setEmailMasked(data?.email_masked || email.trim().toLowerCase());
     setView('otp');
     startResendCooldown();
@@ -254,7 +404,9 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
           </h1>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             {view === 'pan'
-              ? 'Enter your PAN — we’ll fetch your name instantly. No documents needed to begin.'
+              ? (dlEnabled && !manualPan
+                ? 'Verify with DigiLocker — your name and PAN come straight from the source. No documents needed to begin.'
+                : 'Enter your PAN — we’ll fetch your name instantly. No documents needed to begin.')
               : view === 'form'
               ? 'Just your mobile and email to finish creating your account.'
               : <>We sent a 6-digit code to <span style={{ color: 'var(--text-primary)' }}>{emailMasked || 'your email'}</span>.</>}
@@ -296,7 +448,24 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
 
         {/* Card */}
         <div className="rounded-2xl p-6 space-y-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-card)' }}>
-          {view === 'pan' ? (
+          {view === 'pan' && dlEnabled === null ? (
+            <p className="text-sm text-center py-6" style={{ color: 'var(--text-muted)' }}>One moment…</p>
+          ) : view === 'pan' && dlEnabled && !manualPan ? (
+            <>
+              <button onClick={handleDigilocker} disabled={busy}
+                className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 press disabled:opacity-50 transition-opacity"
+                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))', color: 'var(--text-on-accent)' }}>
+                {busy ? 'Opening DigiLocker…' : <>Verify with DigiLocker <ExternalLink className="w-4 h-4" /></>}
+              </button>
+              <p className="text-xs text-center leading-relaxed" style={{ color: 'var(--text-faint)' }}>
+                You’ll sign in to DigiLocker and share your PAN &amp; Aadhaar. We read your name and PAN
+                from there — no typing, and nothing is shared without your consent.
+              </p>
+              <button onClick={() => { setManualPan(true); setError(''); }} className="w-full text-xs underline-offset-2 hover:underline" style={{ color: 'var(--text-muted)' }}>
+                Don’t use DigiLocker? Enter your PAN instead
+              </button>
+            </>
+          ) : view === 'pan' ? (
             <>
               <Field icon={CreditCard} label="PAN Number">
                 <Input value={pan} inputMode="text" autoFocus maxLength={10}
@@ -311,6 +480,11 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
               <p className="text-xs text-center" style={{ color: 'var(--text-faint)' }}>
                 We verify your PAN instantly and fetch your name — no typing needed.
               </p>
+              {dlEnabled && (
+                <button onClick={() => { setManualPan(false); setError(''); }} className="w-full flex items-center justify-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <ArrowLeft className="w-3.5 h-3.5" /> Verify with DigiLocker instead
+                </button>
+              )}
             </>
           ) : view === 'form' ? (
             <>
@@ -322,6 +496,11 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
                     <CheckCircle2 className="w-3.5 h-3.5" /> as per PAN
                   </span>
                 </div>
+                {dlToken && (
+                  <p className="text-xs mt-1.5" style={{ color: 'var(--text-faint)' }}>
+                    {panMasked ? `PAN ${panMasked} · ` : ''}verified with DigiLocker
+                  </p>
+                )}
               </Field>
               <Field icon={Phone} label="Mobile Number">
                 <Input type="tel" inputMode="numeric" value={phone} maxLength={10} autoFocus
@@ -335,8 +514,8 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
                 style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))', color: 'var(--text-on-accent)' }}>
                 {busy ? 'Creating your account…' : <>Create Free Account <ArrowRight className="w-4 h-4" /></>}
               </button>
-              <button onClick={() => { setView('pan'); setError(''); }} className="w-full flex items-center justify-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-                <ArrowLeft className="w-3.5 h-3.5" /> Change PAN
+              <button onClick={resetVerification} className="w-full flex items-center justify-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                <ArrowLeft className="w-3.5 h-3.5" /> {dlToken ? 'Start over' : 'Change PAN'}
               </button>
             </>
           ) : (

@@ -1673,7 +1673,8 @@ export type Database = {
       }
       digilocker_sessions: {
         Row: {
-          client_id: string
+          client_id: string | null
+          consumed_at: string | null
           created_at: string | null
           created_by: string | null
           dl_aadhaar_masked: string | null
@@ -1681,17 +1682,23 @@ export type Database = {
           dl_name: string | null
           dl_pan: string | null
           error: string | null
+          expires_at: string | null
+          flow: string
           id: string
+          ip: string | null
           name_match: boolean | null
           result: Json | null
+          return_origin: string | null
           session_id: string | null
+          signup_token_hash: string | null
           state: string | null
           status: string
           updated_at: string | null
           verified_at: string | null
         }
         Insert: {
-          client_id: string
+          client_id?: string | null
+          consumed_at?: string | null
           created_at?: string | null
           created_by?: string | null
           dl_aadhaar_masked?: string | null
@@ -1699,17 +1706,23 @@ export type Database = {
           dl_name?: string | null
           dl_pan?: string | null
           error?: string | null
+          expires_at?: string | null
+          flow?: string
           id?: string
+          ip?: string | null
           name_match?: boolean | null
           result?: Json | null
+          return_origin?: string | null
           session_id?: string | null
+          signup_token_hash?: string | null
           state?: string | null
           status?: string
           updated_at?: string | null
           verified_at?: string | null
         }
         Update: {
-          client_id?: string
+          client_id?: string | null
+          consumed_at?: string | null
           created_at?: string | null
           created_by?: string | null
           dl_aadhaar_masked?: string | null
@@ -1717,10 +1730,15 @@ export type Database = {
           dl_name?: string | null
           dl_pan?: string | null
           error?: string | null
+          expires_at?: string | null
+          flow?: string
           id?: string
+          ip?: string | null
           name_match?: boolean | null
           result?: Json | null
+          return_origin?: string | null
           session_id?: string | null
+          signup_token_hash?: string | null
           state?: string | null
           status?: string
           updated_at?: string | null
@@ -6153,6 +6171,51 @@ export type Database = {
           status?: string
           txns_upserted?: number | null
           unmatched?: number
+        }
+        Relationships: []
+      }
+      mf_rta_pending_downloads: {
+        Row: {
+          attempts: number
+          created_at: string
+          direct_url: string
+          error: string | null
+          fetched_at: string | null
+          id: string
+          message_id: string
+          registrar: string | null
+          report_hint: string | null
+          status: string
+          subject: string | null
+          tracker_url: string | null
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          direct_url: string
+          error?: string | null
+          fetched_at?: string | null
+          id?: string
+          message_id: string
+          registrar?: string | null
+          report_hint?: string | null
+          status?: string
+          subject?: string | null
+          tracker_url?: string | null
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          direct_url?: string
+          error?: string | null
+          fetched_at?: string | null
+          id?: string
+          message_id?: string
+          registrar?: string | null
+          report_hint?: string | null
+          status?: string
+          subject?: string | null
+          tracker_url?: string | null
         }
         Relationships: []
       }
