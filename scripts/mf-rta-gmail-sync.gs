@@ -276,28 +276,56 @@ function downloadUrls(html) {
   return all;
 }
 
+/**
+ * The direct download URL hidden in a KFintech /c/ tracker link.
+ *
+ * The real file lives on dss.kfintech.com; the tracker encodes it in the `u`
+ * parameter with a Caesar(+1) shift (e.g. "iuuqt" = "https"). The /c/ link
+ * itself now answers with an HTML landing page, but the decoded dss URL returns
+ * the ZIP straight away (verified: content-type application/zip, "PK" magic).
+ * Returns null when there is no decodable http URL.
+ */
+function directUrl(trackerUrl) {
+  var m = trackerUrl.match(/[?&]u=([^&]+)/);
+  if (!m) return null;
+  var enc;
+  try { enc = decodeURIComponent(m[1]); } catch (e) { return null; }
+  var real = '';
+  for (var i = 0; i < enc.length; i++) real += String.fromCharCode(enc.charCodeAt(i) - 1);
+  return /^https?:\/\/\S+/i.test(real) ? real : null;
+}
+
 /** Fetch one download link; {bytes} when it resolves to a ZIP, else {note}. */
 function fetchZip(url) {
   var opts = { followRedirects: true, muteHttpExceptions: true,
     headers: { 'User-Agent': 'Mozilla/5.0 (NiyomRTA)' } };
-  var resp = UrlFetchApp.fetch(url, opts);
-  if (resp.getResponseCode() !== 200) return { note: 'HTTP ' + resp.getResponseCode() };
-  var bytes = resp.getContent();
-  if (isZip(bytes)) return { bytes: bytes };
-  // An HTML interstitial sometimes stands in for the file — follow the file URL
-  // it names (the S3/dss link) once. '<' = 60.
-  var ct = (resp.getHeaders()['Content-Type'] || resp.getHeaders()['content-type'] || '').toLowerCase();
-  if (ct.indexOf('html') > -1 || (bytes.length && bytes[0] === 60)) {
-    var body = resp.getContentText();
-    var next = (body.match(/https?:\/\/[^"'\s<>]+\.(?:zip|kmfs)[^"'\s<>]*/i) ||
-                body.match(/https?:\/\/[^"'\s<>]*(?:dss\.kfintech\.com|amazonaws\.com|s3[^"'\s<>]*)[^"'\s<>]+/i) || [])[0];
-    if (next) {
-      var r2 = UrlFetchApp.fetch(next.replace(/&amp;/g, '&'), opts);
-      if (r2.getResponseCode() === 200 && isZip(r2.getContent())) return { bytes: r2.getContent() };
+  // Try the decoded dss.kfintech.com URL first (it serves the ZIP directly),
+  // then the tracker link itself as a fallback.
+  var direct = directUrl(url);
+  var candidates = direct ? [direct, url] : [url];
+  var note = 'no download link';
+  for (var c = 0; c < candidates.length; c++) {
+    var resp = UrlFetchApp.fetch(candidates[c], opts);
+    if (resp.getResponseCode() !== 200) { note = 'HTTP ' + resp.getResponseCode(); continue; }
+    var bytes = resp.getContent();
+    if (isZip(bytes)) return { bytes: bytes };
+    // An HTML interstitial sometimes stands in for the file — follow the file
+    // URL it names (the dss/S3 link) once. '<' = 60.
+    var ct = (resp.getHeaders()['Content-Type'] || resp.getHeaders()['content-type'] || '').toLowerCase();
+    if (ct.indexOf('html') > -1 || (bytes.length && bytes[0] === 60)) {
+      var body = resp.getContentText();
+      var next = (body.match(/https?:\/\/[^"'\s<>]+\.(?:zip|kmfs)[^"'\s<>]*/i) ||
+                  body.match(/https?:\/\/[^"'\s<>]*(?:dss\.kfintech\.com|amazonaws\.com|s3[^"'\s<>]*)[^"'\s<>]+/i) || [])[0];
+      if (next) {
+        var r2 = UrlFetchApp.fetch(next.replace(/&amp;/g, '&'), opts);
+        if (r2.getResponseCode() === 200 && isZip(r2.getContent())) return { bytes: r2.getContent() };
+      }
+      note = 'link returned HTML, no file URL inside';
+      continue;
     }
-    return { note: 'link returned HTML, no file URL inside' };
+    note = 'not a ZIP (content-type ' + (ct || '?') + ')';
   }
-  return { note: 'not a ZIP (content-type ' + (ct || '?') + ')' };
+  return { note: note };
 }
 
 function isZip(bytes) { return bytes && bytes.length > 2 && bytes[0] === 80 && bytes[1] === 75; } // 'PK'
