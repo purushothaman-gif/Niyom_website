@@ -6,7 +6,7 @@
  * the codes printed beside each value are what gets keyed into the platform.
  */
 import { describe, expect, it } from 'vitest';
-import { buildMfAccountSheet, sheetToCsv, sheetToText, type SheetClient, type SheetNominee } from './mfAccountSheet';
+import { buildMfAccountSheet, queueBucket, sheetToCsv, sheetToText, type SheetClient, type SheetNominee } from './mfAccountSheet';
 
 const client: SheetClient = {
   client_code: 'NW0010030', full_name: 'Asha Kumar', pan_name: 'ASHA KUMAR', pan: 'ABCPK1234F', pan_verified: true,
@@ -72,6 +72,17 @@ describe('buildMfAccountSheet', () => {
     expect(s.ready).toBe(true);
     expect(s.notes.join(' ')).toContain('Auto-debit');
     expect(row(buildMfAccountSheet({ ...client, mandate_preference: 'later' }, [nominee]), 'Preference')?.value).toContain('later');
+  });
+});
+
+describe('queueBucket', () => {
+  it('puts a complete, unopened client in "ready" and an incomplete one in "needs details"', () => {
+    expect(queueBucket(null, buildMfAccountSheet(client, [nominee]))).toBe('ready');
+    expect(queueBucket(null, buildMfAccountSheet({ ...client, investor_profile_completed_at: null }, [nominee]))).toBe('needs_details');
+  });
+
+  it('treats an opened account as done even if our own record has gaps', () => {
+    expect(queueBucket('2026-11-12T10:00:00Z', buildMfAccountSheet({ ...client, gender: null }, []))).toBe('opened');
   });
 });
 

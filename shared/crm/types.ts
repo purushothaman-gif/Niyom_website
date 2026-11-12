@@ -91,6 +91,11 @@ export interface NWClient {
   mandate_preference?: string | null;
   mandate_max_amount?: number | null;
   mandate_upi_id?: string | null;
+  /** Set once the client's MF account exists on the fund platform. */
+  mf_platform_opened_at?: string | null;
+  mf_platform_opened_by?: string | null;
+  /** 'staff' = ticked off in the CRM queue; 'sign_on' = their first successful sign-on. */
+  mf_platform_opened_via?: 'staff' | 'sign_on' | null;
   created_at: string;
   updated_at: string;
   employee?: { full_name: string; employee_code: string };
@@ -367,6 +372,7 @@ export type CRMPage =
   | 'mf_platform'
   | 'mf_feeds'
   | 'mf_brokerage_mis'
+  | 'mf_account_queue'
   | 'leads'
   | 'onboarding'
   | 'clients'

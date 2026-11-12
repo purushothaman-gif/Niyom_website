@@ -8,8 +8,7 @@ import {
   Send, Target, Landmark, LifeBuoy, Sparkles, LineChart, BadgePercent, Gem,
   CalendarCheck, CalendarClock, CalendarDays, Coins, Receipt, Fingerprint,
   BadgeIndianRupee, SlidersHorizontal, Mail, Trophy, ExternalLink, Database,
-  Image as ImageIcon, Activity,
-} from 'lucide-react';
+  Image as ImageIcon, Activity, ListChecks } from 'lucide-react';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
 import { EmployeeAvatar } from './EmployeeAvatar';
@@ -83,6 +82,7 @@ const NAV: NavSection[] = [
       { key: 'support_tickets' as CRMPage,   label: 'Support Tickets',   icon: LifeBuoy },
       { key: 'bond_orders' as CRMPage,       label: 'Bond Orders',       icon: Receipt },
       { key: 'share_orders' as CRMPage,      label: 'Share Orders',      icon: Receipt },
+      { key: 'mf_account_queue' as CRMPage,  label: 'MF Account Queue',  icon: ListChecks },
       { key: 'mf_feeds' as CRMPage,          label: 'MF Feeds',          icon: Database, adminOnly: true },
     ],
   },

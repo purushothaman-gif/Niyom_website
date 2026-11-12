@@ -205,6 +205,18 @@ export function buildMfAccountSheet(c: SheetClient, nominees: SheetNominee[]): M
   return { rows, missing, notes, ready: missing.length === 0 };
 }
 
+export type QueueBucket = 'ready' | 'needs_details' | 'opened';
+
+/**
+ * Where a mutual-fund client sits in the account queue. "Opened" wins: once
+ * the account exists on the platform, gaps in our own record no longer hold
+ * anything up. Otherwise a client is ready only when nothing is missing.
+ */
+export function queueBucket(openedAt: string | null | undefined, sheet: Pick<MfAccountSheet, 'ready'>): QueueBucket {
+  if (openedAt) return 'opened';
+  return sheet.ready ? 'ready' : 'needs_details';
+}
+
 const csvCell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 
 export function sheetToCsv(sheet: MfAccountSheet): string {

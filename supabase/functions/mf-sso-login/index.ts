@@ -108,6 +108,14 @@ Deno.serve(async (req: Request) => {
 
     if (result.ok) {
       await log({ caller_type: "client", caller_auth_id: user.id, client_id, outcome: "ok", latency_ms });
+      // A successful sign-on proves the account exists on the platform, so tick
+      // the client off the CRM's MF account queue if staff have not already.
+      // Best-effort: it must never stand between the client and their link.
+      await db.from("nw_clients")
+        .update({ mf_platform_opened_at: new Date().toISOString(), mf_platform_opened_via: "sign_on" })
+        .eq("id", client_id)
+        .is("mf_platform_opened_at", null)
+        .then(({ error }) => { if (error) console.error("mf-sso-login: queue mark failed", error.message); });
       return json({ status: "ok", redirect_url: result.redirectUrl });
     }
 

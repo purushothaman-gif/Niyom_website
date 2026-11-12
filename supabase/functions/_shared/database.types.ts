@@ -8394,6 +8394,9 @@ export type Database = {
           mandate_max_amount: number | null
           mandate_preference: string | null
           mandate_upi_id: string | null
+          mf_platform_opened_at: string | null
+          mf_platform_opened_by: string | null
+          mf_platform_opened_via: string | null
           mobile_belongs_to: string | null
           nomination_choice: string | null
           notes: string | null
@@ -8465,6 +8468,9 @@ export type Database = {
           mandate_max_amount?: number | null
           mandate_preference?: string | null
           mandate_upi_id?: string | null
+          mf_platform_opened_at?: string | null
+          mf_platform_opened_by?: string | null
+          mf_platform_opened_via?: string | null
           mobile_belongs_to?: string | null
           nomination_choice?: string | null
           notes?: string | null
@@ -8536,6 +8542,9 @@ export type Database = {
           mandate_max_amount?: number | null
           mandate_preference?: string | null
           mandate_upi_id?: string | null
+          mf_platform_opened_at?: string | null
+          mf_platform_opened_by?: string | null
+          mf_platform_opened_via?: string | null
           mobile_belongs_to?: string | null
           nomination_choice?: string | null
           notes?: string | null

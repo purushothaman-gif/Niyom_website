@@ -39,6 +39,7 @@ import Settings from './Settings';
 import DealConfirmation from './DealConfirmation';
 import TransferQueue from './TransferQueue';
 import SupportTickets from './SupportTickets';
+import MfAccountQueue from './MfAccountQueue';
 import BondOrders from './BondOrders';
 import ShareOrders from './ShareOrders';
 import Mail from './mail/Mail';
@@ -100,6 +101,7 @@ export default function CRM() {
     'mf_platform',
     'mf_feeds',
     'mf_brokerage_mis',
+    'mf_account_queue',
     'mail_campaigns',
     'mis',
     'dsa_management',
@@ -262,6 +264,7 @@ export default function CRM() {
       case 'mf_platform': return <MfStaffPlaceholder />;
       case 'mf_feeds': return isAdmin ? <MfFeeds employee={employee} /> : <Dashboard employee={employee} onNavigate={navigate} />;
       case 'mf_brokerage_mis': return <BrokerageMis employee={employee} />;
+      case 'mf_account_queue': return <MfAccountQueue employee={employee} />;
       // Open to every employee: admins mail as the company, employees as themselves to their own book (enforced in the database).
       case 'mail_campaigns': return <Mail employee={employee} />;
       case 'documents': return <Documents employee={employee} initialClientId={pageParams.clientId} onBack={pageParams.clientId ? () => navigate('clients') : undefined} />;
