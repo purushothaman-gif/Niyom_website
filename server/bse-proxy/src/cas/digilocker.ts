@@ -87,6 +87,34 @@ export function signupThrottle(
   return 'ok';
 }
 
+/**
+ * What the consent redirect tells us, read from its query string.
+ *
+ * The vendor returns `session_id`, `state`, `documents` and
+ * `has_verified_data=1` (observed in production). An earlier version of this
+ * code looked for `id` and `success=true`, which the vendor never sends, so
+ * every completed consent was recorded as declined. The redirect is therefore
+ * only treated as a refusal when it says so explicitly; otherwise the result
+ * read is what decides, since that is the vendor's actual answer.
+ */
+export function readCallbackQuery(query: Record<string, unknown>): {
+  sessionId: string;
+  state: string;
+  declined: boolean;
+  error: string | null;
+} {
+  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  const error = str(query.error) || str(query.error_description) || null;
+  const declined =
+    Boolean(error) || str(query.success).toLowerCase() === 'false' || str(query.has_verified_data) === '0';
+  return {
+    sessionId: str(query.session_id) || str(query.id),
+    state: str(query.state),
+    declined,
+    error: declined ? (error ?? 'consent_declined').slice(0, 200) : null,
+  };
+}
+
 /** Show only the last four characters of a PAN. */
 export function maskPan(pan: string | null): string | null {
   return pan && pan.length >= 4 ? `${'•'.repeat(pan.length - 4)}${pan.slice(-4)}` : null;
@@ -230,10 +258,9 @@ export function digilockerCallbackRouter(cfg: ProxyConfig): Router {
     // A signup visitor goes straight back to the signup page, which reads the
     // outcome with its token; nothing about the result travels in the URL.
     let signupBack: string | null = null;
+    let rowId: string | null = null;
     try {
-      const sessionId = String(req.query.id ?? '');
-      const state = String(req.query.state ?? '');
-      const success = String(req.query.success ?? '') === 'true';
+      const { sessionId, state, declined, error } = readCallbackQuery(req.query as Record<string, unknown>);
       if (!sessionId && !state) return res.status(400).send(page('Something went wrong', 'That link was invalid.', back));
 
       const [row] = await sbSelect<SessionRow>(
@@ -243,13 +270,14 @@ export function digilockerCallbackRouter(cfg: ProxyConfig): Router {
           `&limit=1`,
       );
       if (!row) return res.status(404).send(page('Link expired', 'This verification link has expired.', back));
+      rowId = row.id;
       const isSignup = row.flow === 'signup';
       if (isSignup) signupBack = `${signupReturnOrigin(cfg, row.return_origin)}/onboarding?dl=1`;
 
-      if (!success) {
+      if (declined) {
         await sbPatch(cfg, `digilocker_sessions?id=eq.${row.id}`, {
           status: 'failed',
-          error: String(req.query.error ?? 'consent_declined'),
+          error,
           state: null,
         }).catch(() => undefined);
         if (signupBack) return res.redirect(302, signupBack);
@@ -281,7 +309,15 @@ export function digilockerCallbackRouter(cfg: ProxyConfig): Router {
       });
       if (signupBack) return res.redirect(302, signupBack);
       res.send(page('Identity verified', 'Thank you — your documents were shared successfully. You can close this tab.', back));
-    } catch {
+    } catch (err) {
+      console.error('[cas/digilocker] callback failed', err instanceof Error ? err.message.slice(0, 200) : 'error');
+      // Settle the row so the signup page gets a definite answer instead of
+      // waiting on a session that will never complete.
+      if (rowId) {
+        await sbPatch(cfg, `digilocker_sessions?id=eq.${rowId}`, { status: 'failed', error: 'result_unavailable' }).catch(
+          () => undefined,
+        );
+      }
       if (signupBack) return res.redirect(302, signupBack);
       res.status(500).send(page('Something went wrong', 'Please try the verification again in a moment.', back));
     }

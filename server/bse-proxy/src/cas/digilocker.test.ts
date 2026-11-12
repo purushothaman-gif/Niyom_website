@@ -12,6 +12,7 @@ import {
   hashSignupToken,
   isSignupToken,
   maskPan,
+  readCallbackQuery,
   signupReturnOrigin,
   signupThrottle,
 } from './digilocker.js';
@@ -74,5 +75,27 @@ describe('maskPan', () => {
     expect(maskPan('ABCDE1234F')).toBe('••••••234F');
     expect(maskPan(null)).toBeNull();
     expect(maskPan('AB')).toBeNull();
+  });
+});
+
+describe('readCallbackQuery', () => {
+  it('reads the redirect the vendor actually sends as a completed consent', () => {
+    const q = readCallbackQuery({ session_id: 'abc123', state: 'st-1', documents: 'pan aadhaar', has_verified_data: '1' });
+    expect(q).toEqual({ sessionId: 'abc123', state: 'st-1', declined: false, error: null });
+  });
+
+  it('still accepts the older id parameter', () => {
+    expect(readCallbackQuery({ id: 'abc123' }).sessionId).toBe('abc123');
+  });
+
+  it('treats the redirect as a refusal only when it says so', () => {
+    expect(readCallbackQuery({ session_id: 'a', error: 'access_denied' })).toMatchObject({ declined: true, error: 'access_denied' });
+    expect(readCallbackQuery({ session_id: 'a', success: 'false' })).toMatchObject({ declined: true, error: 'consent_declined' });
+    expect(readCallbackQuery({ session_id: 'a', has_verified_data: '0' }).declined).toBe(true);
+    expect(readCallbackQuery({ session_id: 'a' }).declined).toBe(false);
+  });
+
+  it('ignores repeated or non-string parameters', () => {
+    expect(readCallbackQuery({ session_id: ['a', 'b'], state: { x: 1 } })).toMatchObject({ sessionId: '', state: '' });
   });
 });
