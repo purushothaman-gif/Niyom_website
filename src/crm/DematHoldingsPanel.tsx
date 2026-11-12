@@ -28,6 +28,11 @@ export function DematHoldingsPanel({ clientId }: { clientId: string }) {
     };
   }, [clientId]);
 
+  return <DematHoldingsView view={view} loading={loading} />;
+}
+
+/** The panel from data alone, for a page that has already loaded the statement. */
+export function DematHoldingsView({ view, loading = false }: { view: DematCrmView | null; loading?: boolean }) {
   if (loading) {
     return (
       <div className="rounded-2xl p-8 flex justify-center" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>

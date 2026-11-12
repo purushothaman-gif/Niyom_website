@@ -1,7 +1,10 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
-import { CasHoldingsPanel } from './CasHoldingsPanel';
-import { DematHoldingsPanel } from './DematHoldingsPanel';
+import { CasHoldingsView } from './CasHoldingsPanel';
+import { DematHoldingsView } from './DematHoldingsPanel';
+import { loadCasView, type CasCrmView } from './services/casClientView';
+import { loadDematView, type DematCrmView } from './services/dematClientView';
+import { statementTotals } from './services/statementTotals';
 import { RtaMfPanel } from './mf/RtaMfPanel';
 import { SchemePicker } from './SchemePicker';
 import { supabase } from '../lib/supabase';
@@ -290,6 +293,29 @@ export default function Portfolio({ employee, pageParams }: Props) {
   // 'clients' = one row per client (the book); 'detail' = one client's full portfolio.
   // clientFilter stays the single source of truth for *which* client is open.
   const [view, setView] = useState<ClientView>('clients');
+  // The selected client's imported statements (CAS + demat). Loaded here, not
+  // inside the panels, because the summary cards and the chart count them too.
+  const [casView, setCasView] = useState<CasCrmView | null>(null);
+  const [dematView, setDematView] = useState<DematCrmView | null>(null);
+  const [stmtLoading, setStmtLoading] = useState(false);
+  const stmtClient = view === 'detail' && clientFilter !== 'all' ? clientFilter : '';
+  useEffect(() => {
+    setCasView(null);
+    setDematView(null);
+    if (!stmtClient) { setStmtLoading(false); return; }
+    let alive = true;
+    setStmtLoading(true);
+    void Promise.all([
+      loadCasView(stmtClient).catch(() => null),
+      loadDematView(stmtClient).catch(() => null),
+    ]).then(([c, d]) => {
+      if (!alive) return;
+      setCasView(c);
+      setDematView(d);
+      setStmtLoading(false);
+    });
+    return () => { alive = false; };
+  }, [stmtClient]);
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<ClientSortKey>('aum');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -596,6 +622,8 @@ export default function Portfolio({ employee, pageParams }: Props) {
   const mfAum = clientFilter !== 'all'
     ? (mfByClient.get(clientFilter) ?? 0)
     : [...mfByClient.values()].reduce((sm, v) => sm + v, 0);
+  // What the selected client's imported statements add (one-client view only).
+  const stmt = useMemo(() => statementTotals(casView, dematView, mfAum), [casView, dematView, mfAum]);
   const chartData = [
     ...PRODUCTS.map(p => ({
       label: PRODUCT_LABELS[p],
@@ -605,12 +633,18 @@ export default function Portfolio({ employee, pageParams }: Props) {
     ...(MF_ON_PLATFORM && mfAum > 0
       ? [{ label: PRODUCT_LABELS.mutual_fund, value: mfAum, color: PRODUCT_CHART_COLORS.mutual_fund }]
       : []),
+    ...stmt.slices,
   ].filter(d => d.value > 0);
   const chartTotal = chartData.reduce((s, d) => s + d.value, 0);
 
   const totalValue = scopedHoldings.reduce((s, h) => s + (h.current_value || 0), 0);
   const totalInvested = scopedHoldings.reduce((s, h) => s + (h.invested_amount || 0), 0);
   const gainLoss = totalValue - totalInvested;
+  // Detail cards: the client's whole position — book, registrar MF (entered at
+  // value, the feed has no cost) and anything their statements add.
+  const detailMf = view === 'detail' && MF_ON_PLATFORM ? mfAum : 0;
+  const detailValue = totalValue + detailMf + stmt.value;
+  const detailInvested = totalInvested + detailMf + stmt.invested;
   const annualInterest = scopedHoldings
     .filter(h => BOND_TYPES.includes(h.product_type))
     .reduce((s, h) => {
@@ -1198,14 +1232,21 @@ export default function Portfolio({ employee, pageParams }: Props) {
           { label: 'Total Invested', value: fmt(totalInvested), color: 'var(--text-secondary)' },
           { label: 'MF (registrar)', value: fmt(mfAum), color: 'var(--chart-4)' },
         ] : [
-          { label: 'Total Value', value: fmt(totalValue), color: 'var(--accent)' },
-          { label: 'Total Invested', value: fmt(totalInvested), color: 'var(--text-secondary)' },
+          {
+            label: 'Total Value', value: fmt(detailValue), color: 'var(--accent)',
+            sub: stmt.heldElsewhere > 0 ? `incl. ${fmt(stmt.heldElsewhere)} held outside Niyom` : undefined,
+          },
+          {
+            label: 'Total Invested', value: fmt(detailInvested), color: 'var(--text-secondary)',
+            sub: stmt.value > 0 || detailMf > 0 ? 'holdings without a cost are entered at value' : undefined,
+          },
           { label: 'Annual Interest Income', value: fmt(annualInterest), color: 'var(--chart-5)' },
           { label: 'MF (registrar)', value: fmt(mfAum), color: 'var(--chart-4)' },
-        ]).map(s => (
+        ] as { label: string; value: string; color: string; sub?: string }[]).map(s => (
           <div key={s.label} className="rounded-2xl p-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
             <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-faint)' }}>{s.label}</p>
             <p className="text-2xl font-bold" style={{ color: s.color }}>{s.value}</p>
+            {s.sub && <p className="mt-1 text-[11px]" style={{ color: 'var(--text-faint)' }}>{s.sub}</p>}
           </div>
         ))}
       </div>
@@ -1366,7 +1407,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
               {loading ? (
                 <tr><td colSpan={8} className="text-center py-12"><LogoLoader size={40} /></td></tr>
               ) : holdings.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>No holdings found</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>{stmt.value > 0 || mfAum > 0 ? 'Nothing booked in-house for this client — their registrar and statement holdings are listed below.' : 'No holdings found'}</td></tr>
               ) : (() => {
                 // Build ISIN groups: key = clientId + isin + productType
                 const isinGroupKeys = new Map<string, NWHolding[]>();
@@ -1511,14 +1552,14 @@ export default function Portfolio({ employee, pageParams }: Props) {
           our ARN, and this statement is the one place an RM sees the rest. */}
       {view === 'detail' && clientFilter && (
         <div className="mt-6">
-          <CasHoldingsPanel clientId={clientFilter} />
+          <CasHoldingsView view={casView} loading={stmtLoading} />
         </div>
       )}
 
       {/* The client's imported demat statement — stocks, ETFs, bonds. */}
       {view === 'detail' && clientFilter && (
         <div className="mt-6">
-          <DematHoldingsPanel clientId={clientFilter} />
+          <DematHoldingsView view={dematView} loading={stmtLoading} />
         </div>
       )}
 
