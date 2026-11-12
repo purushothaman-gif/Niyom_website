@@ -170,30 +170,42 @@ export function ImportHubModal({
             />
           )}
 
-          {screen === 'demat' && (
-            <MethodsScreen
-              lead={
-                depo === 'nsdl'
-                  ? 'Your holdings are with NSDL, which has no instant fetch — forward your statement or connect your inbox and we import it automatically.'
-                  : 'A CDSL fetch returns everything you hold across both depositories in one statement.'
-              }
-              getItForMe={
-                depo === 'cdsl' && onDemat ? (
-                  <MethodRow
-                    icon={Zap}
-                    title="Fetch via CDSL OTP"
-                    body="Full holdings — CDSL + NSDL — in seconds, with a one-time password to your phone."
-                    onClick={onDemat}
-                    primary
-                  />
-                ) : null
-              }
-              onUpload={onUpload}
-              inboxEnabled={inboxEnabled}
-              forwardEnabled={forwardEnabled}
-              onImported={onImported}
-            />
-          )}
+          {screen === 'demat' &&
+            (() => {
+              // The CDSL OTP fetch reads the client's PAN, DOB and 16-digit BO id
+              // from their record server-side — there is no field to type a demat
+              // number here. So only offer it when a CDSL demat is actually on
+              // file (depositoryHint === 'cdsl'); otherwise the server would just
+              // reject it. Everyone else is steered to upload / forward / inbox,
+              // which need nothing on file.
+              const canFetchCdsl = depo === 'cdsl' && !!onDemat && depositoryHint === 'cdsl';
+              return (
+                <MethodsScreen
+                  lead={
+                    depo === 'nsdl'
+                      ? 'Your holdings are with NSDL, which has no instant fetch — forward your statement or connect your inbox and we import it automatically.'
+                      : canFetchCdsl
+                        ? 'A CDSL fetch returns everything you hold across both depositories in one statement.'
+                        : 'Upload your CDSL statement or connect your inbox and we import it automatically. Ask your relationship manager to add your demat number for one-tap OTP fetch.'
+                  }
+                  getItForMe={
+                    canFetchCdsl ? (
+                      <MethodRow
+                        icon={Zap}
+                        title="Fetch via CDSL OTP"
+                        body="Full holdings — CDSL + NSDL — in seconds, with a one-time password to your phone."
+                        onClick={onDemat}
+                        primary
+                      />
+                    ) : null
+                  }
+                  onUpload={onUpload}
+                  inboxEnabled={inboxEnabled}
+                  forwardEnabled={forwardEnabled}
+                  onImported={onImported}
+                />
+              );
+            })()}
 
           <p className="flex items-start gap-2 border-t border-border-subtle pt-4 text-[11px] leading-relaxed text-text-faint">
             <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
