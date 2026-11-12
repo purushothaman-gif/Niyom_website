@@ -7,7 +7,7 @@ import { ageOn } from '../../../../supabase/functions/_shared/profile/profileRul
 import {
   BANK_ACCOUNT_TYPES, CONTACT_OWNERS, GENDERS, GUARDIAN_RELATIONSHIPS, INCOME_SLABS, MANDATE_PREFERENCES, MAX_MF_NOMINEES, MAX_PARENT_NAME,
   NOMINEE_ID_TYPES, NOMINEE_RELATIONSHIPS, OCCUPATIONS, PEP_STATUSES, WEALTH_SOURCES, validateInvestorProfile,
-  validateMandatePreference, validateNomination,
+  forStaff, validateMandatePreference, validateNomination,
   type InvestorProfileInput, type MandatePreferenceInput, type MfNomineeInput, type NominationInput, type Option,
 } from '../../../../supabase/functions/_shared/profile/investorProfile';
 import { COUNTRIES, isCountryCode } from '../../../../supabase/functions/_shared/profile/countries';
@@ -150,7 +150,8 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack, staff, 
   const [nominees, setNominees] = useState<NomineeRow[]>([blankNominee('100')]);
 
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setErrorText] = useState('');
+  const setError = (message: string) => setErrorText(staff ? forStaff(message) : message);
 
   // Nominees already on file (from the portal's Profile page or an earlier
   // visit to this step) — read under the client's own RLS, or by the CRM.
@@ -186,6 +187,11 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack, staff, 
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
+
+  // "Mine / My spouse’s" reads wrongly when an employee is answering for the client.
+  const contactOwners: Option[] = staff
+    ? CONTACT_OWNERS.map((o) => ({ ...o, label: o.label.replace(/^Mine$/, 'The client’s own').replace(/^My /, 'The client’s ') }))
+    : CONTACT_OWNERS;
 
   const upd = (i: number, patch: Partial<NomineeRow>) =>
     setNominees((list) => list.map((n, j) => (j === i ? { ...n, ...patch } : n)));
@@ -235,7 +241,7 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack, staff, 
       ? await saveWith(profile, nominationInput as NominationInput, mandate, staff ? { bank_account_type: accountType } : undefined)
       : await OnboardingService.saveInvestorProfile(clientId, profile, nominationInput, mandate);
     setBusy(false);
-    if (!r.ok) return setError(r.error || 'We could not save your profile. Please try again.');
+    if (!r.ok) return setError(r.error || 'We could not save the profile. Please try again.');
     onSaved();
   };
 
@@ -265,10 +271,10 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack, staff, 
         <Field label="Occupation"><Select value={occupation} onChange={setOccupation} options={OCCUPATIONS} /></Field>
         <Field label="Annual income"><Select value={incomeSlab} onChange={setIncomeSlab} options={INCOME_SLABS} /></Field>
         <Field label="Main source of wealth"><Select value={wealthSource} onChange={setWealthSource} options={WEALTH_SOURCES} /></Field>
-        <Field label="Father’s name" optional hint="Father’s or spouse’s name — at least one is needed.">
+        <Field label="Father’s name (optional)" optional>
           <input className={inputCls} value={fatherName} maxLength={MAX_PARENT_NAME} onChange={(e) => setFatherName(e.target.value)} placeholder="As on your records" />
         </Field>
-        <Field label="Spouse’s name" optional>
+        <Field label="Spouse’s name (optional)" optional>
           <input className={inputCls} value={spouseName} maxLength={MAX_PARENT_NAME} onChange={(e) => setSpouseName(e.target.value)} placeholder="If married" />
         </Field>
         <Field label="Place of birth">
@@ -280,10 +286,10 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack, staff, 
       </div>
 
       <div className="space-y-4 border-t border-border pt-4">
-        <Field label="Are you a politically exposed person?" hint="Someone who holds, or has held, a prominent public position — or is closely related to such a person.">
+        <Field label={staff ? 'Is the client a politically exposed person?' : 'Are you a politically exposed person?'} hint="Someone who holds, or has held, a prominent public position — or is closely related to such a person.">
           <Select value={pep} onChange={setPep} options={PEP_STATUSES} />
         </Field>
-        <Field label="Do you pay tax in any country other than India?">
+        <Field label={staff ? 'Does the client pay tax in any country other than India?' : 'Do you pay tax in any country other than India?'}>
           <Choice value={taxAbroad} onChange={setTaxAbroad} options={[{ value: 'no', label: 'No, only in India' }, { value: 'yes', label: 'Yes' }]} />
         </Field>
         {taxAbroad === 'yes' && (
@@ -298,10 +304,10 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack, staff, 
         )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={`The mobile ${client?.phone ? `ending ${String(client.phone).slice(-4)}` : 'number'} is`}>
-            <Select value={mobileOwner} onChange={setMobileOwner} options={CONTACT_OWNERS} />
+            <Select value={mobileOwner} onChange={setMobileOwner} options={contactOwners} />
           </Field>
           <Field label="The email address is">
-            <Select value={emailOwner} onChange={setEmailOwner} options={CONTACT_OWNERS} />
+            <Select value={emailOwner} onChange={setEmailOwner} options={contactOwners} />
           </Field>
         </div>
       </div>
@@ -313,17 +319,21 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack, staff, 
             <h3 className="text-sm font-bold text-text-primary">Nomination</h3>
           </div>
           <p className="mt-1 text-xs text-text-muted">
-            A nominee receives your investments if something happens to you. You can add up to {MAX_MF_NOMINEES}, or choose not to nominate.
+            {staff
+              ? `A nominee receives the client’s investments if something happens to them. Up to ${MAX_MF_NOMINEES} can be added, or the client can choose not to nominate.`
+              : `A nominee receives your investments if something happens to you. You can add up to ${MAX_MF_NOMINEES}, or choose not to nominate.`}
           </p>
         </div>
         <Choice
           value={nomination} onChange={setNomination}
-          options={[{ value: 'nominate', label: 'Add a nominee' }, { value: 'opt_out', label: 'I do not wish to nominate' }]}
+          options={[{ value: 'nominate', label: 'Add a nominee' }, { value: 'opt_out', label: staff ? 'Client does not wish to nominate' : 'I do not wish to nominate' }]}
         />
 
         {nomination === 'opt_out' && (
           <p className="rounded-token-md border border-warning-soft/30 bg-warning-soft/10 p-3.5 text-xs leading-relaxed text-text-muted">
-            Without a nominee, your legal heirs will need to produce court or succession documents to claim your investments. You can add a nominee later.
+            {staff
+              ? 'Without a nominee, the client’s legal heirs will need court or succession documents to claim the investments. A nominee can be added later.'
+              : 'Without a nominee, your legal heirs will need to produce court or succession documents to claim your investments. You can add a nominee later.'}
           </p>
         )}
 
@@ -347,7 +357,7 @@ export function InvestorProfileStep({ client, clientId, onSaved, onBack, staff, 
                     <Field label="Full name">
                       <input className={inputCls} value={n.full_name} onChange={(e) => upd(i, { full_name: e.target.value })} />
                     </Field>
-                    <Field label="Relationship to you">
+                    <Field label={staff ? 'Relationship to the client' : 'Relationship to you'}>
                       <select className={inputCls} value={n.relationship} onChange={(e) => upd(i, { relationship: e.target.value })}>
                         <option value="">Select…</option>
                         {NOMINEE_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}

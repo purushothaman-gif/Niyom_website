@@ -178,9 +178,10 @@ export function validateInvestorProfile(input: InvestorProfileInput): Check<Inve
     if (foreignId.length < 3) return { ok: false, error: 'Enter your tax identification number for that country.' };
   }
 
+  // Both optional: the exchange marks them conditional and has registered
+  // accounts without either. Kept when given (2+ characters), never demanded.
   const father = clean(input.father_name, MAX_PARENT_NAME);
   const spouse = clean(input.spouse_name, MAX_PARENT_NAME);
-  if (father.length < 2 && spouse.length < 2) return { ok: false, error: 'Enter your father’s or your spouse’s name.' };
 
   if (!has(CONTACT_OWNERS, input.mobile_belongs_to)) return { ok: false, error: 'Tell us whose mobile number this is.' };
   if (!has(CONTACT_OWNERS, input.email_belongs_to)) return { ok: false, error: 'Tell us whose email address this is.' };
@@ -350,6 +351,23 @@ export function validateMfDetails(d: { dob?: string | null; address?: string | n
   if (!/^\d{9,20}$/.test(String(d.bank_account ?? '').trim())) return { ok: false, error: 'Enter your bank account number (9 to 20 digits).' };
   if (!has(BANK_ACCOUNT_TYPES, d.bank_account_type)) return { ok: false, error: 'Select your bank account type.' };
   return { ok: true, value: true };
+}
+
+/**
+ * The shared rules word their messages for the investor ("Select your
+ * occupation"). When an employee is filling the form for a client, the same
+ * message is reworded to be about the client.
+ */
+export function forStaff(message: string): string {
+  return message
+    .replace(/Tell us whether you are/g, 'Say whether the client is')
+    .replace(/Tell us whether you pay/g, 'Say whether the client pays')
+    .replace(/Tell us whose/g, 'Say whose')
+    .replace(/where you are a tax resident/g, 'where the client is a tax resident')
+    .replace(/how you would like/g, 'how the client would like')
+    .replace(/You must be/g, 'The client must be')
+    .replace(/\byour\b/g, 'the client’s')
+    .replace(/\bYour\b/g, 'The client’s');
 }
 
 export const labelOf = (opts: Option[], value: string | null | undefined): string =>

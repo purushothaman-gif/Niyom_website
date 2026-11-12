@@ -73,9 +73,15 @@ describe('validateInvestorProfile', () => {
     expect(validateInvestorProfile({ ...profile, tax_resident_outside_india: undefined }).ok).toBe(false);
   });
 
-  it('needs a father or a spouse name, not both', () => {
-    expect(validateInvestorProfile({ ...profile, father_name: '', spouse_name: '' }).ok).toBe(false);
-    expect(validateInvestorProfile({ ...profile, father_name: '', spouse_name: 'A Kumar' }).ok).toBe(true);
+  it('treats the father and spouse names as optional, keeping whichever is given', () => {
+    const neither = validateInvestorProfile({ ...profile, father_name: '', spouse_name: '' });
+    expect(neither.ok && neither.value.father_name).toBeNull();
+    expect(neither.ok && neither.value.spouse_name).toBeNull();
+    const spouseOnly = validateInvestorProfile({ ...profile, father_name: '', spouse_name: 'A Kumar' });
+    expect(spouseOnly.ok && spouseOnly.value.spouse_name).toBe('A Kumar');
+    // A single stray character is not a name — dropped rather than stored.
+    const stray = validateInvestorProfile({ ...profile, father_name: 'x', spouse_name: '' });
+    expect(stray.ok && stray.value.father_name).toBeNull();
   });
 
   it('asks for the country and tax number when tax is paid abroad', () => {

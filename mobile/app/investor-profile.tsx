@@ -237,9 +237,8 @@ export default function InvestorProfile() {
         </Card>
 
         <Card padding={4} style={{ gap: space[3] }}>
-          <Input label="Father’s name" value={fatherName} onChangeText={setFatherName} autoCapitalize="words" maxLength={MAX_PARENT_NAME}
-            hint="Father’s or spouse’s name — at least one is needed." />
-          <Input label="Spouse’s name (if married)" value={spouseName} onChangeText={setSpouseName} autoCapitalize="words" maxLength={MAX_PARENT_NAME} />
+          <Input label="Father’s name (optional)" value={fatherName} onChangeText={setFatherName} autoCapitalize="words" maxLength={MAX_PARENT_NAME} />
+          <Input label="Spouse’s name (optional)" value={spouseName} onChangeText={setSpouseName} autoCapitalize="words" maxLength={MAX_PARENT_NAME} />
           <Input label="Place of birth" placeholder="City or town" value={birthPlace} onChangeText={setBirthPlace} autoCapitalize="words" maxLength={60} />
           <CountryField label="Country of birth" value={birthCountry} onChange={setBirthCountry} allowIndia />
         </Card>
