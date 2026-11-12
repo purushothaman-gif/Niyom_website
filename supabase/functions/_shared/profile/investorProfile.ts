@@ -354,6 +354,88 @@ export function validateMfDetails(d: { dob?: string | null; address?: string | n
 }
 
 /**
+ * The whole "address, bank and demat" step in one check, for a surface that
+ * collects it on a single screen (the mobile app). It applies the exchange
+ * rules above to everyone — date of birth, a full address, a well-formed IFSC
+ * and account number, the account type — because on the phone the products
+ * are chosen afterwards, so it cannot know yet whether mutual funds are wanted.
+ * Demat details are optional unless the caller says a demat product is chosen.
+ */
+export interface KycDetailsInput {
+  dob?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  bank_name?: string | null;
+  bank_account?: string | null;
+  bank_ifsc?: string | null;
+  bank_account_type?: string | null;
+  demat_account?: string | null;
+  dp_name?: string | null;
+}
+
+export interface KycDetails {
+  dob: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  bank_name: string;
+  bank_account: string;
+  bank_ifsc: string;
+  bank_account_type: string;
+  demat_account: string;
+  dp_name: string;
+  /** '' when there is no demat account — the column is NOT NULL DEFAULT ''. */
+  depository: '' | 'NSDL' | 'CDSL';
+}
+
+export function validateKycDetails(d: KycDetailsInput, opts: { dematRequired?: boolean } = {}, today = new Date()): Check<KycDetails> {
+  const core = validateMfDetails(d, today);
+  if (!core.ok) return core;
+  const city = clean(d.city, 60);
+  const state = clean(d.state, 60);
+  if (city.length < 2) return { ok: false, error: 'Enter your city.' };
+  if (state.length < 2) return { ok: false, error: 'Enter your state.' };
+  const pincode = String(d.pincode ?? '').trim();
+  if (!/^[1-9]\d{5}$/.test(pincode)) return { ok: false, error: 'Enter a valid 6-digit PIN code.' };
+  const bankName = clean(d.bank_name, 80);
+  if (bankName.length < 2) return { ok: false, error: 'Enter your bank’s name.' };
+
+  const demat = String(d.demat_account ?? '').trim().toUpperCase().replace(/[^0-9A-Z]/g, '');
+  const dpName = clean(d.dp_name, 80);
+  if (opts.dematRequired && (!demat || dpName.length < 2)) {
+    return { ok: false, error: 'Bonds and unlisted shares need your demat account number and DP name.' };
+  }
+  if (demat && demat.length !== 16) return { ok: false, error: 'A demat account number has 16 characters.' };
+  if (demat && dpName.length < 2) return { ok: false, error: 'Enter the name of your depository participant (DP).' };
+
+  return {
+    ok: true,
+    value: {
+      dob: String(d.dob),
+      address: clean(d.address, 300),
+      city,
+      state,
+      pincode,
+      bank_name: bankName,
+      bank_account: String(d.bank_account).trim(),
+      bank_ifsc: String(d.bank_ifsc).trim().toUpperCase(),
+      bank_account_type: String(d.bank_account_type),
+      demat_account: demat,
+      dp_name: demat ? dpName : '',
+      depository: !demat ? '' : demat.startsWith('IN') ? 'NSDL' : 'CDSL',
+    },
+  };
+}
+
+/** True when a client record already holds a complete address and bank step. */
+export function kycDetailsOnRecord(c: KycDetailsInput | null | undefined, today = new Date()): boolean {
+  return !!c && validateKycDetails(c, {}, today).ok;
+}
+
+/**
  * The shared rules word their messages for the investor ("Select your
  * occupation"). When an employee is filling the form for a client, the same
  * message is reworded to be about the client.

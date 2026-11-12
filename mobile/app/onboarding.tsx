@@ -37,6 +37,7 @@ import {
   CreditCard,
   FileText,
   Landmark,
+  MapPin,
   ShieldCheck,
   Upload,
   UserRound,
@@ -50,7 +51,7 @@ import {
   kycUnderReview,
   PRODUCTS,
 } from '@shared/portal/onboarding/onboardingSteps';
-import { needsInvestorProfile } from '@shared/portal/onboarding/investorProfile';
+import { kycDetailsOnRecord, needsInvestorProfile } from '@shared/portal/onboarding/investorProfile';
 import { OnboardingService } from '@shared/portal/onboarding/onboardingService';
 import { useClientSnapshot } from '@shared/portal/hooks/useClientSnapshot';
 import { radius, space } from '@/design/tokens';
@@ -87,6 +88,12 @@ export default function Onboarding() {
   // auto-debit) — the same one the website's wizard asks for. It lives on its
   // own screen; coming back from it has to re-read the client record, which is
   // the only place "done" is recorded.
+  // Date of birth, address and bank account — collected on their own screen,
+  // like the website's Details step. Bonds and unlisted shares also need the
+  // demat account, which that screen takes but does not insist on.
+  const detailsDone = kycDetailsOnRecord(client);
+  const dematMissing = cmlRequiredFor(prefs) && !(client?.demat_account || '').trim();
+
   const profileDone = !!client?.investor_profile_completed_at;
   const profileNeeded = needsInvestorProfile(prefs) && !profileDone;
   const profileOwed = investorProfilePending(client);
@@ -212,6 +219,14 @@ export default function Onboarding() {
     setMessage('');
     if (prefs.length === 0) {
       setMessage('Choose at least one product you are interested in.');
+      return;
+    }
+    if (!detailsDone) {
+      setMessage('Add your date of birth, address and bank details before submitting.');
+      return;
+    }
+    if (dematMissing) {
+      setMessage('Bonds and unlisted shares need your demat account — add it under your details.');
       return;
     }
     if (profileNeeded) {
@@ -411,6 +426,37 @@ export default function Onboarding() {
               )}
             </StepCard>
 
+            {/* ------------------------- address & bank --------------------- */}
+            <StepCard
+              icon={MapPin}
+              title="Your address and bank details"
+              body="Date of birth, address and the bank account your investments are paid from and into."
+              done={detailsDone}
+            >
+              <View style={{ gap: space[2] }}>
+                {detailsDone ? (
+                  <Text variant="small" tone="secondary">
+                    {[client?.city, client?.bank_name, client?.bank_account ? `a/c ending ${String(client.bank_account).slice(-4)}` : null]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                ) : null}
+                <Button
+                  label={detailsDone ? 'Edit details' : 'Add details'}
+                  icon={MapPin}
+                  variant={detailsDone ? 'secondary' : 'primary'}
+                  onPress={() => router.push('/kyc-details' as never)}
+                  disabled={busy !== null || !client?.pan_verified}
+                  fullWidth
+                />
+                {!client?.pan_verified ? (
+                  <Text variant="caption" tone="faint">
+                    Verify your PAN first.
+                  </Text>
+                ) : null}
+              </View>
+            </StepCard>
+
             {/* --------------------------- PAN copy ------------------------- */}
             <StepCard
               icon={FileText}
@@ -519,6 +565,12 @@ export default function Onboarding() {
                   </View>
                 ) : null}
 
+                {dematMissing ? (
+                  <Text variant="caption" tone="warning">
+                    Bonds and unlisted shares need your demat account number — add it under “Your address and bank details” above.
+                  </Text>
+                ) : null}
+
                 {cmlRequiredFor(prefs) && !client?.cml_uploaded ? (
                   <Text variant="caption" tone="warning">
                     Bonds and unlisted shares need a demat proof — the CML step above.
@@ -530,7 +582,7 @@ export default function Onboarding() {
                   icon={ClipboardCheck}
                   onPress={() => void submit()}
                   loading={busy === 'submit'}
-                  disabled={busy !== null || prefs.length === 0 || profileNeeded}
+                  disabled={busy !== null || prefs.length === 0 || profileNeeded || !detailsDone || dematMissing}
                   fullWidth
                   size="lg"
                 />

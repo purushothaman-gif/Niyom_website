@@ -10,7 +10,9 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_MF_NOMINEES,
   needsInvestorProfile,
+  kycDetailsOnRecord,
   validateInvestorProfile,
+  validateKycDetails,
   validateMandatePreference,
   validateMfDetails,
   validateNomination,
@@ -205,5 +207,42 @@ describe('validateMfDetails', () => {
     expect(validateMfDetails({ ...ok, bank_ifsc: 'HDFC1001234' }, TODAY).ok).toBe(false);
     expect(validateMfDetails({ ...ok, bank_account: '12345' }, TODAY).ok).toBe(false);
     expect(validateMfDetails({ ...ok, bank_account_type: '' }, TODAY).ok).toBe(false);
+  });
+});
+
+describe('validateKycDetails', () => {
+  const ok = {
+    dob: '1988-01-15', address: '12 Lake View Road, Adyar', city: 'Chennai', state: 'Tamil Nadu', pincode: '600020',
+    bank_name: 'HDFC Bank', bank_account: '123456789012', bank_ifsc: 'hdfc0001234', bank_account_type: 'savings',
+  };
+
+  it('accepts a complete step with no demat account and tidies it', () => {
+    const r = validateKycDetails(ok, {}, TODAY);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toMatchObject({ bank_ifsc: 'HDFC0001234', demat_account: '', dp_name: '', depository: '' });
+    expect(kycDetailsOnRecord(ok, TODAY)).toBe(true);
+  });
+
+  it('needs every address and bank field', () => {
+    for (const key of ['dob', 'address', 'city', 'state', 'pincode', 'bank_name', 'bank_account', 'bank_ifsc', 'bank_account_type'] as const) {
+      expect(validateKycDetails({ ...ok, [key]: '' }, {}, TODAY).ok, key).toBe(false);
+    }
+    expect(validateKycDetails({ ...ok, pincode: '012345' }, {}, TODAY).ok).toBe(false);
+    expect(kycDetailsOnRecord({ ...ok, bank_account_type: null }, TODAY)).toBe(false);
+    expect(kycDetailsOnRecord(null, TODAY)).toBe(false);
+  });
+
+  it('asks for demat details only when a demat product is chosen', () => {
+    expect(validateKycDetails(ok, { dematRequired: true }, TODAY).ok).toBe(false);
+    expect(validateKycDetails({ ...ok, demat_account: '1234567890123456' }, { dematRequired: true }, TODAY).ok).toBe(false);
+    const cdsl = validateKycDetails({ ...ok, demat_account: '1234567890123456', dp_name: 'Zerodha' }, { dematRequired: true }, TODAY);
+    expect(cdsl.ok && cdsl.value.depository).toBe('CDSL');
+    const nsdl = validateKycDetails({ ...ok, demat_account: 'in30021412345678', dp_name: 'HDFC Securities' }, {}, TODAY);
+    expect(nsdl.ok && nsdl.value).toMatchObject({ demat_account: 'IN30021412345678', depository: 'NSDL' });
+  });
+
+  it('rejects a demat number of the wrong length, or one without its DP', () => {
+    expect(validateKycDetails({ ...ok, demat_account: '12345', dp_name: 'Zerodha' }, {}, TODAY).ok).toBe(false);
+    expect(validateKycDetails({ ...ok, demat_account: '1234567890123456' }, {}, TODAY).ok).toBe(false);
   });
 });
