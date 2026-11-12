@@ -11,11 +11,11 @@
 
 import { useMemo, useState } from 'react';
 import {
-  AlertTriangle, CalendarClock, CalendarOff, CheckCircle2, ChevronLeft,
+  AlertTriangle, PauseCircle, CalendarClock, CalendarOff, CheckCircle2, ChevronLeft,
   Clock, Facebook, Film, Instagram, Layers, Linkedin, RefreshCw,
 } from 'lucide-react';
 import {
-  useAutoCycleStatus, useAutoSchedule, usePlanAhead, useSkipDay,
+  useAutoCycleStatus, useAutoSchedule, useAutomationStatus, usePlanAhead, useSkipDay,
 } from '../marketingClient';
 import { CONTENT_TYPES } from '../marketingConstants';
 import { AutoSlotState, MktAutoDay, MktAutoSlot } from '../marketingTypes';
@@ -130,13 +130,21 @@ function PublishCountdown({ publishAt }: { publishAt: string }) {
   );
 }
 
-function DayRow({ day, today }: { day: MktAutoDay; today: string }) {
+function DayRow({ day, today, automationOn }: { day: MktAutoDay; today: string; automationOn: boolean }) {
   const isToday = day.run_date === today;
-  // A day is alarming when the gate has passed and nothing is live. That is the
-  // one condition an admin must never scroll past.
+  /*
+    A day is alarming when the gate has passed and nothing is live — the one
+    condition an admin must never scroll past.
+
+    Unless the automation is switched off, in which case an empty day is the
+    expected outcome and not a fault. The engine was retired by unscheduling its
+    crons, and for three weeks this strip shouted "needs attention" at days
+    nobody intended to produce. An alarm that fires for a deliberate decision is
+    how people learn to ignore alarms.
+  */
   const live = day.slots.filter(s => s.state === 'approved').length;
   const gatePassed = new Date(day.publish_at).getTime() <= Date.now();
-  const alarming = gatePassed && live === 0 && day.slots.length > 0;
+  const alarming = automationOn && gatePassed && live === 0 && day.slots.length > 0;
 
   return (
     <div className="rounded-2xl p-4"
@@ -159,6 +167,10 @@ function DayRow({ day, today }: { day: MktAutoDay; today: string }) {
         {alarming ? (
           <span className="inline-flex items-center gap-1 text-xs font-bold" style={{ color: 'var(--danger-soft)' }}>
             <AlertTriangle className="w-3.5 h-3.5" /> Nothing live — needs attention
+          </span>
+        ) : !automationOn ? (
+          <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
+            {live}/{day.slots.length} live · automation paused
           </span>
         ) : isToday ? (
           <PublishCountdown publishAt={day.publish_at} />
@@ -185,6 +197,10 @@ export default function AutoSchedule({ onBack }: Props) {
   const today = todayIst();
   const { data: days = [], isLoading } = useAutoSchedule(3, 14);
   const { data: cycle } = useAutoCycleStatus();
+  const { data: automation } = useAutomationStatus();
+  // Assume running until the check answers, so a slow query cannot flash a
+  // "paused" banner at a healthy system.
+  const automationOn = automation?.enabled !== false;
   const planAhead = usePlanAhead();
   const skipDay = useSkipDay();
   const [skipping, setSkipping] = useState<string>('');
@@ -211,14 +227,43 @@ export default function AutoSchedule({ onBack }: Props) {
 
         <PrimaryButton
           onClick={() => planAhead.mutate(14)}
-          disabled={planAhead.isPending}
+          /* Planning days that nothing will ever generate is what produced the
+             orphaned fortnight this banner exists to explain. */
+          disabled={planAhead.isPending || !automationOn}
+          title={automationOn ? undefined : 'Automation is paused'}
           className="flex items-center gap-2">
           <RefreshCw className={`w-4 h-4 ${planAhead.isPending ? 'animate-spin' : ''}`} />
           {planAhead.isPending ? 'Planning…' : 'Plan ahead'}
         </PrimaryButton>
       </div>
 
-      {cycle && (
+      {!automationOn && (
+        /*
+          Said once, at the top, instead of implied by a page full of empty
+          days. Someone opening this in three months needs to know the silence
+          is a decision, not a fault — and needs to know the work is still here
+          if they want it back.
+        */
+        <div className="rounded-2xl p-4 flex items-start gap-3"
+          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+          <PauseCircle className="w-5 h-5 shrink-0 mt-0.5" style={{ color: 'var(--text-muted)' }} />
+          <div className="min-w-0">
+            <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+              Automation paused
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              The scheduled jobs that plan, write and render the daily batch are not running, so no
+              new content is being produced. Everything already published stays in the library and
+              in Analytics, and the Content Studio still works for making pieces by hand.
+            </p>
+            <p className="text-xs mt-1.5" style={{ color: 'var(--text-faint)' }}>
+              Re-scheduling the six cron jobs turns it back on; nothing was deleted.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {cycle && automationOn && (
         <div className="rounded-2xl p-4 flex items-center justify-between gap-4 flex-wrap"
           style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
           <div>
@@ -252,15 +297,21 @@ export default function AutoSchedule({ onBack }: Props) {
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading schedule…</p>
       ) : days.length === 0 ? (
         <EmptyState
-          icon={CalendarClock}
-          title="Nothing planned yet"
-          message="The planner runs at 07:50 IST each day and fills the next two weeks. Use Plan ahead to fill the horizon now."
-          action={<PrimaryButton onClick={() => planAhead.mutate(14)}>Plan ahead</PrimaryButton>} />
+          icon={automationOn ? CalendarClock : PauseCircle}
+          title={automationOn ? 'Nothing planned yet' : 'No schedule — automation is paused'}
+          message={automationOn
+            ? 'The planner runs at 07:50 IST each day and fills the next two weeks. Use Plan ahead to fill the horizon now.'
+            : 'Nothing is scheduled to plan, write or render content. Published work is still in the library and in Analytics, and the Content Studio can make pieces by hand.'}
+          /* No "Plan ahead" while paused: booking days that nothing will ever
+             generate is what left a fortnight of permanently empty rows here. */
+          action={automationOn
+            ? <PrimaryButton onClick={() => planAhead.mutate(14)}>Plan ahead</PrimaryButton>
+            : undefined} />
       ) : (
         <>
-          {todayDay && <DayRow day={todayDay} today={today} />}
+          {todayDay && <DayRow day={todayDay} today={today} automationOn={automationOn} />}
           <div className="space-y-2">
-            {rest.map(d => <DayRow key={d.run_date} day={d} today={today} />)}
+            {rest.map(d => <DayRow key={d.run_date} day={d} today={today} automationOn={automationOn} />)}
           </div>
         </>
       )}

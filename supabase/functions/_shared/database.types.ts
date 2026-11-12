@@ -13289,6 +13289,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      mkt_auto_automation_status: { Args: never; Returns: Json }
       mkt_auto_batch_rollup: { Args: { p_run_date: string }; Returns: string }
       mkt_auto_category_topics: {
         Args: { p_category: string }

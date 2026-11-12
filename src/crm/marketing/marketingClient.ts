@@ -37,6 +37,7 @@ export const mktKeys = {
   platformUsage: () => ['mkt_analytics', 'platforms'] as const,
   autoSchedule: (from: string, to: string) => ['mkt_auto', 'schedule', from, to] as const,
   autoCycle: () => ['mkt_auto', 'cycle'] as const,
+  autoAutomation: () => ['mkt_auto', 'automation'] as const,
 };
 
 const CONTENT_COLUMNS =
@@ -514,5 +515,28 @@ export function usePlanAhead() {
       return (data as number) ?? 0;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['mkt_auto'] }),
+  });
+}
+
+/**
+ * Is the daily automation actually scheduled?
+ *
+ * Derived from cron.job by the database, not from a stored flag. The engine was
+ * retired on 2026-11-07 by unscheduling its jobs, and a screen that cannot tell
+ * "switched off" from "broken" spent three weeks showing red alarms for days
+ * nobody intended to produce. Reading the live schedule means this answer can
+ * never disagree with reality — which is the failure this module kept hitting
+ * whenever one fact was kept in two places.
+ */
+export function useAutomationStatus() {
+  return useQuery({
+    queryKey: mktKeys.autoAutomation(),
+    queryFn: async (): Promise<{ enabled: boolean; jobs: string[]; expected: string[] }> => {
+      const { data, error } = await supabase.rpc('mkt_auto_automation_status');
+      if (error) throw error;
+      const d = (data ?? {}) as { enabled?: boolean; jobs?: string[]; expected?: string[] };
+      return { enabled: d.enabled === true, jobs: d.jobs ?? [], expected: d.expected ?? [] };
+    },
+    staleTime: 5 * 60_000,
   });
 }
