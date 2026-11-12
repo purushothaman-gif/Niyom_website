@@ -23,7 +23,7 @@
 import { mfSsoEnabled } from '@shared/platform/env';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { File } from 'expo-file-system';
@@ -39,15 +39,18 @@ import {
   Landmark,
   ShieldCheck,
   Upload,
+  UserRound,
 } from 'lucide-react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import {
   buildChecklist,
   checklistProgress,
   cmlRequiredFor,
+  investorProfilePending,
   kycUnderReview,
   PRODUCTS,
 } from '@shared/portal/onboarding/onboardingSteps';
+import { needsInvestorProfile } from '@shared/portal/onboarding/investorProfile';
 import { OnboardingService } from '@shared/portal/onboarding/onboardingService';
 import { useClientSnapshot } from '@shared/portal/hooks/useClientSnapshot';
 import { radius, space } from '@/design/tokens';
@@ -79,6 +82,20 @@ export default function Onboarding() {
   const progress = checklistProgress(steps);
   const underReview = kycUnderReview(client);
   const cmlNeeded = !!client?.cml_required || cmlRequiredFor(prefs);
+
+  // Mutual funds need the investor profile (declaration, nomination,
+  // auto-debit) — the same one the website's wizard asks for. It lives on its
+  // own screen; coming back from it has to re-read the client record, which is
+  // the only place "done" is recorded.
+  const profileDone = !!client?.investor_profile_completed_at;
+  const profileNeeded = needsInvestorProfile(prefs) && !profileDone;
+  const profileOwed = investorProfilePending(client);
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+  );
 
   /* ------------------------------- actions -------------------------------- */
 
@@ -197,6 +214,10 @@ export default function Onboarding() {
       setMessage('Choose at least one product you are interested in.');
       return;
     }
+    if (profileNeeded) {
+      setMessage('Mutual funds need your investor profile — complete it before submitting.');
+      return;
+    }
     setBusy('submit');
     const result = await OnboardingService.submit(clientId, prefs);
     setBusy(null);
@@ -242,6 +263,7 @@ export default function Onboarding() {
               KYC is complete and verified. You can invest whenever you are ready.
             </Text>
           </Card>
+          {profileOwed ? <InvestorProfilePrompt /> : null}
           <Button
             label={mfSsoEnabled() ? 'Open Mutual Funds' : 'Explore funds'}
             onPress={() => router.replace('/(client)/invest')}
@@ -335,6 +357,8 @@ export default function Onboarding() {
               ))}
           </View>
         </Card>
+
+        {underReview && profileOwed ? <InvestorProfilePrompt /> : null}
 
         {underReview ? (
           <Card padding={5} style={{ alignItems: 'center', gap: space[3] }}>
@@ -477,6 +501,24 @@ export default function Onboarding() {
                   })}
                 </View>
 
+                {needsInvestorProfile(prefs) ? (
+                  <View style={{ gap: space[2] }}>
+                    <Text variant="caption" tone={profileDone ? 'success' : 'warning'}>
+                      {profileDone
+                        ? 'Investor profile for mutual funds: completed.'
+                        : 'Mutual funds need your investor profile — occupation, income, nominee and auto-debit. It takes about two minutes.'}
+                    </Text>
+                    <Button
+                      label={profileDone ? 'Review investor profile' : 'Complete investor profile'}
+                      icon={UserRound}
+                      variant={profileDone ? 'secondary' : 'primary'}
+                      onPress={() => router.push('/investor-profile' as never)}
+                      disabled={busy !== null}
+                      fullWidth
+                    />
+                  </View>
+                ) : null}
+
                 {cmlRequiredFor(prefs) && !client?.cml_uploaded ? (
                   <Text variant="caption" tone="warning">
                     Bonds and unlisted shares need a demat proof — the CML step above.
@@ -488,7 +530,7 @@ export default function Onboarding() {
                   icon={ClipboardCheck}
                   onPress={() => void submit()}
                   loading={busy === 'submit'}
-                  disabled={busy !== null || prefs.length === 0}
+                  disabled={busy !== null || prefs.length === 0 || profileNeeded}
                   fullWidth
                   size="lg"
                 />
@@ -498,6 +540,26 @@ export default function Onboarding() {
         )}
       </View>
     </Screen>
+  );
+}
+
+/** For a client who already submitted KYC but still owes the investor profile. */
+function InvestorProfilePrompt() {
+  const p = usePalette();
+  return (
+    <Card padding={5} style={{ gap: space[3] }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
+        <UserRound size={22} color={p.accent.DEFAULT} strokeWidth={2} />
+        <Text variant="h3" style={{ flex: 1 }}>
+          Complete your investor profile
+        </Text>
+      </View>
+      <Text variant="small" tone="muted">
+        Mutual funds need a few more details from you — occupation, income, a nominee and how you
+        would like SIP auto-debit set up. It takes about two minutes.
+      </Text>
+      <Button label="Complete investor profile" icon={UserRound} onPress={() => router.push('/investor-profile' as never)} fullWidth />
+    </Card>
   );
 }
 

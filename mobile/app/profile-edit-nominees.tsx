@@ -22,7 +22,11 @@ import { Button } from '@/ui/Button';
 import { Input } from '@/ui/Input';
 import { SkeletonScreen } from '@/ui/kit';
 
-const RELATIONSHIPS = ['Spouse', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister', 'Grandchild', 'Other'];
+import { NOMINEE_RELATIONSHIPS } from '@shared/portal/onboarding/investorProfile';
+
+// The exchange's own relationship list, shared with onboarding and the
+// website, so a nominee added here can be sent on as is.
+const RELATIONSHIPS: readonly string[] = NOMINEE_RELATIONSHIPS;
 
 /** The form keeps DOB as DD/MM/YYYY text and share as text; both convert on save. */
 interface Row {
@@ -40,7 +44,7 @@ const toRow = (n: Nominee): Row => ({
 const blankRow = (share: number): Row =>
   toRow({
     full_name: '',
-    relationship: 'Spouse',
+    relationship: '',
     dob: null,
     share_percent: share,
     guardian_name: null,
@@ -108,6 +112,7 @@ export default function ProfileEditNominees() {
     for (const r of list) {
       const dob = dmyToIso(r.dobText);
       if (r.nominee.full_name.trim().length < 2) return setError('Enter every nominee’s full name.');
+      if (!r.nominee.relationship) return setError('Choose each nominee’s relationship to you.');
       if (dob === undefined) return setError('Enter each date of birth as DD/MM/YYYY.');
       if (isMinor(dob) && !(r.nominee.guardian_name ?? '').trim()) return setError('A minor nominee needs a guardian’s name.');
       const share = Number(r.shareText);

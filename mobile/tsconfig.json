@@ -6,6 +6,11 @@
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
     "allowJs": true,
+    // The shared investor-profile rules live under the edge functions, where
+    // Deno requires explicit `.ts` import extensions. Metro resolves them as
+    // written; this lets the type checker accept them too (it never emits).
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     // No `baseUrl`: TypeScript 6 deprecates it, and paths already resolve
     // relative to this file. Kept in step with babel.config.js's aliases.
     "paths": {
