@@ -32,7 +32,7 @@ const COPY: Record<Exclude<State, 'ok'>, { title: string; message: string }> = {
   },
   kyc_incomplete: {
     title: 'Complete your KYC first',
-    message: 'Your PAN needs to be verified before we can open your mutual fund account.',
+    message: 'Your KYC needs to be completed and approved before we can open your mutual fund account.',
   },
   not_available: {
     title: 'Not available for this login',

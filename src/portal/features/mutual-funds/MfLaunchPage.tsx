@@ -214,6 +214,6 @@ const STATUS_NOTE: Partial<Record<MfLaunchState, { text: string; warn?: boolean 
   opened: { text: 'Opened in a new tab.' },
   blocked: { text: 'Your browser blocked the new tab — allow pop-ups, then', warn: true },
   not_mapped: { text: 'Your investing account is being set up — your relationship manager will let you know when it’s ready.' },
-  kyc_incomplete: { text: 'Verify your PAN to start investing.', warn: true },
+  kyc_incomplete: { text: 'Complete your KYC to start investing — you can invest as soon as it is approved.', warn: true },
   error: { text: 'We couldn’t open your investing account —', warn: true },
 };

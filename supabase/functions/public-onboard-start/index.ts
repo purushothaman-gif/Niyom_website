@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   corsHeaders, json, serviceClient, NIYOM_DEFAULT_EMPLOYEE_ID,
   normalizePhone, isValidPhone, isValidEmail, isValidPan,
-  generateOTP, persistOtp, deliverOtp, isRateLimited, maskEmail,
+  generateOTP, persistOtp, deliverOtp, isRateLimited, maskEmail, panAlreadyRegistered,
 } from "../_shared/onboarding.ts";
 import { findAuthUserByEmail } from "../_shared/clientAuth.ts";
 
@@ -57,6 +57,15 @@ Deno.serve(async (req: Request) => {
         message: "An account already exists for these details. We've emailed a code to sign you in.",
       }, 200);
     }
+
+    // A PAN may belong to one client only. public-onboard-pan-verify makes the
+    // same check on the first screen, but that is a separate anonymous call the
+    // browser can skip — and this function is what stores the PAN as verified,
+    // which mf-sso-login and the KYC wizard then trust. Without the check here a
+    // caller could open a second account carrying an existing client's PAN. The
+    // unique index nw_clients_pan_unique is the backstop for a race.
+    const PAN_TAKEN = "This PAN is already registered. Please sign in to your existing account instead.";
+    if (await panAlreadyRegistered(db, pan)) return json({ error: PAN_TAKEN }, 409);
 
     // Marketing Tool referral attribution (optional).
     //
@@ -172,6 +181,8 @@ Deno.serve(async (req: Request) => {
       client_login_enabled: true,
       client_password_changed: true, // no password step in this flow (OTP login)
     }]).select("id").single();
+    // 23505 = the unique PAN index caught a concurrent signup for the same PAN.
+    if (clientErr?.code === "23505") return json({ error: PAN_TAKEN }, 409);
     if (clientErr) throw clientErr;
 
     // Provision / link a Supabase auth user for the client (reuses the

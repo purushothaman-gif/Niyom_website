@@ -68,11 +68,14 @@ Deno.serve(async (req: Request) => {
     if (!client || client.client_auth_user_id !== user.id) return json({ error: "Unauthorized" }, 403);
 
     const pan = (client.pan ?? "").trim().toUpperCase();
-    // The PAN is trusted once Cashfree verified it (self-signup) or staff
-    // approved the client (RM-onboarded clients carry an uploaded PAN document
-    // but pan_verified=false). Clients can't set either field themselves
-    // (nw_clients guard trigger), so a self-typed PAN never reaches the platform.
-    const panTrusted = client.pan_verified === true || client.onboarding_status === "active";
+    // The PAN is trusted only once staff have approved the client
+    // (onboarding_status 'active', which a client cannot set — nw_clients guard
+    // trigger). pan_verified alone is NOT enough: at self-signup it only means
+    // the PAN exists (Cashfree lookup), not that the person who typed it owns
+    // it, and this function hands back a sign-in link to that PAN's investing
+    // account. Signing in before approval returns once signup proves ownership
+    // (DigiLocker).
+    const panTrusted = client.onboarding_status === "active";
     if (!pan || !panTrusted) {
       await log({ caller_type: "client", caller_auth_id: user.id, client_id, outcome: "kyc_incomplete" });
       return json({ status: "kyc_incomplete" });
