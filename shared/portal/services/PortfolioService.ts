@@ -196,6 +196,7 @@ export const PortfolioService = {
             h.cas?.ownership ??
             (h.product_type === 'mutual_fund' ? MF_OWNERSHIP.heldWithNiyom : undefined),
           cas: h.cas,
+          demat: (h as PortalHolding).demat,
           productType: h.product_type,
           productLabel: h.demat?.label ?? PRODUCT_LABELS[h.product_type] ?? h.product_type,
           productColor: h.demat?.color ?? PRODUCT_CHART_COLORS[h.product_type] ?? '#7688A4',

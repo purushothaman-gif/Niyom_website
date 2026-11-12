@@ -8,17 +8,34 @@ import {
   Loader2,
   PiggyBank,
   Receipt,
+  ShieldCheck,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { fmt } from '../../../crm/utils';
 import type { NWClient, NWHolding } from '../../../crm/types';
+import type { HoldingRow } from '../../../../shared/portal/types';
 import { Card } from '../../components/Card';
 import { KpiStat } from '../../components/KpiStat';
 import { ComingSoonBadge } from '../../components/StatusPill';
 import { PortfolioService } from '../../services/PortfolioService';
-import { exportHoldingsXlsx, exportTransactionsXlsx } from '../../services/exporters';
+import {
+  exportDematHoldingsXlsx,
+  exportElssXlsx,
+  exportHoldingsXlsx,
+  exportTransactionsXlsx,
+} from '../../services/exporters';
 import { useTransactions } from '../../hooks/useTransactions';
 import { mfSsoEnabled } from '../../../../shared/platform/env';
+
+/**
+ * ELSS schemes carry an 80C lock-in and need their own statement. A CAS states
+ * no scheme category, so match on the name, which reliably carries the ELSS
+ * branding ("… ELSS", "… Tax Saver", or the older "… Long Term Equity").
+ */
+const ELSS_RE = /\b(elss|tax[\s-]?saver|tax[\s-]?saving|long[\s-]?term\s+equity)\b/i;
+const isElss = (r: HoldingRow) =>
+  r.productType === 'mutual_fund' && (ELSS_RE.test(r.name) || ELSS_RE.test(r.category ?? ''));
 
 interface Props {
   clientId: string;
@@ -104,6 +121,9 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
   const { rows: txnRows } = useTransactions(clientId);
   const summary = useMemo(() => PortfolioService.buildSummary(holdings), [holdings]);
   const holdingRows = useMemo(() => PortfolioService.buildHoldingRows(holdings), [holdings]);
+  // Only offer a report when there is something to put in it.
+  const elssRows = useMemo(() => holdingRows.filter(isElss), [holdingRows]);
+  const dematRows = useMemo(() => holdingRows.filter((r) => r.demat), [holdingRows]);
 
   const allReports: ReportDef[] = [
     {
@@ -116,6 +136,19 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
       open: onOpenCapitalGains,
       openLabel: 'View capital gains',
     },
+    ...(elssRows.length
+      ? [
+          {
+            key: 'elss',
+            category: 'Tax' as Category,
+            title: 'ELSS Statement (Section 80C)',
+            description:
+              'Your tax-saving ELSS funds in one sheet — amount invested and current value, as proof for your 80C deduction.',
+            icon: ShieldCheck,
+            action: () => exportElssXlsx(elssRows, client),
+          },
+        ]
+      : []),
     {
       key: 'holdings',
       category: 'Holdings',
@@ -124,6 +157,19 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
       icon: FileSpreadsheet,
       action: () => exportHoldingsXlsx(holdingRows, client),
     },
+    ...(dematRows.length
+      ? [
+          {
+            key: 'demat',
+            category: 'Holdings' as Category,
+            title: 'Demat Holdings',
+            description:
+              'Shares, bonds and other securities from your imported demat statement — with ISIN and depository, as held.',
+            icon: Wallet,
+            action: () => exportDematHoldingsXlsx(dematRows, client),
+          },
+        ]
+      : []),
     {
       key: 'txn',
       category: 'Transactions',

@@ -10,7 +10,7 @@
  * render an honest indicator.
  */
 import type { ProductType } from '../../crm/types';
-import type { CasHoldingMeta } from './cas';
+import type { CasHoldingMeta, DematHoldingMeta } from './cas';
 import type { MfOwnership } from './ownership';
 
 /** A single row on the six-way asset-allocation ring. */
@@ -161,6 +161,8 @@ export interface HoldingRow {
    * folio without re-reading the client's CAS.
    */
   cas?: CasHoldingMeta;
+  /** Present when this row came from a demat eCAS (shares, bonds, G-secs…). */
+  demat?: DematHoldingMeta;
 }
 
 /** One slice of an allocation breakdown along a chosen dimension. */

@@ -70,6 +70,59 @@ export async function exportHoldingsXlsx(rows: HoldingRow[], client: NWClient | 
 }
 
 /**
+ * ELSS holdings for Section 80C. The ELSS slice of the portfolio — the funds a
+ * client (or their CA) needs to evidence a tax-saving investment. Derived from
+ * holdings, so it is reliable whether the fund sits with the registrar or came
+ * from an imported CAS; it states what is held and what was put in, not a
+ * per-instalment lock-in ledger, which a holdings snapshot cannot support.
+ */
+export async function exportElssXlsx(rows: HoldingRow[], client: NWClient | null) {
+  const header = [
+    'Scheme', 'AMC', 'Folio', 'Units', 'Invested (INR)', 'Current Value (INR)', 'P&L (INR)',
+  ];
+  const body = rows.map((r) => [
+    r.name,
+    r.amc ?? '',
+    (r.meta ?? '').replace(/^Folio\s+/i, ''),
+    r.units ?? '',
+    Number(r.invested.toFixed(2)),
+    Number(r.value.toFixed(2)),
+    Number(r.gain.toFixed(2)),
+  ]);
+  const invested = rows.reduce((s, r) => s + r.invested, 0);
+  const value = rows.reduce((s, r) => s + r.value, 0);
+  const total = ['Total', '', '', '', Number(invested.toFixed(2)), Number(value.toFixed(2)), Number((value - invested).toFixed(2))];
+  await writeSheet(
+    [header, ...body, [], total],
+    'ELSS 80C',
+    `niyom_elss_80c_${safeCode(client)}_${stamp()}.xlsx`,
+  );
+}
+
+/**
+ * Demat holdings, exactly as the client's eCAS stated — shares, bonds, G-secs,
+ * ETFs, NPS. A holdings SNAPSHOT: it carries ISIN, depository, units and value,
+ * but no cost basis (an eCAS has no transaction ledger), so no P&L is claimed.
+ */
+export async function exportDematHoldingsXlsx(rows: HoldingRow[], client: NWClient | null) {
+  const header = ['Type', 'Security', 'ISIN', 'Depository', 'Units', 'Value (INR)'];
+  const body = rows.map((r) => [
+    r.demat?.label ?? r.productLabel,
+    r.name,
+    r.demat?.isin ?? '',
+    (r.demat?.depository ?? '').toUpperCase(),
+    r.units ?? '',
+    Number(r.value.toFixed(2)),
+  ]);
+  const value = rows.reduce((s, r) => s + r.value, 0);
+  await writeSheet(
+    [header, ...body, [], ['Total', '', '', '', '', Number(value.toFixed(2))]],
+    'Demat Holdings',
+    `niyom_demat_holdings_${safeCode(client)}_${stamp()}.xlsx`,
+  );
+}
+
+/**
  * The capital gains statement, one row per matched lot.
  *
  * Deliberately one row per DISPOSAL rather than per redemption: a single
