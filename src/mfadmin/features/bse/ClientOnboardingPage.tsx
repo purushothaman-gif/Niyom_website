@@ -19,7 +19,8 @@ import {
   NOMINEE_RELATIONS,
   type BseUccRow,
 } from '../../services/BseOpsService';
-import { CrmImportService, type CrmClientLookup } from '../../services/CrmImportService';
+import { CrmImportService, type CrmClientDetails, type CrmClientLookup } from '../../services/CrmImportService';
+import type { BseDeclaration } from '../../../../supabase/functions/_shared/profile/bseCodes';
 import { useBseData } from '../../hooks/useBseData';
 import {
   ConfirmBox,
@@ -57,6 +58,13 @@ interface Form {
   bankProof: DocDraft | null;
   bankProofType: 'cancel_cheque' | 'bank_statement';
   aof: DocDraft | null;
+  /**
+   * The investor's own declaration (occupation, income, FATCA answers, whose
+   * mobile and email), imported from the client record as BSE codes. It is
+   * the client's to make, so this form shows it but does not edit it; null
+   * means there is none and the proxy's defaults would be sent.
+   */
+  declared: BseDeclaration | null;
 }
 
 interface DocDraft {
@@ -72,7 +80,8 @@ interface NomineeDraft {
   dob: string;
   relation: string;
   percent: string;
-  identifierType: 'pan' | 'aadhaar' | 'passport';
+  /** '' = imported without a usable document type; staff must choose. */
+  identifierType: 'pan' | 'aadhaar' | 'passport' | '';
   identifierNumber: string;
   isMinor: boolean;
   guardianFirstName: string;
@@ -121,6 +130,7 @@ const EMPTY: Form = {
   bankProof: null,
   bankProofType: 'cancel_cheque',
   aof: null,
+  declared: null,
 };
 
 /** BSE encodes entity type in the PAN's 4th character — 'P' for an individual. */
@@ -145,6 +155,8 @@ async function readAsDoc(file: File): Promise<DocDraft> {
 function nomineeIssues(f: Form): (string | null)[] {
   return f.nominees.map((n) => {
     if (!n.firstName.trim()) return 'First name is required.';
+    if (!n.relation) return 'Choose the relationship.';
+    if (!n.identifierType) return 'Choose the type of identity document.';
     if (!n.identifierNumber.trim()) return 'An ID number is required.';
     if (n.identifierType === 'pan' && !PAN_RE.test(n.identifierNumber.trim().toUpperCase()))
       return 'PAN format must be ABCDE1234F.';
@@ -219,6 +231,9 @@ export function ClientOnboardingPage() {
   const [importedFrom, setImportedFrom] = useState<string | null>(null);
   // CRM row this form was prefilled from — needed to store the UCC afterwards.
   const [importedId, setImportedId] = useState<string | null>(null);
+  /** Points from the import that staff must look at before registering. */
+  const [importNotes, setImportNotes] = useState<string[]>([]);
+  const [detailsState, setDetailsState] = useState<'idle' | 'loading' | 'loaded' | 'unavailable'>('idle');
   // PAN check against Cashfree — its registered name is what BSE's KYC compares.
   const [panCheck, setPanCheck] = useState<{ state: 'ok' | 'bad'; name?: string; msg?: string } | null>(null);
   const [panBusy, setPanBusy] = useState(false);
@@ -313,10 +328,36 @@ export function ClientOnboardingPage() {
     });
     setImportedFrom(`${c.fullName} (${c.clientCode})`);
     setImportedId(c.id);
+    setImportNotes([]);
+    setDetailsState('loading');
+    // The investor profile, nomination and stored bank proof arrive a moment
+    // later; they are merged only if the form still holds this client.
+    void CrmImportService.details(c.id).then((d) => {
+      setForm((f) => (f.clientCode === c.clientCode ? mergeDetails(f, d) : f));
+      setImportNotes(d?.notes ?? []);
+      setDetailsState(d ? 'loaded' : 'unavailable');
+    });
     setPanCheck(c.panVerified && c.panName ? { state: 'ok', name: c.panName } : null);
     setResults(null);
     setTerm('');
     setTouched(false);
+  };
+
+  /** Fold the client's saved profile, nomination and bank proof into the form. */
+  const mergeDetails = (f: Form, d: CrmClientDetails | null): Form => {
+    if (!d) return f;
+    return {
+      ...f,
+      declared: d.declaration,
+      accountType: d.accountType ?? f.accountType,
+      fatherName: d.fatherName || f.fatherName,
+      spouseName: d.spouseName || f.spouseName,
+      // The client's own recorded choice; with none on record it stays
+      // 'pending', so an import can never silently opt a client out.
+      nominationChoice: d.nominationChoice === 'opt_out' ? 'decline' : d.nominees.length ? 'nominate' : f.nominationChoice,
+      nominees: d.nominationChoice === 'opt_out' ? [] : d.nominees.length ? d.nominees : f.nominees,
+      bankProof: d.bankProof ?? f.bankProof,
+    };
   };
 
   const checkPan = async () => {
@@ -369,9 +410,21 @@ export function ClientOnboardingPage() {
           ifsc: form.ifsc.trim().toUpperCase(),
           accountType: form.accountType,
         },
+        // The investor's own declaration, when the client record has one.
+        occupationCode: form.declared?.occupationCode,
+        occupationType: form.declared?.occupationType,
+        whoseMobile: form.declared?.whoseMobile,
+        whoseEmail: form.declared?.whoseEmail,
         fatca: {
           fatherName: form.fatherName.trim() || undefined,
           spouseName: form.spouseName.trim() || undefined,
+          placeOfBirth: form.declared?.placeOfBirth,
+          countryOfBirth: form.declared?.countryOfBirth,
+          incomeSlab: form.declared?.incomeSlab,
+          wealthSource: form.declared?.wealthSource,
+          politicallyExposed: form.declared?.politicallyExposed,
+          foreignTaxCountry: form.declared?.foreignTaxCountry,
+          foreignTaxId: form.declared?.foreignTaxId,
         },
         // Absent means declined — the proxy reads that as a recorded opt-out.
         nominees:
@@ -383,7 +436,7 @@ export function ClientOnboardingPage() {
                 dob: n.dob || undefined,
                 relation: n.relation,
                 percent: Number(n.percent),
-                identifierType: n.identifierType,
+                identifierType: n.identifierType || 'pan',
                 identifierNumber:
                   n.identifierType === 'pan'
                     ? n.identifierNumber.trim().toUpperCase()
@@ -561,6 +614,33 @@ export function ClientOnboardingPage() {
               Prefilled from {importedFrom}. Review everything below — BSE is the record that
               counts.
             </p>
+          )}
+          {importedFrom && detailsState === 'loading' && (
+            <p className="mt-1 text-[11px] text-text-faint">Loading the investor profile, nominees and bank proof…</p>
+          )}
+          {importedFrom && detailsState === 'loaded' && (
+            <div className="mt-2 rounded-token-md border border-border bg-bg-raised p-3 text-[11px] leading-relaxed">
+              <p className={form.declared ? 'font-semibold text-success' : 'font-semibold text-warning'}>
+                {form.declared
+                  ? 'Investor declaration on record — it will be sent to BSE as the client gave it.'
+                  : 'No investor declaration on record.'}
+              </p>
+              {form.declared && (
+                <p className="mt-1 text-text-muted">
+                  BSE codes: occupation {form.declared.occupationCode} · income slab {form.declared.incomeSlab} · source of wealth{' '}
+                  {form.declared.wealthSource} · politically exposed {form.declared.politicallyExposed} · born{' '}
+                  {form.declared.placeOfBirth}, {form.declared.countryOfBirth} · mobile {form.declared.whoseMobile} · email{' '}
+                  {form.declared.whoseEmail}
+                  {form.declared.foreignTaxCountry ? ` · also tax resident in ${form.declared.foreignTaxCountry}` : ''}
+                </p>
+              )}
+              {form.bankProof && <p className="mt-1 text-text-muted">Bank proof attached from the client’s KYC upload: {form.bankProof.fileName}.</p>}
+              {importNotes.length > 0 && (
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-warning">
+                  {importNotes.map((n) => <li key={n}>{n}</li>)}
+                </ul>
+              )}
+            </div>
           )}
         </div>
 
@@ -854,6 +934,7 @@ export function ClientOnboardingPage() {
                         onChange={(e) => setNominee(i, { relation: e.target.value })}
                         className={selectCls}
                       >
+                        {!n.relation && <option value="">Relationship…</option>}
                         {NOMINEE_RELATIONS.map((r) => (
                           <option key={r.code} value={r.code}>
                             {r.label}
@@ -888,6 +969,7 @@ export function ClientOnboardingPage() {
                         }
                         className={selectCls}
                       >
+                        {!n.identifierType && <option value="">ID type…</option>}
                         <option value="pan">PAN</option>
                         <option value="aadhaar">Aadhaar (last 4)</option>
                         <option value="passport">Passport</option>

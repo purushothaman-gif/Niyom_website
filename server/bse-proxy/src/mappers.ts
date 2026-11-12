@@ -410,13 +410,29 @@ export interface AppUccRequest {
   email: string;
   mobile: string;
   occupationCode?: string;       // occ_code, default '02' (service)
+  occupationType?: string;       // occ_type B/S/O, default 'B'
+  /** whose_contact_number / whose_email_address (§7.4.16), default 'SE' (self). */
+  whoseMobile?: string;
+  whoseEmail?: string;
   taxCode?: string;              // default '01' (resident individual)
   holdingNature?: string;        // default 'SI' (single)
   kycType?: string;              // default 'C' (CKYC)
   ckycNumber?: string;
   address: { line1: string; line2?: string; line3?: string; city: string; state: string; pincode: string; country?: string };
   bank: { accountNumber: string; ifsc: string; accountType?: string };
-  fatca?: { placeOfBirth?: string; countryOfBirth?: string; fatherName?: string; spouseName?: string; incomeSlab?: string; wealthSource?: string; politicallyExposed?: boolean };
+  fatca?: {
+    placeOfBirth?: string;
+    countryOfBirth?: string;
+    fatherName?: string;
+    spouseName?: string;
+    incomeSlab?: string;
+    wealthSource?: string;
+    /** 'Y' | 'N' | 'R' (relative of a PEP); a boolean is still accepted. */
+    politicallyExposed?: boolean | 'Y' | 'N' | 'R';
+    /** A second tax residency, when the investor declared one outside India. */
+    foreignTaxCountry?: string;
+    foreignTaxId?: string;
+  };
   /** Empty or absent means the client has declined to nominate. */
   nominees?: AppNominee[];
   documents?: {
@@ -508,7 +524,11 @@ export function toAddUcc(req: AppUccRequest, memberCode: string) {
     state: req.address.state,
     country: req.address.country ?? 'IND',
   };
-  const contact = {
+  // Nominees reuse the holder's address and contact (BSE's own worked
+  // example does). That copy is always declared as the nominee's own, exactly
+  // as before; only the holder's block carries who the investor said the
+  // mobile and email belong to.
+  const nomineeContact = {
     contact_number: req.mobile,
     country_code: '91',
     whose_contact_number: 'SE',
@@ -516,6 +536,13 @@ export function toAddUcc(req: AppUccRequest, memberCode: string) {
     whose_email_address: 'SE',
     contact_type: 'PR',
   };
+  const contact = {
+    ...nomineeContact,
+    whose_contact_number: req.whoseMobile ?? 'SE',
+    whose_email_address: req.whoseEmail ?? 'SE',
+  };
+  const pep = fatca.politicallyExposed;
+  const pepCode = typeof pep === 'string' ? pep : pep ? 'Y' : 'N';
 
   return {
     member: { member_id: memberCode },
@@ -554,7 +581,7 @@ export function toAddUcc(req: AppUccRequest, memberCode: string) {
         contact: [contact],
         // Nominees hang off the first holder only (§7.3.4).
         ...(nominees.length > 0
-          ? { nomination: nominees.map((n) => toNomination(n, commAddr, contact)) }
+          ? { nomination: nominees.map((n) => toNomination(n, commAddr, nomineeContact)) }
           : {}),
       },
     ],
@@ -588,18 +615,25 @@ export function toAddUcc(req: AppUccRequest, memberCode: string) {
         ...(fatca.spouseName ? { spouse_name: fatca.spouseName } : {}),
         address_type: '1',
         occ_code: occ,
-        occ_type: 'B',
+        occ_type: req.occupationType ?? 'B',
         tax_status: 'Individual',
         data_source: 'P',
         wealth_source: fatca.wealthSource ?? '1',
         income_slab: fatca.incomeSlab ?? '31',
-        politically_exposed: fatca.politicallyExposed ? 'Y' : 'N',
+        politically_exposed: pepCode,
         is_self_declared: true,
         identifier: { identifier_type: 'pan', identifier_number: pan },
         // Mandatory per §7.3.16 and present in BSE's worked example. For a
         // resident individual the tax id is the PAN — tax_id_type 'C' is
         // "PAN Card" in fatca_identifier_type (§7.4.35), NOT 'A' (Passport).
-        tax_residency: [{ country: 'IND', tax_id_no: pan, tax_id_type: 'C' }],
+        // A declared residency abroad is added alongside it, as a tax
+        // identification number ('T' = TIN).
+        tax_residency: [
+          { country: 'IND', tax_id_no: pan, tax_id_type: 'C' },
+          ...(fatca.foreignTaxCountry && fatca.foreignTaxId
+            ? [{ country: fatca.foreignTaxCountry, tax_id_no: fatca.foreignTaxId, tax_id_type: 'T' }]
+            : []),
+        ],
       },
     ],
     ...(docs.aof ? { aof: { is_aof_submitted: true } } : {}),

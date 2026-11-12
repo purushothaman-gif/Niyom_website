@@ -211,7 +211,26 @@ export interface RegisterUccInput {
   mobile: string;
   address: { line1: string; city: string; state: string; pincode: string };
   bank: { accountNumber: string; ifsc: string; accountType?: string };
-  fatca?: { fatherName?: string; spouseName?: string };
+  /**
+   * The investor's own declaration, as BSE codes (see _shared/profile/bseCodes).
+   * Absent for a client who has not completed the investor profile — the proxy
+   * then falls back to its long-standing defaults.
+   */
+  occupationCode?: string;
+  occupationType?: string;
+  whoseMobile?: string;
+  whoseEmail?: string;
+  fatca?: {
+    fatherName?: string;
+    spouseName?: string;
+    placeOfBirth?: string;
+    countryOfBirth?: string;
+    incomeSlab?: string;
+    wealthSource?: string;
+    politicallyExposed?: 'Y' | 'N' | 'R';
+    foreignTaxCountry?: string;
+    foreignTaxId?: string;
+  };
   /** Empty means the client has declined to nominate — a recorded opt-out. */
   nominees?: NomineeInput[];
   documents?: {
