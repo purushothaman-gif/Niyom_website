@@ -91,6 +91,9 @@ export interface NWClient {
   mandate_preference?: string | null;
   mandate_max_amount?: number | null;
   mandate_upi_id?: string | null;
+  /** The client's UCC at BSE StAR MF, once one has been created there. */
+  bse_ucc?: string | null;
+  bse_ucc_status?: string | null;
   /** Set once the client's MF account exists on the fund platform. */
   mf_platform_opened_at?: string | null;
   mf_platform_opened_by?: string | null;

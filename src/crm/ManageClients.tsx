@@ -95,6 +95,10 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   const [viewClient, setViewClient] = useState<NWClient | null>(null);
   const [editClient, setEditClient] = useState<NWClient | null>(null);
   const [deleteClient, setDeleteClient] = useState<NWClient | null>(null);
+  // Deleting a client who has a mutual fund account needs a deliberate tick:
+  // the account at BSE / on the fund platform is NOT closed by deleting here.
+  const [deleteMfAck, setDeleteMfAck] = useState(false);
+  const deleteHasMfAccount = !!deleteClient && (!!deleteClient.bse_ucc || !!deleteClient.mf_platform_opened_at);
   const [loginClient, setLoginClient] = useState<NWClient | null>(null);
   const [loginPassword, setLoginPassword] = useState('');
   const [loginSaving, setLoginSaving] = useState(false);
@@ -291,11 +295,13 @@ export default function ManageClients({ employee, onNavigate }: Props) {
 
   const handleDelete = async () => {
     if (!deleteClient) return;
+    if (deleteHasMfAccount && !deleteMfAck) return;
     setSaving(true);
     const { error } = await supabase.from('nw_clients').delete().eq('id', deleteClient.id);
     setSaving(false);
     if (error) { showToast(error.message, false); return; }
     setDeleteClient(null);
+    setDeleteMfAck(false);
     showToast('Client deleted.');
     load();
   };
@@ -737,7 +743,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                       }
                       {isAdmin && <button onClick={() => openReassign(c)} className="p-1.5 rounded-lg transition-colors" title="Reassign to Employee" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'rgb(var(--info-soft-rgb))')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><UserCog className="w-4 h-4" /></button>}
                       {isAdmin && (c.sourced_via === 'direct' || c.sourced_via === 'dsa') && <button onClick={() => openModifyMapping(c)} className="p-1.5 rounded-lg transition-colors" title={c.sourced_via === 'dsa' ? 'Modify Mapping (DSA → Direct)' : 'Modify Mapping (Direct → DSA)'} style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Handshake className="w-4 h-4" /></button>}
-                      {isAdmin && <button onClick={() => setDeleteClient(c)} className="p-1.5 rounded-lg transition-colors" title="Delete" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Trash2 className="w-4 h-4" /></button>}
+                      {isAdmin && <button onClick={() => { setDeleteMfAck(false); setDeleteClient(c); }} className="p-1.5 rounded-lg transition-colors" title="Delete" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Trash2 className="w-4 h-4" /></button>}
                     </div>
                   </td>
                 </tr>
@@ -961,9 +967,30 @@ export default function ManageClients({ employee, onNavigate }: Props) {
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               Are you sure you want to delete <span className="text-text-primary font-semibold">{deleteClient.full_name}</span>? This will also delete all their holdings, transactions, and documents. This action cannot be undone.
             </p>
+            {deleteHasMfAccount && (
+              <div className="rounded-xl p-4 space-y-3" role="alert" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)' }}>
+                <p className="flex items-center gap-2 text-sm font-bold" style={{ color: 'var(--danger)' }}>
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  This client has a mutual fund account
+                </p>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  {deleteClient.bse_ucc
+                    ? <>A UCC has been created for them at BSE StAR MF: <span className="font-mono font-semibold text-text-primary">{deleteClient.bse_ucc}</span>. </>
+                    : <>Their account has been opened on the mutual fund platform. </>}
+                  Deleting the client here does <span className="font-semibold text-text-primary">not</span> close that account. It will be left with no client record behind it: their investments, SIPs and auto-debit mandate carry on, but the client can no longer sign in here, the holdings feed will have nobody to attach to, and the UCC stays in use at BSE under their PAN.
+                </p>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Close or transfer the account at BSE first, or keep the client and switch off their login instead.
+                </p>
+                <label className="flex items-start gap-2.5 text-sm cursor-pointer" style={{ color: 'var(--text-primary)' }}>
+                  <input type="checkbox" checked={deleteMfAck} onChange={e => setDeleteMfAck(e.target.checked)} className="mt-0.5" />
+                  <span>I understand the mutual fund account will be left without a client record, and I still want to delete this client.</span>
+                </label>
+              </div>
+            )}
             <div className="flex justify-end gap-3">
               <button onClick={() => setDeleteClient(null)} className="px-4 py-2 rounded-xl text-sm" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Cancel</button>
-              <button onClick={handleDelete} disabled={saving} className="px-5 py-2 rounded-xl text-sm font-bold text-text-primary disabled:opacity-50" style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)' }}>
+              <button onClick={handleDelete} disabled={saving || (deleteHasMfAccount && !deleteMfAck)} className="px-5 py-2 rounded-xl text-sm font-bold text-text-primary disabled:opacity-50" style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)' }}>
                 {saving ? 'Deleting...' : 'Delete Client'}
               </button>
             </div>
