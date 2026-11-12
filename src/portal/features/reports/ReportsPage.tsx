@@ -6,8 +6,8 @@ import {
   FileText,
   Landmark,
   Loader2,
+  PiggyBank,
   Receipt,
-  TrendingUp,
   type LucideIcon,
 } from 'lucide-react';
 import { fmt } from '../../../crm/utils';
@@ -28,8 +28,19 @@ interface Props {
   onOpenCapitalGains?: () => void;
 }
 
+/** Grouped the way a broker's reports screen is: by what the report is for. */
+type Category = 'Tax' | 'Holdings' | 'Transactions';
+
+const CATEGORY_ORDER: Category[] = ['Tax', 'Holdings', 'Transactions'];
+const CATEGORY_ICON: Record<Category, LucideIcon> = {
+  Tax: PiggyBank,
+  Holdings: FileSpreadsheet,
+  Transactions: Receipt,
+};
+
 interface ReportDef {
   key: string;
+  category: Category;
   title: string;
   description: string;
   icon: LucideIcon;
@@ -40,7 +51,7 @@ interface ReportDef {
   soon?: boolean;
 }
 
-function ReportCard({ report }: { report: ReportDef }) {
+function ReportRow({ report }: { report: ReportDef }) {
   const [busy, setBusy] = useState(false);
   const run = async () => {
     if (!report.action) return;
@@ -96,30 +107,34 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
 
   const allReports: ReportDef[] = [
     {
-      key: 'txn',
-      title: 'Transaction Statement',
-      description: 'All buy & sell transactions across products, as an Excel workbook.',
-      icon: Receipt,
-      action: () => exportTransactionsXlsx(txnRows, client),
-    },
-    {
-      key: 'holdings',
-      title: 'Holdings Statement',
-      description: 'Current holdings with invested value, market value and P&L.',
-      icon: FileSpreadsheet,
-      action: () => exportHoldingsXlsx(holdingRows, client),
-    },
-    {
       key: 'capgain',
-      title: 'Capital Gains Statement',
+      category: 'Tax',
+      title: 'Capital Gains — Mutual Funds',
       description:
-        'Realised gains by financial year, matched FIFO from your own statement — with the Excel to match.',
-      icon: TrendingUp,
+        'Realised gains by financial year, short-term vs long-term, matched FIFO from your imported statement. View on screen or download the Excel.',
+      icon: PiggyBank,
       open: onOpenCapitalGains,
       openLabel: 'View capital gains',
     },
     {
+      key: 'holdings',
+      category: 'Holdings',
+      title: 'Holdings Statement',
+      description: 'A snapshot of everything you hold — funds, bonds, shares — with value and P&L.',
+      icon: FileSpreadsheet,
+      action: () => exportHoldingsXlsx(holdingRows, client),
+    },
+    {
+      key: 'txn',
+      category: 'Transactions',
+      title: 'Transaction Statement',
+      description: 'Every buy and sell across all products, as an Excel workbook.',
+      icon: Receipt,
+      action: () => exportTransactionsXlsx(txnRows, client),
+    },
+    {
       key: 'cas',
+      category: 'Holdings',
       title: 'Consolidated Account Statement',
       description:
         'Issued by CAMS and KFintech, not by us. Request it to your email, then import it here.',
@@ -127,16 +142,18 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
       soon: true,
     },
   ];
-  // Both are built on imported MF statements, which retire once mutual funds
-  // run on the MF platform (the platform issues its own statements).
-  const reports = mfSsoEnabled()
-    ? allReports.filter((r) => r.key !== 'capgain' && r.key !== 'cas')
-    : allReports;
+
+  // The CAS card is only useful when funds are not already on the MF platform.
+  const reports = mfSsoEnabled() ? allReports.filter((r) => r.key !== 'cas') : allReports;
+  const byCategory = CATEGORY_ORDER.map((cat) => ({
+    cat,
+    items: reports.filter((r) => r.category === cat),
+  })).filter((g) => g.items.length > 0);
 
   const gainUp = summary.gain >= 0;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <Card padding="lg">
         <div className="grid grid-cols-3 gap-4">
           <KpiStat label="Portfolio Value" value={fmt(summary.netWorth)} color="var(--accent)" />
@@ -153,21 +170,31 @@ export function ReportsPage({ clientId, client, holdings, onOpenCapitalGains }: 
 
       <div className="flex items-center gap-2">
         <FileText className="h-4 w-4 text-accent" />
-        <h2 className="text-sm font-bold text-text-primary">Statements & Reports</h2>
+        <h2 className="text-sm font-bold text-text-primary">Reports & Statements</h2>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {reports.map((r) => (
-          <ReportCard key={r.key} report={r} />
-        ))}
-      </div>
+      {byCategory.map(({ cat, items }) => {
+        const Icon = CATEGORY_ICON[cat];
+        return (
+          <section key={cat} className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Icon className="h-4 w-4 text-text-muted" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">{cat}</h3>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {items.map((r) => (
+                <ReportRow key={r.key} report={r} />
+              ))}
+            </div>
+          </section>
+        );
+      })}
 
       <p className="px-1 text-[11px] text-text-faint">
         Excel statements are generated on your device from your portfolio data — nothing leaves your
-        browser.{' '}
-        {mfSsoEnabled()
-          ? 'Mutual fund statements are available in your mutual fund account.'
-          : 'A Consolidated Account Statement is issued by the registrars themselves; we cannot produce one, but importing yours is what powers everything above.'}
+        browser. Capital gains are worked out from the Consolidated Account Statement you import, so
+        import yours first if the page is empty.
+        {mfSsoEnabled() ? ' Your mutual fund order history lives in your mutual fund account.' : ''}
       </p>
     </div>
   );

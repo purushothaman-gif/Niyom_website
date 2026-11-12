@@ -53,8 +53,10 @@ import type { PortalView } from './layout/navigation';
 import { clientSupabase } from '../lib/supabase';
 import { useHiddenProducts } from '../lib/productAccess';
 
-/** In-house MF views that have no place once mutual funds run on the MF platform. */
-const MF_PLATFORM_RETIRED_VIEWS: PortalView[] = ['sip', 'capital-gains'];
+/** In-house MF views that have no place once mutual funds run on the MF platform.
+ *  Capital Gains is NOT retired: it lives under Reports (computed from the
+ *  client's imported CAS) and is wanted regardless of where funds are held. */
+const MF_PLATFORM_RETIRED_VIEWS: PortalView[] = ['sip'];
 
 interface PortalAppProps {
   clientId: string;
