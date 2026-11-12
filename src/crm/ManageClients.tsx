@@ -730,7 +730,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                       <button onClick={() => onNavigate('documents', { clientId: c.id })} className="p-1.5 rounded-lg transition-colors" title="View Documents" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--success)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><FolderOpen className="w-4 h-4" /></button>
                       <button onClick={() => handleEdit(c)} className="p-1.5 rounded-lg transition-colors" title="Edit" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'rgb(var(--info-soft-rgb))')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Pencil className="w-4 h-4" /></button>
                       <button onClick={() => openBankManager(c)} className="p-1.5 rounded-lg transition-colors" title="Bank Accounts" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Landmark className="w-4 h-4" /></button>
-                      <button onClick={() => setExtrasClient(c)} className="p-1.5 rounded-lg transition-colors" title="Nominees & profile changes" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Users className="w-4 h-4" /></button>
+                      <button onClick={() => setExtrasClient(c)} className="p-1.5 rounded-lg transition-colors" title="MF account readiness, investor profile & nominees" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Users className="w-4 h-4" /></button>
                       {c.client_login_enabled
                         ? <button onClick={() => handleResetClientPassword(c)} className="p-1.5 rounded-lg transition-colors" title="Send Password Reset Email" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--success)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><ShieldCheck className="w-4 h-4" /></button>
                         : <button onClick={() => { setLoginClient(c); setLoginPassword(''); setShowLoginPw(false); }} className="p-1.5 rounded-lg transition-colors" title="Enable Client Login" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--warning)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><KeyRound className="w-4 h-4" /></button>
@@ -1098,7 +1098,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
       )}
 
       {extrasClient && (
-        <ClientProfileExtrasModal clientId={extrasClient.id} clientName={extrasClient.full_name} onClose={() => setExtrasClient(null)} />
+        <ClientProfileExtrasModal clientId={extrasClient.id} clientName={extrasClient.full_name} employeeId={employee.id} onClose={() => setExtrasClient(null)} />
       )}
 
       {/* Bank Accounts Manager (Sprint 5) */}

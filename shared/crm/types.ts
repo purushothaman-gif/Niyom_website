@@ -84,6 +84,13 @@ export interface NWClient {
   email_belongs_to?: string | null;
   nomination_choice?: 'nominate' | 'opt_out' | null;
   investor_profile_completed_at?: string | null;
+  /** Who recorded the declaration: the client in the portal, or staff on their behalf. */
+  investor_profile_source?: 'client' | 'staff' | null;
+  investor_profile_by?: string | null;
+  /** Auto-debit preference for SIPs: 'later' | 'enach' | 'upi'. */
+  mandate_preference?: string | null;
+  mandate_max_amount?: number | null;
+  mandate_upi_id?: string | null;
   created_at: string;
   updated_at: string;
   employee?: { full_name: string; employee_code: string };

@@ -293,6 +293,53 @@ export function validateNomination(input: NominationInput | null | undefined, to
   return { ok: true, value: { choice: 'nominate', nominees: out } };
 }
 
+/**
+ * How the client wants a SIP's bank mandate authorised. Both the platform in
+ * use today and BSE StAR MF ask the same things: the method, the most that
+ * may be debited at a time and, for UPI, the UPI ID. The bank account is the
+ * client's primary one. 'later' is a real answer — asked, and not yet.
+ */
+export const MANDATE_PREFERENCES: Option[] = [
+  { value: 'enach', label: 'e-NACH (net banking or debit card)' },
+  { value: 'upi', label: 'UPI Autopay' },
+  { value: 'later', label: 'Set up later' },
+];
+
+/** A ceiling on the per-debit limit, to catch a slipped decimal — not a regulatory limit. */
+export const MAX_MANDATE_AMOUNT = 10_000_000;
+
+export interface MandatePreferenceInput {
+  preference?: string | null;
+  max_amount?: number | string | null;
+  upi_id?: string | null;
+}
+
+export interface MandatePreference {
+  preference: 'later' | 'enach' | 'upi';
+  max_amount: number | null;
+  upi_id: string | null;
+}
+
+export function validateMandatePreference(input: MandatePreferenceInput | null | undefined): Check<MandatePreference> {
+  const pref = input?.preference;
+  if (pref !== 'later' && pref !== 'enach' && pref !== 'upi') {
+    return { ok: false, error: 'Choose how you would like to set up auto-debit for SIPs, or choose to set it up later.' };
+  }
+  if (pref === 'later') return { ok: true, value: { preference: 'later', max_amount: null, upi_id: null } };
+
+  const amount = Number(input?.max_amount);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Enter the maximum amount that may be debited at a time.' };
+  if (!Number.isInteger(amount)) return { ok: false, error: 'Enter the maximum debit amount in whole rupees.' };
+  if (amount > MAX_MANDATE_AMOUNT) return { ok: false, error: 'That maximum debit amount looks too high — please check it.' };
+
+  let upi: string | null = null;
+  if (pref === 'upi') {
+    upi = String(input?.upi_id ?? '').trim().toLowerCase();
+    if (!/^[a-z0-9._-]{2,}@[a-z0-9.-]{2,}$/.test(upi)) return { ok: false, error: 'Enter a valid UPI ID (for example name@bank).' };
+  }
+  return { ok: true, value: { preference: pref, max_amount: amount, upi_id: upi } };
+}
+
 /** Details-step rules that only apply when an exchange account is wanted. */
 export function validateMfDetails(d: { dob?: string | null; address?: string | null; bank_ifsc?: string | null; bank_account?: string | null; bank_account_type?: string | null }, today = new Date()): Check<true> {
   const age = d.dob ? ageOn(d.dob, today) : null;

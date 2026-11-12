@@ -56,6 +56,14 @@ export const CONTACT_OWNER_CODE: Record<string, string> = {
 /** §7.4.12 bank_acc_type */
 export const BANK_ACC_TYPE_CODE: Record<string, string> = { savings: 'SB', current: 'CB', nre: 'NE', nro: 'NO' };
 
+/** §7.4.46 mandate_type — N e-NACH, U UPI Autopay. ('later' has no mandate.) */
+export const MANDATE_TYPE_CODE: Record<string, 'N' | 'U'> = { enach: 'N', upi: 'U' };
+
+/** §7.4.65 guardian_relation — keyed by the label the form stores. */
+export const GUARDIAN_RELATION_CODE: Record<string, string> = {
+  'Father': '6', 'Mother': '13', 'Court appointed legal guardian': '23',
+};
+
 /** §7.4.18 nomination_relation — keyed by the label the form stores. */
 export const NOMINEE_RELATION_CODE: Record<string, string> = {
   'Aunt': '1', 'Brother': '2', 'Daughter': '3', 'Daughter In Law': '4', 'Father': '5', 'Father In Law': '6',

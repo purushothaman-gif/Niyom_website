@@ -7,11 +7,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  BANK_ACCOUNT_TYPES, CONTACT_OWNERS, INCOME_SLABS, NOMINEE_ID_TYPES, NOMINEE_RELATIONSHIPS,
-  OCCUPATIONS, PEP_STATUSES, WEALTH_SOURCES,
+  BANK_ACCOUNT_TYPES, CONTACT_OWNERS, GUARDIAN_RELATIONSHIPS, INCOME_SLABS, MANDATE_PREFERENCES, NOMINEE_ID_TYPES,
+  NOMINEE_RELATIONSHIPS, OCCUPATIONS, PEP_STATUSES, WEALTH_SOURCES,
 } from './investorProfile';
 import {
-  BANK_ACC_TYPE_CODE, CONTACT_OWNER_CODE, INCOME_SLAB_CODE, NOMINEE_ID_TYPE_CODE, NOMINEE_RELATION_CODE,
+  BANK_ACC_TYPE_CODE, CONTACT_OWNER_CODE, GUARDIAN_RELATION_CODE, INCOME_SLAB_CODE, MANDATE_TYPE_CODE, NOMINEE_ID_TYPE_CODE, NOMINEE_RELATION_CODE,
   OCC_CODE, PEP_CODE, WEALTH_SOURCE_CODE, occType, toBseDeclaration, type DeclaredProfile,
 } from './bseCodes';
 
@@ -51,6 +51,16 @@ describe('every value the form can store has one BSE code', () => {
     expect(Object.keys(NOMINEE_RELATION_CODE)).toHaveLength(22);
     expect(new Set(Object.values(NOMINEE_RELATION_CODE)).size).toBe(22);
     expect(NOMINEE_RELATION_CODE).toMatchObject({ Daughter: '3', Father: '5', Husband: '11', Son: '18', Wife: '21', Others: '22' });
+  });
+
+  it('guardian relationship and auto-debit method', () => {
+    for (const g of GUARDIAN_RELATIONSHIPS) expect(GUARDIAN_RELATION_CODE[g], g).toBeTruthy();
+    expect(GUARDIAN_RELATION_CODE).toEqual({ Father: '6', Mother: '13', 'Court appointed legal guardian': '23' });
+    // Every method except "later", which means no mandate is created.
+    for (const m of MANDATE_PREFERENCES) {
+      if (m.value === 'later') expect(MANDATE_TYPE_CODE[m.value]).toBeUndefined();
+      else expect(MANDATE_TYPE_CODE[m.value], m.value).toBeTruthy();
+    }
   });
 
   it('nominee identity document, except the driving licence, which staff choose by hand', () => {

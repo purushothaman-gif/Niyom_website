@@ -4,13 +4,17 @@
  * under the CRM's own RLS — the RM sees their clients, admins see all.
  */
 import { useEffect, useState } from 'react';
-import { History, Loader2, UserRound, Users, X } from 'lucide-react';
+import { ClipboardCopy, Download, FileCheck2, History, Loader2, Pencil, UserRound, Users, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import {
   BANK_ACCOUNT_TYPES, CONTACT_OWNERS, GENDERS, INCOME_SLABS, NOMINEE_ID_TYPES, OCCUPATIONS,
   PEP_STATUSES, WEALTH_SOURCES, labelOf,
 } from '../../supabase/functions/_shared/profile/investorProfile';
 import { countryName } from '../../supabase/functions/_shared/profile/countries';
+import {
+  buildMfAccountSheet, sheetToCsv, sheetToText, type SheetClient, type SheetNominee,
+} from '../../supabase/functions/_shared/profile/mfAccountSheet';
+import { InvestorProfileEditorModal } from './InvestorProfileEditor';
 
 /** The mutual-fund investor profile the client declared in onboarding. */
 interface InvestorProfile {
@@ -32,6 +36,7 @@ interface InvestorProfile {
   email_belongs_to: string | null;
   nomination_choice: string | null;
   investor_profile_completed_at: string | null;
+  investor_profile_source: string | null;
 }
 
 interface Nominee {
@@ -42,6 +47,8 @@ interface Nominee {
   share_percent: number;
   guardian_name: string | null;
   guardian_pan: string | null;
+  guardian_dob: string | null;
+  guardian_relationship: string | null;
   id_type: string | null;
   id_number: string | null;
   added_via: string;
@@ -80,21 +87,24 @@ const SOURCE: Record<string, string> = {
 const when = (d: string) =>
   new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-export function ClientProfileExtrasModal({ clientId, clientName, onClose }: { clientId: string; clientName: string; onClose: () => void }) {
+export function ClientProfileExtrasModal({ clientId, clientName, employeeId, onClose }: { clientId: string; clientName: string; employeeId?: string; onClose: () => void }) {
   const [nominees, setNominees] = useState<Nominee[] | null>(null);
   const [changes, setChanges] = useState<Change[] | null>(null);
-  const [profile, setProfile] = useState<InvestorProfile | null | undefined>(undefined);
+  const [profile, setProfile] = useState<(InvestorProfile & SheetClient) | null | undefined>(undefined);
+  const [editing, setEditing] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     supabase
       .from('nw_clients')
-      .select('gender, investment_preferences, bank_account_type, occupation, income_slab, wealth_source, pep_status, birth_place, birth_country, tax_resident_outside_india, foreign_tax_country, foreign_tax_id, father_name, spouse_name, mobile_belongs_to, email_belongs_to, nomination_choice, investor_profile_completed_at')
+      .select('*')
       .eq('id', clientId)
       .maybeSingle()
-      .then(({ data }) => setProfile((data as InvestorProfile | null) ?? null));
+      .then(({ data }) => setProfile((data as unknown as (InvestorProfile & SheetClient) | null) ?? null));
     supabase
       .from('nw_client_nominees')
-      .select('id, full_name, relationship, dob, share_percent, guardian_name, guardian_pan, id_type, id_number, added_via')
+      .select('id, full_name, relationship, dob, share_percent, guardian_name, guardian_pan, guardian_dob, guardian_relationship, id_type, id_number, added_via')
       .eq('client_id', clientId)
       .order('created_at')
       .then(({ data }) => setNominees((data as Nominee[]) ?? []));
@@ -105,10 +115,39 @@ export function ClientProfileExtrasModal({ clientId, clientName, onClose }: { cl
       .order('created_at', { ascending: false })
       .limit(50)
       .then(({ data }) => setChanges((data as Change[]) ?? []));
-  }, [clientId]);
+  }, [clientId, reload]);
+
+  // One sheet for whichever platform opens the mutual fund account.
+  const sheet = profile && nominees ? buildMfAccountSheet(profile, nominees as SheetNominee[]) : null;
+  const copySheet = async () => {
+    if (!sheet) return;
+    try {
+      await navigator.clipboard.writeText(sheetToText(sheet));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard blocked — the download still works */ }
+  };
+  const downloadSheet = () => {
+    if (!sheet) return;
+    const url = URL.createObjectURL(new Blob([sheetToCsv(sheet)], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mf-account-${String(profile?.client_code ?? 'client')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)' }} onClick={onClose}>
+      {editing && employeeId && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <InvestorProfileEditorModal
+            clientId={clientId} clientName={clientName} employeeId={employeeId}
+            onClose={() => setEditing(false)}
+            onSaved={() => { setEditing(false); setReload((n) => n + 1); }}
+          />
+        </div>
+      )}
       <div
         className="max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-xl border"
         style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
@@ -124,10 +163,51 @@ Investor profile, nominees & changes — {clientName}
         </div>
 
         <div className="space-y-6 p-5">
+          {sheet && (
+            <section className="rounded-lg border p-4" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h4 className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  <FileCheck2 className="h-4 w-4" style={{ color: 'var(--accent)' }} /> Mutual fund account readiness
+                </h4>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={copySheet} className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+                    <ClipboardCopy className="h-3.5 w-3.5" /> {copied ? 'Copied' : 'Copy account sheet'}
+                  </button>
+                  <button type="button" onClick={downloadSheet} className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+                    <Download className="h-3.5 w-3.5" /> CSV
+                  </button>
+                </div>
+              </div>
+              <p className="mt-2 text-sm font-semibold" style={{ color: sheet.ready ? 'var(--success)' : 'var(--warning, #d97706)' }}>
+                {sheet.ready ? 'Ready — everything needed to open the account is on record.' : `Not ready — ${sheet.missing.length} thing${sheet.missing.length === 1 ? '' : 's'} still needed:`}
+              </p>
+              {!sheet.ready && (
+                <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  {sheet.missing.map((m) => <li key={m}>{m}</li>)}
+                </ul>
+              )}
+              {sheet.notes.length > 0 && (
+                <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs" style={{ color: 'var(--text-faint)' }}>
+                  {sheet.notes.map((n) => <li key={n}>{n}</li>)}
+                </ul>
+              )}
+              <p className="mt-2 text-xs" style={{ color: 'var(--text-faint)' }}>
+                The account sheet lists every field with its BSE StAR MF code — use it to open the account on the fund platform today; the same data registers the account at BSE directly later.
+              </p>
+            </section>
+          )}
+
           <section>
-            <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            <div className="mb-2 flex items-center justify-between gap-3">
+            <h4 className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
               <UserRound className="h-4 w-4" style={{ color: 'var(--accent)' }} /> Investor profile (mutual funds)
             </h4>
+            {employeeId && profile && (
+              <button type="button" onClick={() => setEditing(true)} className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--border)', color: 'var(--accent)' }}>
+                <Pencil className="h-3.5 w-3.5" /> {profile.investor_profile_completed_at ? 'Edit' : 'Record for client'}
+              </button>
+            )}
+            </div>
             {profile === undefined ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : !profile ? (
@@ -135,7 +215,7 @@ Investor profile, nominees & changes — {clientName}
             ) : !profile.investor_profile_completed_at ? (
               <p className="text-sm" style={{ color: 'var(--text-faint)' }}>
                 {profile.investment_preferences?.includes('mutual_funds')
-                  ? 'Not completed yet — the client is asked for it in the portal under Complete KYC. Needed before a BSE account can be registered.'
+                  ? 'Not completed yet — the client is asked for it in the portal under Complete KYC, or you can record it for them here. Needed before a mutual fund account can be opened.'
                   : 'Not applicable — the client has not chosen mutual funds.'}
               </p>
             ) : (
@@ -165,7 +245,7 @@ Investor profile, nominees & changes — {clientName}
                   ))}
                 </dl>
                 <p className="mt-2 text-xs" style={{ color: 'var(--text-faint)' }}>
-                  Declared by the client on {when(profile.investor_profile_completed_at)}.
+                  {profile.investor_profile_source === 'staff' ? 'Recorded by staff on the client’s behalf' : 'Declared by the client'} on {when(profile.investor_profile_completed_at)}.
                 </p>
               </>
             )}

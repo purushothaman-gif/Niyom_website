@@ -2,8 +2,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, json, serviceClient } from "../_shared/onboarding.ts";
 import {
-  validateInvestorProfile, validateNomination,
-  type InvestorProfileInput, type NominationInput,
+  validateInvestorProfile, validateMandatePreference, validateNomination,
+  type InvestorProfileInput, type MandatePreferenceInput, type NominationInput,
 } from "../_shared/profile/investorProfile.ts";
 
 // Onboarding — the investor profile a mutual-fund exchange account needs: the
@@ -20,7 +20,8 @@ import {
 // for first completion and for corrections while KYC is still open; once the
 // account is active AND the profile is complete, changes go through staff.
 //
-// Body: { client_id, profile: {...}, nomination: { choice, nominees? } }
+// Body: { client_id, profile: {...}, nomination: { choice, nominees? },
+//         mandate: { preference, max_amount?, upi_id? } }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -59,6 +60,8 @@ Deno.serve(async (req: Request) => {
     if (!profile.ok) return json({ error: profile.error }, 400);
     const nomination = validateNomination(body.nomination as NominationInput);
     if (!nomination.ok) return json({ error: nomination.error }, 400);
+    const mandate = validateMandatePreference(body.mandate as MandatePreferenceInput);
+    if (!mandate.ok) return json({ error: mandate.error }, 400);
 
     // Nominees are a full replacement. The share-total trigger is deferred, and
     // these are two statements, so a failed insert would leave no nominees —
@@ -92,7 +95,13 @@ Deno.serve(async (req: Request) => {
     const { error: updErr } = await db.from("nw_clients").update({
       ...profile.value,
       nomination_choice: nomination.value.choice,
+      mandate_preference: mandate.value.preference,
+      mandate_max_amount: mandate.value.max_amount,
+      mandate_upi_id: mandate.value.upi_id,
       investor_profile_completed_at: new Date().toISOString(),
+      // Declared by the client themselves, in the portal.
+      investor_profile_source: "client",
+      investor_profile_by: null,
     }).eq("id", client_id);
     if (updErr) throw updErr;
 

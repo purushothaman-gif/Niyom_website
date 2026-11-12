@@ -161,10 +161,11 @@ export const OnboardingService = {
    */
   async saveInvestorProfile(
     clientId: string,
-    profile: Record<string, unknown>,
-    nomination: Record<string, unknown>,
+    profile: object,
+    nomination: object,
+    mandate: object,
   ): Promise<{ ok: boolean; error?: string }> {
-    const { ok, data } = await authedFn('public-onboard-save-profile', { client_id: clientId, profile, nomination });
+    const { ok, data } = await authedFn('public-onboard-save-profile', { client_id: clientId, profile, nomination, mandate });
     return ok ? { ok: true } : { ok: false, error: data.error };
   },
 

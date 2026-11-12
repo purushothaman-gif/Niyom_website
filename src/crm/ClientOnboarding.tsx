@@ -7,6 +7,7 @@ import { NWEmployee, NWDSA, CRMPage } from './types';
 import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
 import { User, Building2, Upload, FileText, CheckCircle2, AlertCircle, ChevronRight, Users, Handshake, UserCheck, UserPlus, Sparkles } from 'lucide-react';
 import { mfSsoEnabled } from '../../shared/platform/env';
+import { InvestorProfileEditorModal } from './InvestorProfileEditor';
 
 interface Props {
   employee: NWEmployee;
@@ -131,6 +132,8 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
 
   // Products the client wants access to (mirrors the self-service portal wizard).
   const [prefs, setPrefs] = useState<string[]>([]);
+  /** Set after a mutual fund client is created, to collect the investor profile. */
+  const [profileFor, setProfileFor] = useState<{ id: string; name: string } | null>(null);
   const togglePref = (value: string) =>
     setPrefs(p => (p.includes(value) ? p.filter(x => x !== value) : [...p, value]));
   // Demat is mandatory only when a CML product (Bonds / Unlisted Shares) is chosen.
@@ -583,7 +586,12 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
       // re-enabling the button here let a second click onboard the client again
       // under a fresh client code.
       setSuccess(`Client ${form.full_name} onboarded successfully with code ${clientCode}!`);
-      setTimeout(() => onNavigate('clients'), 2000);
+      // A mutual fund client also needs the investor profile (declaration,
+      // nomination, auto-debit) — the same one a self-onboarded client fills
+      // in. Offer it now while the employee has the client with them; it can
+      // be skipped and recorded later from Manage Clients.
+      if (prefs.includes('mutual_funds')) setProfileFor({ id: client.id, name: form.full_name });
+      else setTimeout(() => onNavigate('clients'), 2000);
     } catch (err: any) {
       setError(err.message || 'Failed to save client');
       setSaving(false);
@@ -631,6 +639,14 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
           <AlertCircle className="w-4 h-4 text-c-red flex-shrink-0" />
           <p className="text-sm text-c-red">{error}</p>
         </div>
+      )}
+      {profileFor && (
+        <InvestorProfileEditorModal
+          clientId={profileFor.id} clientName={profileFor.name} employeeId={employee.id}
+          closeLabel="Do this later"
+          onClose={() => onNavigate('clients')}
+          onSaved={() => onNavigate('clients')}
+        />
       )}
       {success && (
         <div className="p-4 rounded-2xl flex items-center gap-3" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>

@@ -8382,13 +8382,18 @@ export type Database = {
           id: string
           income_slab: string | null
           investment_preferences: string[]
+          investor_profile_by: string | null
           investor_profile_completed_at: string | null
+          investor_profile_source: string | null
           kra_active: string | null
           kra_checked_at: string | null
           kra_compliant: boolean | null
           kra_detail: Json | null
           kra_status: string | null
           kyc_submitted_at: string | null
+          mandate_max_amount: number | null
+          mandate_preference: string | null
+          mandate_upi_id: string | null
           mobile_belongs_to: string | null
           nomination_choice: string | null
           notes: string | null
@@ -8448,13 +8453,18 @@ export type Database = {
           id?: string
           income_slab?: string | null
           investment_preferences?: string[]
+          investor_profile_by?: string | null
           investor_profile_completed_at?: string | null
+          investor_profile_source?: string | null
           kra_active?: string | null
           kra_checked_at?: string | null
           kra_compliant?: boolean | null
           kra_detail?: Json | null
           kra_status?: string | null
           kyc_submitted_at?: string | null
+          mandate_max_amount?: number | null
+          mandate_preference?: string | null
+          mandate_upi_id?: string | null
           mobile_belongs_to?: string | null
           nomination_choice?: string | null
           notes?: string | null
@@ -8514,13 +8524,18 @@ export type Database = {
           id?: string
           income_slab?: string | null
           investment_preferences?: string[]
+          investor_profile_by?: string | null
           investor_profile_completed_at?: string | null
+          investor_profile_source?: string | null
           kra_active?: string | null
           kra_checked_at?: string | null
           kra_compliant?: boolean | null
           kra_detail?: Json | null
           kra_status?: string | null
           kyc_submitted_at?: string | null
+          mandate_max_amount?: number | null
+          mandate_preference?: string | null
+          mandate_upi_id?: string | null
           mobile_belongs_to?: string | null
           nomination_choice?: string | null
           notes?: string | null

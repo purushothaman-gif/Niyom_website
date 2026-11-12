@@ -11,6 +11,7 @@ import {
   MAX_MF_NOMINEES,
   needsInvestorProfile,
   validateInvestorProfile,
+  validateMandatePreference,
   validateMfDetails,
   validateNomination,
   type InvestorProfileInput,
@@ -156,6 +157,31 @@ describe('validateNomination', () => {
     const r = validateNomination({ choice: 'nominate', nominees: [{ ...minor, guardian_dob: '1990-04-02', guardian_pan: 'abcde1234f', guardian_relationship: 'Mother' }] }, TODAY);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value.nominees[0]).toMatchObject({ guardian_pan: 'ABCDE1234F', guardian_relationship: 'Mother' });
+  });
+});
+
+describe('validateMandatePreference', () => {
+  it('needs an answer, and "later" is one', () => {
+    expect(validateMandatePreference(null).ok).toBe(false);
+    expect(validateMandatePreference({ preference: 'cheque' }).ok).toBe(false);
+    expect(validateMandatePreference({ preference: 'later', max_amount: 5000, upi_id: 'x@y' }))
+      .toEqual({ ok: true, value: { preference: 'later', max_amount: null, upi_id: null } });
+  });
+
+  it('needs a whole-rupee limit for e-NACH and ignores any UPI ID', () => {
+    expect(validateMandatePreference({ preference: 'enach' }).ok).toBe(false);
+    expect(validateMandatePreference({ preference: 'enach', max_amount: 0 }).ok).toBe(false);
+    expect(validateMandatePreference({ preference: 'enach', max_amount: 2500.5 }).ok).toBe(false);
+    expect(validateMandatePreference({ preference: 'enach', max_amount: 99_000_000_000 }).ok).toBe(false);
+    expect(validateMandatePreference({ preference: 'enach', max_amount: '25000', upi_id: 'asha@okbank' }))
+      .toEqual({ ok: true, value: { preference: 'enach', max_amount: 25000, upi_id: null } });
+  });
+
+  it('needs a UPI ID for UPI Autopay', () => {
+    expect(validateMandatePreference({ preference: 'upi', max_amount: 15000 }).ok).toBe(false);
+    expect(validateMandatePreference({ preference: 'upi', max_amount: 15000, upi_id: 'not-a-upi-id' }).ok).toBe(false);
+    expect(validateMandatePreference({ preference: 'upi', max_amount: 15000, upi_id: ' Asha.K@OkBank ' }))
+      .toEqual({ ok: true, value: { preference: 'upi', max_amount: 15000, upi_id: 'asha.k@okbank' } });
   });
 });
 
