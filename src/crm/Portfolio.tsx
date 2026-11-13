@@ -13,6 +13,8 @@ import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, PRODUCT_CHART_COLORS } fr
 import { Plus, X, Pencil, Trash2, ChevronDown, Printer, TrendingUp, Percent, Shield, ArrowLeft, ArrowUp, ArrowDown, Search, Download } from 'lucide-react';
 import type { Insertable } from '../lib/dbJson';
 import { recalcPortfolioValue } from './portfolioValue';
+import { buildPortfolioReportHtml } from './portfolioReport';
+import { fetchRtaMf } from '../../shared/mf/rtaMf';
 import { mfSsoEnabled } from '../../shared/platform/env';
 
 interface Props {
@@ -639,7 +641,6 @@ export default function Portfolio({ employee, pageParams }: Props) {
 
   const totalValue = scopedHoldings.reduce((s, h) => s + (h.current_value || 0), 0);
   const totalInvested = scopedHoldings.reduce((s, h) => s + (h.invested_amount || 0), 0);
-  const gainLoss = totalValue - totalInvested;
   // Detail cards: the client's whole position — book, registrar MF (entered at
   // value, the feed has no cost) and anything their statements add.
   const detailMf = view === 'detail' && MF_ON_PLATFORM ? mfAum : 0;
@@ -754,128 +755,41 @@ export default function Portfolio({ employee, pageParams }: Props) {
       img.src = '/niyomlogo.png';
     });
 
-    getLogoBase64().then(logoBase64 => {
-
-    // Product section color map for print
-    const sectionColors: Record<string, string> = {
-      unlisted_share: '#7C3AED', secondary_bond: '#0891B2', primary_bond: '#0E7490',
-      mutual_fund: '#DB2777', fixed_deposit: '#D97706', insurance: '#EA580C',
-    };
-
-    const productSectionsHtml = PRODUCTS.map(pt => {
-      const group = holdings.filter(h => h.product_type === pt);
-      if (group.length === 0) return '';
-      const groupValue = group.reduce((s, h) => s + (h.current_value || 0), 0);
-      const groupInvested = group.reduce((s, h) => s + (h.invested_amount || 0), 0);
-      const groupPL = groupValue - groupInvested;
-      const color = sectionColors[pt] || '#555';
-
-      const extraCols = BOND_TYPES.includes(pt)
-        ? '<th>Coupon</th><th>Maturity</th>'
-        : pt === 'mutual_fund' ? '<th>Folio No.</th><th>NAV</th>'
-        : pt === 'insurance' ? '<th>Policy No.</th><th>Cover</th>'
-        : '';
-
-      const rows = group.map((h, i) => {
-        const clientForHolding = clients.find(c => c.id === h.client_id);
-        const isDsaHolding = clientForHolding?.sourced_via === 'dsa' && DSA_PRICE_TYPES.includes(pt);
-        // For DSA clients on applicable types, print shows client_price; otherwise avg_cost
-        const displayPrice = isDsaHolding && h.client_price ? h.client_price : (h.avg_cost || 0);
-        const pl = (h.current_value || 0) - (h.invested_amount || 0);
-        const extraTds = BOND_TYPES.includes(pt)
-          ? `<td>${h.coupon_rate ? h.coupon_rate + '% ' + (PAYOUT_FREQ[h.payout_frequency || 'annual'] || '') : '&mdash;'}</td><td>${h.maturity_date ? fmtDate(h.maturity_date) : '&mdash;'}</td>`
-          : pt === 'mutual_fund'
-          ? `<td>${h.folio_number || '&mdash;'}</td><td>${h.current_nav ? '&#8377;' + h.current_nav : '&mdash;'}</td>`
-          : pt === 'insurance'
-          ? `<td>${(h as any).policy_number || '&mdash;'}</td><td>${h.sum_assured ? '&#8377;' + (h.sum_assured as number).toLocaleString('en-IN') : '&mdash;'}</td>`
-          : '';
-        return `<tr>
-          <td>${i + 1}</td>
-          <td><strong>${h.product_name}</strong>${(h as any).client ? `<br><span style="color:#888;font-size:11px">${(h as any).client.full_name}</span>` : ''}</td>
-          <td>${h.quantity || '&mdash;'}</td>
-          <td>&#8377;${displayPrice.toLocaleString('en-IN')}</td>
-          <td>&#8377;${(h.invested_amount || 0).toLocaleString('en-IN')}</td>
-          <td>&#8377;${(h.current_value || 0).toLocaleString('en-IN')}</td>
-          <td class="${pl >= 0 ? 'green' : 'red'}">${pl >= 0 ? '+' : ''}&#8377;${Math.abs(pl).toLocaleString('en-IN')}</td>
-          ${extraTds}
-        </tr>`;
-      }).join('');
-
-      return `
-        <div class="section-header" style="border-left:4px solid ${color}">
-          <span class="section-title" style="color:${color}">${PRODUCT_LABELS[pt]}</span>
-          <span class="section-summary">${group.length} holding${group.length > 1 ? 's' : ''} &nbsp;&middot;&nbsp; Value: &#8377;${groupValue.toLocaleString('en-IN')} &nbsp;&middot;&nbsp; <span class="${groupPL >= 0 ? 'green' : 'red'}">${groupPL >= 0 ? '+' : ''}&#8377;${Math.abs(groupPL).toLocaleString('en-IN')}</span></span>
-        </div>
-        <table>
-          <thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Price / Unit</th><th>Invested</th><th>Current Value</th><th>P&amp;L</th>${extraCols}</tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`;
-    }).join('');
-
-    const logoHtml = logoBase64
-      ? `<img src="${logoBase64}" style="width:56px;height:56px;object-fit:contain;" />`
-      : `<div style="width:56px;height:56px;background:linear-gradient(135deg,#d4af37,#b8961e);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:26px;color:#000;font-family:Georgia,serif;">N</div>`;
-
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <title>Niyom Wealth - Portfolio Report</title>
-  <style>
-    @page { margin: 20mm 15mm; }
-    body { font-family: Arial, sans-serif; background: #fff; color: #111; margin: 0; padding: 0; font-size: 13px; }
-    .header { display: flex; align-items: center; gap: 14px; padding-bottom: 16px; border-bottom: 3px solid #d4af37; margin-bottom: 20px; }
-    .logo-box { flex-shrink: 0; }
-    .brand { font-size: 24px; font-weight: 900; color: #111; letter-spacing: -0.5px; }
-    .sub { font-size: 11px; color: #888; margin-top: 2px; letter-spacing: 0.03em; }
-    .client-bar { background: #f5f5f5; border-radius: 6px; padding: 10px 14px; margin-bottom: 18px; font-size: 13px; }
-    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px; }
-    .stat { background: #f8f8f8; border-radius: 8px; padding: 12px 14px; border-top: 3px solid #eee; }
-    .stat-label { font-size: 9px; color: #999; text-transform: uppercase; letter-spacing: 0.08em; }
-    .stat-value { font-size: 17px; font-weight: 800; margin-top: 4px; }
-    .section-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #fafafa; margin: 20px 0 0; border-left: 4px solid #ccc; }
-    .section-title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; }
-    .section-summary { font-size: 11px; color: #666; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-    th { background: #f2f2f2; padding: 7px 10px; text-align: left; font-size: 10px; text-transform: uppercase; color: #777; letter-spacing: 0.04em; border-bottom: 1px solid #e0e0e0; }
-    td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 12px; vertical-align: top; }
-    tr:last-child td { border-bottom: none; }
-    .gold { color: #b8961e; }
-    .green { color: #059669; }
-    .red { color: #DC2626; }
-    .footer { margin-top: 32px; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; }
-    .alloc-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    .alloc-table td { padding: 6px 10px; font-size: 12px; border-bottom: 1px solid #f5f5f5; }
-    .alloc-bar { height: 6px; border-radius: 3px; margin-top: 3px; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="logo-box">${logoHtml}</div>
-    <div>
-      <div class="brand">Niyom Wealth</div>
-      <div class="sub">Portfolio Report &nbsp;&middot;&nbsp; ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
-    </div>
-  </div>
-
-  ${clientInfo ? `<div class="client-bar"><strong>${clientInfo.full_name}</strong> &nbsp;&middot;&nbsp; Code: ${clientInfo.client_code}</div>` : ''}
-
-  <div class="stats">
-    <div class="stat" style="border-top-color:#d4af37"><div class="stat-label">Total Value</div><div class="stat-value gold">&#8377;${totalValue.toLocaleString('en-IN')}</div></div>
-    <div class="stat" style="border-top-color:#6b7280"><div class="stat-label">Total Invested</div><div class="stat-value">&#8377;${totalInvested.toLocaleString('en-IN')}</div></div>
-    <div class="stat" style="border-top-color:${gainLoss >= 0 ? '#059669' : '#DC2626'}"><div class="stat-label">Gain / Loss</div><div class="stat-value ${gainLoss >= 0 ? 'green' : 'red'}">${gainLoss >= 0 ? '+' : ''}&#8377;${Math.abs(gainLoss).toLocaleString('en-IN')}</div></div>
-    <div class="stat" style="border-top-color:#0891B2"><div class="stat-label">Annual Interest</div><div class="stat-value" style="color:#0891B2">&#8377;${annualInterest.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div></div>
-  </div>
-
-  ${productSectionsHtml}
-
-  <div class="footer">Niyom Wealth Distribution &nbsp;&middot;&nbsp; Confidential &nbsp;&middot;&nbsp; Generated ${new Date().toLocaleString('en-IN')}</div>
-</body>
-</html>`;
-
+    // Everything the screen shows for this client, not just the in-house book:
+    // the registrar feed and the imported statements are read here too. If the
+    // statements are still loading on screen, fetch them rather than print short.
+    const cid = clientFilter !== 'all' ? clientFilter : '';
+    const stmtReady = cid === stmtClient && !stmtLoading;
+    Promise.all([
+      getLogoBase64(),
+      cid && MF_ON_PLATFORM ? fetchRtaMf(supabase, cid).then(d => d.holdings) : Promise.resolve([]),
+      !cid ? Promise.resolve(null) : stmtReady ? Promise.resolve(casView) : loadCasView(cid),
+      !cid ? Promise.resolve(null) : stmtReady ? Promise.resolve(dematView) : loadDematView(cid),
+    ]).then(([logoBase64, registrar, cas, demat]) => {
+      const logoHtml = logoBase64
+        ? `<img src="${logoBase64}" style="width:56px;height:56px;object-fit:contain;" />`
+        : `<div style="width:56px;height:56px;background:linear-gradient(135deg,#d4af37,#b8961e);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:26px;color:#000;font-family:Georgia,serif;">N</div>`;
+      const html = buildPortfolioReportHtml({
+        client: clientInfo ?? null,
+        products: PRODUCTS,
+        holdings: scopedHoldings,
+        clientOf: id => clientMap.get(id),
+        annualInterest,
+        registrar,
+        cas,
+        demat,
+        logoHtml,
+        now: new Date(),
+      });
       w.document.open();
       w.document.write(html);
       w.document.close();
       setTimeout(() => w.print(), 500);
+    }).catch(() => {
+      // Never leave a half-report that reads as "this client holds nothing".
+      w.document.open();
+      w.document.write('<html><head><title>Portfolio Report</title></head><body style="font-family:Arial;padding:40px;color:#555">The report could not be generated. Please close this tab and try again.</body></html>');
+      w.document.close();
     });
   };
 

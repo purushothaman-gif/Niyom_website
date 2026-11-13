@@ -24,8 +24,8 @@
  * MF — rather than showing a gain nobody can support.
  */
 import { MF_OWNERSHIP } from '../../portal/types/ownership';
-import type { CasCrmView } from './casClientView';
-import type { DematCrmView } from './dematClientView';
+import type { CasCrmScheme, CasCrmView } from './casClientView';
+import type { DematCrmGroup, DematCrmView } from './dematClientView';
 
 export interface StatementSlice {
   label: string;
@@ -55,6 +55,35 @@ const DEMAT_COLORS: Record<string, string> = {
   other: '#7688A4',
 };
 
+/**
+ * The statement rows that count towards the client's position, after the two
+ * de-duplication rules above. The summary cards and the printed report both
+ * read this, so a fund can never be counted on one and skipped on the other.
+ */
+export interface CountedStatementRows {
+  /** Statement funds held with us — empty when the registrar feed covers them. */
+  ours: CasCrmScheme[];
+  /** Statement funds held with another distributor (or of unknown origin). */
+  outside: CasCrmScheme[];
+  /** Demat groups, without demat MFs when a CAS already carries them. */
+  dematGroups: DematCrmGroup[];
+}
+
+export function countedStatementRows(
+  cas: CasCrmView | null,
+  demat: DematCrmView | null,
+  registrarMfValue: number,
+): CountedStatementRows {
+  const ours = cas && !(registrarMfValue > 0)
+    ? cas.schemes.filter((s) => s.ownership === MF_OWNERSHIP.heldWithNiyom)
+    : [];
+  const outside = cas ? cas.schemes.filter((s) => s.ownership !== MF_OWNERSHIP.heldWithNiyom) : [];
+  const dematGroups = demat
+    ? demat.groups.filter((g) => !(g.key === 'demat_mf' && cas) && g.value > 0)
+    : [];
+  return { ours, outside, dematGroups };
+}
+
 export function statementTotals(
   cas: CasCrmView | null,
   demat: DematCrmView | null,
@@ -65,35 +94,28 @@ export function statementTotals(
   let invested = 0;
   let heldElsewhere = 0;
 
-  if (cas) {
-    const ours = cas.schemes.filter((s) => s.ownership === MF_OWNERSHIP.heldWithNiyom);
-    const outside = cas.schemes.filter((s) => s.ownership !== MF_OWNERSHIP.heldWithNiyom);
-    const sum = (rows: typeof ours, k: 'value' | 'cost') => rows.reduce((t, s) => t + s[k], 0);
+  const { ours, outside, dematGroups } = countedStatementRows(cas, demat, registrarMfValue);
+  const sum = (rows: CasCrmScheme[], k: 'value' | 'cost') => rows.reduce((t, s) => t + s[k], 0);
 
-    if (!(registrarMfValue > 0) && ours.length) {
-      const v = sum(ours, 'value');
-      value += v;
-      invested += sum(ours, 'cost');
-      if (v > 0) slices.push({ label: 'Mutual Fund (statement)', value: v, color: '#D9548F' });
-    }
-    if (outside.length) {
-      const v = sum(outside, 'value');
-      value += v;
-      invested += sum(outside, 'cost');
-      heldElsewhere += v;
-      if (v > 0) slices.push({ label: 'Mutual Fund (outside Niyom)', value: v, color: '#9A6FD0' });
-    }
+  if (ours.length) {
+    const v = sum(ours, 'value');
+    value += v;
+    invested += sum(ours, 'cost');
+    if (v > 0) slices.push({ label: 'Mutual Fund (statement)', value: v, color: '#D9548F' });
+  }
+  if (outside.length) {
+    const v = sum(outside, 'value');
+    value += v;
+    invested += sum(outside, 'cost');
+    heldElsewhere += v;
+    if (v > 0) slices.push({ label: 'Mutual Fund (outside Niyom)', value: v, color: '#9A6FD0' });
   }
 
-  if (demat) {
-    for (const g of demat.groups) {
-      if (g.key === 'demat_mf' && cas) continue;
-      if (!(g.value > 0)) continue;
-      value += g.value;
-      invested += g.value;
-      heldElsewhere += g.value;
-      slices.push({ label: `${g.label} (demat)`.replace(' (demat) (demat)', ' (demat)'), value: g.value, color: DEMAT_COLORS[g.key] ?? DEMAT_COLORS.other });
-    }
+  for (const g of dematGroups) {
+    value += g.value;
+    invested += g.value;
+    heldElsewhere += g.value;
+    slices.push({ label: `${g.label} (demat)`.replace(' (demat) (demat)', ' (demat)'), value: g.value, color: DEMAT_COLORS[g.key] ?? DEMAT_COLORS.other });
   }
 
   return { value, invested, heldElsewhere, slices };
