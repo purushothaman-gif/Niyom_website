@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   User, Phone, Mail, ShieldCheck, ArrowLeft, ArrowRight, CheckCircle2,
-  AlertCircle, Clock, Sparkles, RotateCcw, Home, CreditCard, ExternalLink, type LucideIcon,
+  AlertCircle, Clock, Sparkles, RotateCcw, Home, CreditCard, type LucideIcon,
 } from 'lucide-react';
 import { clientSupabase as supabase } from '../lib/supabase';
 import { bseProxyBaseUrl } from '../../shared/platform/env';
@@ -151,7 +151,6 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
   // Set once DigiLocker has verified this visitor; redeemed by public-onboard-start.
   const [dlToken, setDlToken] = useState('');
   const [panMasked, setPanMasked] = useState('');
-  const [manualPan, setManualPan] = useState(false);
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
@@ -186,15 +185,14 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
             settled = true;
             clearDlToken();
             if (returning) {
-              setManualPan(true);
-              setError('DigiLocker verification was not completed. You can try again, or enter your PAN below.');
+              // Don't leave them stuck: the PAN field is right here — point to it.
+              setError('DigiLocker didn’t finish — no problem. Just enter your PAN below to continue.');
             }
           }
         }
         if (alive && !settled) {
           clearDlToken();
-          setManualPan(true);
-          setError('We could not confirm your DigiLocker verification. You can try again, or enter your PAN below.');
+          setError('We couldn’t confirm your DigiLocker verification — no problem. Enter your PAN below to continue.');
         }
       }
       const { ok, data } = await callDigilocker<{ enabled?: boolean }>('public-mode');
@@ -273,16 +271,14 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
     const url = data?.authorizationUrl || '';
     if (!ok || !data?.token || !url.startsWith('https://')) {
       setBusy(false);
-      setManualPan(true);
-      return setError(data?.error || 'DigiLocker is not available right now. Please enter your PAN below.');
+      return setError(data?.error || 'DigiLocker isn’t available right now — just enter your PAN below to continue.');
     }
     try {
       sessionStorage.setItem(DL_TOKEN_KEY, data.token);
     } catch {
       // Without the token there is no way to pick the result up on return.
       setBusy(false);
-      setManualPan(true);
-      return setError('Your browser is blocking storage for this site. Please enter your PAN below.');
+      return setError('Your browser is blocking storage for this site — enter your PAN below to continue instead.');
     }
     window.location.assign(url);
   };
@@ -404,8 +400,8 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
           </h1>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             {view === 'pan'
-              ? (dlEnabled && !manualPan
-                ? 'Verify with DigiLocker — your name and PAN come straight from the source. No documents needed to begin.'
+              ? (dlEnabled
+                ? 'Verify instantly with DigiLocker, or just enter your PAN — we fetch your name either way. No documents needed to begin.'
                 : 'Enter your PAN — we’ll fetch your name instantly. No documents needed to begin.')
               : view === 'form'
               ? 'Just your mobile and email to finish creating your account.'
@@ -450,41 +446,46 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
         <div className="rounded-2xl p-6 space-y-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-card)' }}>
           {view === 'pan' && dlEnabled === null ? (
             <p className="text-sm text-center py-6" style={{ color: 'var(--text-muted)' }}>One moment…</p>
-          ) : view === 'pan' && dlEnabled && !manualPan ? (
-            <>
-              <button onClick={handleDigilocker} disabled={busy}
-                className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 press disabled:opacity-50 transition-opacity"
-                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))', color: 'var(--text-on-accent)' }}>
-                {busy ? 'Opening DigiLocker…' : <>Verify with DigiLocker <ExternalLink className="w-4 h-4" /></>}
-              </button>
-              <p className="text-xs text-center leading-relaxed" style={{ color: 'var(--text-faint)' }}>
-                You’ll sign in to DigiLocker and share your PAN &amp; Aadhaar. We read your name and PAN
-                from there — no typing, and nothing is shared without your consent.
-              </p>
-              <button onClick={() => { setManualPan(true); setError(''); }} className="w-full text-xs underline-offset-2 hover:underline" style={{ color: 'var(--text-muted)' }}>
-                Don’t use DigiLocker? Enter your PAN instead
-              </button>
-            </>
           ) : view === 'pan' ? (
             <>
+              {/*
+               * Both paths are on screen at once, so a fresh lead is never forced
+               * into a redirect and never gets stuck: DigiLocker is the recommended
+               * hero, but the PAN field sits right below it. If DigiLocker fails the
+               * error above says "enter your PAN below" — and it already is there.
+               */}
+              {dlEnabled && (
+                <>
+                  <button onClick={handleDigilocker} disabled={busy}
+                    className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 press disabled:opacity-50 transition-opacity"
+                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))', color: 'var(--text-on-accent)' }}>
+                    {busy ? 'Opening DigiLocker…' : <><Sparkles className="w-4 h-4" /> Verify instantly with DigiLocker</>}
+                  </button>
+                  <p className="text-xs text-center leading-relaxed" style={{ color: 'var(--text-faint)' }}>
+                    Recommended — your name &amp; PAN come straight from the source, nothing typed, nothing shared without your consent.
+                  </p>
+                  <div className="flex items-center gap-3 py-0.5">
+                    <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+                    <span className="text-xs font-medium" style={{ color: 'var(--text-faint)' }}>or enter your PAN</span>
+                    <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+                  </div>
+                </>
+              )}
               <Field icon={CreditCard} label="PAN Number">
-                <Input value={pan} inputMode="text" autoFocus maxLength={10}
+                <Input value={pan} inputMode="text" autoFocus={!dlEnabled} maxLength={10}
                   onChange={e => setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
                   placeholder="ABCDE1234F" style={{ letterSpacing: '0.15em' }} />
               </Field>
               <button onClick={handleVerifyPan} disabled={busy || !validPan}
-                className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 press disabled:opacity-50 transition-opacity"
-                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))', color: 'var(--text-on-accent)' }}>
-                {busy ? 'Verifying…' : <>Verify PAN <ArrowRight className="w-4 h-4" /></>}
+                className="w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 press disabled:opacity-50 transition-opacity"
+                style={dlEnabled
+                  ? { background: 'var(--bg-raised)', color: 'var(--text-primary)', border: '1px solid var(--border)' }
+                  : { background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))', color: 'var(--text-on-accent)' }}>
+                {busy ? 'Verifying…' : <>Continue with PAN <ArrowRight className="w-4 h-4" /></>}
               </button>
               <p className="text-xs text-center" style={{ color: 'var(--text-faint)' }}>
-                We verify your PAN instantly and fetch your name — no typing needed.
+                We verify your PAN instantly and fetch your name — no documents needed to begin.
               </p>
-              {dlEnabled && (
-                <button onClick={() => { setManualPan(false); setError(''); }} className="w-full flex items-center justify-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  <ArrowLeft className="w-3.5 h-3.5" /> Verify with DigiLocker instead
-                </button>
-              )}
             </>
           ) : view === 'form' ? (
             <>
