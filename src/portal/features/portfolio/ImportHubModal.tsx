@@ -94,12 +94,12 @@ export function ImportHubModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4"
+      className="m-sheet fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="import-hub-title"
     >
-      <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-token-xl border border-border bg-modal shadow-token-lg">
+      <div className="m-sheet-panel max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-token-xl border border-border bg-modal shadow-token-lg">
         <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-modal px-5 py-4">
           {screen === 'choose' ? (
             <PackagePlus className="h-4 w-4 shrink-0 text-accent" />

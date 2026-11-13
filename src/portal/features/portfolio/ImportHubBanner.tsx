@@ -16,29 +16,31 @@ interface Props {
 }
 
 export function ImportHubBanner({ onOpen, compact = false }: Props) {
-  if (compact) {
-    return (
+  // On a phone the full banner pushed the client's own money below the fold,
+  // so there it is always the one-row version, worded for "not imported yet".
+  const row = (sub: string, extra = '') => (
       <button
         type="button"
         onClick={onOpen}
-        className="press group flex w-full items-center gap-3 rounded-token-lg border border-accent/30 bg-accent/5 px-4 py-3 text-left transition-colors hover:border-accent/60"
+        className={`press group flex w-full items-center gap-3 rounded-token-lg border border-accent/30 bg-accent/5 px-4 py-3 text-left transition-colors hover:border-accent/60 ${extra}`}
       >
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-token-md bg-accent/10">
           <PackagePlus className="h-4 w-4 text-accent" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-text-primary">Import my portfolio</span>
-          <span className="block text-xs text-text-muted">
-            Add or refresh mutual funds, shares, bonds and NPS held elsewhere.
-          </span>
+          <span className="block text-xs text-text-muted">{sub}</span>
         </span>
         <ArrowRight className="h-4 w-4 shrink-0 text-accent transition-transform group-hover:translate-x-0.5" />
       </button>
-    );
-  }
+  );
+
+  if (compact) return row('Add or refresh mutual funds, shares, bonds and NPS held elsewhere.');
 
   return (
-    <section className="relative overflow-hidden rounded-token-xl border border-accent/30 bg-card p-5 shadow-token-card sm:p-6">
+    <>
+    {row('Bring in funds, shares, bonds and NPS you hold elsewhere.', 'sm:hidden')}
+    <section className="relative hidden overflow-hidden sm:block rounded-token-xl border border-accent/30 bg-card p-5 shadow-token-card sm:p-6">
       <div
         aria-hidden
         className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full opacity-[0.09]"
@@ -70,5 +72,6 @@ export function ImportHubBanner({ onOpen, compact = false }: Props) {
         </button>
       </div>
     </section>
+    </>
   );
 }

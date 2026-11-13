@@ -42,9 +42,9 @@ export function BondFilterModal({
   const matchCount = useMemo(() => bonds.filter((b) => matchesFilters(b, draft)).length, [bonds, draft]);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
+    <div className="m-sheet fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
       <div
-        className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-token-xl border border-border bg-bg-elevated shadow-token-lg"
+        className="m-sheet-panel flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-token-xl border border-border bg-bg-elevated shadow-token-lg"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

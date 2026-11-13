@@ -334,8 +334,8 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
         {rows.length === 0 ? (
           <EmptyState icon={TrendingUp} title="Nothing sold in this year" compact />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-left text-xs">
+          <div className="m-table-wrap overflow-x-auto">
+            <table className="m-table w-full min-w-[860px] text-left text-xs">
               <thead>
                 <tr className="border-b border-border text-[11px] uppercase tracking-wider text-text-secondary">
                   <th className="pb-2 pr-3 font-semibold">Scheme</th>
@@ -362,19 +362,17 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
                     key={`${d.schemeId}-${d.buyDate}-${d.sellDate}-${i}`}
                     className={isFirstOfScheme && i > 0 ? 'border-t border-border' : 'border-b border-border/50'}
                   >
-                    <td className="py-2.5 pr-3">
-                      {isFirstOfScheme && (
-                        <span className="font-medium text-text-primary">
-                          {displaySchemeName(d.schemeName)}
-                        </span>
-                      )}
+                    <td data-primary className="py-2.5 pr-3">
+                      <span className={`font-medium text-text-primary ${isFirstOfScheme ? '' : 'sm:hidden'}`}>
+                        {displaySchemeName(d.schemeName)}
+                      </span>
                     </td>
-                    <td className="py-2.5 pr-3 text-text-secondary">{fmtDate(d.buyDate)}</td>
-                    <td className="py-2.5 pr-3 text-text-secondary">{fmtDate(d.sellDate)}</td>
-                    <td className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">
+                    <td data-label="Bought" className="py-2.5 pr-3 text-text-secondary">{fmtDate(d.buyDate)}</td>
+                    <td data-label="Sold" className="py-2.5 pr-3 text-text-secondary">{fmtDate(d.sellDate)}</td>
+                    <td data-label="Units" className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">
                       {d.units.toFixed(3)}
                     </td>
-                    <td className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">
+                    <td data-label="Cost" className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">
                       {fmt(d.cost)}
                       {d.grandfathered && (
                         /*
@@ -390,17 +388,18 @@ export function CapitalGainsPage({ clientId, client, onImport }: Props) {
                         </span>
                       )}
                     </td>
-                    <td className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">
+                    <td data-label="Proceeds" className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">
                       {fmt(d.proceeds)}
                     </td>
                     <td
+                      data-label="Gain"
                       className="py-2.5 pr-3 text-right font-semibold tabular-nums"
                       style={{ color: d.gain >= 0 ? 'var(--success)' : 'var(--danger)' }}
                     >
                       {d.gain >= 0 ? '+' : ''}
                       {fmt(d.gain)}
                     </td>
-                    <td className="py-2.5 text-text-secondary">
+                    <td data-label="Treatment" className="py-2.5 text-text-secondary">
                       <span className="whitespace-nowrap">{treatmentLabel(d.treatment)}</span>
                     </td>
                   </tr>
@@ -500,8 +499,8 @@ function ElssLockInCard({ lockIn, client }: { lockIn: ElssLockIn; client: NWClie
         />
       </div>
 
-      <div className="mt-4 overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-xs">
+      <div className="m-table-wrap mt-4 overflow-x-auto">
+        <table className="m-table w-full min-w-[640px] text-left text-xs">
           <thead>
             <tr className="border-b border-border text-[11px] uppercase tracking-wider text-text-secondary">
               <th className="pb-2 pr-3 font-semibold">Scheme</th>
@@ -521,21 +520,21 @@ function ElssLockInCard({ lockIn, client }: { lockIn: ElssLockIn; client: NWClie
                   key={`${l.schemeName}-${l.buyDate}-${i}`}
                   className={isFirstOfScheme && i > 0 ? 'border-t border-border' : 'border-b border-border/50'}
                 >
-                  <td className="py-2.5 pr-3">
-                    {isFirstOfScheme && (
-                      <span className="font-medium text-text-primary">{displaySchemeName(l.schemeName)}</span>
-                    )}
+                  <td data-primary className="py-2.5 pr-3">
+                    <span className={`font-medium text-text-primary ${isFirstOfScheme ? '' : 'sm:hidden'}`}>
+                      {displaySchemeName(l.schemeName)}
+                    </span>
                   </td>
-                  <td className="py-2.5 pr-3 text-text-secondary">{fmtDate(l.buyDate)}</td>
-                  <td className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">{l.units.toFixed(3)}</td>
-                  <td className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">{fmt(l.invested)}</td>
+                  <td data-label="Bought" className="py-2.5 pr-3 text-text-secondary">{fmtDate(l.buyDate)}</td>
+                  <td data-label="Units" className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">{l.units.toFixed(3)}</td>
+                  <td data-label="Invested" className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">{fmt(l.invested)}</td>
                   {showValue && (
-                    <td className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">
+                    <td data-label="Value" className="py-2.5 pr-3 text-right tabular-nums text-text-secondary">
                       {l.currentValue === null ? '—' : fmt(l.currentValue)}
                     </td>
                   )}
-                  <td className="py-2.5 pr-3 text-text-secondary">{fmtDate(l.unlockDate)}</td>
-                  <td className="py-2.5">
+                  <td data-label="Unlocks" className="py-2.5 pr-3 text-text-secondary">{fmtDate(l.unlockDate)}</td>
+                  <td data-label="Status" className="py-2.5">
                     {l.locked ? (
                       <StatusPill tone="warning">
                         <Lock className="h-3 w-3" />

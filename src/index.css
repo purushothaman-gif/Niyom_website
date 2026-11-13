@@ -831,3 +831,132 @@ input[type='range'] {
   .nw-ticker-dup { display: none !important; }
   .nw-ticker-viewport { overflow-x: auto; }
 }
+
+/* -----------------------------------------------------------------------------
+ * Mobile kit (phones, < 640px). Shared by the public site, client portal,
+ * partner portal and CRM. Each rule is opt-in by class, so a screen changes
+ * only when someone adds the class, and nothing changes from 640px up.
+ * React helpers live in src/components/mobile/.
+ *
+ *  .m-sheet + .m-sheet-panel  A centred modal becomes a bottom sheet: full
+ *                             width, pinned to the bottom, rounded top with a
+ *                             grab handle. Put .m-sheet on the fixed backdrop
+ *                             and .m-sheet-panel on the dialog box. Leave short
+ *                             confirm/alert dialogs centred.
+ *  .m-table (+ .m-table-wrap) A data table becomes a stack of cards. Each <td>
+ *                             shows its header from data-label="…"; the cell
+ *                             marked data-primary becomes the card title;
+ *                             data-mobile-hide drops a cell on phones. Put
+ *                             .m-table-wrap on the scroll/border wrapper so it
+ *                             stops drawing a card around the cards.
+ *  .pb-safe                   Bottom padding that clears the iPhone home bar.
+ * -------------------------------------------------------------------------- */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (max-width: 639px) {
+  .m-sheet {
+    align-items: flex-end !important;
+    justify-content: stretch !important;
+    padding: 0 !important;
+  }
+  .m-sheet-panel {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 92dvh !important;
+    border-bottom-width: 0 !important;
+    border-left-width: 0 !important;
+    border-right-width: 0 !important;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .m-sheet-panel::before {
+    content: '';
+    display: block;
+    flex-shrink: 0;
+    width: 36px;
+    height: 4px;
+    margin: 8px auto 0;
+    border-radius: 9999px;
+    background: var(--border-strong);
+  }
+
+  .m-table-wrap {
+    overflow: visible !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .m-table {
+    min-width: 0 !important;
+    table-layout: auto !important;
+  }
+  .m-table thead {
+    display: none;
+  }
+  .m-table,
+  .m-table tbody,
+  .m-table tr,
+  .m-table td {
+    display: block;
+    width: 100%;
+  }
+  .m-table tr {
+    margin-bottom: 0.625rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-lg);
+    background: var(--bg-elevated);
+  }
+  .m-table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.3rem 0 !important;
+    border: 0 !important;
+    text-align: right !important;
+    white-space: normal !important;
+  }
+  .m-table td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 500;
+    text-align: left;
+    color: var(--text-faint);
+  }
+  .m-table td:not([data-label])::before {
+    content: none;
+  }
+  .m-table td[data-primary] {
+    display: block;
+    margin-bottom: 0.25rem;
+    padding-bottom: 0.5rem !important;
+    border-bottom: 1px dashed var(--border-subtle) !important;
+    text-align: left !important;
+  }
+  .m-table td[data-primary]::before {
+    content: none;
+  }
+  .m-table td[data-mobile-hide] {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) and (prefers-reduced-motion: no-preference) {
+  .m-sheet-panel {
+    animation: m-sheet-up 0.24s var(--ease-out, ease-out);
+  }
+}
+@keyframes m-sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}

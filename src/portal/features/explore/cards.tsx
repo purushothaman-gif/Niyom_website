@@ -82,7 +82,7 @@ export function ScrollRow({ children, label }: { children: ReactNode; label: str
       type="button"
       onClick={() => go(dir)}
       aria-label={dir < 0 ? `Scroll ${label} left` : `Scroll ${label} right`}
-      className={`absolute top-1/2 z-10 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full border border-border bg-bg-elevated text-text-primary shadow-token-lg transition-colors hover:border-accent hover:text-accent ${
+      className={`absolute top-1/2 z-10 hidden h-9 w-9 sm:grid -translate-y-1/2 place-items-center rounded-full border border-border bg-bg-elevated text-text-primary shadow-token-lg transition-colors hover:border-accent hover:text-accent ${
         dir < 0 ? 'left-0 sm:-left-4' : 'right-0 sm:-right-4'
       }`}
     >
@@ -96,10 +96,10 @@ export function ScrollRow({ children, label }: { children: ReactNode; label: str
         onScroll={update}
         role="region"
         aria-label={label}
-        className="-mx-1 -my-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 py-1 sm:gap-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="-mx-4 -my-1 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 py-1 sm:-mx-1 sm:scroll-px-1 sm:gap-4 sm:px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {Children.map(children, (c) => (
-          <div className="w-[calc(50%-0.375rem)] shrink-0 snap-start sm:w-[calc(50%-0.5rem)] lg:w-[calc(25%-0.75rem)]">{c}</div>
+          <div className="w-[64%] shrink-0 snap-start sm:w-[calc(50%-0.5rem)] lg:w-[calc(25%-0.75rem)]">{c}</div>
         ))}
       </div>
       {!edge.start && arrow(-1)}

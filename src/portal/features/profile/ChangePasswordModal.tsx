@@ -65,8 +65,8 @@ export function ChangePasswordModal({ clientId, onClose }: ChangePasswordModalPr
   ];
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4">
-      <div className="w-full max-w-md overflow-hidden rounded-token-xl border border-border bg-modal shadow-token-lg">
+    <div className="m-sheet fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4">
+      <div className="m-sheet-panel w-full max-w-md overflow-hidden rounded-token-xl border border-border bg-modal shadow-token-lg">
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <div className="flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-accent" />

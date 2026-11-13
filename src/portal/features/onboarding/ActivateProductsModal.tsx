@@ -66,8 +66,8 @@ export function ActivateProductsModal({ client, clientId, onClose, onDone }: Pro
   const labelFor = (v: string) => ACTIVATABLE_PRODUCTS.find((p) => p.value === v)?.label ?? v;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4">
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-token-xl border border-border bg-modal shadow-token-lg">
+    <div className="m-sheet fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4">
+      <div className="m-sheet-panel max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-token-xl border border-border bg-modal shadow-token-lg">
         <div className="sticky top-0 flex items-center justify-between border-b border-border bg-modal px-6 py-4">
           <div className="flex items-center gap-2">
             <Landmark className="h-4 w-4 text-accent" />

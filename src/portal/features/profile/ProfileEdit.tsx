@@ -26,9 +26,9 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
 
 function Shell({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4" onClick={onClose}>
+    <div className="m-sheet fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-4" onClick={onClose}>
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-token-xl border border-border bg-modal shadow-token-lg"
+        className="m-sheet-panel max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-token-xl border border-border bg-modal shadow-token-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border-subtle px-5 py-4">

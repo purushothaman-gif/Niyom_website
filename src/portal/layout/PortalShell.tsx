@@ -20,6 +20,7 @@ import { ThemeToggle } from '../../theme/ThemeToggle';
 import { getDb } from '../../../shared/platform/db';
 import { MarketTicker } from '../../components/marketWatch/MarketTicker';
 import { ClientAvatar } from '../components/ClientAvatar';
+import { MobileTabBar } from '../../components/mobile/MobileTabBar';
 import {
   ACCOUNT_ITEMS,
   ACCOUNT_MENU_GROUPS,
@@ -391,37 +392,24 @@ export function PortalShell({
       </main>
 
       {/* ---- Mobile tab bar ---- */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border-subtle bg-header/95 backdrop-blur lg:hidden">
-        <div className="mx-auto flex max-w-lg items-stretch">
-          {primaryTabs.map((p) => {
-            const active = p.view === view;
-            const Icon = p.icon;
-            return (
-              <button
-                key={p.view}
-                type="button"
-                onClick={() => go(p.view)}
-                className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-semibold transition-colors ${
-                  active ? 'text-accent' : 'text-text-faint'
-                }`}
-              >
-                <Icon className="h-5 w-5" />
-                {p.label}
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => setMoreOpen(true)}
-            className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-semibold transition-colors ${
-              !primaryViews.includes(view) ? 'text-accent' : 'text-text-faint'
-            }`}
-          >
-            <MoreHorizontal className="h-5 w-5" />
-            More
-          </button>
-        </div>
-      </nav>
+      <MobileTabBar
+        tabs={[
+          ...primaryTabs.map((p) => ({
+            key: p.view,
+            label: p.label,
+            icon: p.icon,
+            active: p.view === view,
+            onSelect: () => go(p.view),
+          })),
+          {
+            key: 'more',
+            label: 'More',
+            icon: MoreHorizontal,
+            active: moreOpen || !primaryViews.includes(view),
+            onSelect: () => setMoreOpen(true),
+          },
+        ]}
+      />
 
       {/* ---- "More" sheet ---- */}
       {moreOpen && (
@@ -432,7 +420,8 @@ export function PortalShell({
             onClick={() => setMoreOpen(false)}
             className="absolute inset-0 bg-bg-overlay"
           />
-          <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-token-xl border-t border-border bg-bg-elevated p-5 pb-8">
+          <div className="absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-token-xl border-t border-border bg-bg-elevated p-5 pb-[calc(2rem+env(safe-area-inset-bottom,0px))]">
+            <div aria-hidden className="mx-auto -mt-2 mb-3 h-1 w-9 rounded-full bg-border-strong" />
             <div className="mb-4 flex items-center justify-between">
               {client ? (
                 <div className="flex min-w-0 items-center gap-3">

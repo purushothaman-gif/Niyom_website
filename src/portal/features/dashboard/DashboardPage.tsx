@@ -93,6 +93,14 @@ export function DashboardPage({
   const xirrCoverage = data.xirrCoveragePct ?? null;
   const xirrNote = data.xirrNote ?? null;
 
+  // On a phone the client's own money comes first — before promos and the
+  // Explore rails — once there is any. A client with nothing yet still sees the
+  // setup steps first, and the empty card stays further down.
+  const hasMoney = rows.length > 0;
+  const investmentsCard = (
+    <YourInvestmentsCard summary={hasMoney ? summarise(rows) : null} xirr={xirr} xirrCoveragePct={xirrCoverage} xirrNote={xirrNote} onOpen={() => onNavigate('portfolio')} />
+  );
+
   const exploreBlockNode = (
     <>
       {explore && (
@@ -131,6 +139,8 @@ export function DashboardPage({
         )}
       </div>
 
+      {hasMoney && <div className="lg:hidden">{investmentsCard}</div>}
+
       {onboardingIncomplete(client) && (
         <OnboardingChecklistCard client={client} onNavigate={onNavigate} />
       )}
@@ -153,7 +163,7 @@ export function DashboardPage({
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0">{exploreBlockNode}</div>
         <aside className="space-y-8">
-          <YourInvestmentsCard summary={rows.length ? summarise(rows) : null} xirr={xirr} xirrCoveragePct={xirrCoverage} xirrNote={xirrNote} onOpen={() => onNavigate('portfolio')} />
+          <div className={hasMoney ? 'hidden lg:block' : ''}>{investmentsCard}</div>
           <TopHoldingsCard rows={rows} onOpen={() => onNavigate('portfolio')} />
           {mfSsoOn ? (
             <SipsCard sips={rta.data?.sips ?? []} onOpen={() => onNavigate('mutual-funds')} />
