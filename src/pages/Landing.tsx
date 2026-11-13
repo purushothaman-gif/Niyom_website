@@ -26,6 +26,17 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
   const employeeTriggerRef = useRef<HTMLButtonElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const [mobileSheetMaxHeight, setMobileSheetMaxHeight] = useState<number | undefined>(undefined);
+  // The phone's sticky Call / Start Investing bar repeats the hero buttons, so
+  // it only slides in once those have scrolled out of view.
+  const heroCtaRef = useRef<HTMLDivElement>(null);
+  const [showActionBar, setShowActionBar] = useState(false);
+  useEffect(() => {
+    const el = heroCtaRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') { setShowActionBar(true); return; }
+    const io = new IntersectionObserver(([entry]) => setShowActionBar(!entry.isIntersecting), { threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   useEffect(() => {
     setIsLoaded(true);
@@ -398,46 +409,51 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
       {/* Inherently dark: the animated network backdrop renders in navy + gold,
           so it pins the dark token set regardless of the active theme —
           otherwise the light theme's dark-on-light gold would render muted. */}
-      <section id="home" data-theme="dark" className="relative text-white overflow-hidden min-h-[88vh] flex items-center px-5 sm:px-6 pt-12 md:pt-28 pb-16">
+      <section id="home" data-theme="dark" className="relative text-white overflow-hidden md:min-h-[88vh] flex items-center px-5 sm:px-6 pt-6 sm:pt-12 md:pt-28 pb-10 sm:pb-16">
         {/* Original animated fintech backdrop — replaces the old stock photo. */}
         <HeroBackground />
-        <div className="relative w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-8 items-center">
+        {/* Below lg the message column dissolves (display: contents) so its
+            parts can be reordered around the film: headline → film → buttons →
+            description → trust points. The film is then on the opening screen
+            of a phone instead of below the fold. lg+ keeps the two columns. */}
+        <div className="relative w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-7 lg:gap-8 items-center text-center lg:text-left">
 
           {/* Left — message */}
-          <div className="text-center lg:text-left">
+          <div className="contents lg:block">
             {/* Headline — gold emphasis on "Build Wealth" and "Confidence" */}
-            <h1 className={`text-[2.5rem] leading-[1.08] sm:text-5xl md:text-6xl xl:text-7xl font-bold md:leading-[1.04] tracking-tight mb-5 sm:mb-6 ${isLoaded ? 'animate-fadeInUp animate-delay-100' : 'opacity-0'}`} style={{ fontFamily: 'var(--font-display)' }}>
+            <h1 className={`order-1 lg:order-none text-[2.15rem] leading-[1.08] sm:text-5xl md:text-6xl xl:text-7xl font-bold md:leading-[1.04] tracking-tight lg:mb-6 ${isLoaded ? 'animate-fadeInUp animate-delay-100' : 'opacity-0'}`} style={{ fontFamily: 'var(--font-display)' }}>
               <span className="text-accent-soft">Build Wealth</span><br />
               <span className="text-white">with </span><span className="text-accent-soft">Confidence</span>
             </h1>
 
             {/* Sub-heading */}
-            <p className={`text-base sm:text-lg md:text-xl text-gray-300 leading-relaxed mb-7 sm:mb-9 max-w-xl mx-auto lg:mx-0 ${isLoaded ? 'animate-fadeInUp animate-delay-200' : 'opacity-0'}`}>
+            <p className={`order-4 lg:order-none text-[15px] sm:text-lg md:text-xl text-gray-300 leading-relaxed lg:mb-9 max-w-xl mx-auto lg:mx-0 ${isLoaded ? 'animate-fadeInUp animate-delay-200' : 'opacity-0'}`}>
               Premium investment solutions in Mutual Funds, Bonds, Fixed Deposits, Insurance &amp; Unlisted Shares—powered by research, transparency and personalized guidance.
             </p>
 
             {/* CTAs */}
-            <div className={`flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-4 ${isLoaded ? 'animate-fadeInUp animate-delay-300' : 'opacity-0'}`}>
+            <div ref={heroCtaRef} className={`order-3 lg:order-none flex flex-row items-stretch lg:items-start justify-center lg:justify-start gap-3 sm:gap-4 ${isLoaded ? 'animate-fadeInUp animate-delay-300' : 'opacity-0'}`}>
               <button
                 onClick={() => window.open('/onboarding', '_blank')}
-                className="cta-glow press bg-accent-soft hover:bg-accent-soft-deep text-black font-bold py-4 px-9 rounded-xl flex items-center gap-2.5 text-lg w-full sm:w-auto justify-center"
+                className="cta-glow press bg-accent-soft hover:bg-accent-soft-deep text-black font-bold py-3 px-4 sm:px-7 rounded-xl flex items-center gap-2 text-[15px] sm:text-base flex-1 sm:flex-none justify-center whitespace-nowrap"
               >
-                Start Investing <ArrowRight size={20} />
+                Start Investing <ArrowRight size={18} />
               </button>
               <button
                 onClick={() => scrollToSection('services')}
-                className="group press font-semibold py-4 px-7 rounded-xl text-lg transition-colors w-full sm:w-auto"
+                className="group press font-semibold py-3 px-4 sm:px-6 rounded-xl text-[15px] sm:text-base transition-colors flex-1 sm:flex-none whitespace-nowrap"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.16)' }}
               >
                 <span className="relative inline-block">
-                  Explore Investment Solutions
+                  <span className="sm:hidden">Explore solutions</span>
+                  <span className="hidden sm:inline">Explore Investment Solutions</span>
                   <span className="absolute left-0 -bottom-0.5 h-px w-full origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-300" style={{ background: 'var(--accent-soft)' }} />
                 </span>
               </button>
             </div>
 
             {/* Trust strip — a tidy 2-col grid on phones, inline wrap from sm up. */}
-            <div className={`mt-9 sm:mt-11 grid grid-cols-2 gap-x-4 gap-y-3 sm:flex sm:flex-wrap sm:justify-center lg:justify-start sm:gap-x-6 sm:gap-y-3 ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`}>
+            <div className={`order-5 lg:order-none lg:mt-11 grid grid-cols-2 gap-x-4 gap-y-3 sm:flex sm:flex-wrap sm:justify-center lg:justify-start sm:gap-x-6 sm:gap-y-3 ${isLoaded ? 'animate-fadeInUp animate-delay-500' : 'opacity-0'}`}>
               {[
                 { icon: Search, label: 'Research Driven' },
                 { icon: Eye, label: 'Transparent Process' },
@@ -456,7 +472,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
           {/* Right — premium wealth visual. Now shown on mobile too (the
               floating chips self-hide below md to avoid horizontal overflow),
               so phones get the branded panel instead of an empty navy void. */}
-          <div className="block px-2 sm:px-0 mt-2 md:mt-0">
+          <div className="order-2 lg:order-none block">
             <BrandFilm />
           </div>
         </div>
@@ -671,7 +687,8 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
           how far the visitor has scrolled. Hidden from md up (desktop has the
           nav CTAs). */}
       <div
-        className="md:hidden fixed inset-x-0 bottom-0 z-40 px-4 pt-3 pb-[max(0.85rem,env(safe-area-inset-bottom))]"
+        aria-hidden={!showActionBar}
+        className={`md:hidden fixed inset-x-0 bottom-0 z-40 px-4 pt-3 pb-[max(0.85rem,env(safe-area-inset-bottom))] transition-transform duration-300 ${showActionBar ? 'translate-y-0' : 'translate-y-full pointer-events-none'}`}
         style={{
           background: 'rgba(7, 21, 36, 0.9)',
           backdropFilter: 'saturate(160%) blur(14px)',
@@ -682,6 +699,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
         <div className="flex items-center gap-3">
           <a
             href="tel:+918939433113"
+            tabIndex={showActionBar ? undefined : -1}
             aria-label="Call Niyom Wealth"
             className="press flex items-center justify-center gap-2 h-12 px-5 rounded-xl font-semibold text-white flex-shrink-0"
             style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)' }}
@@ -690,6 +708,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             Call
           </a>
           <button
+            tabIndex={showActionBar ? undefined : -1}
             onClick={() => window.open('/onboarding', '_blank')}
             className="press flex-1 flex items-center justify-center gap-2 h-12 rounded-xl bg-accent hover:bg-accent-strong text-on-accent font-bold"
           >
