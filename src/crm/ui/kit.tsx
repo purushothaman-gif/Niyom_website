@@ -122,17 +122,17 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
       <div className="absolute inset-0" style={{ background: 'var(--bg-overlay)' }} onClick={onClose} />
       <div className={`relative w-full ${width} h-full flex flex-col shadow-2xl`}
         style={{ background: 'var(--bg-surface)', borderLeft: '1px solid var(--border)' }}>
-        <div className="flex items-start justify-between px-6 py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-start justify-between px-4 py-4 sm:px-6 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="min-w-0">
             <h2 className="text-base font-bold truncate" style={{ color: 'var(--text-primary)' }}>{title}</h2>
             {subtitle && <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-faint)' }}>{subtitle}</p>}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg flex-shrink-0" style={{ color: 'var(--text-faint)' }}>
+          <button onClick={onClose} aria-label="Close" className="-m-1 p-2.5 rounded-lg flex-shrink-0" style={{ color: 'var(--text-faint)' }}>
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
-        {footer && <div className="px-6 py-4 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>{footer}</div>}
+        <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">{children}</div>
+        {footer && <div className="pb-safe px-4 py-4 sm:px-6 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>{footer}</div>}
       </div>
     </div>,
     document.body,
@@ -150,15 +150,17 @@ export function Modal({ open, onClose, title, children, width = 'max-w-md' }:
   }, [open, onClose]);
   if (!open) return null;
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <div className="m-sheet fixed inset-0 z-[70] flex items-center justify-center p-4">
       <div className="absolute inset-0" style={{ background: 'var(--bg-overlay)' }} onClick={onClose} />
-      <div className={`relative w-full ${width} rounded-2xl shadow-2xl overflow-hidden`}
+      {/* Bottom sheet on a phone (.m-sheet); the body scrolls so a long form
+          never runs off-screen with its buttons out of reach. */}
+      <div className={`m-sheet-panel relative flex max-h-[92vh] w-full ${width} flex-col rounded-2xl shadow-2xl overflow-hidden`}
         style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-        <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex shrink-0 items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{title}</h3>
-          <button onClick={onClose} className="p-1 rounded-lg" style={{ color: 'var(--text-faint)' }}><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Close" className="-m-1.5 p-2.5 rounded-lg" style={{ color: 'var(--text-faint)' }}><X className="w-4 h-4" /></button>
         </div>
-        <div className="px-5 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
       </div>
     </div>,
     document.body,

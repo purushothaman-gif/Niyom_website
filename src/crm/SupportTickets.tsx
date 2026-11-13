@@ -183,8 +183,8 @@ export default function SupportTickets({ employee }: Props) {
             <p className="text-sm">No tickets{filter !== 'all' ? ` with status “${filter.replace('_', ' ')}”` : ''} yet.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full nw-table">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full nw-table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   {['Ref', 'Client', 'Category', 'Subject', 'Status', 'Raised', ''].map((h) => (
@@ -200,15 +200,15 @@ export default function SupportTickets({ employee }: Props) {
                     className="cursor-pointer transition-colors"
                     style={{ borderBottom: '1px solid var(--border-subtle)' }}
                   >
-                    <td className="px-5 py-3.5 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>{t.ref}</td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Ref" className="px-5 py-3.5 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>{t.ref}</td>
+                    <td data-primary className="px-5 py-3.5">
                       <div className="text-sm font-semibold text-text-primary">{t.client?.full_name ?? '—'}</div>
                       <div className="text-[11px]" style={{ color: 'var(--text-faint)' }}>{t.client?.client_code ?? ''}</div>
                     </td>
-                    <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--text-secondary)' }}>{CATEGORY_LABEL[t.category] ?? t.category}</td>
-                    <td className="px-5 py-3.5 text-sm text-text-primary max-w-xs truncate">{t.subject}</td>
-                    <td className="px-5 py-3.5"><StatusPill status={t.status} /></td>
-                    <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{timeAgo(t.created_at)}</td>
+                    <td data-label="Category" className="px-5 py-3.5 text-sm" style={{ color: 'var(--text-secondary)' }}>{CATEGORY_LABEL[t.category] ?? t.category}</td>
+                    <td data-label="Subject" className="px-5 py-3.5 text-sm text-text-primary max-w-xs truncate">{t.subject}</td>
+                    <td data-label="Status" className="px-5 py-3.5"><StatusPill status={t.status} /></td>
+                    <td data-label="Raised" className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{timeAgo(t.created_at)}</td>
                     <td className="px-5 py-3.5 text-right">
                       <button
                         onClick={(e) => { e.stopPropagation(); setActive(t); }}

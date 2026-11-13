@@ -931,8 +931,8 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
   );
 
   const sendPromptEl = sendPrompt && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
-      <div className="w-full max-w-md rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    <div className="m-sheet fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+      <div className="m-sheet-panel w-full max-w-md rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(var(--accent-rgb),0.12)' }}>
             <Send className="w-5 h-5" style={{ color: 'var(--accent)' }} />
@@ -979,8 +979,8 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
   );
 
   const cancelModalEl = cancelDeal && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
-      <div className="w-full max-w-md rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    <div className="m-sheet fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+      <div className="m-sheet-panel w-full max-w-md rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(239,68,68,0.1)' }}>
             <Ban className="w-5 h-5 text-c-red" />
@@ -1460,8 +1460,8 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
             <p className="text-xs mt-1" style={{ color: 'var(--border-strong)' }}>Click "Create Deal Confirmation" to get started</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   {['Reference', 'Client', 'Security', 'Type', 'Date', 'Settlement', 'Deal Status', 'Payment Status', ''].map(h => (
@@ -1472,14 +1472,14 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
               <tbody>
                 {filteredDeals.map(d => (
                   <tr key={d.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Reference" className="px-5 py-3.5">
                       <span className="text-xs font-mono font-bold" style={{ color: 'var(--accent)' }}>{d.confirmation_number}</span>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td data-primary className="px-5 py-3.5">
                       <p className="text-sm font-medium text-text-primary">{d.snap_client_name}</p>
                       <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{(d.client as any)?.client_code}</p>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Security" className="px-5 py-3.5">
                       <p className="text-sm text-text-primary">{d.security_name}</p>
                       {d.items && d.items.length > 1 ? (
                         <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>+{d.items.length - 1} more product{d.items.length - 1 !== 1 ? 's' : ''}</p>
@@ -1487,17 +1487,17 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
                         <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{d.isin}</p>
                       )}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Type" className="px-5 py-3.5">
                       <span className={`text-xs font-bold px-2 py-1 rounded-lg ${d.transaction_type === 'Buy' ? 'text-c-emerald bg-emerald-900/20' : 'text-c-red bg-red-900/20'}`}>
                         {d.transaction_type}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{fmtDate(d.deal_date)}</td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Date" className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{fmtDate(d.deal_date)}</td>
+                    <td data-label="Settlement" className="px-5 py-3.5">
                       <p className="text-sm font-bold text-text-primary">{fmt(d.settlement_amount || 0)}</p>
                       <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Qty: {d.quantity?.toLocaleString('en-IN')}</p>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Deal" className="px-5 py-3.5">
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${d.status === 'confirmed' ? 'text-c-emerald bg-emerald-900/20' : 'text-c-amber bg-amber-900/20'}`}>
                         {d.status === 'confirmed' ? 'Confirmed' : 'Draft'}
                       </span>
@@ -1528,7 +1528,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
                     </td>
                     {/* Payment Status — derived from nw_deal_payment_summary.
                         Clicking navigates to Manage Payments to reduce clicks. */}
-                    <td className="px-5 py-3.5">
+                    <td data-label="Payment" className="px-5 py-3.5">
                       {!paySummariesLoaded ? (
                         <span
                           className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md uppercase tracking-wider"

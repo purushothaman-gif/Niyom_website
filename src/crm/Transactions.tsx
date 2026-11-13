@@ -146,8 +146,8 @@ function patternToNextISODate(pattern: string, freq: string): string | null {
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
-      <div className="w-full max-w-2xl rounded-2xl overflow-hidden max-h-[92vh] flex flex-col" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    <div className="m-sheet fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+      <div className="m-sheet-panel w-full max-w-2xl rounded-2xl overflow-hidden max-h-[92vh] flex flex-col" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         <div className="px-6 py-4 flex items-center justify-between flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-bold text-text-primary">{title}</h3>
           <button onClick={onClose} style={{ color: 'var(--text-faint)' }}><X className="w-5 h-5" /></button>
@@ -1189,8 +1189,8 @@ export default function Transactions({ employee, onNavigate }: Props) {
       </div>
 
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-        <div className="overflow-x-auto">
-          <table className="w-full nw-table">
+        <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+          <table className="m-table w-full nw-table">
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 {['Date', 'Client', 'Type', 'Product', 'Details', 'Amount', 'Actions'].map(h => (
@@ -1210,17 +1210,17 @@ export default function Transactions({ employee, onNavigate }: Props) {
                 const payout = isB && t.face_value && t.coupon_rate && t.quantity ? calcPayout(t.face_value, t.coupon_rate, t.quantity, t.payout_frequency || 'annual') : null;
                 return (
                   <tr key={t.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                    <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(t.txn_date)}</td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Date" className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(t.txn_date)}</td>
+                    <td data-primary className="px-5 py-3.5">
                       <p className="text-sm font-medium text-text-primary">{(t.client as any)?.full_name || '—'}</p>
                       <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{(t.client as any)?.client_code}</p>
                     </td>
-                    <td className="px-5 py-3.5"><span className={`text-xs font-bold px-2 py-1 rounded-lg ${TXN_COLORS[t.txn_type]}`}>{TXN_LABELS[t.txn_type]}</span></td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Type" className="px-5 py-3.5"><span className={`text-xs font-bold px-2 py-1 rounded-lg ${TXN_COLORS[t.txn_type]}`}>{TXN_LABELS[t.txn_type]}</span></td>
+                    <td data-label="Product" className="px-5 py-3.5">
                       <p className="text-sm text-text-primary">{t.product_name}</p>
                       <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${PRODUCT_COLORS[t.product_type]}`}>{PRODUCT_LABELS[t.product_type]}</span>
                     </td>
-                    <td className="px-5 py-3.5 min-w-[140px]">
+                    <td data-label="Details" className="px-5 py-3.5 min-w-[140px]">
                       {isB && <div className="space-y-0.5">
                         {t.coupon_rate && <p className="text-xs font-bold" style={{ color: 'var(--success)' }}>{t.coupon_rate}% p.a.</p>}
                         {t.payout_frequency && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{PAYOUT_FREQ[t.payout_frequency]}</p>}
@@ -1240,7 +1240,7 @@ export default function Transactions({ employee, onNavigate }: Props) {
                       </div>}
                       {!isB && !isMFt && !isIt && t.quantity && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Qty: {t.quantity}</p>}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Amount" className="px-5 py-3.5">
                       <p className="text-sm font-bold text-text-primary">{fmt(t.consolidated_amount)}</p>
                       {isIt && t.sum_assured && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Cover: {fmt(t.sum_assured)}</p>}
                       {!isIt && t.documents && t.documents.length > 0 && (

@@ -33,8 +33,8 @@ const PRODUCT_LABELS: Record<string, string> = {
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
-      <div className="w-full max-w-2xl rounded-2xl overflow-hidden max-h-[90vh] flex flex-col" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    <div className="m-sheet fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
+      <div className="m-sheet-panel w-full max-w-2xl rounded-2xl overflow-hidden max-h-[90vh] flex flex-col" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         <div className="px-6 py-4 flex items-center justify-between flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-bold text-text-primary">{title}</h3>
           <button onClick={onClose} style={{ color: 'var(--text-faint)' }}><X className="w-5 h-5" /></button>
@@ -689,8 +689,8 @@ export default function ManageClients({ employee, onNavigate }: Props) {
 
       {/* Table */}
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-        <div className="overflow-auto" style={{ maxHeight: '70vh' }}>
-          <table className="w-full nw-table">
+        <div className="m-table-wrap p-3 sm:p-0 overflow-auto" style={{ maxHeight: '70vh' }}>
+          <table className="m-table w-full nw-table">
             <thead className="sticky top-0 z-10" style={{ background: 'var(--bg-elevated)' }}>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 {['Client', 'Code', ...(isAdmin ? ['Employee'] : []), 'Source', 'Portfolio', 'Status', 'Date', 'Actions'].map(h => (
@@ -705,7 +705,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                 <tr><td colSpan={isAdmin ? 8 : 7} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>No clients found</td></tr>
               ) : clients.map(c => (
                 <tr key={c.id} className="transition-colors" style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                  <td className="px-5 py-3.5">
+                  <td data-primary className="px-5 py-3.5">
                     <p className="text-sm font-medium text-text-primary">{c.full_name}</p>
                     <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{c.phone || c.email || '—'}</p>
                     {(() => {
@@ -721,9 +721,9 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                       ) : null;
                     })()}
                   </td>
-                  <td className="px-5 py-3.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{c.client_code}</span></td>
-                  {isAdmin && <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{(c.employee as any)?.full_name || 'Admin'}</td>}
-                  <td className="px-5 py-3.5">
+                  <td data-label="Code" className="px-5 py-3.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{c.client_code}</span></td>
+                  {isAdmin && <td data-label="Employee" className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{(c.employee as any)?.full_name || 'Admin'}</td>}
+                  <td data-label="Source" className="px-5 py-3.5">
                     {c.sourced_via === 'dsa' ? (
                       <>
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-lg" style={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>DSA</span>
@@ -733,13 +733,13 @@ export default function ManageClients({ employee, onNavigate }: Props) {
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-lg" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Direct</span>
                     )}
                   </td>
-                  <td className="px-5 py-3.5 text-sm font-semibold text-text-primary">{fmt(c.portfolio_value || 0)}</td>
-                  <td className="px-5 py-3.5">
+                  <td data-label="Portfolio" className="px-5 py-3.5 text-sm font-semibold text-text-primary">{fmt(c.portfolio_value || 0)}</td>
+                  <td data-label="Status" className="px-5 py-3.5">
                     <span className={`text-xs font-semibold px-2 py-1 rounded-lg border ${VERIFICATION_COLORS[c.verification_status]}`}>
                       {VERIFICATION_LABELS[c.verification_status]}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(c.created_at)}</td>
+                  <td data-label="Date" className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(c.created_at)}</td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-1">
                       <button onClick={() => setViewClient(c)} className="p-1.5 rounded-lg transition-colors" title="View Details" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Eye className="w-4 h-4" /></button>

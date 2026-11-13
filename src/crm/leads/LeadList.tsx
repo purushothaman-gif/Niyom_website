@@ -344,8 +344,9 @@ export default function LeadList({ employee, category, onNew, onOpen, onEdit, on
       </div>
 
       {/* Search + filter toggle */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+      {/* Phone: search gets its own full-width row; the buttons wrap below it. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-auto sm:flex-1">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-faint)' }} />
           <Input value={searchInput} onChange={e => setSearchInput(e.target.value)}
             placeholder="Search name, mobile, email, city, lead code…" style={{ paddingLeft: '2.25rem' }} />
@@ -503,8 +504,8 @@ export default function LeadList({ employee, category, onNew, onOpen, onEdit, on
 
       {/* Table */}
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+          <table className="m-table w-full text-sm">
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 {isAdmin && (
@@ -546,7 +547,7 @@ export default function LeadList({ employee, category, onNew, onOpen, onEdit, on
                       <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleSel(l.id)} />
                     </td>
                   )}
-                  <td className="px-3 py-3 cursor-pointer" onClick={() => onOpen(l)}>
+                  <td data-primary className="px-3 py-3 cursor-pointer" onClick={() => onOpen(l)}>
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-bold flex-shrink-0"
                         style={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)' }}>
@@ -558,23 +559,23 @@ export default function LeadList({ employee, category, onNew, onOpen, onEdit, on
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-3 whitespace-nowrap">
+                  <td data-label="Contact" className="px-3 py-3 whitespace-nowrap">
                     <p className="text-xs" style={{ color: 'var(--text-primary)' }}>{l.mobile || '—'}</p>
                     <p className="text-[11px] truncate max-w-[160px]" style={{ color: 'var(--text-faint)' }}>{l.email || '—'}</p>
                   </td>
-                  <td className="px-3 py-3 whitespace-nowrap">
+                  <td data-label="Location" className="px-3 py-3 whitespace-nowrap">
                     <p className="text-xs" style={{ color: 'var(--text-primary)' }}>{l.city || '—'}</p>
                     <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>{l.state || '—'}</p>
                   </td>
-                  <td className="px-3 py-3"><StatusBadge status={l.status} small /></td>
-                  <td className="px-3 py-3"><PriorityBadge priority={l.priority} /></td>
-                  <td className="px-3 py-3"><ScoreBadge score={l.lead_score} band={l.score_band} /></td>
-                  <td className="px-3 py-3 whitespace-nowrap">
+                  <td data-label="Status" className="px-3 py-3"><StatusBadge status={l.status} small /></td>
+                  <td data-label="Priority" className="px-3 py-3"><PriorityBadge priority={l.priority} /></td>
+                  <td data-label="Score" className="px-3 py-3"><ScoreBadge score={l.lead_score} band={l.score_band} /></td>
+                  <td data-label="Owner" className="px-3 py-3 whitespace-nowrap">
                     {l.owner ? <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{l.owner.full_name}</span>
                       : <span className="text-[11px] px-2 py-0.5 rounded" style={{ background: 'rgba(168,85,247,0.12)', color: 'rgb(168,85,247)' }}>Admin Pool</span>}
                   </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{formatMoney(l.investment_capacity)}</td>
-                  <td className="px-3 py-3 whitespace-nowrap">
+                  <td data-label="Capacity" className="px-3 py-3 whitespace-nowrap text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{formatMoney(l.investment_capacity)}</td>
+                  <td data-label="Created" className="px-3 py-3 whitespace-nowrap">
                     <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{formatDate(l.created_at)}</p>
                     <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>{relativeTime(l.created_at)}</p>
                   </td>

@@ -211,8 +211,8 @@ export default function BondOrders({ employee, onNavigate }: Props) {
             <p className="text-sm">No orders{filter !== 'all' ? ` with status “${filter.replace('_', ' ')}”` : ''} yet.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full nw-table">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full nw-table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   {['Ref', 'Client', 'Bond', 'Qty', 'Indicative', 'Status', 'Placed', ''].map((h) => (
@@ -228,8 +228,8 @@ export default function BondOrders({ employee, onNavigate }: Props) {
                     className="cursor-pointer transition-colors"
                     style={{ borderBottom: '1px solid var(--border-subtle)' }}
                   >
-                    <td className="px-5 py-3.5 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>{o.ref}</td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Ref" className="px-5 py-3.5 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>{o.ref}</td>
+                    <td data-primary className="px-5 py-3.5">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-text-primary">{o.client?.full_name ?? '—'}</span>
                         {o.source === 'partner' && (
@@ -240,11 +240,11 @@ export default function BondOrders({ employee, onNavigate }: Props) {
                       </div>
                       <div className="text-[11px]" style={{ color: 'var(--text-faint)' }}>{o.client?.client_code ?? ''}</div>
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-text-primary max-w-xs truncate">{o.bond_name || o.isin}</td>
-                    <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--text-secondary)' }}>{o.units}</td>
-                    <td className="px-5 py-3.5 text-sm font-semibold text-text-primary">{inr(o.amount)}</td>
-                    <td className="px-5 py-3.5"><StatusPill status={o.status} /></td>
-                    <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{timeAgo(o.created_at)}</td>
+                    <td data-label="Bond" className="px-5 py-3.5 text-sm text-text-primary max-w-xs truncate">{o.bond_name || o.isin}</td>
+                    <td data-label="Qty" className="px-5 py-3.5 text-sm" style={{ color: 'var(--text-secondary)' }}>{o.units}</td>
+                    <td data-label="Indicative" className="px-5 py-3.5 text-sm font-semibold text-text-primary">{inr(o.amount)}</td>
+                    <td data-label="Status" className="px-5 py-3.5"><StatusPill status={o.status} /></td>
+                    <td data-label="Placed" className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{timeAgo(o.created_at)}</td>
                     <td className="px-5 py-3.5 text-right">
                       <button
                         onClick={(e) => { e.stopPropagation(); setActive(o); }}

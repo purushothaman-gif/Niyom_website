@@ -83,8 +83,8 @@ function PriceModal({ share, onClose }: { share: UnlistedShare; onClose: () => v
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
-      <div className="w-full max-w-lg rounded-2xl overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+    <div className="m-sheet fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+      <div className="m-sheet-panel w-full max-w-lg rounded-2xl overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3">
             <ShareLogo name={share.short_name || share.company_name} url={share.logo_url} size={36} />
@@ -235,8 +235,8 @@ function ShareModal({ share, onClose }: { share: UnlistedShare | null; onClose: 
   const inputCls = 'w-full px-3 py-2 rounded-lg text-sm outline-none';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
-      <div className="w-full max-w-2xl rounded-2xl overflow-hidden max-h-[90vh] flex flex-col" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+    <div className="m-sheet fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+      <div className="m-sheet-panel w-full max-w-2xl rounded-2xl overflow-hidden max-h-[90vh] flex flex-col" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
           <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{share ? 'Edit share' : 'Add unlisted share'}</h2>
           <button onClick={onClose} style={{ color: 'var(--text-faint)' }}><X className="w-4 h-4" /></button>
@@ -276,7 +276,7 @@ function ShareModal({ share, onClose }: { share: UnlistedShare | null; onClose: 
             {field('Website', <input value={form.website ?? ''} onChange={(e) => set('website', e.target.value)} placeholder="https://" className={inputCls} style={inputStyle} />)}
           </div>
           {field('About', <textarea value={form.about ?? ''} onChange={(e) => set('about', e.target.value)} rows={3} className={inputCls} style={inputStyle} />)}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {field('Face value', <input type="number" step="0.01" value={form.face_value ?? ''} onChange={(e) => set('face_value', e.target.value === '' ? null : parseFloat(e.target.value))} className={inputCls} style={inputStyle} />)}
             {field('Min qty', <input type="number" min={1} value={form.min_qty ?? 1} onChange={(e) => set('min_qty', parseInt(e.target.value, 10) || 1)} className={inputCls} style={inputStyle} />)}
             {field('Lot size', <input type="number" min={1} value={form.lot_size ?? 1} onChange={(e) => set('lot_size', parseInt(e.target.value, 10) || 1)} className={inputCls} style={inputStyle} />)}

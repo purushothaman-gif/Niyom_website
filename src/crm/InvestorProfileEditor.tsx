@@ -33,8 +33,8 @@ export function InvestorProfileEditorModal({ clientId, clientName, employeeId, o
   }, [clientId]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl border" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
+    <div className="m-sheet fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+      <div className="m-sheet-panel max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl border" style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}>
         <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: 'var(--border)' }}>
           <div>
             <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Investor profile — {clientName}</h3>

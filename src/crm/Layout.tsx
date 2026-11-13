@@ -8,7 +8,8 @@ import {
   Send, Target, Landmark, LifeBuoy, Sparkles, LineChart, BadgePercent, Gem,
   CalendarCheck, CalendarClock, CalendarDays, Coins, Receipt, Fingerprint,
   BadgeIndianRupee, SlidersHorizontal, Mail, Trophy, ExternalLink, Database,
-  Image as ImageIcon, Activity, ListChecks } from 'lucide-react';
+  Image as ImageIcon, Activity, ListChecks, MoreHorizontal } from 'lucide-react';
+import { MobileTabBar } from '../components/mobile/MobileTabBar';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
 import { EmployeeAvatar } from './EmployeeAvatar';
@@ -154,6 +155,15 @@ const SETTINGS_ITEM: NavItem = { key: 'settings' as CRMPage, label: 'Settings', 
 // topbar title lookup.
 const NAV_FLAT: NavItem[] = [...NAV.flatMap(s => s.items), SETTINGS_ITEM];
 
+/** Phone tab bar: the screens an RM opens on the go. Each is still subject to
+ *  canSee, and "More" opens the full drawer. Short labels fit a 375px bar. */
+const MOBILE_TABS: { key: CRMPage; label: string; icon: typeof LayoutDashboard }[] = [
+  { key: 'dashboard' as CRMPage,         label: 'Home',    icon: LayoutDashboard },
+  { key: 'leads' as CRMPage,             label: 'Leads',   icon: Target },
+  { key: 'clients' as CRMPage,           label: 'Clients', icon: Users },
+  { key: 'deal_confirmation' as CRMPage, label: 'Deals',   icon: ClipboardList },
+];
+
 export default function Layout({ children, page, onNavigate, employee }: Props) {
   const [alerts, setAlerts] = useState<NWAlert[]>([]);
   const [showAlerts, setShowAlerts] = useState(false);
@@ -269,6 +279,11 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
     return items.length ? [{ ...s, items }] : [];
   });
 
+  const mobileTabs = MOBILE_TABS.filter(t => {
+    const item = NAV_FLAT.find(n => n.key === t.key);
+    return !!item && canSee(item);
+  });
+
   const goHome = () => {
     window.location.href = '/';
   };
@@ -369,7 +384,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
   );
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
+    <div className="flex h-screen h-[100dvh] overflow-hidden" style={{ background: 'var(--bg-base)' }}>
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-60 flex-shrink-0" style={{ background: 'var(--sidebar-bg)', borderRight: '1px solid var(--border-subtle)' }}>
         {sidebarContent}
@@ -388,17 +403,17 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar */}
-        <header className="flex items-center justify-between px-6 py-4 flex-shrink-0" style={{ background: 'var(--header-bg)', borderBottom: '1px solid var(--border-subtle)' }}>
-          <div className="flex items-center gap-3">
-            <button className="lg:hidden p-2 rounded-lg" style={{ color: 'var(--text-secondary)' }} onClick={() => setMobileOpen(true)}>
+        <header className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 flex-shrink-0" style={{ background: 'var(--header-bg)', borderBottom: '1px solid var(--border-subtle)' }}>
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <button aria-label="Open navigation" className="lg:hidden -ml-2 p-2 rounded-lg" style={{ color: 'var(--text-secondary)' }} onClick={() => setMobileOpen(true)}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
-            <div>
-              <p className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>{NAV_FLAT.find(n => n.key === page)?.label || 'Dashboard'}</p>
-              <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+            <div className="min-w-0">
+              <p className="truncate font-bold text-sm" style={{ color: 'var(--text-primary)' }}>{NAV_FLAT.find(n => n.key === page)?.label || 'Dashboard'}</p>
+              <p className="hidden sm:block text-xs" style={{ color: 'var(--text-faint)' }}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             {/* Theme toggle */}
             <ThemeToggle variant="icon" />
 
@@ -416,7 +431,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
                 )}
               </button>
               {showAlerts && (
-                <div className="absolute right-0 top-12 w-80 rounded-2xl shadow-2xl z-50 overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-80 rounded-2xl shadow-2xl z-50 overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
                   <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
                     <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Notifications</p>
                     <div className="flex items-center gap-2">
@@ -461,12 +476,36 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
 
         {/* Page content — keyed by page so each navigation re-plays a subtle
             fade + rise (see .crm-page-enter). */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className={`flex-1 overflow-y-auto p-4 sm:p-6 ${mobileTabs.length >= 2 ? 'pb-28 lg:pb-6' : ''}`}>
           <div key={page} className="crm-page-enter">
             {children}
           </div>
         </main>
       </div>
+
+      {/* Phone/tablet tab bar. Skipped for logins that see fewer than two of
+          these screens (e.g. Transfer Admin), where the drawer is enough. */}
+      {mobileTabs.length >= 2 && (
+        <MobileTabBar
+          label="CRM"
+          tabs={[
+            ...mobileTabs.map(t => ({
+              key: t.key,
+              label: t.label,
+              icon: t.icon,
+              active: !mobileOpen && page === t.key,
+              onSelect: () => onNavigate(t.key),
+            })),
+            {
+              key: 'more',
+              label: 'More',
+              icon: MoreHorizontal,
+              active: mobileOpen || !mobileTabs.some(t => t.key === page),
+              onSelect: () => setMobileOpen(true),
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

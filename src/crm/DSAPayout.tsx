@@ -1109,10 +1109,10 @@ export default function DSAPayout({ employee }: Props) {
 
       {/* Cancel Debit Note — confirmation modal (reason required) */}
       {cancelTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="m-sheet fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.7)' }}
           onClick={() => { if (statusBusyId !== cancelTarget.id) setCancelTarget(null); }}>
-          <div className="w-full max-w-md rounded-2xl overflow-hidden"
+          <div className="m-sheet-panel w-full max-w-md rounded-2xl overflow-hidden"
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
             onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -1163,10 +1163,10 @@ export default function DSAPayout({ employee }: Props) {
 
       {/* Mark as Paid — choose the actual business payment date */}
       {payTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="m-sheet fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.7)' }}
           onClick={() => { if (statusBusyId !== payTarget.id) setPayTarget(null); }}>
-          <div className="w-full max-w-md rounded-2xl overflow-hidden"
+          <div className="m-sheet-panel w-full max-w-md rounded-2xl overflow-hidden"
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
             onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border)' }}>

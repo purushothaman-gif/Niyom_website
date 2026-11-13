@@ -11,8 +11,8 @@ interface Props { employee: NWEmployee; }
 
 function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
-      <div className={`w-full ${wide ? 'max-w-lg' : 'max-w-md'} rounded-2xl overflow-hidden`} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    <div className="m-sheet fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
+      <div className={`m-sheet-panel w-full ${wide ? 'max-w-lg' : 'max-w-md'} rounded-2xl overflow-hidden`} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 className="text-sm font-bold text-text-primary">{title}</h3>
           <button onClick={onClose} style={{ color: 'var(--text-faint)' }}><X className="w-5 h-5" /></button>

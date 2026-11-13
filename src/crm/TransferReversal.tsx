@@ -59,8 +59,8 @@ export function ReverseTransferDialog({ dealLabel, clientName, references, onCan
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}>
-      <div className="w-full max-w-md rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    <div className="m-sheet fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}>
+      <div className="m-sheet-panel w-full max-w-md rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         <div className="px-6 py-5 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <h3 className="text-base font-bold text-text-primary">Reverse this transfer?</h3>

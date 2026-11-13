@@ -1485,7 +1485,7 @@ function Offices({ onToast, canEdit, employee }: {
                 placeholder="Street, area, city" />
             </Field>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Latitude" required>
                 <Input value={editing.latitude ?? ''} placeholder="13.082680"
                   onChange={e => setEditing({ ...editing, latitude: e.target.value as never })} />
@@ -1500,7 +1500,7 @@ function Offices({ onToast, canEdit, employee }: {
               </Field>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Status">
                 <Select value={editing.status ?? 'active'} onChange={e => setEditing({ ...editing, status: e.target.value })}>
                   <option value="active">Active</option>

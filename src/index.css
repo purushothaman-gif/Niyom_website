@@ -884,6 +884,7 @@ input[type='range'] {
 
   .m-table-wrap {
     overflow: visible !important;
+    max-height: none !important;
     border: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
@@ -903,35 +904,77 @@ input[type='range'] {
     width: 100%;
   }
   .m-table tr {
+    display: flex;
+    flex-direction: column;
     margin-bottom: 0.625rem;
     padding: 0.75rem 1rem;
     border: 1px solid var(--border-subtle) !important;
     border-radius: var(--radius-lg);
-    background: var(--bg-elevated);
+    background: var(--bg-elevated) !important;
   }
+  /* Label in column 1; everything the cell holds stacks in column 2, so a
+     cell with two lines (mobile over email) stays together on the right. */
   .m-table td {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(5.5rem, max-content) minmax(0, 1fr);
+    column-gap: 1rem;
     align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
+    justify-items: end;
     padding: 0.3rem 0 !important;
     border: 0 !important;
+    max-width: none !important;
     text-align: right !important;
     white-space: normal !important;
   }
+  .m-table td > * {
+    grid-column: 2;
+    max-width: 100%;
+  }
   .m-table td::before {
     content: attr(data-label);
-    flex-shrink: 0;
+    grid-column: 1;
+    grid-row: 1 / span 12;
+    justify-self: start;
+    align-self: start;
     font-size: 11px;
     font-weight: 500;
     text-align: left;
     color: var(--text-faint);
   }
+  /* Unlabelled cells (actions, loading/empty rows) span the card. */
+  .m-table td:not([data-label]) {
+    display: block;
+  }
   .m-table td:not([data-label])::before {
     content: none;
   }
+  /* Action cells (unlabelled, not the title): finger-sized buttons on a
+     ruled-off row at the foot of the card. */
+  .m-table td:not([data-label]):not([data-primary]):not([colspan]):last-child {
+    margin-top: 0.25rem;
+    padding-top: 0.5rem !important;
+    border-top: 1px solid var(--border-subtle) !important;
+  }
+  .m-table td:not([data-label]):not([data-primary]):not([colspan]):last-child > div {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .m-table td:not([data-label]):not([data-primary]):not([colspan]):last-child button,
+  .m-table td:not([data-label]):not([data-primary]):not([colspan]):last-child a {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .m-table td[colspan] {
+    justify-items: center;
+    text-align: center !important;
+  }
   .m-table td[data-primary] {
     display: block;
+    order: -1;
+    justify-items: start;
     margin-bottom: 0.25rem;
     padding-bottom: 0.5rem !important;
     border-bottom: 1px dashed var(--border-subtle) !important;

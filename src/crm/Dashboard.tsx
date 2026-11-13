@@ -229,19 +229,19 @@ export default function Dashboard({ employee, onNavigate }: Props) {
       )}
 
       {/* Stats */}
-      <div className={`grid gap-4 ${isAdmin ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-4'}`}>
+      <div className={`grid gap-3 sm:gap-4 ${isAdmin ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-4'}`}>
         {statCards.map((s, i) => {
           const Icon = s.icon;
           const delay = ['', 'animate-delay-100', 'animate-delay-200', 'animate-delay-300', 'animate-delay-400'][i] || '';
           return (
-            <div key={s.label} className={`lift rounded-2xl p-5 animate-fadeInUp ${delay}`} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-card)' }}>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `color-mix(in srgb, ${s.color} 12%, transparent)` }}>
+            <div key={s.label} className={`lift min-w-0 rounded-2xl p-4 sm:p-5 animate-fadeInUp ${delay}`} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-card)' }}>
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <p className="min-w-0 text-[11px] sm:text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-xl flex items-center justify-center" style={{ background: `color-mix(in srgb, ${s.color} 12%, transparent)` }}>
                   <Icon className="w-4 h-4" style={{ color: s.color }} />
                 </div>
               </div>
-              <p className="text-3xl font-bold text-text-primary tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>
+              <p className="whitespace-nowrap text-2xl sm:text-3xl font-bold text-text-primary tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>
                 {s.numeric !== undefined ? <Counter value={s.numeric} durationMs={1100} /> : s.value}
               </p>
               <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>{s.sub}</p>
@@ -256,10 +256,10 @@ export default function Dashboard({ employee, onNavigate }: Props) {
           <div className="px-5 py-4 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
             <BarChart2 className="w-4 h-4" style={{ color: 'var(--accent)' }} />
             <h2 className="text-sm font-bold text-text-primary">Employee Breakdown</h2>
-            <span className="text-xs ml-1" style={{ color: 'var(--text-faint)' }}>— clients & AUM per employee</span>
+            <span className="hidden sm:inline text-xs ml-1" style={{ color: 'var(--text-faint)' }}>— clients & AUM per employee</span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full nw-table">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full nw-table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   {['Employee', 'Code', 'Clients', 'Verified', 'Portfolio AUM', 'Share'].map(h => (
@@ -272,23 +272,23 @@ export default function Dashboard({ employee, onNavigate }: Props) {
                   const pct = stats.totalPortfolio > 0 ? (es.portfolioValue / stats.totalPortfolio) * 100 : 0;
                   return (
                     <tr key={es.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                      <td className="px-5 py-3.5">
+                      <td data-primary className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           <EmployeeAvatar name={es.full_name} url={es.avatar_url} size={28} rounded="full"
                             badgeStyle={{ background: i === 0 ? 'rgba(var(--accent-rgb),0.15)' : 'rgba(var(--hover-bg-rgb),0.05)', color: i === 0 ? 'var(--accent)' : 'var(--text-muted)' }} />
                           <span className="text-sm font-medium text-text-primary">{es.full_name}</span>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td data-label="Code" className="px-5 py-3.5">
                         <span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{es.employee_code}</span>
                       </td>
-                      <td className="px-5 py-3.5 text-sm font-semibold text-text-primary">{es.clientCount}</td>
-                      <td className="px-5 py-3.5">
+                      <td data-label="Clients" className="px-5 py-3.5 text-sm font-semibold text-text-primary">{es.clientCount}</td>
+                      <td data-label="Verified" className="px-5 py-3.5">
                         <span className="text-sm text-c-emerald font-semibold">{es.verifiedCount}</span>
                         <span className="text-xs ml-1" style={{ color: 'var(--text-faint)' }}>/ {es.clientCount}</span>
                       </td>
-                      <td className="px-5 py-3.5 text-sm font-semibold text-text-primary">{fmt(es.portfolioValue)}</td>
-                      <td className="px-5 py-3.5">
+                      <td data-label="Portfolio AUM" className="px-5 py-3.5 text-sm font-semibold text-text-primary">{fmt(es.portfolioValue)}</td>
+                      <td data-label="Share" className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           <div className="w-20 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
                             <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, var(--accent), var(--accent-strong))' }} />
@@ -370,8 +370,8 @@ export default function Dashboard({ employee, onNavigate }: Props) {
             View all <ArrowRight className="w-3 h-3" />
           </button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
+        <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+          <table className="m-table w-full">
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 {['Client', 'Code', ...(isAdmin ? ['Managed By'] : []), 'Portfolio', 'Status', 'Date'].map(h => (
@@ -384,23 +384,23 @@ export default function Dashboard({ employee, onNavigate }: Props) {
                 <tr><td colSpan={isAdmin ? 6 : 5} className="text-center py-10 text-sm" style={{ color: 'var(--text-faint)' }}>No clients yet</td></tr>
               ) : recentClients.map(c => (
                 <tr key={c.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                  <td className="px-5 py-3.5">
+                  <td data-primary className="px-5 py-3.5">
                     <p className="text-sm font-medium text-text-primary">{c.full_name}</p>
                     <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{c.phone || c.email || '—'}</p>
                   </td>
-                  <td className="px-5 py-3.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{c.client_code}</span></td>
+                  <td data-label="Code" className="px-5 py-3.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{c.client_code}</span></td>
                   {isAdmin && (
-                    <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    <td data-label="Managed by" className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
                       {c.employee?.full_name || <span style={{ color: 'var(--border-stronger)' }}>Unassigned</span>}
                     </td>
                   )}
-                  <td className="px-5 py-3.5 text-sm font-semibold text-text-primary">{fmt(c.portfolio_value || 0)}</td>
-                  <td className="px-5 py-3.5">
+                  <td data-label="Portfolio" className="px-5 py-3.5 text-sm font-semibold text-text-primary">{fmt(c.portfolio_value || 0)}</td>
+                  <td data-label="Status" className="px-5 py-3.5">
                     <span className={`text-xs font-semibold px-2 py-1 rounded-lg border ${VERIFICATION_COLORS[c.verification_status]}`}>
                       {VERIFICATION_LABELS[c.verification_status]}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(c.created_at)}</td>
+                  <td data-label="Date" className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(c.created_at)}</td>
                 </tr>
               ))}
             </tbody>

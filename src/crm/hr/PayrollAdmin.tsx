@@ -773,7 +773,7 @@ function PayrollWorkspace({ runId, employeeId, access, onBack, onToast }: {
               the register, it simply stops costing money.
             </Notice>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Days to waive" required hint={`Up to ${waiveFor.lop}`}>
                 <Input type="number" min={0.5} max={waiveFor.lop} step={0.5} value={waiveDays}
                   onChange={e => setWaiveDays(e.target.value)} />
@@ -1211,7 +1211,7 @@ function BankFileDialog({ runId, run, records, employeeId, onClose, onToast }: {
 
             {built && (
               <>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <StatTile label="Payees" value={built.row_count} />
                   <StatTile label="Total Amount" value={inr(built.total_amount)} tone="good" />
                   <StatTile label="Issues" value={built.issues.length}
