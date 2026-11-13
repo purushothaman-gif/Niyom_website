@@ -19,7 +19,7 @@ import { BseClient, BseError } from './bseClient.js';
 import { webhookRouter } from './webhooks.js';
 import { casRequestRouter } from './cas/requests.js';
 import { dematRouter } from './cas/demat.js';
-import { kycRouter } from './cas/kyc.js';
+import { kycPublicRouter, kycRouter } from './cas/kyc.js';
 import { inboxCallbackRouter, inboxRouter } from './cas/inbox.js';
 import { inboundRouter, inboundWebhookRouter } from './cas/inbound.js';
 import { digilockerCallbackRouter, digilockerRouter } from './cas/digilocker.js';
@@ -261,6 +261,9 @@ mountFeature('/cas/inbox', 'cas_inbox_callback', inboxCallbackRouter(cfg));
 mountFeature('/cas/inbound', 'cas_inbound_webhook', inboundWebhookRouter(cfg));
 // Public — DigiLocker redirects the browser here after consent (no session).
 mountFeature('/cas/digilocker', 'cas_digilocker_callback', digilockerCallbackRouter(cfg));
+// Public — website self-signup checks a visitor's own PAN KYC status (no
+// session). Other /cas/kyc/* paths fall through to the authed router below.
+mountFeature('/cas/kyc', 'cas_kyc_public', kycPublicRouter(cfg));
 
 /**
  * Cashfree PAN verification relay. Called server-to-server by the Supabase edge

@@ -107,6 +107,28 @@ async function callDigilocker<T>(path: string, body?: unknown): Promise<{ ok: bo
   }
 }
 
+/** Call the proxy's public KYC route. Never throws. The KRA lookup can be slow. */
+async function callKyc<T>(path: string, body?: unknown): Promise<{ ok: boolean; data: T | null }> {
+  const base = bseProxyBaseUrl();
+  if (!base) return { ok: false, data: null };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), path === 'public-pan-status' ? 65_000 : 6_000);
+  try {
+    const res = await fetch(`${base}/cas/kyc/${path}`, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    const data = (await res.json().catch(() => null)) as T | null;
+    return { ok: res.ok, data };
+  } catch {
+    return { ok: false, data: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Small presentational helpers (match the app's token design language) ──
 function Field({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: React.ReactNode }) {
   return (
@@ -151,6 +173,23 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
   // Set once DigiLocker has verified this visitor; redeemed by public-onboard-start.
   const [dlToken, setDlToken] = useState('');
   const [panMasked, setPanMasked] = useState('');
+  // Inline KRA KYC status, fetched in the background after the PAN is known, so
+  // an already-compliant lead is told they can invest right away and never has
+  // to touch DigiLocker. Slow lookup (up to ~60s) — never blocks the flow.
+  const [kyc, setKyc] = useState<{ compliant: boolean; status: string } | null>(null);
+  const [kycChecking, setKycChecking] = useState(false);
+
+  /** Fire-and-forget KYC check for a verified PAN; updates the chip when it lands. */
+  const checkKyc = (panValue: string) => {
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panValue)) return;
+    setKyc(null);
+    setKycChecking(true);
+    void callKyc<{ enabled?: boolean; compliant?: boolean; status?: string }>('public-pan-status', { pan: panValue })
+      .then(({ ok, data }) => {
+        if (ok && data?.enabled) setKyc({ compliant: !!data.compliant, status: String(data.status ?? 'unknown') });
+      })
+      .finally(() => setKycChecking(false));
+  };
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
@@ -258,6 +297,7 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
       return setError(data?.error || 'PAN could not be verified. Please check and try again.');
     }
     setFullName(data.name_as_per_pan);
+    checkKyc(pan); // background — the result shows on the next step when it lands
     setView('form');
   };
 
@@ -503,6 +543,28 @@ export default function PublicOnboarding({ onBack, refCode, contentNo, platform 
                   </p>
                 )}
               </Field>
+
+              {/* Inline KRA KYC status — lands a moment after the name. */}
+              {kycChecking && !kyc ? (
+                <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--text-faint)' }}>
+                  <Clock className="w-3.5 h-3.5 animate-pulse" /> Checking your KYC status…
+                </p>
+              ) : kyc?.compliant ? (
+                <div className="p-3 rounded-xl flex items-start gap-2" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                  <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--success)' }} />
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    <span className="font-semibold" style={{ color: 'var(--success)' }}>Your KYC is already complete.</span> You can start investing right away — no documents needed.
+                  </p>
+                </div>
+              ) : kyc ? (
+                <div className="p-3 rounded-xl flex items-start gap-2" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)' }}>
+                  <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--text-muted)' }} />
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    We’ll help you finish a quick one-time KYC after you sign up — it only takes a minute.
+                  </p>
+                </div>
+              ) : null}
+
               <Field icon={Phone} label="Mobile Number">
                 <Input type="tel" inputMode="numeric" value={phone} maxLength={10} autoFocus
                   onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="9876543210" />
