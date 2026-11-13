@@ -104,7 +104,9 @@ export default function BondOrders({ employee, onNavigate }: Props) {
         o.bond_name.toLowerCase().includes(q) ||
         o.isin.toLowerCase().includes(q) ||
         (o.client?.full_name ?? '').toLowerCase().includes(q) ||
-        (o.client?.client_code ?? '').toLowerCase().includes(q)
+        (o.client?.client_code ?? '').toLowerCase().includes(q) ||
+        (o.dsa?.full_name ?? '').toLowerCase().includes(q) ||
+        (o.dsa?.dsa_code ?? '').toLowerCase().includes(q)
       );
     });
   }, [orders, filter, search]);
@@ -172,7 +174,7 @@ export default function BondOrders({ employee, onNavigate }: Props) {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search ref, bond, ISIN or client..."
+            placeholder="Search ref, bond, ISIN, client or DSA..."
             className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm text-text-primary outline-none"
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
           />

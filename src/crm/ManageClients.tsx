@@ -151,11 +151,19 @@ export default function ManageClients({ employee, onNavigate }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    // A search can also name the DSA: match its clients by DSA name/code.
+    let dsaIdClause = '';
+    if (search) {
+      const { data: dsaHits } = await supabase.from('nw_dsa').select('id')
+        .or(`full_name.ilike.%${search}%,dsa_code.ilike.%${search}%`).limit(200);
+      const ids = ((dsaHits as { id: string }[]) || []).map(d => d.id);
+      if (ids.length) dsaIdClause = `,dsa_id.in.(${ids.join(',')})`;
+    }
     const buildQuery = () => {
       let query = supabase.from('nw_clients')
         .select('*, employee:nw_employees(full_name, employee_code), dsa:nw_dsa(full_name, dsa_code)');
 
-      if (search) query = query.or(`full_name.ilike.%${search}%,client_code.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,pan.ilike.%${search}%${clientCodeOrClause(search)}`);
+      if (search) query = query.or(`full_name.ilike.%${search}%,client_code.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,pan.ilike.%${search}%${clientCodeOrClause(search)}${dsaIdClause}`);
 
       if (bseReadyFilter === 'incomplete') {
         // Any of these blank means BSE's add_ucc would be rejected.
@@ -630,7 +638,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
       <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-faint)' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, code, email, phone, PAN..."
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, code, email, phone, PAN or DSA..."
             className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm text-text-primary outline-none"
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
           />

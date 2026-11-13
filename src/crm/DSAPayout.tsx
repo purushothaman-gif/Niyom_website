@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { edgeFunctionErrorMessage } from '../lib/edgeFunctionError';
 import { NWEmployee, NWTransaction, NWClient, NWDSA, NWDSADebitNote } from './types';
 import { fmt, PRODUCT_LABELS } from './utils';
-import { Wallet, Download, ChevronDown, FileText, RefreshCw, Loader2, FileCheck2, CheckCircle2, XCircle, Eye, Send, Lock, FileArchive } from 'lucide-react';
+import { Wallet, Download, ChevronDown, FileText, RefreshCw, Loader2, FileCheck2, CheckCircle2, XCircle, Eye, Send, Lock, FileArchive, Search, X } from 'lucide-react';
 import JSZip from 'jszip';
 import { generateDebitNotePdfBlob, DebitNoteParticular, computePayoutTds } from './dsaDebitNote';
 import { asJson } from '../lib/dbJson';
@@ -66,6 +66,12 @@ export default function DSAPayout({ employee }: Props) {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [empList, setEmpList] = useState<{ id: string; full_name: string; employee_code: string }[]>([]);
   const [empFilter, setEmpFilter] = useState('all');
+  const [dsaSearch, setDsaSearch] = useState('');
+  // Narrows the DSA cards only; period totals still cover every DSA.
+  const matchesDsaSearch = (g: DSAGroup) => {
+    const q = dsaSearch.trim().toLowerCase();
+    return !q || g.dsa_name.toLowerCase().includes(q) || g.dsa_code.toLowerCase().includes(q);
+  };
 
   const isAdmin = employee.role === 'admin' || employee.role === 'super_admin';
   const years = Array.from({ length: 5 }, (_, i) => today.getFullYear() - i);
@@ -986,13 +992,31 @@ export default function DSAPayout({ employee }: Props) {
       {/* DSA Groups */}
       {hasLoaded && (
         <div className="space-y-4">
+          {groups.length > 1 && (
+            <div className="relative max-w-sm">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
+              <input value={dsaSearch} onChange={e => setDsaSearch(e.target.value)}
+                placeholder={`Search ${groups.length} DSAs by name or code`}
+                className="w-full pl-9 pr-9 py-2.5 rounded-xl text-sm text-text-primary outline-none"
+                style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }} />
+              {dsaSearch && (
+                <button onClick={() => setDsaSearch('')} title="Clear search"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md" style={{ color: 'var(--text-faint)' }}>
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+          {groups.length > 0 && dsaSearch.trim() && !groups.some(g => matchesDsaSearch(g)) && (
+            <p className="text-sm px-1" style={{ color: 'var(--text-faint)' }}>No DSA matches “{dsaSearch.trim()}”.</p>
+          )}
           {groups.length === 0 ? (
             <div className="rounded-2xl p-12 text-center" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
               <Wallet className="w-10 h-10 mx-auto mb-3" style={{ color: 'var(--border-strong)' }} />
               <p className="text-sm font-semibold" style={{ color: 'var(--text-faint)' }}>No DSA payout entries for {MONTHS[selectedMonth]} {selectedYear}</p>
               <p className="text-xs mt-1" style={{ color: 'var(--border-strong)' }}>DSA payouts are generated from holdings added in the selected period with DSA pricing</p>
             </div>
-          ) : groups.map(g => {
+          ) : groups.filter(matchesDsaSearch).map(g => {
             const gTds = computePayoutTds(g.total).tds;
             const gNet = g.total - gTds;
             return (
