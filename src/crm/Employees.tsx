@@ -276,8 +276,8 @@ export default function Employees({ employee }: Props) {
 
       {/* Table */}
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-        <div className="overflow-x-auto">
-          <table className="w-full nw-table">
+        <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+          <table className="m-table w-full nw-table">
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 {['Employee', 'Code', 'Designation', 'Status', 'Joined', 'Actions'].map(h => (
@@ -290,7 +290,7 @@ export default function Employees({ employee }: Props) {
                 <tr><td colSpan={6} className="text-center py-12"><LogoLoader size={40} /></td></tr>
               ) : employees.map(e => (
                 <tr key={e.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                  <td className="px-5 py-3.5">
+                  <td data-primary className="px-5 py-3.5">
                     <div className="flex items-center gap-3">
                       <EmployeeAvatar name={e.full_name} url={e.avatar_url} size={36} rounded="xl"
                         badgeStyle={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)' }} />
@@ -300,17 +300,17 @@ export default function Employees({ employee }: Props) {
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-3.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{e.employee_code}</span></td>
-                  <td className="px-5 py-3.5">
+                  <td data-label="Code" className="px-5 py-3.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{e.employee_code}</span></td>
+                  <td data-label="Designation" className="px-5 py-3.5">
                     <span className="text-xs font-semibold px-2 py-1 rounded-lg border text-c-blue bg-c-blue/10 border-c-blue/20">{e.designation ?? 'Relationship Manager'}</span>
                   </td>
-                  <td className="px-5 py-3.5">
+                  <td data-label="Status" className="px-5 py-3.5">
                     <span className={`text-xs font-semibold px-2 py-1 rounded-lg border ${e.status === 'active' ? 'text-c-emerald bg-c-emerald/10 border-c-emerald/20' : 'text-c-red bg-c-red/10 border-c-red/20'}`}>
                       {e.status === 'active' ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(e.joining_date || e.created_at)}</td>
-                  <td className="px-5 py-3.5">
+                  <td data-label="Joined" className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(e.joining_date || e.created_at)}</td>
+                  <td data-label="Actions" className="px-5 py-3.5">
                     {e.id !== employee.id && (
                       <div className="flex items-center gap-1">
                         <button onClick={() => { setEditEmp(e); setEditAvatar(e.avatar_url); setNewTransferPw(''); setEditForm({ full_name: e.full_name, phone: e.phone || '', role: e.role, designation: e.designation ?? 'Relationship Manager', status: e.status }); }}

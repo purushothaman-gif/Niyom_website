@@ -180,8 +180,8 @@ export default function ContentLibrary({ onOpen, onNew, onAnalytics, onAutoSched
             Posters, captions and videos are permanently gone. Only this record is kept, so the AI can avoid
             repeating topics and the analytics stay accurate.
           </p>
-          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            <table className="w-full text-sm">
+          <div className="m-table-wrap p-3 sm:p-0 rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            <table className="m-table w-full text-sm">
               <thead>
                 <tr style={{ background: 'var(--bg-surface)' }}>
                   {['Reference', 'Title', 'Category', 'Type', 'Downloads', 'Removed', 'Reason'].map(h => (
@@ -198,15 +198,15 @@ export default function ContentLibrary({ onOpen, onNew, onAnalytics, onAutoSched
                   </td></tr>
                 ) : history.map(h => (
                   <tr key={h.content_no} style={{ background: 'var(--bg-base)', borderTop: '1px solid var(--border-subtle)' }}>
-                    <td className="px-3 py-2 text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{h.content_no}</td>
-                    <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-primary)' }}>{h.title}</td>
-                    <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{h.category}</td>
-                    <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{h.content_type}</td>
-                    <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{h.download_count}</td>
-                    <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <td data-label="Reference" className="px-3 py-2 text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{h.content_no}</td>
+                    <td data-primary className="px-3 py-2 text-xs" style={{ color: 'var(--text-primary)' }}>{h.title}</td>
+                    <td data-label="Category" className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{h.category}</td>
+                    <td data-label="Type" className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{h.content_type}</td>
+                    <td data-label="Downloads" className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{h.download_count}</td>
+                    <td data-label="Removed" className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
                       {new Date(h.deleted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                     </td>
-                    <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <td data-label="Reason" className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
                       {h.delete_reason === 'expired' ? 'Expired (48h)' : 'Deleted by admin'}
                     </td>
                   </tr>

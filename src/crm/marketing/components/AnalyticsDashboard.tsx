@@ -77,7 +77,7 @@ export default function AnalyticsDashboard({ onBack }: { onBack: () => void }) {
               {leaderboard.length === 0 ? (
                 <Empty>No employee activity yet.</Empty>
               ) : (
-                <table className="w-full text-sm">
+                <table data-auto-label className="m-table w-full text-sm">
                   <thead>
                     <tr>
                       {['Employee', 'Downloads', 'Copies', 'Clicks', 'Leads', 'Clients'].map((h, i) => (
@@ -150,8 +150,8 @@ export default function AnalyticsDashboard({ onBack }: { onBack: () => void }) {
               {performance.length === 0 ? (
                 <Empty>No content activity yet.</Empty>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm min-w-[640px]">
+                <div data-m-wrap className="overflow-x-auto">
+                  <table data-auto-label className="w-full text-sm min-w-[640px]">
                     <thead>
                       <tr>
                         {['Reference', 'Title', 'Status', 'Downloads', 'Copies', 'Clicks', 'Leads', 'Clients'].map((h, i) => (

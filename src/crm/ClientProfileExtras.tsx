@@ -260,7 +260,7 @@ Investor profile, nominees & changes — {clientName}
             ) : nominees.length === 0 ? (
               <p className="text-sm" style={{ color: 'var(--text-faint)' }}>No nominees recorded.</p>
             ) : (
-              <table className="w-full text-sm">
+              <table className="m-table w-full text-sm">
                 <thead>
                   <tr style={{ color: 'var(--text-faint)' }} className="text-left text-xs uppercase">
                     <th className="py-1.5">Name</th>
@@ -274,12 +274,12 @@ Investor profile, nominees & changes — {clientName}
                 <tbody>
                   {nominees.map((n) => (
                     <tr key={n.id} className="border-t" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
-                      <td className="py-2 font-medium">{n.full_name}</td>
-                      <td>{n.relationship}</td>
-                      <td>{n.dob ?? '—'}</td>
-                      <td>{n.id_type ? `${labelOf(NOMINEE_ID_TYPES, n.id_type)} ${n.id_number ?? ''}` : '—'}</td>
-                      <td>{n.guardian_name ? `${n.guardian_name}${n.guardian_pan ? ` (${n.guardian_pan})` : ''}` : '—'}</td>
-                      <td className="text-right font-semibold">{n.share_percent}%</td>
+                      <td data-primary className="py-2 font-medium">{n.full_name}</td>
+                      <td data-label="Relationship">{n.relationship}</td>
+                      <td data-label="DOB">{n.dob ?? '—'}</td>
+                      <td data-label="ID">{n.id_type ? `${labelOf(NOMINEE_ID_TYPES, n.id_type)} ${n.id_number ?? ''}` : '—'}</td>
+                      <td data-label="Guardian">{n.guardian_name ? `${n.guardian_name}${n.guardian_pan ? ` (${n.guardian_pan})` : ''}` : '—'}</td>
+                      <td data-label="Share" className="text-right font-semibold">{n.share_percent}%</td>
                     </tr>
                   ))}
                 </tbody>

@@ -333,8 +333,8 @@ export default function BondMasterList({ isAdmin, onUpload, onVerify, onOpen }: 
         </div>
       ) : (
         <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div data-m-wrap className="overflow-x-auto">
+            <table data-auto-label className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
                   {COLUMNS.map(col => {

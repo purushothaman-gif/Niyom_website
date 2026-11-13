@@ -87,8 +87,8 @@ export function DematHoldingsView({ view, loading = false }: { view: DematCrmVie
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full nw-table">
+      <div data-m-wrap className="overflow-x-auto">
+        <table data-auto-label className="w-full nw-table">
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               {['Security', 'Demat account', 'Quantity', 'Price', 'Value'].map((h) => (

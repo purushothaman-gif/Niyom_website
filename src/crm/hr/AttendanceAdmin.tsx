@@ -385,8 +385,8 @@ function Register({ onToast, canEdit }: { onToast: (m: string, ok?: boolean) => 
         {loading ? <Skeleton rows={8} /> : staff.length === 0 ? (
           <EmptyState icon={CalendarRange} title="No employees" />
         ) : (
-          <div className="overflow-x-auto -mx-5 px-5">
-            <table className="nw-table hr-register text-xs" style={{ minWidth: 900 }}>
+          <div data-m-wrap className="overflow-x-auto -mx-5 px-5">
+            <table data-auto-label className="nw-table hr-register text-xs" style={{ minWidth: 900 }}>
               <thead>
                 <tr>
                   <th className="hr-sticky text-left">Employee</th>

@@ -372,8 +372,8 @@ export default function BondProfile({ bondId, isAdmin, employee, onBack }: Props
           <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
             <h2 className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>Cash Flow Schedule (per ₹100 face)</h2>
           </div>
-          <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-            <table className="w-full text-xs">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto max-h-[420px] overflow-y-auto">
+            <table className="m-table w-full text-xs">
               <thead className="sticky top-0" style={{ background: 'var(--bg-surface)' }}>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
                   {['#', 'Date', 'Interest', 'Principal', 'Total', 'Remark'].map(h => (
@@ -384,12 +384,12 @@ export default function BondProfile({ bondId, isAdmin, employee, onBack }: Props
               <tbody>
                 {cashflow.map(r => (
                   <tr key={r.seq} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                    <td className="px-3 py-1.5" style={{ color: 'var(--text-faint)' }}>{r.seq}</td>
-                    <td className="px-3 py-1.5" style={{ color: 'var(--text-secondary)' }}>{fmtDate(r.cf_date)}</td>
-                    <td className="px-3 py-1.5 text-right" style={{ color: 'var(--text-secondary)' }}>{NUM(r.interest_per_100)}</td>
-                    <td className="px-3 py-1.5 text-right" style={{ color: 'var(--text-secondary)' }}>{r.principal_per_100 > 0 ? NUM(r.principal_per_100) : '—'}</td>
-                    <td className="px-3 py-1.5 text-right font-semibold" style={{ color: 'var(--text-primary)' }}>{NUM(r.total_per_100)}</td>
-                    <td className="px-3 py-1.5" style={{ color: 'var(--text-faint)' }}>{r.remark}</td>
+                    <td data-label="#" data-mobile-hide className="px-3 py-1.5" style={{ color: 'var(--text-faint)' }}>{r.seq}</td>
+                    <td data-primary className="px-3 py-1.5" style={{ color: 'var(--text-secondary)' }}>{fmtDate(r.cf_date)}</td>
+                    <td data-label="Interest" className="px-3 py-1.5 text-right" style={{ color: 'var(--text-secondary)' }}>{NUM(r.interest_per_100)}</td>
+                    <td data-label="Principal" className="px-3 py-1.5 text-right" style={{ color: 'var(--text-secondary)' }}>{r.principal_per_100 > 0 ? NUM(r.principal_per_100) : '—'}</td>
+                    <td data-label="Total" className="px-3 py-1.5 text-right font-semibold" style={{ color: 'var(--text-primary)' }}>{NUM(r.total_per_100)}</td>
+                    <td data-label="Remark" className="px-3 py-1.5" style={{ color: 'var(--text-faint)' }}>{r.remark}</td>
                   </tr>
                 ))}
               </tbody>

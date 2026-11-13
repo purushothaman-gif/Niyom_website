@@ -13,9 +13,13 @@ import './index.css';
  */
 import './lib/supabase';
 import { installNumberInputScrollGuard } from './lib/numberInputScrollGuard';
+import { installMobileTableLabels } from './lib/mobileTableLabels';
 
 // Guards every number field in the app against accidental trackpad edits.
 installNumberInputScrollGuard();
+
+// Fills phone card labels for tables marked data-auto-label (see the file).
+installMobileTableLabels();
 
 // A client password-recovery link arrives as a URL hash (…#type=recovery&…).
 // Capture it synchronously at boot — before the Supabase client's async init

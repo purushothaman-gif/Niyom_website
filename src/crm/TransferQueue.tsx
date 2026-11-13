@@ -629,8 +629,8 @@ export default function TransferQueue({ employee }: Props) {
         {/* --- Section 2: Product Details — one row per security on the deal --- */}
         <Section title={previewLines.length > 1 ? `Product Details (${previewLines.length} securities)` : 'Product Details'}>
           <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm nw-table">
+            <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+              <table className="m-table w-full text-sm nw-table">
                 <thead>
                   <tr style={{ background: 'var(--bg-base)', borderBottom: '1px solid var(--border)' }}>
                     {['#', 'Security / ISIN', 'Quantity', 'Rate', 'Amount', 'Status'].map(h => (
@@ -644,21 +644,21 @@ export default function TransferQueue({ employee }: Props) {
                     const done = transferredItemIds.has(it.id);
                     return (
                       <tr key={it.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
-                        <td className="px-4 py-3">
+                        <td data-label="#" data-mobile-hide className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
+                        <td data-primary className="px-4 py-3">
                           <p className="font-semibold text-text-primary">{it.security_name || '—'}</p>
                           <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{it.isin || '—'}</p>
                         </td>
-                        <td className="px-4 py-3 font-mono font-bold text-text-primary">
+                        <td data-label="Quantity" className="px-4 py-3 font-mono font-bold text-text-primary">
                           {it.quantity != null ? Number(it.quantity).toLocaleString('en-IN') : '—'}
                         </td>
-                        <td className="px-4 py-3 font-mono" style={{ color: 'var(--text-secondary)' }}>
+                        <td data-label="Rate" className="px-4 py-3 font-mono" style={{ color: 'var(--text-secondary)' }}>
                           {inr(it.rate_per_unit)}
                         </td>
-                        <td className="px-4 py-3 font-mono font-semibold text-text-primary">
+                        <td data-label="Amount" className="px-4 py-3 font-mono font-semibold text-text-primary">
                           {inr(it.line_settlement)}
                         </td>
-                        <td className="px-4 py-3">
+                        <td data-label="Status" className="px-4 py-3">
                           <span className="text-xs font-semibold px-2 py-1 rounded-lg"
                             style={done
                               ? { background: 'rgba(16,185,129,0.12)', color: 'var(--success)' }
@@ -795,8 +795,8 @@ export default function TransferQueue({ employee }: Props) {
                 No payments recorded.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm nw-table">
+              <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+                <table className="m-table w-full text-sm nw-table">
                   <thead>
                     <tr style={{ background: 'var(--bg-base)', color: 'var(--text-muted)' }}>
                       <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Payment No.</th>
@@ -811,22 +811,22 @@ export default function TransferQueue({ employee }: Props) {
                       const ref = p.utr_number || p.cheque_number || '—';
                       return (
                         <tr key={p.id} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap"
+                          <td data-primary className="px-4 py-2.5 font-mono text-xs whitespace-nowrap"
                             style={{ color: 'var(--accent)' }}>
                             {p.payment_number}
                           </td>
-                          <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
+                          <td data-label="Payment Date" className="px-4 py-2.5 whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
                             {fmtDate(p.payment_date)}
                           </td>
-                          <td className="px-4 py-2.5 text-right font-semibold whitespace-nowrap"
+                          <td data-label="Payment Amount" className="px-4 py-2.5 text-right font-semibold whitespace-nowrap"
                             style={{ color: 'var(--text-primary)' }}>
                             {inr(p.amount_inr)}
                           </td>
-                          <td className="px-4 py-2.5 whitespace-nowrap"
+                          <td data-label="Payment Mode" className="px-4 py-2.5 whitespace-nowrap"
                             style={{ color: 'var(--text-primary)' }}>
                             {MODE_LABEL[p.payment_mode] ?? p.payment_mode}
                           </td>
-                          <td className="px-4 py-2.5 font-mono text-xs">
+                          <td data-label="Transaction No. / UTR / Ref" className="px-4 py-2.5 font-mono text-xs">
                             {ref}
                           </td>
                         </tr>
@@ -990,8 +990,8 @@ export default function TransferQueue({ employee }: Props) {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full nw-table">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full nw-table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   {['Deal Number', 'Client', 'Security', 'Type', 'Settlement', 'Accepted', 'Last Payment', ''].map(h => (
@@ -1003,16 +1003,16 @@ export default function TransferQueue({ employee }: Props) {
               <tbody>
                 {deals.map(d => (
                   <tr key={d.deal_id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Deal Number" className="px-5 py-3.5">
                       <span className="text-xs font-mono font-bold" style={{ color: 'var(--accent)' }}>
                         {d.confirmation_number}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td data-primary className="px-5 py-3.5">
                       <p className="text-sm font-medium text-text-primary">{d.snap_client_name}</p>
                       <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{d.snap_pan}</p>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Security" className="px-5 py-3.5">
                       {/* Every security on the deal — a multi-line deal used to
                           show only its first line here. */}
                       <div className="space-y-1.5">
@@ -1038,19 +1038,19 @@ export default function TransferQueue({ employee }: Props) {
                         })}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Type" className="px-5 py-3.5">
                       <span className="text-xs font-semibold px-2 py-1 rounded-lg"
                         style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)' }}>
                         {d.transaction_type}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Settlement" className="px-5 py-3.5">
                       <p className="text-sm font-bold text-text-primary">{inr(d.settlement_amount)}</p>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Accepted" className="px-5 py-3.5">
                       <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{fmtDate(d.accepted_at)}</p>
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Last Payment" className="px-5 py-3.5">
                       <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{fmtDate(d.last_payment_at)}</p>
                       <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{d.payment_count} pmt(s)</p>
                     </td>

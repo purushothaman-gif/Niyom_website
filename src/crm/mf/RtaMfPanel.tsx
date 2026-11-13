@@ -78,8 +78,8 @@ export function RtaMfPanel({ clientId, showHoldings = true }: { clientId: string
       </div>
 
       {showHoldings && data.holdings.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+          <table className="m-table w-full text-sm">
             <thead>
               <tr style={{ color: 'var(--text-secondary)' }} className="text-left text-[11px] uppercase tracking-wider">
                 <th className="py-2 pr-3 font-medium">Scheme</th>
@@ -93,12 +93,12 @@ export function RtaMfPanel({ clientId, showHoldings = true }: { clientId: string
             <tbody>
               {data.holdings.map((h) => (
                 <tr key={h.id} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td className="py-2 pr-3 text-text-primary">{h.schemeName ?? h.schemeCode}</td>
-                  <td className="py-2 px-3" style={{ color: 'var(--text-secondary)' }}>{h.folio}</td>
-                  <td className="py-2 px-3" style={{ color: 'var(--text-secondary)' }}>{h.firstInvestmentDate ? fmtDate(h.firstInvestmentDate) : '—'}</td>
-                  <td className="py-2 px-3 text-right text-text-primary">{h.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
-                  <td className="py-2 px-3 text-right" style={{ color: 'var(--text-secondary)' }}>{h.investedCost != null ? fmt(h.investedCost) : '—'}</td>
-                  <td className="py-2 pl-3 text-right text-text-primary">{fmt(h.rtaValue ?? h.navValue ?? 0)}</td>
+                  <td data-primary className="py-2 pr-3 text-text-primary">{h.schemeName ?? h.schemeCode}</td>
+                  <td data-label="Folio" className="py-2 px-3" style={{ color: 'var(--text-secondary)' }}>{h.folio}</td>
+                  <td data-label="Since" className="py-2 px-3" style={{ color: 'var(--text-secondary)' }}>{h.firstInvestmentDate ? fmtDate(h.firstInvestmentDate) : '—'}</td>
+                  <td data-label="Units" className="py-2 px-3 text-right text-text-primary">{h.units.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
+                  <td data-label="Invested" className="py-2 px-3 text-right" style={{ color: 'var(--text-secondary)' }}>{h.investedCost != null ? fmt(h.investedCost) : '—'}</td>
+                  <td data-label="Value" className="py-2 pl-3 text-right text-text-primary">{fmt(h.rtaValue ?? h.navValue ?? 0)}</td>
                 </tr>
               ))}
             </tbody>
@@ -112,8 +112,8 @@ export function RtaMfPanel({ clientId, showHoldings = true }: { clientId: string
             <ArrowLeftRight className="h-4 w-4" style={{ color: 'var(--accent)' }} />
             <h4 className="text-xs font-bold text-text-primary">Recent transactions (last {txns.length})</h4>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full text-sm">
               <thead>
                 <tr style={{ color: 'var(--text-secondary)' }} className="text-left text-[11px] uppercase tracking-wider">
                   <th className="py-2 pr-3 font-medium">Date</th>
@@ -126,13 +126,13 @@ export function RtaMfPanel({ clientId, showHoldings = true }: { clientId: string
               <tbody>
                 {txns.map((t) => (
                   <tr key={t.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td className="py-2 pr-3" style={{ color: 'var(--text-secondary)' }}>{fmtDate(t.txn_date)}</td>
-                    <td className="py-2 px-3 text-text-primary">{t.product_name}</td>
-                    <td className="py-2 px-3" style={{ color: t.txn_type === 'sell' ? 'var(--danger)' : 'var(--success)' }}>{t.notes}</td>
-                    <td className="py-2 px-3 text-right" style={{ color: 'var(--text-secondary)' }}>
+                    <td data-label="Date" className="py-2 pr-3" style={{ color: 'var(--text-secondary)' }}>{fmtDate(t.txn_date)}</td>
+                    <td data-primary className="py-2 px-3 text-text-primary">{t.product_name}</td>
+                    <td data-label="Type" className="py-2 px-3" style={{ color: t.txn_type === 'sell' ? 'var(--danger)' : 'var(--success)' }}>{t.notes}</td>
+                    <td data-label="Units" className="py-2 px-3 text-right" style={{ color: 'var(--text-secondary)' }}>
                       {t.quantity != null ? t.quantity.toLocaleString('en-IN', { maximumFractionDigits: 3 }) : '—'}
                     </td>
-                    <td className="py-2 pl-3 text-right text-text-primary">{fmt(t.consolidated_amount)}</td>
+                    <td data-label="Amount" className="py-2 pl-3 text-right text-text-primary">{fmt(t.consolidated_amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -147,8 +147,8 @@ export function RtaMfPanel({ clientId, showHoldings = true }: { clientId: string
             <Repeat className="h-4 w-4" style={{ color: 'var(--accent)' }} />
             <h4 className="text-xs font-bold text-text-primary">Active systematic plans ({active.length})</h4>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full text-sm">
               <thead>
                 <tr style={{ color: 'var(--text-secondary)' }} className="text-left text-[11px] uppercase tracking-wider">
                   <th className="py-2 pr-3 font-medium">Scheme</th>
@@ -161,11 +161,11 @@ export function RtaMfPanel({ clientId, showHoldings = true }: { clientId: string
               <tbody>
                 {active.map((s) => (
                   <tr key={s.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td className="py-2 pr-3 text-text-primary">{s.schemeName ?? s.schemeCode}</td>
-                    <td className="py-2 px-3" style={{ color: 'var(--text-secondary)' }}>{s.type ?? 'SIP'}</td>
-                    <td className="py-2 px-3 text-right text-text-primary">{s.amount != null ? fmt(s.amount) : '—'}</td>
-                    <td className="py-2 px-3" style={{ color: 'var(--text-secondary)' }}>{s.frequency ?? '—'}</td>
-                    <td className="py-2 pl-3" style={{ color: 'var(--text-secondary)' }}>{s.sipDay ?? '—'}</td>
+                    <td data-primary className="py-2 pr-3 text-text-primary">{s.schemeName ?? s.schemeCode}</td>
+                    <td data-label="Type" className="py-2 px-3" style={{ color: 'var(--text-secondary)' }}>{s.type ?? 'SIP'}</td>
+                    <td data-label="Amount" className="py-2 px-3 text-right text-text-primary">{s.amount != null ? fmt(s.amount) : '—'}</td>
+                    <td data-label="Frequency" className="py-2 px-3" style={{ color: 'var(--text-secondary)' }}>{s.frequency ?? '—'}</td>
+                    <td data-label="Next / day" className="py-2 pl-3" style={{ color: 'var(--text-secondary)' }}>{s.sipDay ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

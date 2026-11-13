@@ -316,8 +316,8 @@ export default function BrokerageMis({ employee }: Props) {
         {loading ? <p className="px-5 py-6 text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</p>
           : grouped.length === 0 ? <p className="px-5 py-6 text-sm" style={{ color: 'var(--text-muted)' }}>No brokerage for this selection yet. WBR77 files are picked up from the CAMS mailback daily, or can be uploaded on MF Feeds.</p>
           : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div data-m-wrap className="overflow-x-auto">
+            <table data-auto-label className="w-full text-sm">
               <thead><tr className="text-left text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
                 <th className={th}>{GROUPS.find((g) => g.key === groupBy)?.label}</th>
                 <th className={`${th} text-right`}>Lines</th><th className={`${th} text-right`}>Clients</th>
@@ -358,8 +358,8 @@ export default function BrokerageMis({ employee }: Props) {
               </p>
             </div>
             {recon.length === 0 ? <p className="px-5 py-6 text-sm" style={{ color: 'var(--text-muted)' }}>Nothing to reconcile yet.</p> : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+                <table className="m-table w-full text-sm">
                   <thead><tr className="text-left text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
                     <th className={th}>Month</th><th className={th}>AMC</th><th className={`${th} text-right`}>Computed</th>
                     <th className={`${th} text-right`}>+ GST</th><th className={`${th} text-right`}>Received</th><th className={`${th} text-right`}>Difference</th><th className={th}>Status</th>
@@ -371,19 +371,19 @@ export default function BrokerageMis({ employee }: Props) {
                       const ok = diff != null && (Math.abs(diff) < 0.01 || Math.abs(diff - r.gst) < 0.01);
                       return (
                         <tr key={k} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td className={td} style={{ color: 'var(--text-secondary)' }}>{monthLabel(r.month)}</td>
-                          <td className={`${td} text-text-primary`}>{r.amc_name}</td>
-                          <td className={`${td} text-right text-text-primary`}>{inr(r.computed)}</td>
-                          <td className={`${td} text-right`} style={{ color: 'var(--text-secondary)' }}>{inr(r.computed + r.gst)}</td>
-                          <td className={`${td} text-right`}>
+                          <td data-primary className={td} style={{ color: 'var(--text-secondary)' }}>{monthLabel(r.month)}</td>
+                          <td data-label="AMC" className={`${td} text-text-primary`}>{r.amc_name}</td>
+                          <td data-label="Computed" className={`${td} text-right text-text-primary`}>{inr(r.computed)}</td>
+                          <td data-label="+ GST" className={`${td} text-right`} style={{ color: 'var(--text-secondary)' }}>{inr(r.computed + r.gst)}</td>
+                          <td data-label="Received" className={`${td} text-right`}>
                             <div className="flex justify-end gap-1">
                               <input value={draft[k] ?? (r.receipt ? String(r.receipt.amount) : '')} onChange={(e) => setDraft((d) => ({ ...d, [k]: e.target.value }))}
                                 inputMode="decimal" placeholder="₹ paid" className="w-24 px-2 py-1 rounded-lg text-sm text-right text-text-primary" style={sel} />
                               {draft[k] != null && <button disabled={busy} onClick={() => saveReceipt(r.amc_code, r.month)} className="px-2 py-1 rounded-lg text-xs font-semibold text-on-accent disabled:opacity-50" style={{ background: 'var(--accent)' }}>Save</button>}
                             </div>
                           </td>
-                          <td className={`${td} text-right`} style={{ color: diff == null ? 'var(--text-muted)' : ok ? 'var(--c-green)' : 'var(--c-red)' }}>{diff == null ? '—' : inr(diff)}</td>
-                          <td className={td} style={{ color: diff == null ? 'var(--text-muted)' : ok ? 'var(--c-green)' : 'var(--c-red)' }}>
+                          <td data-label="Difference" className={`${td} text-right`} style={{ color: diff == null ? 'var(--text-muted)' : ok ? 'var(--c-green)' : 'var(--c-red)' }}>{diff == null ? '—' : inr(diff)}</td>
+                          <td data-label="Status" className={td} style={{ color: diff == null ? 'var(--text-muted)' : ok ? 'var(--c-green)' : 'var(--c-red)' }}>
                             {diff == null ? 'Awaiting payout' : ok ? (Math.abs(diff) < 0.01 ? 'Matched' : 'Matched (incl. GST)') : diff < 0 ? 'Short-paid' : 'Over-paid'}
                           </td>
                         </tr>
@@ -403,17 +403,17 @@ export default function BrokerageMis({ employee }: Props) {
                 <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Registrar holdings with no WBR77 line in the latest month: check the ARN/EUIN on the folio, a direct-plan switch, or a missing month.</p>
               </div>
               {noBrokerage.length === 0 ? <p className="px-5 py-6 text-sm" style={{ color: 'var(--text-muted)' }}>Every CAMS holding earned brokerage in {monthLabel(latestMonth)}.</p> : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+                  <table className="m-table w-full text-sm">
                     <thead><tr className="text-left text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
                       <th className={th}>Folio</th><th className={th}>Scheme</th><th className={`${th} text-right`}>Value</th>
                     </tr></thead>
                     <tbody>
                       {noBrokerage.slice(0, 50).map((h, i) => (
                         <tr key={`${h.folio}-${i}`} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td className={`${td} font-mono text-xs text-text-primary`}>{h.folio}</td>
-                          <td className={td} style={{ color: 'var(--text-secondary)' }}>{h.scheme_name ?? '—'}</td>
-                          <td className={`${td} text-right text-text-primary`}>{inr(h.value)}</td>
+                          <td data-label="Folio" className={`${td} font-mono text-xs text-text-primary`}>{h.folio}</td>
+                          <td data-primary className={td} style={{ color: 'var(--text-secondary)' }}>{h.scheme_name ?? '—'}</td>
+                          <td data-label="Value" className={`${td} text-right text-text-primary`}>{inr(h.value)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -454,8 +454,8 @@ export default function BrokerageMis({ employee }: Props) {
               <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Each WBR77 import is refused unless the stored lines add up to the file's own line count and brokerage total.</p>
             </div>
             {imports.length === 0 ? <p className="px-5 py-6 text-sm" style={{ color: 'var(--text-muted)' }}>No WBR77/WBR39 imported yet.</p> : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+                <table className="m-table w-full text-sm">
                   <thead><tr className="text-left text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
                     <th className={th}>When</th><th className={th}>Report</th><th className={`${th} text-right`}>Rows</th>
                     <th className={`${th} text-right`}>Matched</th><th className={`${th} text-right`}>File total</th><th className={th}>Result</th>
@@ -463,12 +463,12 @@ export default function BrokerageMis({ employee }: Props) {
                   <tbody>
                     {imports.map((r) => (
                       <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                        <td className={td} style={{ color: 'var(--text-secondary)' }}>{new Date(r.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</td>
-                        <td className={`${td} text-text-primary`}>{r.report} <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{r.source}</span></td>
-                        <td className={`${td} text-right text-text-primary`}>{r.rows_total ?? '—'}</td>
-                        <td className={`${td} text-right`} style={{ color: 'var(--text-secondary)' }}>{r.report === 'WBR77' ? `${r.matched ?? 0}/${(r.matched ?? 0) + (r.unmatched ?? 0)}` : `${r.schemes_upserted ?? 0} schemes`}</td>
-                        <td className={`${td} text-right text-text-primary`}>{r.amount_total != null ? inr(Number(r.amount_total)) : '—'}</td>
-                        <td className={td} style={{ color: r.status === 'ok' ? 'var(--c-green)' : 'var(--c-red)' }}>
+                        <td data-primary className={td} style={{ color: 'var(--text-secondary)' }}>{new Date(r.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                        <td data-label="Report" className={`${td} text-text-primary`}>{r.report} <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{r.source}</span></td>
+                        <td data-label="Rows" className={`${td} text-right text-text-primary`}>{r.rows_total ?? '—'}</td>
+                        <td data-label="Matched" className={`${td} text-right`} style={{ color: 'var(--text-secondary)' }}>{r.report === 'WBR77' ? `${r.matched ?? 0}/${(r.matched ?? 0) + (r.unmatched ?? 0)}` : `${r.schemes_upserted ?? 0} schemes`}</td>
+                        <td data-label="File total" className={`${td} text-right text-text-primary`}>{r.amount_total != null ? inr(Number(r.amount_total)) : '—'}</td>
+                        <td data-label="Result" className={td} style={{ color: r.status === 'ok' ? 'var(--c-green)' : 'var(--c-red)' }}>
                           {r.status === 'ok' ? (r.report === 'WBR77' ? 'Reconciled' : 'OK') : (r.error ?? 'Error')}
                         </td>
                       </tr>

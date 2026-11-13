@@ -298,8 +298,11 @@ export function TableWrap({ children }: { children: React.ReactNode }) {
   // Wide HR tables (a monthly register is 31 columns) scroll inside their own
   // container so the page body never scrolls sideways on a phone.
   return (
-    <div className="overflow-x-auto -mx-5 px-5">
-      <table className="nw-table w-full text-sm" style={{ minWidth: 560 }}>{children}</table>
+    // data-m-wrap + data-auto-label: cards on a phone with labels taken from
+    // the header row (src/lib/mobileTableLabels.ts); registers wider than 12
+    // columns keep the sideways scroll.
+    <div data-m-wrap className="overflow-x-auto -mx-5 px-5">
+      <table data-auto-label className="nw-table w-full text-sm" style={{ minWidth: 560 }}>{children}</table>
     </div>
   );
 }

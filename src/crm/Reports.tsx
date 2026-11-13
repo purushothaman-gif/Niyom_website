@@ -120,13 +120,13 @@ export default function Reports({ employee }: Props) {
       </div>
 
       {/* Mode tabs */}
-      <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+      <div className="flex gap-1 p-1 rounded-xl w-fit max-w-full overflow-x-auto [scrollbar-width:none]" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
         {modes.map(m => {
           const Icon = m.icon;
           const active = mode === m.key;
           return (
             <button key={m.key} onClick={() => setMode(m.key)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+              className="flex shrink-0 whitespace-nowrap items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
               style={active ? { background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' } : { color: 'var(--text-muted)', border: '1px solid transparent' }}>
               <Icon className="w-4 h-4" />{m.label}
             </button>
@@ -194,8 +194,8 @@ export default function Reports({ employee }: Props) {
 
               {/* Holdings table */}
               <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-                <div className="overflow-x-auto">
-                  <table className="w-full nw-table">
+                <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+                  <table className="m-table w-full nw-table">
                     <thead><tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                       {['Product', 'Client', 'Type', 'Invested', 'Current Value', 'P&L'].map(h => (
                         <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>
@@ -206,12 +206,12 @@ export default function Reports({ employee }: Props) {
                         const pl = (h.current_value || 0) - (h.invested_amount || 0);
                         return (
                           <tr key={h.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                            <td className="px-5 py-3.5 text-sm font-medium text-text-primary">{h.product_name}</td>
-                            <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{(h as any).client?.full_name || '—'}</td>
-                            <td className="px-5 py-3.5"><span className="text-xs px-1.5 py-0.5 rounded" style={{ background: PRODUCT_CHART_COLORS[h.product_type] + '20', color: PRODUCT_CHART_COLORS[h.product_type] }}>{PRODUCT_LABELS[h.product_type]}</span></td>
-                            <td className="px-5 py-3.5 text-sm text-text-primary">{fmt(h.invested_amount || 0)}</td>
-                            <td className="px-5 py-3.5 text-sm font-bold text-text-primary">{fmt(h.current_value || 0)}</td>
-                            <td className="px-5 py-3.5"><span className={`text-sm font-bold ${pl >= 0 ? 'text-c-emerald' : 'text-c-red'}`}>{pl >= 0 ? '+' : ''}{fmt(pl)}</span></td>
+                            <td data-label="Product" className="px-5 py-3.5 text-sm font-medium text-text-primary">{h.product_name}</td>
+                            <td data-primary className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{(h as any).client?.full_name || '—'}</td>
+                            <td data-label="Type" className="px-5 py-3.5"><span className="text-xs px-1.5 py-0.5 rounded" style={{ background: PRODUCT_CHART_COLORS[h.product_type] + '20', color: PRODUCT_CHART_COLORS[h.product_type] }}>{PRODUCT_LABELS[h.product_type]}</span></td>
+                            <td data-label="Invested" className="px-5 py-3.5 text-sm text-text-primary">{fmt(h.invested_amount || 0)}</td>
+                            <td data-label="Current Value" className="px-5 py-3.5 text-sm font-bold text-text-primary">{fmt(h.current_value || 0)}</td>
+                            <td data-label="P&L" className="px-5 py-3.5"><span className={`text-sm font-bold ${pl >= 0 ? 'text-c-emerald' : 'text-c-red'}`}>{pl >= 0 ? '+' : ''}{fmt(pl)}</span></td>
                           </tr>
                         );
                       })}
@@ -224,8 +224,8 @@ export default function Reports({ employee }: Props) {
 
           {mode === 'transactions' && (
             <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-              <div className="overflow-x-auto">
-                <table className="w-full nw-table">
+              <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+                <table className="m-table w-full nw-table">
                   <thead><tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                     {['Date', 'Client', 'Type', 'Product', 'Amount'].map(h => (
                       <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>
@@ -236,11 +236,11 @@ export default function Reports({ employee }: Props) {
                       <tr><td colSpan={5} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>No transactions in range</td></tr>
                     ) : filteredTxns.map(t => (
                       <tr key={t.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                        <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(t.txn_date)}</td>
-                        <td className="px-5 py-3.5 text-sm text-text-primary">{(t.client as any)?.full_name || '—'}</td>
-                        <td className="px-5 py-3.5"><span className={`text-xs font-bold px-2 py-1 rounded-lg ${TXN_COLORS[t.txn_type]}`}>{TXN_LABELS[t.txn_type]}</span></td>
-                        <td className="px-5 py-3.5 text-sm text-text-primary">{t.product_name}</td>
-                        <td className="px-5 py-3.5 text-sm font-bold text-text-primary">{fmt(t.consolidated_amount)}</td>
+                        <td data-label="Date" className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(t.txn_date)}</td>
+                        <td data-primary className="px-5 py-3.5 text-sm text-text-primary">{(t.client as any)?.full_name || '—'}</td>
+                        <td data-label="Type" className="px-5 py-3.5"><span className={`text-xs font-bold px-2 py-1 rounded-lg ${TXN_COLORS[t.txn_type]}`}>{TXN_LABELS[t.txn_type]}</span></td>
+                        <td data-label="Product" className="px-5 py-3.5 text-sm text-text-primary">{t.product_name}</td>
+                        <td data-label="Amount" className="px-5 py-3.5 text-sm font-bold text-text-primary">{fmt(t.consolidated_amount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -251,8 +251,8 @@ export default function Reports({ employee }: Props) {
 
           {mode === 'clients' && (
             <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-              <div className="overflow-x-auto">
-                <table className="w-full nw-table">
+              <div data-m-wrap className="overflow-x-auto">
+                <table data-auto-label className="w-full nw-table">
                   <thead><tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                     {['Client', 'Code', ...(isAdmin ? ['Employee'] : []), 'Portfolio', 'Status', 'Joined'].map(h => (
                       <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>

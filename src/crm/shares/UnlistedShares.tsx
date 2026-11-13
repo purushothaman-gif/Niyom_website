@@ -370,8 +370,8 @@ function Inner({ employee }: Props) {
             <p className="text-sm" style={{ color: 'var(--text-faint)' }}>No shares in the master yet.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
                   {['Company', 'ISIN', 'Sector', 'Price / share', 'Priced on', 'Min · Lot', 'Status', ''].map((h) => (
@@ -385,7 +385,7 @@ function Inner({ employee }: Props) {
                   const isStale = n !== null && n > STALE_DAYS;
                   return (
                     <tr key={s.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                      <td className="px-4 py-3">
+                      <td data-primary className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <ShareLogo name={s.short_name || s.company_name} url={s.logo_url} size={34} />
                           <div className="min-w-0">
@@ -394,14 +394,14 @@ function Inner({ employee }: Props) {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>{s.isin}</td>
-                      <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{s.sector || '—'}</td>
-                      <td className="px-4 py-3 font-bold whitespace-nowrap" style={{ color: s.latest_price == null ? 'var(--text-faint)' : 'var(--text-primary)' }}>{fmtPrice(s.latest_price)}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-xs" style={{ color: isStale ? 'rgb(245,158,11)' : 'var(--text-faint)' }}>
+                      <td data-label="ISIN" className="px-4 py-3 font-mono text-xs whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>{s.isin}</td>
+                      <td data-label="Sector" className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{s.sector || '—'}</td>
+                      <td data-label="Price / share" className="px-4 py-3 font-bold whitespace-nowrap" style={{ color: s.latest_price == null ? 'var(--text-faint)' : 'var(--text-primary)' }}>{fmtPrice(s.latest_price)}</td>
+                      <td data-label="Priced on" className="px-4 py-3 whitespace-nowrap text-xs" style={{ color: isStale ? 'rgb(245,158,11)' : 'var(--text-faint)' }}>
                         {fmtDate(s.price_date)}{isStale && n !== null ? ` · ${n}d old` : ''}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-xs" style={{ color: 'var(--text-secondary)' }}>{s.min_qty} · {s.lot_size}</td>
-                      <td className="px-4 py-3"><StatusBadge status={s.active_status} /></td>
+                      <td data-label="Min · Lot" className="px-4 py-3 whitespace-nowrap text-xs" style={{ color: 'var(--text-secondary)' }}>{s.min_qty} · {s.lot_size}</td>
+                      <td data-label="Status" className="px-4 py-3"><StatusBadge status={s.active_status} /></td>
                       <td className="px-4 py-3">
                         {isAdmin && (
                           <div className="flex items-center justify-end gap-2">

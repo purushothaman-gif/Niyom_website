@@ -955,8 +955,8 @@ function LineGroup({ title, lines, total }: { title: string; lines: PayrollLineR
   return (
     <div>
       <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>{title}</p>
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-subtle)' }}>
-        <table className="nw-table w-full text-sm">
+      <div data-m-wrap className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-subtle)' }}>
+        <table data-auto-label className="nw-table w-full text-sm">
           <tbody>
             {lines.map(l => (
               <tr key={l.id}>

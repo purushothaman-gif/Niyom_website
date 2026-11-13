@@ -1398,8 +1398,8 @@ export default function Portfolio({ employee, pageParams }: Props) {
       {/* Client book — one row per client, click to open the full portfolio */}
       {view === 'clients' && (
         <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-          <div className="overflow-x-auto">
-            <table className="w-full nw-table">
+          <div data-m-wrap className="overflow-x-auto">
+            <table data-auto-label className="w-full nw-table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   {([
@@ -1464,8 +1464,8 @@ export default function Portfolio({ employee, pageParams }: Props) {
       {/* Holdings table (single client) */}
       {view === 'detail' && (
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-        <div className="overflow-x-auto">
-          <table className="w-full nw-table">
+        <div data-m-wrap className="overflow-x-auto">
+          <table data-auto-label className="w-full nw-table">
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 {['Holding', 'Type / Held', 'Key Details', 'Qty', 'Invested', 'Current Value', 'P&L', 'Actions'].map(h => (

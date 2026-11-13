@@ -87,8 +87,8 @@ export function ProductChecklist({ result, manualKeys }: { result: IncentiveResu
     ? <CheckCircle2 className="w-4 h-4 inline" style={{ color: 'rgb(16,185,129)' }} />
     : <Circle className="w-4 h-4 inline" style={{ color: 'var(--text-faint)' }} />;
   return (
-    <div className="overflow-x-auto">
-      <table className="nw-table w-full text-sm" style={{ minWidth: 520 }}>
+    <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+      <table className="m-table nw-table w-full text-sm" style={{ minWidth: 520 }}>
         <thead>
           <tr>
             <th className="text-left">Product</th>
@@ -104,23 +104,23 @@ export function ProductChecklist({ result, manualKeys }: { result: IncentiveResu
             const oa = result.oaChecks[i];
             return (
               <tr key={c.key}>
-                <td>
+                <td data-primary>
                   <span style={{ color: 'var(--text-primary)' }}>{c.label}</span>
                   <span className="text-[11px] ml-1.5" style={{ color: 'var(--text-faint)' }}>
                     {c.unit}{manualKeys?.has(c.key) ? ' · entered by admin' : ''}
                   </span>
                 </td>
-                <td className="text-right tabular-nums">{inr(c.actual)}</td>
-                <td className="text-right tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                <td data-label="This month" className="text-right tabular-nums">{inr(c.actual)}</td>
+                <td data-label="Minimum" className="text-right tabular-nums" style={{ color: 'var(--text-muted)' }}>
                   {inr(c.threshold)}
                   {!c.met && <span className="block text-[11px]" style={{ color: 'rgb(245,158,11)' }}>{inr(c.shortfall)} to go</span>}
                 </td>
-                <td className="text-center">{tick(c)}</td>
-                <td className="text-right tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                <td data-label="Met" className="text-center">{tick(c)}</td>
+                <td data-label="Over-achievement" className="text-right tabular-nums" style={{ color: 'var(--text-muted)' }}>
                   {inr(oa.threshold)}
                   {!oa.met && <span className="block text-[11px]" style={{ color: 'var(--text-faint)' }}>{inr(oa.shortfall)} to go</span>}
                 </td>
-                <td className="text-center">{tick(oa)}</td>
+                <td data-label="Met" className="text-center">{tick(oa)}</td>
               </tr>
             );
           })}
@@ -223,8 +223,8 @@ export function GoalCards({ goals, result }: { goals: IncentiveGoals; result: In
 
 export function SlabTable({ config }: { config: IncentiveConfig }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="nw-table w-full text-sm" style={{ minWidth: 520 }}>
+    <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+      <table className="m-table nw-table w-full text-sm" style={{ minWidth: 520 }}>
         <thead>
           <tr>
             <th className="text-left">Band</th>
@@ -237,11 +237,11 @@ export function SlabTable({ config }: { config: IncentiveConfig }) {
         <tbody>
           {config.bands.map(b => (
             <tr key={b.lower_x}>
-              <td style={{ color: 'var(--text-primary)' }}>{b.label}</td>
-              <td className="text-right tabular-nums">{pct(b.base_mult)}</td>
-              <td className="text-right tabular-nums">{pct(b.addon_pct)}</td>
-              <td className="text-right tabular-nums">{pct(b.oa_pct)}</td>
-              <td style={{ color: 'var(--text-muted)' }}>{b.note}</td>
+              <td data-primary style={{ color: 'var(--text-primary)' }}>{b.label}</td>
+              <td data-label="Base (% of salary)" className="text-right tabular-nums">{pct(b.base_mult)}</td>
+              <td data-label="Add-on (% of revenue)" className="text-right tabular-nums">{pct(b.addon_pct)}</td>
+              <td data-label="OA bonus (% of revenue)" className="text-right tabular-nums">{pct(b.oa_pct)}</td>
+              <td data-label="Note" style={{ color: 'var(--text-muted)' }}>{b.note}</td>
             </tr>
           ))}
         </tbody>

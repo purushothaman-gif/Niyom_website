@@ -166,16 +166,16 @@ export function MarkupPricing({ employee, product, eyebrow, baseLabel, emptyIcon
           {pending.length === 0 ? (
             <p className="text-sm px-5 py-8 text-center" style={{ color: 'var(--text-faint)' }}>Nothing awaiting approval.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="m-table w-full text-sm">
               <thead><tr style={{ borderBottom: '1px solid var(--border)' }}>
                 {['Target', 'Audience', 'Markup', ''].map(h => <th key={h} className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {pending.map(m => (
                   <tr key={m.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                    <td className="px-4 py-2.5 font-semibold" style={{ color: 'var(--text-primary)' }}>{targetLabel(m)}</td>
-                    <td className="px-4 py-2.5 capitalize" style={{ color: 'var(--text-secondary)' }}>{m.audience}</td>
-                    <td className="px-4 py-2.5 font-bold" style={{ color: 'var(--text-primary)' }}>{fmtPct(m.markup_percent)}</td>
+                    <td data-primary className="px-4 py-2.5 font-semibold" style={{ color: 'var(--text-primary)' }}>{targetLabel(m)}</td>
+                    <td data-label="Audience" className="px-4 py-2.5 capitalize" style={{ color: 'var(--text-secondary)' }}>{m.audience}</td>
+                    <td data-label="Markup" className="px-4 py-2.5 font-bold" style={{ color: 'var(--text-primary)' }}>{fmtPct(m.markup_percent)}</td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2">
                         <button disabled={approve.isPending} onClick={() => run(() => approve.mutateAsync(m.id))} className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1" style={{ background: 'rgba(16,185,129,0.12)', color: 'rgb(16,185,129)', border: '1px solid rgba(16,185,129,0.3)' }}><Check className="w-3.5 h-3.5" /> Approve</button>
@@ -208,8 +208,8 @@ export function MarkupPricing({ employee, product, eyebrow, baseLabel, emptyIcon
         ) : list.length === 0 ? (
           <p className="text-sm px-5 py-10 text-center" style={{ color: 'var(--text-faint)' }}><EmptyIcon className="w-6 h-6 mx-auto mb-2" style={{ color: 'var(--text-faint)' }} />No {tab}s.</p>
         ) : (
-          <div className="max-h-[520px] overflow-y-auto">
-            <table className="w-full text-sm">
+          <div data-m-wrap className="max-h-[520px] overflow-y-auto">
+            <table data-auto-label className="w-full text-sm">
               <thead className="sticky top-0" style={{ background: 'var(--bg-surface)' }}><tr style={{ borderBottom: '1px solid var(--border)' }}>
                 {[tab === 'client' ? 'Client' : 'Partner', 'Approved', 'Override', ...(allowBlocking ? ['Price access'] : []), ''].map(h => <th key={h} className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>)}
               </tr></thead>

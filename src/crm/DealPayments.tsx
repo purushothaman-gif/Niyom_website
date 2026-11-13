@@ -1108,8 +1108,8 @@ export default function DealPayments({ deal, employee, onBack }: Props) {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm nw-table">
+          <div data-m-wrap className="overflow-x-auto">
+            <table data-auto-label className="w-full text-sm nw-table">
               <thead>
                 <tr style={{ background: 'var(--bg-base)', color: 'var(--text-muted)' }}>
                   <Th>Date</Th>

@@ -924,7 +924,7 @@ export default function DSAManagement({ employee }: Props) {
                 ) : rows.length === 0 ? (
                   <p className="py-12 text-center text-sm" style={{ color: 'var(--text-faint)' }}>{dsaClients.length === 0 ? 'No clients mapped to this DSA yet' : 'No clients match your search'}</p>
                 ) : (
-                  <table className="w-full nw-table">
+                  <table className="m-table w-full nw-table">
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                         {['Client', 'Code', 'PAN', 'Portfolio', 'Status', 'Date'].map(h => (
@@ -935,19 +935,19 @@ export default function DSAManagement({ employee }: Props) {
                     <tbody>
                       {rows.map(c => (
                         <tr key={c.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                          <td className="px-3 py-2.5">
+                          <td data-primary className="px-3 py-2.5">
                             <p className="text-sm font-medium text-text-primary">{c.full_name}</p>
                             <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{c.phone || c.email || '—'}</p>
                           </td>
-                          <td className="px-3 py-2.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{c.client_code}</span></td>
-                          <td className="px-3 py-2.5 text-xs font-mono text-text-primary">{c.pan || '—'}</td>
-                          <td className="px-3 py-2.5 text-sm font-semibold text-text-primary">{fmt(c.portfolio_value || 0)}</td>
-                          <td className="px-3 py-2.5">
+                          <td data-label="Code" className="px-3 py-2.5"><span className="text-xs font-mono px-2 py-1 rounded" style={{ background: 'var(--bg-raised)', color: 'var(--accent)' }}>{c.client_code}</span></td>
+                          <td data-label="PAN" className="px-3 py-2.5 text-xs font-mono text-text-primary">{c.pan || '—'}</td>
+                          <td data-label="Portfolio" className="px-3 py-2.5 text-sm font-semibold text-text-primary">{fmt(c.portfolio_value || 0)}</td>
+                          <td data-label="Status" className="px-3 py-2.5">
                             <span className={`text-xs font-semibold px-2 py-1 rounded-lg border ${VERIFICATION_COLORS[c.verification_status]}`}>
                               {VERIFICATION_LABELS[c.verification_status]}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(c.created_at)}</td>
+                          <td data-label="Date" className="px-3 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate(c.created_at)}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -282,8 +282,8 @@ export default function MIS({ employee }: Props) {
             <p className="text-sm font-bold text-text-primary">Revenue Breakdown — {MONTHS[selectedMonth]} {selectedYear}</p>
             <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{rows.length} {rows.length === 1 ? 'entry' : 'entries'}</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full nw-table">
+          <div data-m-wrap className="overflow-x-auto">
+            <table data-auto-label className="w-full nw-table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   {['Date', 'Client', 'Product', 'Type', 'Revenue Type', 'Details', 'Revenue'].map(h => (

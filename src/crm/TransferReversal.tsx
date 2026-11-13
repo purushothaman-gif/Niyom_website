@@ -190,8 +190,8 @@ export default function TransferHistory({ onReversed }: { onReversed?: () => voi
         ) : shown.length === 0 ? (
           <p className="text-center py-16 text-sm" style={{ color: 'var(--text-faint)' }}>No transferred deals found.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full nw-table">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full nw-table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   {['Transfer Ref', 'Deal Number', 'Client', 'Security', 'Amount', 'Transferred', ''].map(h => (
@@ -202,15 +202,15 @@ export default function TransferHistory({ onReversed }: { onReversed?: () => voi
               <tbody>
                 {shown.map(r => (
                   <tr key={r.deal_id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                    <td className="px-5 py-3.5 text-xs font-mono text-text-primary">{r.references.join(', ')}</td>
-                    <td className="px-5 py-3.5 text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>{r.confirmation_number}</td>
-                    <td className="px-5 py-3.5">
+                    <td data-label="Transfer Ref" className="px-5 py-3.5 text-xs font-mono text-text-primary">{r.references.join(', ')}</td>
+                    <td data-label="Deal Number" className="px-5 py-3.5 text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>{r.confirmation_number}</td>
+                    <td data-primary className="px-5 py-3.5">
                       <p className="text-sm text-text-primary">{r.client_name}</p>
                       <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{r.client_code}</p>
                     </td>
-                    <td className="px-5 py-3.5 text-sm" style={{ color: 'var(--text-secondary)' }}>{r.securities.join(', ')}</td>
-                    <td className="px-5 py-3.5 text-sm text-text-primary tabular-nums">{inr(r.amount)}</td>
-                    <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <td data-label="Security" className="px-5 py-3.5 text-sm" style={{ color: 'var(--text-secondary)' }}>{r.securities.join(', ')}</td>
+                    <td data-label="Amount" className="px-5 py-3.5 text-sm text-text-primary tabular-nums">{inr(r.amount)}</td>
+                    <td data-label="Transferred" className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>
                       {fmtDateTime(r.transferred_at)}{r.transferred_by ? <><br />by {r.transferred_by}</> : null}
                     </td>
                     <td className="px-5 py-3.5 text-right">

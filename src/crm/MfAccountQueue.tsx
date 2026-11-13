@@ -152,7 +152,7 @@ export default function MfAccountQueue({ employee }: { employee: NWEmployee }) {
         ) : visible.length === 0 ? (
           <p className="p-6 text-sm" style={{ color: 'var(--text-faint)' }}>{term ? 'No clients match that search.' : TABS.find((t) => t.key === tab)!.empty}</p>
         ) : (
-          <table className="w-full text-sm">
+          <table data-auto-label className="m-table w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase" style={{ color: 'var(--text-faint)' }}>
                 <th className="px-4 py-3">Client</th>

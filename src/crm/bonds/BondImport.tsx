@@ -182,8 +182,8 @@ export default function BondImport({ onBack, onDone }: Props) {
       {error && <p className="text-sm" style={{ color: 'rgb(239,68,68)' }}>{error}</p>}
 
       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-        <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
-          <table className="w-full text-xs">
+        <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto max-h-[60vh] overflow-y-auto">
+          <table className="m-table w-full text-xs">
             <thead className="sticky top-0" style={{ background: 'var(--bg-surface)' }}>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 {['#', 'ISIN', 'Bond Name', 'Price', ''].map(h => (
@@ -194,10 +194,10 @@ export default function BondImport({ onBack, onDone }: Props) {
             <tbody>
               {rows.map((r, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid var(--border-subtle)', opacity: r.valid ? 1 : 0.5 }}>
-                  <td className="px-3 py-1.5" style={{ color: 'var(--text-faint)' }}>{r.rowNumber}</td>
-                  <td className="px-3 py-1.5 font-mono" style={{ color: 'var(--text-secondary)' }}>{r.isin}</td>
-                  <td className="px-3 py-1.5 max-w-[360px] truncate" style={{ color: 'var(--text-primary)' }}>{r.bond_name || '—'}</td>
-                  <td className="px-3 py-1.5 text-right" style={{ color: 'var(--text-secondary)' }}>{r.price === null ? '—' : r.price}</td>
+                  <td data-label="#" data-mobile-hide className="px-3 py-1.5" style={{ color: 'var(--text-faint)' }}>{r.rowNumber}</td>
+                  <td data-label="ISIN" className="px-3 py-1.5 font-mono" style={{ color: 'var(--text-secondary)' }}>{r.isin}</td>
+                  <td data-primary className="px-3 py-1.5 max-w-[360px] truncate" style={{ color: 'var(--text-primary)' }}>{r.bond_name || '—'}</td>
+                  <td data-label="Price" className="px-3 py-1.5 text-right" style={{ color: 'var(--text-secondary)' }}>{r.price === null ? '—' : r.price}</td>
                   <td className="px-3 py-1.5">{!r.valid && <span className="text-[11px]" style={{ color: 'rgb(245,158,11)' }}>{r.issue}</span>}</td>
                 </tr>
               ))}

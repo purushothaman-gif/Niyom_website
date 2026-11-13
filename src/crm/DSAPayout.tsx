@@ -842,8 +842,8 @@ export default function DSAPayout({ employee }: Props) {
             </div>
             <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{debitNotes.length} shown</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   {['Debit Note No.', 'DSA', 'Net Payable', 'Status', 'Timeline', 'Actions'].map(h => (
@@ -871,25 +871,25 @@ export default function DSAPayout({ employee }: Props) {
                   ].filter(s => s.at);
                   return (
                   <tr key={note.id} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
-                    <td className="px-5 py-3 text-sm font-mono" style={{ color: 'var(--accent)' }}>
+                    <td data-primary className="px-5 py-3 text-sm font-mono" style={{ color: 'var(--accent)' }}>
                       {note.debit_note_number}
                       {signed && <Lock className="w-3 h-3 inline-block ml-1.5 -mt-0.5" style={{ color: 'rgb(var(--success-soft-rgb))' }} />}
                     </td>
-                    <td className="px-5 py-3">
+                    <td data-label="DSA" className="px-5 py-3">
                       <p className="text-sm font-medium text-text-primary">{note.dsa?.full_name || '—'}</p>
                       <p className="text-xs font-mono" style={{ color: 'var(--text-faint)' }}>{note.dsa?.dsa_code || ''}</p>
                     </td>
-                    <td className="px-5 py-3">
+                    <td data-label="Net Payable" className="px-5 py-3">
                       <p className="text-sm font-bold text-c-emerald">{fmt(net)}</p>
                       <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Gross {fmt(gross)} · TDS {fmt(tds)}</p>
                     </td>
-                    <td className="px-5 py-3">
+                    <td data-label="Status" className="px-5 py-3">
                       <span className="inline-block px-2.5 py-1 rounded-full text-xs font-semibold"
                         style={{ background: stage.bg, color: stage.color, border: `1px solid ${stage.border}` }}>
                         {stage.label}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <td data-label="Timeline" className="px-5 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>
                       {note.status === 'cancelled' ? (
                         <div className="max-w-[240px]">
                           <p style={{ color: 'rgb(var(--danger-soft-rgb))' }}>Cancelled {note.cancelled_at ? new Date(note.cancelled_at).toLocaleDateString('en-IN') : ''}</p>
@@ -913,7 +913,7 @@ export default function DSAPayout({ employee }: Props) {
                         <span style={{ color: 'var(--text-faint)' }}>—</span>
                       )}
                     </td>
-                    <td className="px-5 py-3">
+                    <td data-label="Actions" className="px-5 py-3">
                       <div className="flex items-center gap-2 flex-wrap">
                         <button onClick={() => previewNote(note)} disabled={previewingId === note.id}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
@@ -1033,8 +1033,8 @@ export default function DSAPayout({ employee }: Props) {
                   <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Gross {fmt(g.total)} · TDS {fmt(gTds)}</p>
                 </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full nw-table">
+              <div data-m-wrap className="overflow-x-auto">
+                <table data-auto-label className="w-full nw-table">
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                       {['Client', 'Product', 'Qty', 'DSA Price', 'Client Price', 'Payout'].map(h => (

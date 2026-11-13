@@ -405,8 +405,8 @@ function Group({ title, rows, Row, note }: {
     <div>
       <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-secondary)' }}>{title}</p>
       {note && <p className="text-xs mb-2" style={{ color: 'var(--text-faint)' }}>{note}</p>}
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-subtle)' }}>
-        <table className="nw-table w-full text-sm">
+      <div data-m-wrap className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-subtle)' }}>
+        <table data-auto-label className="nw-table w-full text-sm">
           <thead>
             <tr><th className="text-left">Component</th><th className="text-right">Amount / %</th><th className="text-right">Monthly</th></tr>
           </thead>

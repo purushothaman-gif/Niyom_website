@@ -569,9 +569,9 @@ function CompareView({ funds, onBack, onRemove }: {
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-2xl"
+      <div data-m-wrap className="overflow-x-auto rounded-2xl p-3 sm:p-0"
         style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-        <table className="w-full text-sm" style={{ minWidth: 520 }}>
+        <table data-auto-label className="w-full text-sm" style={{ minWidth: 520 }}>
           <thead>
             <tr>
               <th className="text-left p-3 font-semibold text-xs"

@@ -123,8 +123,8 @@ export function CasHoldingsView({
       </div>
 
       {/* ---------------------------------------------------------- schemes */}
-      <div className="overflow-x-auto">
-        <table className="w-full nw-table">
+      <div data-m-wrap className="overflow-x-auto">
+        <table data-auto-label className="w-full nw-table">
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               {['Scheme', 'Folio', 'Units', 'NAV', 'Cost', 'Value', 'P&L', 'Sits with'].map((h) => (

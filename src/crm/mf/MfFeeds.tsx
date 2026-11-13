@@ -323,8 +323,8 @@ export default function MfFeeds({ employee }: Props) {
             <h2 className="text-sm font-bold text-text-primary">Unmatched folios</h2>
             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>— no client has this PAN yet</span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full text-sm">
               <thead>
                 <tr style={{ color: 'var(--text-muted)' }} className="text-left text-xs uppercase tracking-wider">
                   <th className="px-5 py-2 font-semibold">Folio</th>
@@ -337,11 +337,11 @@ export default function MfFeeds({ employee }: Props) {
               <tbody>
                 {unmatched.map((f) => (
                   <tr key={f.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td className="px-5 py-2.5 text-text-primary font-mono text-xs">{f.folio}</td>
-                    <td className="px-5 py-2.5 text-text-primary">{f.holder_name ?? '—'}</td>
-                    <td className="px-5 py-2.5" style={{ color: 'var(--text-secondary)' }}>{f.pan ?? '—'}</td>
-                    <td className="px-5 py-2.5" style={{ color: 'var(--text-secondary)' }}>{f.amc_code ?? '—'}</td>
-                    <td className="px-5 py-2.5" style={{ color: 'var(--text-secondary)' }}>{f.registrar}</td>
+                    <td data-label="Folio" className="px-5 py-2.5 text-text-primary font-mono text-xs">{f.folio}</td>
+                    <td data-primary className="px-5 py-2.5 text-text-primary">{f.holder_name ?? '—'}</td>
+                    <td data-label="PAN" className="px-5 py-2.5" style={{ color: 'var(--text-secondary)' }}>{f.pan ?? '—'}</td>
+                    <td data-label="AMC" className="px-5 py-2.5" style={{ color: 'var(--text-secondary)' }}>{f.amc_code ?? '—'}</td>
+                    <td data-label="Registrar" className="px-5 py-2.5" style={{ color: 'var(--text-secondary)' }}>{f.registrar}</td>
                   </tr>
                 ))}
               </tbody>
@@ -358,8 +358,8 @@ export default function MfFeeds({ employee }: Props) {
         {log.length === 0 ? (
           <p className="px-5 py-6 text-sm" style={{ color: 'var(--text-muted)' }}>No feeds imported yet.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full text-sm">
               <thead>
                 <tr style={{ color: 'var(--text-muted)' }} className="text-left text-xs uppercase tracking-wider">
                   <th className="px-5 py-2 font-semibold">When</th>
@@ -374,18 +374,18 @@ export default function MfFeeds({ employee }: Props) {
               <tbody>
                 {log.map((r) => (
                   <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td className="px-5 py-2.5" style={{ color: 'var(--text-secondary)' }}>
+                    <td data-primary className="px-5 py-2.5" style={{ color: 'var(--text-secondary)' }}>
                       {new Date(r.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
                     </td>
-                    <td className="px-5 py-2.5 text-text-primary">
+                    <td data-label="Feed" className="px-5 py-2.5 text-text-primary">
                       {r.registrar ?? '—'} {r.report ?? ''}
                       <span className="block text-xs font-mono truncate max-w-[200px]" style={{ color: 'var(--text-muted)' }}>{r.source_file ?? ''}</span>
                     </td>
-                    <td className="px-5 py-2.5" style={{ color: 'var(--text-secondary)' }}>{r.snapshot_date ? fmtDate(r.snapshot_date) : '—'}</td>
-                    <td className="px-5 py-2.5 text-right text-text-primary">{r.rows_total}</td>
-                    <td className="px-5 py-2.5 text-right text-text-primary">{r.matched}</td>
-                    <td className="px-5 py-2.5 text-right text-text-primary">{r.unmatched}</td>
-                    <td className="px-5 py-2.5">
+                    <td data-label="Snapshot" className="px-5 py-2.5" style={{ color: 'var(--text-secondary)' }}>{r.snapshot_date ? fmtDate(r.snapshot_date) : '—'}</td>
+                    <td data-label="Rows" className="px-5 py-2.5 text-right text-text-primary">{r.rows_total}</td>
+                    <td data-label="Matched" className="px-5 py-2.5 text-right text-text-primary">{r.matched}</td>
+                    <td data-label="Unmatched" className="px-5 py-2.5 text-right text-text-primary">{r.unmatched}</td>
+                    <td data-label="Status" className="px-5 py-2.5">
                       {r.status === 'ok' ? (
                         <span className="text-xs font-semibold" style={{ color: 'var(--c-green)' }}>OK</span>
                       ) : (

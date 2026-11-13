@@ -264,8 +264,8 @@ export default function LeadImport({ employee, category, onBack, onDone }: Props
 
           {/* Preview table */}
           <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-            <div className="overflow-x-auto max-h-96">
-              <table className="w-full text-sm">
+            <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto max-h-96">
+              <table className="m-table w-full text-sm">
                 <thead className="sticky top-0" style={{ background: 'var(--bg-elevated)' }}>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     {['#', 'Verdict', 'Name', 'Mobile', 'Email', 'City', 'Product', 'Investment'].map(h => (
@@ -279,18 +279,18 @@ export default function LeadImport({ employee, category, onBack, onDone }: Props
                     const dup = !bad && r.duplicate;
                     return (
                       <tr key={r.rowNumber} style={{ borderBottom: '1px solid var(--border-subtle)', opacity: bad || dup ? 0.6 : 1 }}>
-                        <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-faint)' }}>{r.rowNumber}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">
+                        <td data-label="#" data-mobile-hide className="px-3 py-2 text-xs" style={{ color: 'var(--text-faint)' }}>{r.rowNumber}</td>
+                        <td data-label="Verdict" className="px-3 py-2 whitespace-nowrap">
                           {bad ? <Verdict tone="danger" text={r.errors[0]} />
                             : dup ? <Verdict tone="warning" text={`Dup · ${r.duplicate!.matched_on}`} />
                             : <Verdict tone="success" text="Import" />}
                         </td>
-                        <td className="px-3 py-2 text-xs font-medium truncate max-w-[160px]" style={{ color: 'var(--text-primary)' }}>{r.data.lead_name || '—'}</td>
-                        <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{r.data.mobile || '—'}</td>
-                        <td className="px-3 py-2 text-xs truncate max-w-[160px]" style={{ color: 'var(--text-secondary)' }}>{r.data.email || '—'}</td>
-                        <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{r.data.city || '—'}</td>
-                        <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{r.data.interested_product || '—'}</td>
-                        <td className="px-3 py-2 text-xs whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>{formatMoney(r.data.investment_capacity)}</td>
+                        <td data-primary className="px-3 py-2 text-xs font-medium truncate max-w-[160px]" style={{ color: 'var(--text-primary)' }}>{r.data.lead_name || '—'}</td>
+                        <td data-label="Mobile" className="px-3 py-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{r.data.mobile || '—'}</td>
+                        <td data-label="Email" className="px-3 py-2 text-xs truncate max-w-[160px]" style={{ color: 'var(--text-secondary)' }}>{r.data.email || '—'}</td>
+                        <td data-label="City" className="px-3 py-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{r.data.city || '—'}</td>
+                        <td data-label="Product" className="px-3 py-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{r.data.interested_product || '—'}</td>
+                        <td data-label="Investment" className="px-3 py-2 text-xs whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>{formatMoney(r.data.investment_capacity)}</td>
                       </tr>
                     );
                   })}
