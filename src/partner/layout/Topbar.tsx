@@ -25,19 +25,22 @@ export function Topbar({
 }: TopbarProps) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-border-subtle bg-header px-4 sm:px-6">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        {/* Below lg the bottom tab bar's "More" opens the drawer; the hamburger
+            stays for tablets in landscape that want it, the logo marks the brand. */}
+        <img src="/niyomlogo.png" alt="Niyom Wealth" className="h-8 w-auto shrink-0 object-contain sm:hidden" />
         <button
           type="button"
           onClick={onOpenMobile}
-          className="flex h-9 w-9 items-center justify-center rounded-token-md text-text-muted transition-colors hover:bg-hover hover:text-text-primary lg:hidden"
+          className="hidden h-9 w-9 items-center justify-center rounded-token-md text-text-muted transition-colors hover:bg-hover hover:text-text-primary sm:flex lg:hidden"
           aria-label="Open navigation"
         >
           <Menu className="h-5 w-5" />
         </button>
-        <h1 className="text-base font-bold text-text-primary sm:text-lg">{title}</h1>
+        <h1 className="truncate text-base font-bold text-text-primary sm:text-lg">{title}</h1>
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <button
           type="button"
           onClick={onRefresh}
@@ -51,7 +54,7 @@ export function Topbar({
         <ThemeToggle variant="icon" />
 
         {partner && (
-          <div className="hidden items-center gap-2 rounded-token-lg border border-border bg-bg-surface px-3 py-1.5 sm:flex">
+          <div className="hidden items-center gap-2 rounded-token-lg border border-border bg-bg-surface px-3 py-1.5 lg:flex">
             <div className="flex h-7 w-7 items-center justify-center rounded-token-sm bg-accent/15 text-xs font-bold text-accent">
               {partner.full_name.charAt(0).toUpperCase()}
             </div>
@@ -65,21 +68,21 @@ export function Topbar({
         <button
           type="button"
           onClick={onChangePassword}
-          className="flex h-9 w-9 items-center justify-center rounded-token-md border border-border bg-bg-surface text-text-muted transition-colors hover:text-accent sm:w-auto sm:gap-2 sm:px-3"
+          className="hidden h-9 items-center justify-center rounded-token-md border border-border bg-bg-surface text-text-muted transition-colors hover:text-accent lg:flex lg:gap-2 lg:px-3"
           title="Change password"
         >
           <KeyRound className="h-4 w-4" />
-          <span className="hidden text-xs font-semibold sm:inline">Password</span>
+          <span className="text-xs font-semibold">Password</span>
         </button>
 
         <button
           type="button"
           onClick={onLogout}
-          className="flex h-9 w-9 items-center justify-center rounded-token-md border border-border bg-bg-surface text-text-muted transition-colors hover:text-danger sm:w-auto sm:gap-2 sm:px-3"
+          className="hidden h-9 items-center justify-center rounded-token-md border border-border bg-bg-surface text-text-muted transition-colors hover:text-danger lg:flex lg:gap-2 lg:px-3"
           title="Sign out"
         >
           <LogOut className="h-4 w-4" />
-          <span className="hidden text-xs font-semibold sm:inline">Sign Out</span>
+          <span className="text-xs font-semibold">Sign Out</span>
         </button>
       </div>
     </header>

@@ -56,8 +56,8 @@ export function LeadsPage({ leads }: Props) {
       </Card>
 
       <Card padding="none">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-sm">
+        <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+          <table className="m-table w-full min-w-[600px] text-sm">
             <thead>
               <tr className="border-b border-border-subtle text-[11px] uppercase tracking-wider text-text-faint">
                 <th className="px-5 py-3 text-left font-semibold">Name</th>
@@ -70,15 +70,15 @@ export function LeadsPage({ leads }: Props) {
             <tbody className="divide-y divide-border-subtle">
               {leads.map((l) => (
                 <tr key={l.lead_id} className="transition-colors hover:bg-hover">
-                  <td className="px-5 py-3 font-medium text-text-primary">{l.lead_name}</td>
-                  <td className="px-5 py-3 font-mono text-xs text-text-secondary">{l.mobile}</td>
-                  <td className="px-5 py-3 text-text-secondary">{l.city || '—'}</td>
-                  <td className="px-5 py-3 text-text-secondary">
+                  <td data-primary className="px-5 py-3 font-medium text-text-primary">{l.lead_name}</td>
+                  <td data-label="Mobile" className="px-5 py-3 font-mono text-xs text-text-secondary">{l.mobile}</td>
+                  <td data-label="City" className="px-5 py-3 text-text-secondary">{l.city || '—'}</td>
+                  <td data-label="Submitted" className="px-5 py-3 text-text-secondary">
                     {new Date(l.created_at).toLocaleDateString('en-IN', {
                       day: '2-digit', month: 'short', year: 'numeric',
                     })}
                   </td>
-                  <td className="px-5 py-3">
+                  <td data-label="Status" className="px-5 py-3">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <StatusPill tone={TONE[l.status]}>{l.status}</StatusPill>
                       {l.converted_client_code && (

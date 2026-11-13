@@ -63,8 +63,8 @@ export function PartnerMarketingModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
-      <div className="w-full max-w-sm rounded-token-xl border border-border bg-bg-elevated shadow-token-lg" onClick={(e) => e.stopPropagation()}>
+    <div className="m-sheet fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
+      <div className="m-sheet-panel w-full max-w-sm rounded-token-xl border border-border bg-bg-elevated shadow-token-lg" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-border-subtle px-5 py-4">
           <h2 className="font-display text-base font-bold text-text-primary">Marketing image</h2>
           <button type="button" onClick={onClose} className="text-text-muted hover:text-text-primary"><X className="h-5 w-5" /></button>

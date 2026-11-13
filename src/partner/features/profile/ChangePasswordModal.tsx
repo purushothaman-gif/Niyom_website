@@ -47,8 +47,8 @@ export function ChangePasswordModal({ onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-token-xl border border-border bg-bg-elevated p-6 shadow-token-card">
+    <div className="m-sheet fixed inset-0 z-50 flex items-center justify-center bg-overlay p-4 backdrop-blur-sm">
+      <div className="m-sheet-panel w-full max-w-md rounded-token-xl border border-border bg-bg-elevated p-6 shadow-token-card">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="text-base font-bold text-text-primary">Change Password</h3>
           <button

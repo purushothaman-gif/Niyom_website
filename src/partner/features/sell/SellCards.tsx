@@ -57,11 +57,12 @@ function Actions({ items }: { items: Array<{ label: string; icon: typeof Link2; 
           onClick={a.onClick}
           title={a.label}
           aria-label={a.label}
-          className="flex items-center justify-center gap-1 rounded-token-md border border-border bg-bg-surface px-1.5 py-1.5 text-[11px] font-semibold text-text-secondary transition-colors hover:border-accent/40 hover:text-accent"
+          className="flex min-h-[40px] flex-col items-center justify-center gap-0.5 rounded-token-md border border-border bg-bg-surface px-1 py-1.5 text-[10px] font-semibold text-text-secondary transition-colors hover:border-accent/40 hover:text-accent sm:flex-row sm:gap-1 sm:px-1.5 sm:text-[11px]"
         >
           <a.icon className="h-3.5 w-3.5 shrink-0" />
-          {/* Icons only on a phone, where three labels don't fit a half-width card. */}
-          <span className="hidden truncate sm:inline">{a.label}</span>
+          {/* On a narrow card the label sits under the icon rather than being
+              dropped: three unlabelled icons left partners guessing. */}
+          <span className="max-w-full truncate">{a.label}</span>
         </button>
       ))}
     </div>

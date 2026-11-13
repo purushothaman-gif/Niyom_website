@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Gem, Landmark, LayoutDashboard, MoreHorizontal, Sparkles, Users } from 'lucide-react';
+import { MobileTabBar } from '../../components/mobile/MobileTabBar';
 import { isDemoSession } from '../demo/demoData';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -20,6 +21,13 @@ interface PartnerShellProps {
   hiddenProducts: ReadonlySet<string>;
   children: ReactNode;
 }
+
+const PRIMARY_TABS: { view: PartnerView; label: string; icon: typeof Users }[] = [
+  { view: 'dashboard', label: 'Home', icon: LayoutDashboard },
+  { view: 'clients', label: 'Clients', icon: Users },
+  { view: 'bonds', label: 'Bonds', icon: Landmark },
+  { view: 'unlisted-shares', label: 'Shares', icon: Gem },
+];
 
 /** App frame: persistent sidebar + sticky topbar + scrolling content region.
  *  Structural mirror of PortalShell, typed to PartnerIdentity. */
@@ -49,6 +57,9 @@ export function PartnerShell({
           mobileOpen={mobileOpen}
           onCloseMobile={() => setMobileOpen(false)}
           hiddenProducts={hiddenProducts}
+          partner={partner}
+          onChangePassword={onChangePassword}
+          onLogout={onLogout}
         />
 
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">
@@ -86,11 +97,33 @@ export function PartnerShell({
             </div>
           )}
 
-          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:py-8">
             {children}
           </main>
         </div>
       </div>
+
+      {/* Phone/tablet navigation: the four screens a partner opens most, and
+          "More" for the full drawer (which also holds Password and Sign out). */}
+      <MobileTabBar
+        label="Partner portal"
+        tabs={[
+          ...PRIMARY_TABS.filter((t) => !hiddenProducts.has(t.view)).map((t) => ({
+            key: t.view,
+            label: t.label,
+            icon: t.icon,
+            active: !mobileOpen && view === t.view,
+            onSelect: () => onNavigate(t.view),
+          })),
+          {
+            key: 'more',
+            label: 'More',
+            icon: MoreHorizontal,
+            active: mobileOpen || !PRIMARY_TABS.some((t) => t.view === view),
+            onSelect: () => setMobileOpen(true),
+          },
+        ]}
+      />
     </div>
   );
 }

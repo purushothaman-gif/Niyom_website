@@ -12,7 +12,7 @@
  * "Paid", "Awaiting payment" — never "payout MTD/YTD": debit notes are keyed
  * (dsa_id, month, year), so no accrual exists until the month's note is raised.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
@@ -38,7 +38,7 @@ import type { PartnerView } from '../../layout/navigation';
 import { InvestmentsBoard } from '../../../portal/features/investments/InvestmentsBoard';
 import { usePartnerBook } from '../book/usePartnerBook';
 import { PartnerService, type PartnerBond, type PartnerShare } from '../../services/PartnerService';
-import { CardGrid, ProductsTools, Rail, RailSkeleton, type ToolItem } from '../../../portal/features/explore/cards';
+import { CardGrid, ProductsTools, Rail, RailSkeleton, ScrollRow, type ToolItem } from '../../../portal/features/explore/cards';
 import { popularBonds } from '../../../portal/features/explore/ExploreHub';
 import { PartnerBondSellCard, PartnerShareSellCard } from '../sell/SellCards';
 import type { PartnerBondIntent } from '../bonds/BondsModule';
@@ -95,6 +95,66 @@ export function DashboardPage({ snapshot, onNavigate, onOnboarded, hidden = NONE
     { key: 'payouts', label: 'Statements', icon: FileSignature, badge: unsigned.length ? `${unsigned.length} to sign` : undefined, onClick: () => onNavigate('payouts') },
   ];
 
+  // Rendered once per layout: right-hand column on desktop, near the top on a
+  // phone, where it would otherwise sit below both product rails and the book.
+  const earningsCard = (
+    <section>
+      <h2 className="mb-4 font-display text-xl font-bold tracking-tight text-text-primary">Your earnings</h2>
+      <div className="rounded-token-xl border border-border bg-bg-elevated p-5 shadow-token-card">
+        <p className="text-xs text-text-secondary">Raised this FY {payout?.fy_label ? `(${payout.fy_label})` : ''}</p>
+        <p className="mt-1 font-display text-3xl font-bold tabular-nums text-text-primary">
+          {inr(Number(payout?.fy_net ?? 0))}
+        </p>
+        <p className="mt-0.5 text-[11px] text-text-faint">
+          Gross {inr(Number(payout?.fy_gross ?? 0))} · TDS {inr(Number(payout?.fy_tds ?? 0))}
+        </p>
+        <div className="mt-4 divide-y divide-border-subtle border-t border-dashed border-border">
+          <EarnRow label="Paid to date" value={inr(Number(payout?.paid_net ?? 0))} tone="text-success" />
+          <EarnRow
+            label={`Awaiting payment${unpaid.length ? ` (${unpaid.length})` : ''}`}
+            value={inr(Number(payout?.awaiting_payment_net ?? 0))}
+            tone={unpaid.length ? 'text-warning' : undefined}
+          />
+          <EarnRow label="Lifetime (net of TDS)" value={inr(Number(payout?.lifetime_net ?? 0))} />
+          <EarnRow label="Clients sourced" value={`${clients.length} · ${activeClients} active`} />
+        </div>
+        {payout?.latest_note_number && (
+          <p className="mt-3 border-t border-border-subtle pt-3 text-[11px] text-text-muted">
+            Latest statement <span className="font-mono text-text-secondary">{payout.latest_note_number}</span> for{' '}
+            {payout.latest_note_period} — {inr(Number(payout.latest_note_net ?? 0))} net.
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={() => onNavigate('payouts')}
+          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-accent hover:text-accent-soft"
+        >
+          <Wallet className="h-3.5 w-3.5" /> Statements & payouts
+        </button>
+      </div>
+    </section>
+  );
+
+  const bondCards = topBonds.map((b) => (
+    <PartnerBondSellCard
+      key={b.id}
+      bond={b}
+      onOpen={() => bondGo(b.id, 'detail')}
+      onOrder={() => bondGo(b.id, 'order')}
+      onShare={() => bondGo(b.id, 'share')}
+      onImage={() => bondGo(b.id, 'image')}
+    />
+  ));
+  const shareCards = shares?.slice(0, 3).map((s) => (
+    <PartnerShareSellCard
+      key={s.id}
+      share={s}
+      onOpen={() => shareGo(s.id, 'detail')}
+      onOrder={() => shareGo(s.id, 'order')}
+      onShare={() => shareGo(s.id, 'share')}
+    />
+  ));
+
   return (
     <div className="space-y-6">
       {/* Greeting */}
@@ -144,7 +204,11 @@ export function DashboardPage({ snapshot, onNavigate, onOnboarded, hidden = NONE
         </Card>
       )}
 
-      <InviteImportCard />
+      <div className="lg:hidden">{earningsCard}</div>
+
+      <div className="hidden lg:block">
+        <InviteImportCard />
+      </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* ------------------------------------------------ left */}
@@ -154,18 +218,7 @@ export function DashboardPage({ snapshot, onNavigate, onOnboarded, hidden = NONE
               {bonds === null ? (
                 <RailSkeleton />
               ) : topBonds.length ? (
-                <CardGrid cols={3}>
-                  {topBonds.map((b) => (
-                    <PartnerBondSellCard
-                      key={b.id}
-                      bond={b}
-                      onOpen={() => bondGo(b.id, 'detail')}
-                      onOrder={() => bondGo(b.id, 'order')}
-                      onShare={() => bondGo(b.id, 'share')}
-                      onImage={() => bondGo(b.id, 'image')}
-                    />
-                  ))}
-                </CardGrid>
+                <SellRow label="bonds to sell">{bondCards}</SellRow>
               ) : (
                 <p className="rounded-token-xl border border-dashed border-border px-5 py-8 text-center text-sm text-text-secondary">
                   No bonds are open for you right now — your RM adds new offers regularly.
@@ -179,17 +232,7 @@ export function DashboardPage({ snapshot, onNavigate, onOnboarded, hidden = NONE
               {shares === null ? (
                 <RailSkeleton />
               ) : shares.length ? (
-                <CardGrid cols={3}>
-                  {shares.slice(0, 3).map((s) => (
-                    <PartnerShareSellCard
-                      key={s.id}
-                      share={s}
-                      onOpen={() => shareGo(s.id, 'detail')}
-                      onOrder={() => shareGo(s.id, 'order')}
-                      onShare={() => shareGo(s.id, 'share')}
-                    />
-                  ))}
-                </CardGrid>
+                <SellRow label="unlisted shares to sell">{shareCards}</SellRow>
               ) : (
                 <p className="rounded-token-xl border border-dashed border-border px-5 py-8 text-center text-sm text-text-secondary">
                   No unlisted shares are open right now.
@@ -216,45 +259,15 @@ export function DashboardPage({ snapshot, onNavigate, onOnboarded, hidden = NONE
                 onViewAll={() => onNavigate('clients')}
               />
             ))}
+
+          <div className="lg:hidden">
+            <InviteImportCard />
+          </div>
         </div>
 
         {/* ------------------------------------------------ right */}
         <aside className="space-y-8">
-          <section>
-            <h2 className="mb-4 font-display text-xl font-bold tracking-tight text-text-primary">Your earnings</h2>
-            <div className="rounded-token-xl border border-border bg-bg-elevated p-5 shadow-token-card">
-              <p className="text-xs text-text-secondary">Raised this FY {payout?.fy_label ? `(${payout.fy_label})` : ''}</p>
-              <p className="mt-1 font-display text-3xl font-bold tabular-nums text-text-primary">
-                {inr(Number(payout?.fy_net ?? 0))}
-              </p>
-              <p className="mt-0.5 text-[11px] text-text-faint">
-                Gross {inr(Number(payout?.fy_gross ?? 0))} · TDS {inr(Number(payout?.fy_tds ?? 0))}
-              </p>
-              <div className="mt-4 divide-y divide-border-subtle border-t border-dashed border-border">
-                <EarnRow label="Paid to date" value={inr(Number(payout?.paid_net ?? 0))} tone="text-success" />
-                <EarnRow
-                  label={`Awaiting payment${unpaid.length ? ` (${unpaid.length})` : ''}`}
-                  value={inr(Number(payout?.awaiting_payment_net ?? 0))}
-                  tone={unpaid.length ? 'text-warning' : undefined}
-                />
-                <EarnRow label="Lifetime (net of TDS)" value={inr(Number(payout?.lifetime_net ?? 0))} />
-                <EarnRow label="Clients sourced" value={`${clients.length} · ${activeClients} active`} />
-              </div>
-              {payout?.latest_note_number && (
-                <p className="mt-3 border-t border-border-subtle pt-3 text-[11px] text-text-muted">
-                  Latest statement <span className="font-mono text-text-secondary">{payout.latest_note_number}</span> for{' '}
-                  {payout.latest_note_period} — {inr(Number(payout.latest_note_net ?? 0))} net.
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={() => onNavigate('payouts')}
-                className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-accent hover:text-accent-soft"
-              >
-                <Wallet className="h-3.5 w-3.5" /> Statements & payouts
-              </button>
-            </div>
-          </section>
+          <div className="hidden lg:block">{earningsCard}</div>
 
           <section>
             <h2 className="mb-4 font-display text-xl font-bold tracking-tight text-text-primary">Your RM</h2>
@@ -320,6 +333,21 @@ export function DashboardPage({ snapshot, onNavigate, onOnboarded, hidden = NONE
         />
       )}
     </div>
+  );
+}
+
+/** Swipeable rail on a phone (a 2-up grid of three left one card stranded),
+ *  the three-across grid from sm up. */
+function SellRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <div className="sm:hidden">
+        <ScrollRow label={label}>{children}</ScrollRow>
+      </div>
+      <div className="hidden sm:block">
+        <CardGrid cols={3}>{children}</CardGrid>
+      </div>
+    </>
   );
 }
 

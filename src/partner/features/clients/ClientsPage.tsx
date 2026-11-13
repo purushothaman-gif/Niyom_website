@@ -246,8 +246,8 @@ function ClientRow({
                   <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-text-secondary">
                     <Repeat className="h-3.5 w-3.5 text-text-muted" /> Systematic plans
                   </p>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[580px] text-sm">
+                  <div className="m-table-wrap overflow-x-auto">
+                    <table className="m-table w-full min-w-[580px] text-sm">
                       <thead>
                         <tr className="border-b border-border-subtle text-[11px] uppercase tracking-wider text-text-faint">
                           <th className="pb-2 text-left font-semibold">Scheme</th>
@@ -260,7 +260,7 @@ function ClientRow({
                       <tbody className="divide-y divide-border-subtle">
                         {sips.map((s) => (
                           <tr key={s.sip_id}>
-                            <td className="py-2.5 pr-3">
+                            <td data-primary className="py-2.5 pr-3">
                               <p className="font-medium text-text-primary">{s.scheme_name}</p>
                               {(s.from_date || s.to_date) && (
                                 <p className="text-[11px] text-text-secondary">
@@ -269,19 +269,19 @@ function ClientRow({
                                 </p>
                               )}
                             </td>
-                            <td className="py-2.5 pr-3">
+                            <td data-label="Plan" className="py-2.5 pr-3">
                               <span className="text-text-secondary">{s.txn_type || 'SIP'}</span>
                               {s.sip_day && (
                                 <p className="text-[11px] text-text-faint">Day {s.sip_day}</p>
                               )}
                             </td>
-                            <td className="py-2.5 pr-3 text-right tabular-nums font-medium text-text-primary">
+                            <td data-label="Instalment" className="py-2.5 pr-3 text-right tabular-nums font-medium text-text-primary">
                               {s.amount != null ? fmt(Number(s.amount)) : '—'}
                             </td>
-                            <td className="py-2.5 pr-3 text-text-secondary">
+                            <td data-label="Frequency" className="py-2.5 pr-3 text-text-secondary">
                               {s.frequency || '—'}
                             </td>
-                            <td className="py-2.5">
+                            <td data-label="Status" className="py-2.5">
                               <StatusPill tone={sipStatusTone(s.status)}>
                                 {titleCase(s.status) || 'Active'}
                               </StatusPill>
@@ -299,8 +299,8 @@ function ClientRow({
                   <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
                     Transactions
                   </p>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[560px] text-sm">
+                  <div className="m-table-wrap overflow-x-auto">
+                    <table className="m-table w-full min-w-[560px] text-sm">
                       <thead>
                         <tr className="border-b border-border-subtle text-[11px] uppercase tracking-wider text-text-faint">
                           <th className="pb-2 text-left font-semibold">Date</th>
@@ -313,24 +313,24 @@ function ClientRow({
                       <tbody className="divide-y divide-border-subtle">
                         {txns.map((t) => (
                           <tr key={t.txn_id}>
-                            <td className="py-2.5 pr-3 tabular-nums text-text-secondary">
+                            <td data-label="Date" className="py-2.5 pr-3 tabular-nums text-text-secondary">
                               {t.txn_date}
                             </td>
-                            <td className="py-2.5 pr-3">
+                            <td data-primary className="py-2.5 pr-3">
                               <p className="font-medium text-text-primary">{t.product_name}</p>
                               <p className="text-[11px] text-text-secondary">
                                 {productLabel(t.product_type)}
                               </p>
                             </td>
-                            <td className="py-2.5 pr-3">
+                            <td data-label="Type" className="py-2.5 pr-3">
                               <StatusPill tone={t.txn_type === 'buy' ? 'info' : 'warning'}>
                                 {t.txn_type}
                               </StatusPill>
                             </td>
-                            <td className="py-2.5 text-right tabular-nums text-text-secondary">
+                            <td data-label="Qty" className="py-2.5 text-right tabular-nums text-text-secondary">
                               {Number(t.quantity).toLocaleString('en-IN')}
                             </td>
-                            <td className="py-2.5 text-right tabular-nums font-medium text-text-primary">
+                            <td data-label="Amount" className="py-2.5 text-right tabular-nums font-medium text-text-primary">
                               {fmt(Number(t.amount))}
                             </td>
                           </tr>

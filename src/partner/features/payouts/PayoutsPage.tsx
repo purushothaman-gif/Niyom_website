@@ -111,8 +111,8 @@ export function PayoutsPage({ payout, notes }: Props) {
             hint="Your monthly payout statements will appear here once raised."
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
+          <div className="m-table-wrap p-3 sm:p-0 overflow-x-auto">
+            <table className="m-table w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-border-subtle text-[11px] uppercase tracking-wider text-text-faint">
                   <th className="px-5 py-3 text-left font-semibold">Statement</th>
@@ -127,22 +127,22 @@ export function PayoutsPage({ payout, notes }: Props) {
               <tbody className="divide-y divide-border-subtle">
                 {notes.map((n) => (
                   <tr key={n.id} className="transition-colors hover:bg-hover">
-                    <td className="px-5 py-3 font-mono text-xs text-text-primary">
+                    <td data-primary className="px-5 py-3 font-mono text-xs text-text-primary">
                       {n.debit_note_number}
                     </td>
-                    <td className="px-5 py-3 text-text-secondary">
+                    <td data-label="Period" className="px-5 py-3 text-text-secondary">
                       {MONTHS[n.month]} {n.year}
                     </td>
-                    <td className="px-5 py-3 text-right tabular-nums text-text-secondary">
+                    <td data-label="Gross" className="px-5 py-3 text-right tabular-nums text-text-secondary">
                       {fmt(Number(n.payout_amount))}
                     </td>
-                    <td className="px-5 py-3 text-right tabular-nums text-text-secondary">
+                    <td data-label="TDS" className="px-5 py-3 text-right tabular-nums text-text-secondary">
                       {fmt(Number(n.tds_amount))}
                     </td>
-                    <td className="px-5 py-3 text-right tabular-nums font-semibold text-text-primary">
+                    <td data-label="Net Payable" className="px-5 py-3 text-right tabular-nums font-semibold text-text-primary">
                       {fmt(Number(n.net_payable_amount))}
                     </td>
-                    <td className="px-5 py-3">
+                    <td data-label="Status" className="px-5 py-3">
                       <div className="flex flex-wrap gap-1.5">
                         <StatusPill tone={statusTone(n.status)}>{n.status}</StatusPill>
                         <StatusPill tone={signatureTone(n.signature_status)}>
@@ -150,7 +150,7 @@ export function PayoutsPage({ payout, notes }: Props) {
                         </StatusPill>
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-right">
+                    <td data-label="PDF" className="px-5 py-3 text-right">
                       {n.signed_pdf_url || n.pdf_url ? (
                         <button
                           type="button"

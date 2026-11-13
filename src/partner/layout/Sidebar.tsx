@@ -1,4 +1,5 @@
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { KeyRound, LogOut, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
+import type { PartnerIdentity } from '../types';
 import { NAV_GROUPS, withoutProducts, type NavItem, type PartnerView } from './navigation';
 import { mfStaffSsoEnabled } from '../../../shared/platform/env';
 import { ComingSoonBadge } from '../../portal/components/StatusPill';
@@ -13,6 +14,10 @@ interface SidebarProps {
   onCloseMobile: () => void;
   /** Product keys switched off for this partner. */
   hiddenProducts: ReadonlySet<string>;
+  /** Shown in the drawer's account block below lg, where the topbar drops them. */
+  partner?: PartnerIdentity | null;
+  onChangePassword?: () => void;
+  onLogout?: () => void;
 }
 
 function NavButton({
@@ -66,6 +71,9 @@ export function Sidebar({
   mobileOpen,
   onCloseMobile,
   hiddenProducts,
+  partner,
+  onChangePassword,
+  onLogout,
 }: SidebarProps) {
   const handleSelect = (item: NavItem) => {
     if (item.comingSoon || !item.view) return;
@@ -103,6 +111,14 @@ export function Sidebar({
               <p className="text-[11px] text-text-secondary">Partner Portal</p>
             </div>
           )}
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            aria-label="Close navigation"
+            className="ml-auto rounded-token-md p-2 text-text-muted hover:text-text-primary lg:hidden"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
@@ -128,6 +144,45 @@ export function Sidebar({
             </div>
           ))}
         </nav>
+
+        {(onChangePassword || onLogout) && (
+          <div className="pb-safe border-t border-border-subtle p-3 lg:hidden">
+            {partner && (
+              <div className="mb-2 flex items-center gap-2.5 px-2 py-1.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-token-sm bg-accent/15 text-xs font-bold text-accent">
+                  {partner.full_name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 leading-tight">
+                  <p className="truncate text-xs font-semibold text-text-primary">{partner.full_name}</p>
+                  <p className="mt-0.5 font-mono text-[11px] text-text-secondary">{partner.dsa_code}</p>
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              {onChangePassword && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCloseMobile();
+                    onChangePassword();
+                  }}
+                  className="flex items-center justify-center gap-2 rounded-token-md border border-border bg-bg-surface px-3 py-2.5 text-xs font-semibold text-text-secondary hover:text-accent"
+                >
+                  <KeyRound className="h-4 w-4" /> Password
+                </button>
+              )}
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="flex items-center justify-center gap-2 rounded-token-md border border-border bg-bg-surface px-3 py-2.5 text-xs font-semibold text-text-secondary hover:text-danger"
+                >
+                  <LogOut className="h-4 w-4" /> Sign out
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="hidden border-t border-border-subtle p-3 lg:block">
           <button
