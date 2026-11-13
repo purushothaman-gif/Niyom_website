@@ -350,6 +350,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
   // DSA clients only: the mapped partner, and whether to CC them on that mail.
   const [promptPartner, setPromptPartner] = useState<{ full_name: string; dsa_code: string; email: string } | null>(null);
   const [ccPartner, setCcPartner] = useState(true);
+  const [promptAfterSave, setPromptAfterSave] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [paySummaries, setPaySummaries] = useState<Record<string, { payment_status: 'not_paid' | 'partially_paid' | 'fully_paid' | 'over_paid'; outstanding_amount: number }>>({});
@@ -774,17 +775,31 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
     if (status === 'confirmed' && savedDealId) {
       const { data: saved } = await supabase.from('nw_deal_confirmations').select('*').eq('id', savedDealId).maybeSingle();
       const deal = saved as unknown as DealRecord | null;
-      if (deal && !deal.cancelled_at && deal.acceptance_status !== 'accepted') {
-        const { data: cl } = await supabase.from('nw_clients')
-          .select('sourced_via, dsa:nw_dsa(full_name, dsa_code, email, status)')
-          .eq('id', deal.client_id).maybeSingle();
-        const c = cl as { sourced_via?: string; dsa?: { full_name: string; dsa_code: string; email: string | null; status: string } | null } | null;
-        const p = c?.sourced_via === 'dsa' && c.dsa?.status === 'active' && c.dsa.email?.trim() ? c.dsa : null;
-        setPromptPartner(p ? { full_name: p.full_name, dsa_code: p.dsa_code, email: p.email!.trim() } : null);
-        setCcPartner(true);
-        setSendPrompt(deal);
-      }
+      if (deal && !deal.cancelled_at && deal.acceptance_status !== 'accepted') await openSendPrompt(deal, true);
     }
+  };
+
+  // One send path for every entry point (after save, list Send icon, preview
+  // Send Mail): confirm first, and for DSA clients offer to CC the partner.
+  const openSendPrompt = async (deal: DealRecord, afterSave = false) => {
+    if (emailSending) return;
+    if (deal.cancelled_at) {
+      showToast('This deal was cancelled. Edit it to revise and reissue before sending.', false);
+      return;
+    }
+    if (deal.acceptance_status === 'accepted') {
+      showToast('Accepted deals are locked and cannot be resent.', false);
+      return;
+    }
+    const { data: cl } = await supabase.from('nw_clients')
+      .select('sourced_via, dsa:nw_dsa(full_name, dsa_code, email, status)')
+      .eq('id', deal.client_id).maybeSingle();
+    const c = cl as { sourced_via?: string; dsa?: { full_name: string; dsa_code: string; email: string | null; status: string } | null } | null;
+    const p = c?.sourced_via === 'dsa' && c.dsa?.status === 'active' && c.dsa.email?.trim() ? c.dsa : null;
+    setPromptPartner(p ? { full_name: p.full_name, dsa_code: p.dsa_code, email: p.email!.trim() } : null);
+    setCcPartner(true);
+    setPromptAfterSave(afterSave);
+    setSendPrompt(deal);
   };
 
   const handleDelete = async () => {
@@ -924,7 +939,8 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
           </div>
           <div>
             <p className="text-sm font-bold text-text-primary">
-              {sendPrompt.email_status === 'sent' ? 'Send the revised deal confirmation now?' : 'Send deal confirmation mail now?'}
+              {sendPrompt.email_status !== 'sent' ? 'Send deal confirmation mail now?'
+                : promptAfterSave ? 'Send the revised deal confirmation now?' : 'Resend deal confirmation mail?'}
             </p>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{sendPrompt.confirmation_number} · {sendPrompt.snap_client_name}</p>
           </div>
@@ -1062,6 +1078,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
       <div className="space-y-6">
         {toastEl}
         {cancelModalEl}
+        {sendPromptEl}
         {/* Top Action Bar */}
         <div className="flex items-center gap-4 flex-wrap">
           <button onClick={() => setView('list')} className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
@@ -1105,7 +1122,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
           )}
           {/* Email the deal confirmation to the client, and manage its payments. */}
           <button
-            onClick={() => handleSendSecureLink(previewDeal)}
+            onClick={() => openSendPrompt(previewDeal)}
             disabled={emailSending || !!previewDeal.cancelled_at}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-on-accent transition-all disabled:cursor-not-allowed"
             style={{ background: 'var(--accent-gradient)', opacity: emailSending ? 0.75 : 1 }}
@@ -1539,7 +1556,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleSendSecureLink(d)}
+                          onClick={() => openSendPrompt(d)}
                           disabled={emailSending || !!d.cancelled_at}
                           className="p-1.5 rounded-lg transition-colors disabled:opacity-40"
                           title={d.cancelled_at ? 'Cancelled — edit to revise and reissue' : d.email_status === 'sent' ? 'Resend mail' : 'Send mail'}
