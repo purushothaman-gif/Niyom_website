@@ -72,11 +72,21 @@ describe('portfolio report', () => {
     const html = buildPortfolioReportHtml(input({ registrar: [rta({})] }));
     const row = html.slice(html.indexOf('Alpha Flexi Cap Fund'));
     expect(row.slice(0, row.indexOf('</tr>')).match(/Not available/g)).toHaveLength(2);
-    expect(html).toContain('counted at their current value');
+    expect(html).toContain('counted at current value');
 
     const known = buildPortfolioReportHtml(input({ registrar: [rta({ investedCost: 2500 })] }));
     const kRow = known.slice(known.indexOf('Alpha Flexi Cap Fund'));
     expect(kRow.slice(0, kRow.indexOf('</tr>'))).not.toContain('Not available');
+  });
+
+  it('shows the gain on registrar funds whose cost is known', () => {
+    const i = input({ registrar: [rta({ investedCost: 2500 }), rta({ id: 'r2', rtaValue: 1000, navValue: 1000 })] });
+    const t = portfolioReportTotals(i);
+    expect(t.value).toBe(4000);
+    expect(t.invested).toBe(2500 + 1000); // unknown cost entered at value
+    expect(t.gainLoss).toBe(500);
+    expect(t.unknownCostCount).toBe(1);
+    expect(buildPortfolioReportHtml(i)).toContain('1 holding marked');
   });
 
   it('escapes names and never names the fund platform', () => {

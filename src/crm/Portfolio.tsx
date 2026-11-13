@@ -13,8 +13,8 @@ import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, PRODUCT_CHART_COLORS } fr
 import { Plus, X, Pencil, Trash2, ChevronDown, Printer, TrendingUp, Percent, Shield, ArrowLeft, ArrowUp, ArrowDown, Search, Download } from 'lucide-react';
 import type { Insertable } from '../lib/dbJson';
 import { recalcPortfolioValue } from './portfolioValue';
-import { buildPortfolioReportHtml } from './portfolioReport';
-import { fetchRtaMf } from '../../shared/mf/rtaMf';
+import { buildPortfolioReportHtml, registrarInvested } from './portfolioReport';
+import { fetchRtaMf, type RtaMfData } from '../../shared/mf/rtaMf';
 import { mfSsoEnabled } from '../../shared/platform/env';
 
 interface Props {
@@ -299,21 +299,27 @@ export default function Portfolio({ employee, pageParams }: Props) {
   // inside the panels, because the summary cards and the chart count them too.
   const [casView, setCasView] = useState<CasCrmView | null>(null);
   const [dematView, setDematView] = useState<DematCrmView | null>(null);
+  // Their registrar-feed funds with cost, so "invested" and the printed report
+  // carry the cost the feed knows instead of entering every fund at value.
+  const [rtaView, setRtaView] = useState<RtaMfData | null>(null);
   const [stmtLoading, setStmtLoading] = useState(false);
   const stmtClient = view === 'detail' && clientFilter !== 'all' ? clientFilter : '';
   useEffect(() => {
     setCasView(null);
     setDematView(null);
+    setRtaView(null);
     if (!stmtClient) { setStmtLoading(false); return; }
     let alive = true;
     setStmtLoading(true);
     void Promise.all([
       loadCasView(stmtClient).catch(() => null),
       loadDematView(stmtClient).catch(() => null),
-    ]).then(([c, d]) => {
+      MF_ON_PLATFORM ? fetchRtaMf(supabase, stmtClient).catch(() => null) : Promise.resolve(null),
+    ]).then(([c, d, r]) => {
       if (!alive) return;
       setCasView(c);
       setDematView(d);
+      setRtaView(r);
       setStmtLoading(false);
     });
     return () => { alive = false; };
@@ -645,7 +651,9 @@ export default function Portfolio({ employee, pageParams }: Props) {
   // value, the feed has no cost) and anything their statements add.
   const detailMf = view === 'detail' && MF_ON_PLATFORM ? mfAum : 0;
   const detailValue = totalValue + detailMf + stmt.value;
-  const detailInvested = totalInvested + detailMf + stmt.invested;
+  // Registrar funds at their cost where the feed has one, else at value.
+  const detailMfInvested = detailMf > 0 && rtaView ? registrarInvested(rtaView.holdings) : detailMf;
+  const detailInvested = totalInvested + detailMfInvested + stmt.invested;
   const annualInterest = scopedHoldings
     .filter(h => BOND_TYPES.includes(h.product_type))
     .reduce((s, h) => {
@@ -762,7 +770,7 @@ export default function Portfolio({ employee, pageParams }: Props) {
     const stmtReady = cid === stmtClient && !stmtLoading;
     Promise.all([
       getLogoBase64(),
-      cid && MF_ON_PLATFORM ? fetchRtaMf(supabase, cid).then(d => d.holdings) : Promise.resolve([]),
+      !cid || !MF_ON_PLATFORM ? Promise.resolve([]) : stmtReady && rtaView ? Promise.resolve(rtaView.holdings) : fetchRtaMf(supabase, cid).then(d => d.holdings),
       !cid ? Promise.resolve(null) : stmtReady ? Promise.resolve(casView) : loadCasView(cid),
       !cid ? Promise.resolve(null) : stmtReady ? Promise.resolve(dematView) : loadDematView(cid),
     ]).then(([logoBase64, registrar, cas, demat]) => {

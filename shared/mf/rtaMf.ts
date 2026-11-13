@@ -118,6 +118,42 @@ export function unitsReconcile(held: number, net: number): boolean {
   return Math.abs(held - net) <= Math.max(0.01, Math.abs(held) * 0.001);
 }
 
+export interface FeedTxn {
+  kind: string;
+  amount: number;
+  units: number;
+  tradeDate: string | null;
+}
+
+function aggregate(txns: FeedTxn[]): TxnAgg {
+  const agg = newAgg();
+  for (const t of txns) foldTxn(agg, t.kind, t.amount, t.units, t.tradeDate);
+  return agg;
+}
+
+/**
+ * The feed's transactions for one holding, summed so they describe the SAME
+ * units the holdings snapshot does.
+ *
+ * The two feeds arrive on different days. A SIP instalment allotted on or after
+ * the holdings snapshot is in the transaction feed but not yet in the units, so
+ * summing everything overshoots the units held, the check fails, and a fund
+ * with a perfectly good history loses its cost. When the whole feed does not
+ * add up, the transactions dated on or after the snapshot are left out and the
+ * check is tried again: cost and units then both describe the snapshot.
+ *
+ * Returns null when the feed has nothing for the holding. A result whose units
+ * still do not match is returned as-is — the caller tests it and trusts no
+ * cost from it.
+ */
+export function reconcileToSnapshot(txns: FeedTxn[], held: number, snapshotDate: string | null): TxnAgg | null {
+  const all = aggregate(txns);
+  if (!all.seen) return null;
+  if (unitsReconcile(held, all.netUnits) || !snapshotDate) return all;
+  const settled = aggregate(txns.filter((t) => !t.tradeDate || t.tradeDate < snapshotDate));
+  return settled.seen && unitsReconcile(held, settled.netUnits) ? settled : all;
+}
+
 export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfData> {
   if (!clientId) return EMPTY;
 
@@ -157,18 +193,21 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
   // folio. The scheme-level key is preferred; the folio-level one is a fallback
   // for folios that hold a single scheme (where the transaction feed's product
   // code may be formatted differently from the holdings feed's).
-  const byScheme = new Map<string, TxnAgg>();
-  const byFolio = new Map<string, TxnAgg>();
+  const byScheme = new Map<string, FeedTxn[]>();
+  const byFolio = new Map<string, FeedTxn[]>();
   const schemeKey = (folio: string, code: string) => `${folio}\u0000${code}`;
   for (const t of txnRows) {
-    const amount = Number(t.amount ?? 0);
-    const units = Number((t as { units?: number | string | null }).units ?? 0);
-    const kind = (t.txn_kind ?? 'other') as string;
+    const row: FeedTxn = {
+      kind: (t.txn_kind ?? 'other') as string,
+      amount: Number(t.amount ?? 0),
+      units: Number((t as { units?: number | string | null }).units ?? 0),
+      tradeDate: t.trade_date,
+    };
     const sk = schemeKey(t.folio, t.scheme_code);
-    if (!byScheme.has(sk)) byScheme.set(sk, newAgg());
-    if (!byFolio.has(t.folio)) byFolio.set(t.folio, newAgg());
-    foldTxn(byScheme.get(sk)!, kind, amount, units, t.trade_date);
-    foldTxn(byFolio.get(t.folio)!, kind, amount, units, t.trade_date);
+    if (!byScheme.has(sk)) byScheme.set(sk, []);
+    if (!byFolio.has(t.folio)) byFolio.set(t.folio, []);
+    byScheme.get(sk)!.push(row);
+    byFolio.get(t.folio)!.push(row);
   }
 
   const rawHoldings = (holdingsRes.data ?? []);
@@ -177,9 +216,11 @@ export async function fetchRtaMf(db: NiyomDb, clientId: string): Promise<RtaMfDa
 
   const holdings: RtaHoldingRow[] = rawHoldings
     .map((h) => {
-      const exact = byScheme.get(schemeKey(h.folio, h.scheme_code));
-      const folioOnly = holdingsPerFolio.get(h.folio) === 1 ? byFolio.get(h.folio) : undefined;
-      const agg = exact?.seen ? exact : folioOnly?.seen ? folioOnly : null;
+      const exactTxns = byScheme.get(schemeKey(h.folio, h.scheme_code));
+      const folioTxns = holdingsPerFolio.get(h.folio) === 1 ? byFolio.get(h.folio) : undefined;
+      const exact = exactTxns ? aggregate(exactTxns) : undefined;
+      const txns = exact?.seen ? exactTxns! : folioTxns ?? [];
+      const agg = reconcileToSnapshot(txns, Number(h.units ?? 0), h.snapshot_date);
       // Prefer the registrar's own valuation cost (WBR53) when present: it is the
       // authoritative cost of acquisition and the only source that covers units
       // transferred in from a prior broker, which the transaction feed misses.

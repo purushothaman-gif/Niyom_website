@@ -10,8 +10,8 @@
  * the summary cards:
  *
  *   value    = book + registrar MF + counted statement rows
- *   invested = book cost + statement cost, with anything that has no cost
- *              entered at value so it adds nothing to gain/loss
+ *   invested = book cost + registrar cost + statement cost, with anything that
+ *              has no cost entered at value so it adds nothing to gain/loss
  *
  * A registrar or demat holding without a cost prints "Not available" for cost
  * and gain — never ₹0 invested or a 0% gain nobody can support.
@@ -62,8 +62,13 @@ export interface PortfolioReportTotals {
   gainLoss: number;
   /** Rows printed across every section. */
   rowCount: number;
-  /** True when some value has no cost behind it (entered at value). */
-  hasUnknownCost: boolean;
+  /** Holdings with no cost behind them (entered at value). */
+  unknownCostCount: number;
+}
+
+/** What registrar funds add to "invested": their cost, or their value when unknown. */
+export function registrarInvested(rows: RtaHoldingRow[]): number {
+  return rows.reduce((s, h) => s + (h.investedCost ?? registrarValueOf(h)), 0);
 }
 
 export const registrarValueOf = (h: RtaHoldingRow): number => h.rtaValue ?? h.navValue ?? 0;
@@ -82,13 +87,13 @@ export function portfolioReportTotals(
   const bookValue = input.holdings.reduce((s, h) => s + (h.current_value || 0), 0);
   const bookInvested = input.holdings.reduce((s, h) => s + (h.invested_amount || 0), 0);
   const value = bookValue + registrarValue + casRows.reduce((s, r) => s + r.value, 0) + dematValue;
-  const invested = bookInvested + registrarValue + casRows.reduce((s, r) => s + r.cost, 0) + dematValue;
+  const invested = bookInvested + registrarInvested(registrar) + casRows.reduce((s, r) => s + r.cost, 0) + dematValue;
   return {
     value,
     invested,
     gainLoss: value - invested,
     rowCount: input.holdings.length + registrar.length + casRows.length + dematCount,
-    hasUnknownCost: registrarValue > 0 || dematValue > 0,
+    unknownCostCount: registrar.filter((h) => h.investedCost == null).length + casRows.filter((r) => !(r.cost > 0)).length + dematCount,
   };
 }
 
@@ -159,6 +164,8 @@ const MF_HEAD = '<thead><tr><th>#</th><th>Scheme</th><th>Folio No.</th><th>Units
 function registrarSection(rows: RtaHoldingRow[]): string {
   if (rows.length === 0) return '';
   const value = rows.reduce((s, h) => s + registrarValueOf(h), 0);
+  const costed = rows.filter((h) => h.investedCost != null);
+  const gain = costed.length ? costed.reduce((s, h) => s + registrarValueOf(h) - (h.investedCost as number), 0) : null;
   const body = rows.map((h, i) => {
     const v = registrarValueOf(h);
     const cost = h.investedCost;
@@ -173,7 +180,7 @@ function registrarSection(rows: RtaHoldingRow[]): string {
       <td>${cost != null ? signed(v - cost) : NA}</td>
     </tr>`;
   }).join('');
-  return `${sectionHeader('Mutual Funds', MF_COLOR, rows.length, value, null, 'As reported by the registrar (CAMS / KFintech), valued at the latest NAV.')}
+  return `${sectionHeader('Mutual Funds', MF_COLOR, rows.length, value, gain, 'As reported by the registrar (CAMS / KFintech), valued at the latest NAV.')}
     <table>${MF_HEAD}<tbody>${body}</tbody></table>`;
 }
 
@@ -238,7 +245,7 @@ export function buildPortfolioReportHtml(input: PortfolioReportInput): string {
     <div class="stat" style="border-top-color:${totals.gainLoss >= 0 ? '#059669' : '#DC2626'}"><div class="stat-label">Gain / Loss</div><div class="stat-value">${signed(totals.gainLoss)}</div></div>
     <div class="stat" style="border-top-color:#0891B2"><div class="stat-label">Annual Interest</div><div class="stat-value" style="color:#0891B2">&#8377;${input.annualInterest.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div></div>
   </div>
-  ${totals.hasUnknownCost ? '<div class="stats-note">Holdings whose purchase cost is not available are counted at their current value in Total Invested, so they add nothing to Gain / Loss.</div>' : ''}`;
+  ${totals.unknownCostCount > 0 ? `<div class="stats-note">${totals.unknownCostCount} holding${totals.unknownCostCount === 1 ? '' : 's'} marked &ldquo;Not available&rdquo; ${totals.unknownCostCount === 1 ? 'has' : 'have'} no purchase cost on record (for example, units transferred in from another distributor). ${totals.unknownCostCount === 1 ? 'It is' : 'They are'} counted at current value in Total Invested, so Gain / Loss covers only the holdings with a known cost.</div>` : ''}`;
 
   const dateLong = input.now.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
 

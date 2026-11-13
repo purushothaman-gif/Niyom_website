@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fetchRtaTransactions, mergeByDateDesc, RTA_TXN_LABEL } from './rtaMf';
+import { fetchRtaTransactions, mergeByDateDesc, reconcileToSnapshot, RTA_TXN_LABEL, unitsReconcile } from './rtaMf';
 import type { NiyomDb } from '../platform/db';
 
 /** Minimal stand-in for the query builder fetchRtaTransactions uses. */
@@ -31,5 +31,30 @@ describe('registrar transactions in the portal', () => {
     const a = [{ txn_date: '2026-11-05' }, { txn_date: '2026-09-01' }];
     const b = [{ txn_date: '2026-10-10' }];
     expect(mergeByDateDesc(a, b, 2).map((t) => t.txn_date)).toEqual(['2026-11-05', '2026-10-10']);
+  });
+});
+
+describe('reconcileToSnapshot', () => {
+  const sip = (tradeDate: string, units: number) => ({ kind: 'purchase', amount: 9999.5, units, tradeDate });
+
+  it('leaves out an instalment allotted on or after the holdings snapshot', () => {
+    // Snapshot of the 11th holds two instalments; the feed already has the third.
+    const agg = reconcileToSnapshot([sip('2026-09-10', 33.922), sip('2026-10-12', 34.901), sip('2026-11-11', 34.993)], 68.823, '2026-11-11');
+    expect(agg?.netUnits).toBeCloseTo(68.823, 3);
+    expect(agg?.invested).toBe(19999);
+  });
+
+  it('uses the whole feed when it already adds up', () => {
+    const agg = reconcileToSnapshot([sip('2026-09-10', 4.897), sip('2026-11-11', 4.665)], 9.562, '2026-11-10');
+    expect(agg?.invested).toBe(19999);
+  });
+
+  it('does not invent a match: a feed that never adds up stays unreconciled', () => {
+    const agg = reconcileToSnapshot([sip('2025-03-04', 5.773), { kind: 'switch_in', amount: 126689.14, units: 60.832, tradeDate: '2026-08-21' }], 60.832, '2026-11-06');
+    expect(unitsReconcile(60.832, agg!.netUnits)).toBe(false);
+  });
+
+  it('is null when the feed has nothing for the holding', () => {
+    expect(reconcileToSnapshot([], 10, '2026-11-06')).toBeNull();
   });
 });
