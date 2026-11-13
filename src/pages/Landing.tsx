@@ -6,7 +6,7 @@ import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
 import { BrandFilm } from '../components/BrandFilm';
 import { Reveal } from '../components/Reveal';
-import { LoginMenu, LOGIN_PORTALS } from '../components/LoginMenu';
+import { LoginMenu, ALL_PORTALS } from '../components/LoginMenu';
 
 interface LandingProps {
   onGetStarted: () => void;
@@ -114,11 +114,11 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               className="flex min-w-0 items-center gap-2.5 sm:gap-3 hover:opacity-80 transition-opacity"
             >
               <Logo size="fluid" className={`shrink-0 ${isLoaded ? 'animate-scaleIn' : 'opacity-0'}`} />
-              <div className="min-w-0 text-left">
+              <div className="min-w-0 overflow-hidden text-left">
                 {/* One line on a phone: the old 24px/0.1em wordmark wrapped to two
                     lines and made the sticky header ~120px tall. */}
-                <h1 className="whitespace-nowrap text-base font-bold tracking-tight leading-tight sm:text-2xl" style={{ fontFamily: 'var(--font-body)', letterSpacing: '0.08em' }}>NIYOM WEALTH</h1>
-                <p className="text-accent-soft text-[10px] sm:text-xs tracking-widest">DISTRIBUTION LLP</p>
+                <h1 className="truncate whitespace-nowrap text-base font-bold tracking-[0.06em] leading-tight sm:text-2xl sm:tracking-[0.08em]" style={{ fontFamily: 'var(--font-body)' }}>NIYOM WEALTH</h1>
+                <p className="truncate text-accent-soft text-[10px] sm:text-xs tracking-widest">DISTRIBUTION LLP</p>
               </div>
             </button>
 
@@ -223,8 +223,12 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             {/* Mobile top-bar controls — the theme toggle must live here (not
                 only in the hidden md:flex desktop cluster) or phones lose the
                 day/night switch entirely. */}
-            <div className="md:hidden flex items-center gap-1">
-              <ThemeToggle variant="icon" />
+            {/* Phone header: Login + menu only, so the full wordmark fits; the
+                theme switch lives at the foot of the menu sheet. */}
+            <div className="md:hidden flex shrink-0 items-center gap-1.5">
+              {/* One tap to every login (client, partner, staff) — opens the
+                  phone login sheet rather than hiding them in the menu. */}
+              <LoginMenu triggerClassName="px-3 py-2 text-sm whitespace-nowrap" />
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className="text-white hover:text-accent-soft transition-colors p-1"
@@ -292,6 +296,33 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             style={{ maxHeight: mobileSheetMaxHeight }}
           >
             <div className="flex flex-col p-4 space-y-3">
+              {/* Logins first: on a phone this is what most visitors open the menu
+                  for. Same ALL_PORTALS list as the header's login sheet. */}
+              <div className="pb-3 mb-1 border-b border-accent-soft/20">
+                <div className="flex items-center gap-2 px-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-soft/80">
+                  <LogIn size={13} />
+                  Log in
+                </div>
+                <div className="space-y-2">
+                  {ALL_PORTALS.map(({ label, hint, icon: Icon, href }) => (
+                    <a
+                      key={label}
+                      href={href}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition-colors hover:border-accent-soft/40 hover:bg-accent-soft/10"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft/10 text-accent-soft ring-1 ring-inset ring-accent-soft/20">
+                        <Icon size={17} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-white">{label}</span>
+                        <span className="block text-[11px] text-white/45">{hint}</span>
+                      </span>
+                      <ArrowRight size={16} className="text-accent-soft" />
+                    </a>
+                  ))}
+                </div>
+              </div>
               <button
                 onClick={() => {
                   scrollToSection('home');
@@ -346,30 +377,6 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               >
                 Calculator
               </button>
-              <div className="border-t border-accent-soft/20 my-2 pt-3">
-                <div className="flex items-center gap-2 px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-soft/80">
-                  <KeyRound size={13} />
-                  Employee Access
-                </div>
-                <div className="space-y-2">
-                  {employeeLinks.map(({ label, hint, icon: Icon, open }) => (
-                    <button
-                      key={label}
-                      onClick={() => { setIsMobileMenuOpen(false); open(); }}
-                      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition-colors hover:border-accent-soft/40 hover:bg-accent-soft/10"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft/10 text-accent-soft ring-1 ring-inset ring-accent-soft/20">
-                        <Icon size={17} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold text-white">{label}</span>
-                        <span className="block text-[11px] text-white/45">{hint}</span>
-                      </span>
-                      <ArrowUpRight size={14} className="text-white/25" />
-                    </button>
-                  ))}
-                </div>
-              </div>
               <button
                 onClick={() => {
                   scrollToSection('contact');
@@ -379,35 +386,9 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               >
                 Contact
               </button>
-              {/* No dropdown on mobile — a sheet already has the room, so both
-                  portals are laid out directly. Same LOGIN_PORTALS source as the
-                  desktop menu, so the two can't drift. */}
-              <div className="border-t border-accent-soft/20 my-2 pt-3">
-                <div className="flex items-center gap-2 px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-soft/80">
-                  <LogIn size={13} />
-                  Choose your portal
-                </div>
-                <div className="space-y-2">
-                  {LOGIN_PORTALS.map(({ label, hint, icon: Icon, href }) => (
-                    <button
-                      key={label}
-                      onClick={() => {
-                        window.open(href, '_blank');
-                        setIsMobileMenuOpen(false);
-                      }}
-                      className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition-colors hover:border-accent-soft/40 hover:bg-accent-soft/10"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft/10 text-accent-soft ring-1 ring-inset ring-accent-soft/20">
-                        <Icon size={17} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold text-white">{label}</span>
-                        <span className="block text-[11px] text-white/45">{hint}</span>
-                      </span>
-                      <ArrowUpRight size={14} className="text-white/25" />
-                    </button>
-                  ))}
-                </div>
+              <div className="flex items-center justify-between border-t border-accent-soft/20 mt-1 pt-4 px-1">
+                <span className="text-sm font-medium text-white/80">Appearance</span>
+                <ThemeToggle variant="segmented" />
               </div>
             </div>
           </div>
