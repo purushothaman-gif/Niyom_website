@@ -1,4 +1,4 @@
-import { ArrowRight, Shield, Target, Zap, TrendingUp, Users, Award, Instagram, Linkedin, ChevronRight, Phone, Mail, MessageCircle, Menu, X, ChevronDown, ShieldCheck, Search, Eye, Handshake, KeyRound, LayoutDashboard, ArrowUpRight, LogIn } from 'lucide-react';
+import { ArrowRight, Shield, Target, Zap, TrendingUp, Users, Award, Instagram, Linkedin, ChevronRight, Phone, Mail, MessageCircle, Menu, X, ChevronDown, ShieldCheck, Search, Eye, Handshake, KeyRound, LayoutDashboard, ArrowUpRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Logo } from '../components/Logo';
 import { RegulatoryInfo } from '../components/RegulatoryInfo';
@@ -6,7 +6,7 @@ import { ThemeToggle } from '../theme/ThemeToggle';
 import { HeroBackground } from '../components/HeroBackground';
 import { BrandFilm } from '../components/BrandFilm';
 import { Reveal } from '../components/Reveal';
-import { LoginMenu, ALL_PORTALS } from '../components/LoginMenu';
+import { LoginMenu } from '../components/LoginMenu';
 
 interface LandingProps {
   onGetStarted: () => void;
@@ -307,33 +307,6 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             style={{ maxHeight: mobileSheetMaxHeight }}
           >
             <div className="flex flex-col p-4 space-y-3">
-              {/* Logins first: on a phone this is what most visitors open the menu
-                  for. Same ALL_PORTALS list as the header's login sheet. */}
-              <div className="pb-3 mb-1 border-b border-accent-soft/20">
-                <div className="flex items-center gap-2 px-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-soft/80">
-                  <LogIn size={13} />
-                  Log in
-                </div>
-                <div className="space-y-2">
-                  {ALL_PORTALS.map(({ label, hint, icon: Icon, href }) => (
-                    <a
-                      key={label}
-                      href={href}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition-colors hover:border-accent-soft/40 hover:bg-accent-soft/10"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft/10 text-accent-soft ring-1 ring-inset ring-accent-soft/20">
-                        <Icon size={17} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold text-white">{label}</span>
-                        <span className="block text-[11px] text-white/45">{hint}</span>
-                      </span>
-                      <ArrowRight size={16} className="text-accent-soft" />
-                    </a>
-                  ))}
-                </div>
-              </div>
               <button
                 onClick={() => {
                   scrollToSection('home');

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Volume2, VolumeX } from 'lucide-react';
+import { Volume2, VolumeX } from 'lucide-react';
 
 /**
  * BrandFilm — the premium cinematic brand-film for the landing hero.
@@ -370,10 +370,12 @@ export function BrandFilm({
                   </>
                 ) : scene.cta ? (
                   <>
+                    {/* No button here: the hero's own Start Investing sits right
+                        below the film, so a second one inside it was noise. */}
                     <p
                       className="text-[11px] uppercase tracking-[0.28em] text-gray-400 mb-3"
                     >
-                      Start Investing Today
+                      {scene.kicker}
                     </p>
                     <h3
                       className="text-2xl sm:text-[1.9rem] font-bold leading-tight"
@@ -388,13 +390,6 @@ export function BrandFilm({
                       {scene.title}
                     </h3>
                     <p className="text-sm text-gray-300 mt-3">{scene.vo}</p>
-                    <button
-                      onClick={() => window.open('/onboarding', '_blank')}
-                      className="cta-glow press mt-6 inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-bold text-black"
-                      style={{ background: 'var(--accent-soft)' }}
-                    >
-                      Start Investing <ArrowRight size={16} />
-                    </button>
                   </>
                 ) : (
                   <>
