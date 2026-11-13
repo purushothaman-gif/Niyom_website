@@ -108,15 +108,17 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
         }}
       >
         <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center px-6 py-5">
+          <div className="flex justify-between items-center gap-3 px-4 py-2.5 sm:px-6 sm:py-5">
             <button
               onClick={() => scrollToSection('home')}
-              className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+              className="flex min-w-0 items-center gap-2.5 sm:gap-3 hover:opacity-80 transition-opacity"
             >
-              <Logo size="md" className={isLoaded ? 'animate-scaleIn' : 'opacity-0'} />
-              <div className="text-left">
-                <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-body)', letterSpacing: '0.1em' }}>NIYOM WEALTH</h1>
-                <p className="text-accent-soft text-xs tracking-widest">DISTRIBUTION LLP</p>
+              <Logo size="fluid" className={`shrink-0 ${isLoaded ? 'animate-scaleIn' : 'opacity-0'}`} />
+              <div className="min-w-0 text-left">
+                {/* One line on a phone: the old 24px/0.1em wordmark wrapped to two
+                    lines and made the sticky header ~120px tall. */}
+                <h1 className="whitespace-nowrap text-base font-bold tracking-tight leading-tight sm:text-2xl" style={{ fontFamily: 'var(--font-body)', letterSpacing: '0.08em' }}>NIYOM WEALTH</h1>
+                <p className="text-accent-soft text-[10px] sm:text-xs tracking-widest">DISTRIBUTION LLP</p>
               </div>
             </button>
 
@@ -462,7 +464,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
                 { icon: Target, label: 'Goal-Based Planning' },
                 { icon: Handshake, label: 'Trusted Guidance' },
               ].map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-start sm:items-center gap-2 min-w-0">
+                <div key={label} className="flex items-start sm:items-center gap-2 min-w-0 text-left">
                   <Icon size={16} className="text-accent-soft flex-shrink-0 mt-0.5 sm:mt-0" />
                   <span className="text-sm text-gray-300 leading-snug sm:whitespace-nowrap">{label}</span>
                 </div>
@@ -485,7 +487,7 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
             Our Services
           </h3>
           <div className={`w-24 h-1 bg-accent-soft mx-auto mb-10 sm:mb-16 ${isLoaded ? 'animate-scaleIn animate-delay-200' : 'opacity-0'}`}></div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-8">
             {[
               { id: 'investment', icon: TrendingUp, title: 'Investment Products Distribution', desc: 'Access to mutual funds, stocks, and other investment products' },
               { id: 'financial', icon: Target, title: 'Financial Information', desc: 'Educational resources and market information to help you decide' },
@@ -495,7 +497,27 @@ export function Landing({ onViewServices, onViewLearning, onViewNews, onViewMFRe
               { id: 'alternative', icon: Zap, title: 'Alternative Products', desc: 'Distribution of secondary bonds, unlisted shares, and pre-IPO opportunities' },
             ].map((service, i) => (
               <Reveal key={i} delay={(i % 3) * 90}>
-                <div className="lift group bg-bg-elevated rounded-xl overflow-hidden border border-border-subtle h-full flex flex-col" style={{ boxShadow: 'var(--shadow-card)' }}>
+                {/* Phone: one tappable row per service (six full-height cards
+                    were six screens of scrolling). The card below is sm+. */}
+                <button
+                  type="button"
+                  onClick={() => onViewServices(service.id)}
+                  className="press sm:hidden flex w-full items-center gap-3.5 rounded-xl border border-border-subtle bg-bg-elevated p-4 text-left"
+                  style={{ boxShadow: 'var(--shadow-card)' }}
+                >
+                  <span
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"
+                    style={{ background: 'linear-gradient(150deg, #081B33 0%, #16345C 100%)', border: '1px solid rgba(200,164,93,0.35)' }}
+                  >
+                    <service.icon className="h-5 w-5 text-accent-soft" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-bold leading-snug text-text-primary" style={{ fontFamily: 'var(--font-display)' }}>{service.title}</span>
+                    <span className="mt-0.5 block text-sm leading-snug text-text-secondary">{service.desc}</span>
+                  </span>
+                  <ChevronRight size={18} className="shrink-0 text-accent-soft" />
+                </button>
+                <div className="lift group bg-bg-elevated rounded-xl overflow-hidden border border-border-subtle h-full hidden sm:flex flex-col" style={{ boxShadow: 'var(--shadow-card)' }}>
                   {/* Branded gradient panel + icon — original artwork in place of
                       the old stock thumbnail. */}
                   <div
