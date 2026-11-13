@@ -121,8 +121,9 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   // Admin-only "Modify Mapping" correction — Direct -> DSA, or DSA -> Direct
   const [mapClient, setMapClient] = useState<NWClient | null>(null);
   const [mapCurrentDsa, setMapCurrentDsa] = useState<{ dsa_code: string; full_name: string } | null>(null);
-  const [dsaList, setDsaList] = useState<{ id: string; dsa_code: string; full_name: string }[]>([]);
+  const [dsaList, setDsaList] = useState<{ id: string; dsa_code: string; full_name: string; mobile: string | null }[]>([]);
   const [selectedDsaId, setSelectedDsaId] = useState('');
+  const [mapDsaSearch, setMapDsaSearch] = useState('');
   const [mapCounts, setMapCounts] = useState<{ deals: number; txns: number; holdings: number } | null>(null);
   const [mapSaving, setMapSaving] = useState(false);
   // Bank Accounts manager (Sprint 5): up to 5 accounts, exactly one primary
@@ -337,6 +338,7 @@ export default function ManageClients({ employee, onNavigate }: Props) {
   const openModifyMapping = async (c: NWClient) => {
     setMapClient(c);
     setSelectedDsaId('');
+    setMapDsaSearch('');
     setMapCounts(null);
     setMapCurrentDsa(null);
     if (c.sourced_via === 'dsa') {
@@ -349,8 +351,8 @@ export default function ManageClients({ employee, onNavigate }: Props) {
     } else {
       // Active DSAs for the picker (admin sees all).
       const { data: dsaData } = await supabase.from('nw_dsa')
-        .select('id, dsa_code, full_name').eq('status', 'active').order('full_name');
-      setDsaList((dsaData as { id: string; dsa_code: string; full_name: string }[]) || []);
+        .select('id, dsa_code, full_name, mobile').eq('status', 'active').order('full_name');
+      setDsaList((dsaData as { id: string; dsa_code: string; full_name: string; mobile: string | null }[]) || []);
     }
     // Existing business records — drives the warning (payments live under deals).
     const [dcRes, txRes, hldRes] = await Promise.all([
@@ -1094,11 +1096,54 @@ export default function ManageClients({ employee, onNavigate }: Props) {
               {dsaList.length === 0 ? (
                 <p className="text-xs" style={{ color: 'var(--text-faint)' }}>No active DSAs found. Create one in DSA Management first.</p>
               ) : (
-                <select value={selectedDsaId} onChange={e => setSelectedDsaId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl text-sm text-text-primary outline-none" style={inputStyle}>
-                  <option value="">— Select a DSA —</option>
-                  {dsaList.map(d => <option key={d.id} value={d.id}>{d.full_name} ({d.dsa_code})</option>)}
-                </select>
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
+                    <input value={mapDsaSearch} onChange={e => setMapDsaSearch(e.target.value)} autoFocus
+                      placeholder="Search by name, DSA code or mobile"
+                      className="w-full pl-9 pr-9 py-2 rounded-xl text-sm text-text-primary outline-none" style={inputStyle} />
+                    {mapDsaSearch && (
+                      <button onClick={() => setMapDsaSearch('')} title="Clear search"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md" style={{ color: 'var(--text-faint)' }}>
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {(() => {
+                    const q = mapDsaSearch.trim().toLowerCase();
+                    const qDigits = q.replace(/\D/g, '');
+                    const matches = q
+                      ? dsaList.filter(d =>
+                          d.full_name.toLowerCase().includes(q)
+                          || (d.dsa_code ?? '').toLowerCase().includes(q)
+                          || (qDigits.length > 0 && (d.mobile ?? '').includes(qDigits)))
+                      : dsaList;
+                    // Keep the chosen DSA visible even when it no longer matches the query.
+                    const picked = dsaList.find(d => d.id === selectedDsaId);
+                    const shown = picked && !matches.some(d => d.id === picked.id) ? [picked, ...matches] : matches;
+                    return shown.length === 0 ? (
+                      <p className="text-xs px-1 py-2" style={{ color: 'var(--text-faint)' }}>No DSA matches “{mapDsaSearch.trim()}”.</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                        {shown.map(d => {
+                          const on = d.id === selectedDsaId;
+                          return (
+                            <button key={d.id} type="button" onClick={() => setSelectedDsaId(d.id)}
+                              className="w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-3 transition-all"
+                              style={{ background: on ? 'rgba(var(--accent-rgb),0.08)' : 'var(--bg-raised)', border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}` }}>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-text-primary truncate">{d.full_name}</p>
+                                <p className="text-xs font-mono" style={{ color: 'var(--accent)' }}>{d.dsa_code}</p>
+                              </div>
+                              {d.mobile && <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-muted)' }}>{d.mobile}</span>}
+                              {on && <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--success)' }} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
               )}
             </InlineField>
 
