@@ -30,6 +30,7 @@ import {
 import { PageHead, Panel, PanelHead } from '../../ui/Surface';
 import { Loading } from '../../ui/controls';
 import { useCallerEuin } from '../../hooks/useCallerEuin';
+import { SearchSelect } from '../../../components/SearchSelect';
 
 export function RedeemPage() {
   // Display only — the proxy resolves the real EUIN from the session.
@@ -133,21 +134,17 @@ export function RedeemPage() {
             )}
 
             <Field label="Client (UCC)">
-              <select
+              <SearchSelect
                 value={clientCode}
-                onChange={(e) => {
-                  setClientCode(e.target.value);
+                onChange={(v) => {
+                  setClientCode(v);
                   setKey('');
                 }}
+                emptyOption={{ value: '', label: 'All clients' }}
+                searchPlaceholder="Search by name or UCC"
                 className={selectCls}
-              >
-                <option value="">All clients</option>
-                {activeUccs.map((u) => (
-                  <option key={u.clientCode} value={u.clientCode}>
-                    {u.name?.trim() || u.clientCode} — {u.clientCode}
-                  </option>
-                ))}
-              </select>
+                options={activeUccs.map((u) => ({ value: u.clientCode, label: u.name?.trim() || u.clientCode, sub: u.clientCode }))}
+              />
             </Field>
 
             <Field label="Holding (folio · scheme)">

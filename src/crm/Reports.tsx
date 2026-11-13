@@ -5,6 +5,7 @@ import { NWEmployee, NWHolding, NWTransaction, NWClient, ProductType } from './t
 import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_CHART_COLORS, TXN_LABELS, TXN_COLORS } from './utils';
 import { Download, BarChart3, ArrowLeftRight, Users, ChevronDown } from 'lucide-react';
 import { mfSsoEnabled } from '../../shared/platform/env';
+import { SearchSelect } from '../components/SearchSelect';
 
 interface Props { employee: NWEmployee; }
 
@@ -146,15 +147,12 @@ export default function Reports({ employee }: Props) {
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--accent)' }} />
           </div>
         )}
-        <div className="relative">
-          <select value={clientFilter} onChange={e => setClientFilter(e.target.value)}
-            className="pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
-            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-            <option value="all">All Clients</option>
-            {filteredClients.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-          </select>
-          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
-        </div>
+        <SearchSelect value={clientFilter} onChange={setClientFilter}
+          className="min-w-[200px] max-w-xs px-3 py-2.5 rounded-xl text-sm text-text-primary outline-none"
+          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+          emptyOption={{ value: 'all', label: 'All Clients' }}
+          searchPlaceholder="Search by name, code, phone or PAN"
+          options={filteredClients.map(c => ({ value: c.id, label: c.full_name, sub: c.client_code, keywords: `${c.phone ?? ''} ${c.pan ?? ''}` }))} />
         {mode === 'transactions' && (
           <>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder="From"

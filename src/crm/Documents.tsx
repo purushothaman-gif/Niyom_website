@@ -11,6 +11,7 @@ import {
   FileText, FileImage, File, X, CheckCircle2, AlertCircle,
   ChevronDown, RefreshCw, ArrowLeft, Plus, Pencil, Unlock,
 } from 'lucide-react';
+import { SearchSelect } from '../components/SearchSelect';
 
 interface Props {
   employee: NWEmployee;
@@ -430,14 +431,13 @@ export default function Documents({ employee, initialClientId, onBack }: Props) 
           )}
           <div className="flex-1 min-w-52">
             <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Select Client</label>
-            <select value={selectedClientId} onChange={e => { setSelectedClientId(e.target.value); setSelectedFolder(null); }}
+            <SearchSelect value={selectedClientId} onChange={v => { setSelectedClientId(v); setSelectedFolder(null); }}
+              placeholder="— Choose a client —"
               className="w-full sm:max-w-sm px-3.5 py-2.5 rounded-xl text-sm text-text-primary outline-none"
-              style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}>
-              <option value="">— Choose a client —</option>
-              {clients
+              style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}
+              options={clients
                 .filter(c => empFilter === 'all' || c.employee_id === empFilter)
-                .map(c => <option key={c.id} value={c.id}>{c.full_name} ({c.client_code})</option>)}
-            </select>
+                .map(c => ({ value: c.id, label: c.full_name, sub: c.client_code }))} />
           </div>
         </div>
       )}

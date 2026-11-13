@@ -35,6 +35,7 @@ import { PageHead, Panel, PanelHead } from '../../ui/Surface';
 import { Loading } from '../../ui/controls';
 import { useCallerEuin } from '../../hooks/useCallerEuin';
 import { ClientLinks } from './CopyLink';
+import { SearchSelect } from '../../../components/SearchSelect';
 
 interface Placed {
   orderId: string;
@@ -168,19 +169,15 @@ export function PurchasePage() {
             )}
 
             <Field label="Client (UCC)">
-              <select
+              <SearchSelect
                 value={clientCode}
-                onChange={(e) => setClientCode(e.target.value)}
+                onChange={setClientCode}
                 disabled={activeUccs.length === 0}
+                placeholder="Select a client…"
+                searchPlaceholder="Search by name or UCC"
                 className={selectCls}
-              >
-                <option value="">Select a client…</option>
-                {activeUccs.map((u) => (
-                  <option key={u.clientCode} value={u.clientCode}>
-                    {u.name?.trim() || u.clientCode} — {u.clientCode}
-                  </option>
-                ))}
-              </select>
+                options={activeUccs.map((u) => ({ value: u.clientCode, label: u.name?.trim() || u.clientCode, sub: u.clientCode }))}
+              />
               <p className="mt-1 text-[11px] text-text-faint">
                 {activeUccs.length} of {uccs.data?.length ?? 0} UCCs are able to transact.
               </p>

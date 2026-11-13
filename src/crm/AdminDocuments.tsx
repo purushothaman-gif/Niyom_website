@@ -10,6 +10,7 @@ import {
   FileText, FileImage, File, X, CheckCircle2, AlertCircle,
   ChevronRight, FolderOpen, Users, Shield, Clock, BarChart3,
 } from 'lucide-react';
+import { SearchSelect } from '../components/SearchSelect';
 
 interface Props { employee: NWEmployee; }
 
@@ -348,10 +349,9 @@ export default function AdminDocuments({ employee }: Props) {
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                 <div>
                   <label className="block text-xs mb-1" style={{ color: 'var(--text-faint)' }}>Client</label>
-                  <select value={filterClient} onChange={e => setFilterClient(e.target.value)} style={selStyle}>
-                    <option value="">All Clients</option>
-                    {clients.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-                  </select>
+                  <SearchSelect value={filterClient} onChange={setFilterClient} style={selStyle}
+                    emptyOption={{ value: '', label: 'All Clients' }}
+                    options={clients.map(c => ({ value: c.id, label: c.full_name, sub: c.client_code }))} />
                 </div>
                 <div>
                   <label className="block text-xs mb-1" style={{ color: 'var(--text-faint)' }}>Employee</label>

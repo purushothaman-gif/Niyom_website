@@ -34,6 +34,7 @@ import { ErrorBlock, Loading, fieldCls } from '../../ui/controls';
 import { ConfirmBox, ErrorNote, Field, NotConfigured, SuccessCard, WarnNote } from './formBits';
 import { EnvBadge, envNote, useBseEnv } from './EnvBadge';
 import { inr, inrCompact, num, shortDate } from '../../../lib/money';
+import { SearchSelect } from '../../../components/SearchSelect';
 
 interface Registered {
   mandateId: string;
@@ -270,19 +271,15 @@ export function MandatePage() {
               )}
 
               <Field label="Client (UCC)">
-                <select
+                <SearchSelect
                   value={clientCode}
-                  onChange={(e) => setClientCode(e.target.value)}
+                  onChange={setClientCode}
                   disabled={activeUccs.length === 0}
+                  placeholder="Select a client…"
+                  searchPlaceholder="Search by name or UCC"
                   className={fieldCls}
-                >
-                  <option value="">Select a client…</option>
-                  {activeUccs.map((u) => (
-                    <option key={u.clientCode} value={u.clientCode}>
-                      {u.name?.trim() || u.clientCode} — {u.clientCode}
-                    </option>
-                  ))}
-                </select>
+                  options={activeUccs.map((u) => ({ value: u.clientCode, label: u.name?.trim() || u.clientCode, sub: u.clientCode }))}
+                />
               </Field>
 
               <Field label="Mandate type">

@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { supabase } from '../../lib/supabase';
 import { NWEmployee } from '../types';
 import { BadgeIndianRupee, RefreshCw, AlertTriangle, CheckCircle2, Scale, Link2, Database } from 'lucide-react';
+import { SearchSelect } from '../../components/SearchSelect';
 
 interface Props { employee: NWEmployee; }
 
@@ -435,10 +436,10 @@ export default function BrokerageMis({ employee }: Props) {
                     <span className="flex-1 min-w-[200px] text-sm text-text-primary">
                       <span className="font-mono text-xs">{u.folio}</span> · {u.holder ?? '—'} <span className="text-xs" style={{ color: 'var(--text-muted)' }}>({u.amc ?? '—'}, {u.lines} line(s), {inr(u.amount)})</span>
                     </span>
-                    <select value={assign[u.folio] ?? ''} onChange={(e) => setAssign((a) => ({ ...a, [u.folio]: e.target.value }))} className="px-3 py-2 rounded-lg text-sm text-text-primary" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-                      <option value="">Assign to client…</option>
-                      {clients.map((c) => <option key={c.id} value={c.id}>{c.full_name} ({c.client_code})</option>)}
-                    </select>
+                    <SearchSelect value={assign[u.folio] ?? ''} onChange={(v) => setAssign((a) => ({ ...a, [u.folio]: v }))}
+                      placeholder="Assign to client…" className="min-w-[220px] px-3 py-2 rounded-lg text-sm text-text-primary"
+                      style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+                      options={clients.map((c) => ({ value: c.id, label: c.full_name, sub: c.client_code }))} />
                     <button onClick={() => assignFolio(u.folio)} disabled={!assign[u.folio] || busy} className="px-3 py-2 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50" style={{ background: 'var(--accent)' }}>Save</button>
                   </div>
                 ))}

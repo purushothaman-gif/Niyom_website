@@ -13,6 +13,7 @@ import {
 } from '../../../../shared/partner/shares/partnerShareMath';
 import { PartnerService, type PartnerShare } from '../../services/PartnerService';
 import type { PartnerClientRow } from '../../types';
+import { SearchSelect } from '../../../components/SearchSelect';
 
 export function PartnerShareOrderModal({
   share,
@@ -96,13 +97,11 @@ export function PartnerShareOrderModal({
 
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-text-faint">Client</span>
-              <select value={clientId} onChange={(e) => setClientId(e.target.value)}
-                className="w-full rounded-token-md border border-border bg-bg-surface px-3 py-2.5 text-sm text-text-primary outline-none">
-                <option value="">{loadingClients ? 'Loading…' : clients.length ? 'Select a client' : 'No clients mapped to you yet'}</option>
-                {clients.map((c) => (
-                  <option key={c.client_id} value={c.client_id}>{c.full_name} · {c.client_code}</option>
-                ))}
-              </select>
+              <SearchSelect value={clientId} onChange={setClientId}
+                disabled={loadingClients || clients.length === 0}
+                placeholder={loadingClients ? 'Loading…' : clients.length ? 'Select a client' : 'No clients mapped to you yet'}
+                className="w-full rounded-token-md border border-border bg-bg-surface px-3 py-2.5 text-sm text-text-primary outline-none"
+                options={clients.map((c) => ({ value: c.client_id, label: c.full_name, sub: c.client_code }))} />
             </label>
 
             <div className="grid grid-cols-2 gap-3">

@@ -7,6 +7,7 @@ import { Plus, X, Pencil, Trash2, FileText, ExternalLink, Search, ChevronDown, C
 import type { Insertable } from '../lib/dbJson';
 import { recalcPortfolioValue } from './portfolioValue';
 import { mfSsoEnabled } from '../../shared/platform/env';
+import { SearchSelect } from '../components/SearchSelect';
 
 interface Props { employee: NWEmployee; onNavigate?: (page: string, params?: Record<string, string>) => void; }
 
@@ -954,10 +955,9 @@ export default function Transactions({ employee, onNavigate }: Props) {
       )}
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Client *"><S value={form.client_id} onChange={v => setF('client_id', v)} disabled={locked}>
-          <option value="">Select client...</option>
-          {clients.map(c => <option key={c.id} value={c.id}>{c.full_name} ({c.client_code})</option>)}
-        </S></Field>
+        <Field label="Client *"><SearchSelect value={form.client_id} onChange={v => setF('client_id', v)} disabled={locked}
+          placeholder="Select client..." className={iC} style={iS}
+          options={clients.map(c => ({ value: c.id, label: c.full_name, sub: c.client_code }))} /></Field>
         <Field label="Transaction Type"><S value={form.txn_type} onChange={v => setF('txn_type', v)} disabled={locked}>
           {TXN_TYPES.map(t => <option key={t} value={t}>{TXN_LABELS[t]}</option>)}
         </S></Field>

@@ -14,6 +14,7 @@ import { recalcPortfolioValue } from './portfolioValue';
 import { bookCategoryOf, buildPortfolioReportHtml, buildReportCategories, registrarInvested } from './portfolioReport';
 import { fetchRtaMf, type RtaMfData } from '../../shared/mf/rtaMf';
 import { mfSsoEnabled } from '../../shared/platform/env';
+import { SearchSelect } from '../components/SearchSelect';
 
 interface Props {
   employee: NWEmployee;
@@ -978,10 +979,9 @@ export default function Portfolio({ employee, pageParams }: Props) {
       {error && <div className="p-3 rounded-xl text-sm text-c-red" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>{error}</div>}
       <div className="grid grid-cols-2 gap-4">
         <Field label="Client *">
-          <Sel value={form.client_id} onChange={e => setF('client_id', e.target.value)}>
-            <option value="">Select client...</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.full_name} ({c.client_code})</option>)}
-          </Sel>
+          <SearchSelect value={form.client_id} onChange={v => setF('client_id', v)}
+            placeholder="Select client..." className={inputClass} style={inputStyle}
+            options={clients.map(c => ({ value: c.id, label: c.full_name, sub: c.client_code }))} />
         </Field>
         <Field label="Product Type">
           <Sel value={form.product_type} onChange={e => setF('product_type', e.target.value as ProductType)}>
@@ -1376,16 +1376,12 @@ export default function Portfolio({ employee, pageParams }: Props) {
           </div>
         ) : (
           <>
-            <div className="relative">
-              <select value={clientFilter} onChange={e => setClientFilter(e.target.value)}
-                className="pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
-                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-                {clients
-                  .filter(c => empFilter === 'all' || c.employee_id === empFilter)
-                  .map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-              </select>
-              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
-            </div>
+            <SearchSelect value={clientFilter} onChange={setClientFilter} placeholder="Select client..."
+              className="min-w-[220px] max-w-xs px-3 py-2.5 rounded-xl text-sm text-text-primary outline-none"
+              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+              options={clients
+                .filter(c => empFilter === 'all' || c.employee_id === empFilter)
+                .map(c => ({ value: c.id, label: c.full_name, sub: c.client_code }))} />
             <div className="relative">
               <select value={productFilter} onChange={e => setProductFilter(e.target.value)}
                 className="pl-3 pr-8 py-2.5 rounded-xl text-sm text-text-primary outline-none appearance-none"
