@@ -345,6 +345,8 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
   const [search, setSearch] = useState('');
   const [emailSending, setEmailSending] = useState(false);
   const [cancelDeal, setCancelDeal] = useState<DealRecord | null>(null);
+  // Offered right after a confirmed deal is saved: mail it now, or later from the list.
+  const [sendPrompt, setSendPrompt] = useState<DealRecord | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [paySummaries, setPaySummaries] = useState<Record<string, { payment_status: 'not_paid' | 'partially_paid' | 'fully_paid' | 'over_paid'; outstanding_amount: number }>>({});
@@ -601,6 +603,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
     if (!validate()) return;
     if (!selectedClient) return;
     setSaving(true);
+    let savedDealId: string | null = null;
 
     const addr = [selectedClient.address, selectedClient.city, selectedClient.state].filter(Boolean).join(', ');
 
@@ -703,6 +706,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
       const { error: insErr } = await supabase.from('nw_deal_confirmation_items').insert(itemRows(editDeal.id) as Insertable<'nw_deal_confirmation_items'>[]);
       setSaving(false);
       if (insErr) { setError(insErr.message); return; }
+      savedDealId = editDeal.id;
 
       if (wasSigned) {
         await supabase.from('nw_deal_confirmation_events').insert([
@@ -755,11 +759,20 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
         if (stampErr) showToast('Deal created, but linking the order failed. Update it manually.', false);
         sourceOrderRef.current = null;
       }
+      savedDealId = created.id;
       showToast(status === 'confirmed' ? 'Deal confirmation created.' : 'Draft saved.');
     }
 
     loadDeals();
     setView('list');
+
+    // Confirmed deals: ask whether to mail the client now instead of making the
+    // RM find the Send icon in the list. Drafts are left alone.
+    if (status === 'confirmed' && savedDealId) {
+      const { data: saved } = await supabase.from('nw_deal_confirmations').select('*').eq('id', savedDealId).maybeSingle();
+      const deal = saved as unknown as DealRecord | null;
+      if (deal && !deal.cancelled_at && deal.acceptance_status !== 'accepted') setSendPrompt(deal);
+    }
   };
 
   const handleDelete = async () => {
@@ -886,6 +899,39 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
       style={{ background: 'var(--bg-surface)', border: `1px solid ${toast.ok ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
       {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
       {toast.msg}
+    </div>
+  );
+
+  const sendPromptEl = sendPrompt && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+      <div className="w-full max-w-md rounded-2xl p-6 space-y-4" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(var(--accent-rgb),0.12)' }}>
+            <Send className="w-5 h-5" style={{ color: 'var(--accent)' }} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-text-primary">
+              {sendPrompt.email_status === 'sent' ? 'Send the revised deal confirmation now?' : 'Send deal confirmation mail now?'}
+            </p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{sendPrompt.confirmation_number} · {sendPrompt.snap_client_name}</p>
+          </div>
+        </div>
+        <div className="rounded-xl px-4 py-3 text-xs space-y-1" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+          <p>To: <span className="text-text-primary font-semibold">{sendPrompt.snap_email || 'no email on file'}</span></p>
+          <p>Settlement: <span className="text-text-primary font-semibold">{fmt(sendPrompt.settlement_amount)}</span></p>
+          <p style={{ color: 'var(--text-faint)' }}>The client gets a secure link to review and accept the deal (valid 7 days).</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={() => setSendPrompt(null)} disabled={emailSending}
+            className="flex-1 py-2.5 rounded-xl text-sm disabled:opacity-50" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+            Not now
+          </button>
+          <button onClick={async () => { await handleSendSecureLink(sendPrompt); setSendPrompt(null); }} disabled={emailSending}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-on-accent disabled:opacity-60" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
+            {emailSending ? 'Sending...' : 'Send Mail'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 
@@ -1332,6 +1378,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
 
       {toastEl}
       {cancelModalEl}
+      {sendPromptEl}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
