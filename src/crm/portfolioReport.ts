@@ -58,6 +58,9 @@ const DEMAT_CATEGORY: Record<string, string> = {
   equity: 'equity', etf: 'etf', corporate_bond: 'bond', gsec: 'gsec', aif: 'aif', nps: 'nps', demat_mf: 'mutual_fund', other: 'other',
 };
 
+/** The product category a book holding prints under. */
+export const bookCategoryOf = (pt: ProductType): string => BOOK_CATEGORY[pt] ?? 'other';
+
 /** One holding, whichever source it came from. */
 export interface ReportRow {
   category: string;
@@ -68,6 +71,8 @@ export interface ReportRow {
   held: string;
   quantity: number | null;
   price: number | null;
+  /** Set on rows from the in-house book (the nw_holdings id) — the editable ones. */
+  bookId?: string;
   /** null = no purchase cost on record. */
   invested: number | null;
   value: number;
@@ -135,7 +140,8 @@ export function buildReportCategories(input: RowsInput): ReportCategory[] {
     const isDsa = input.clientOf?.(h.client_id)?.sourced_via === 'dsa' && DSA_PRICE_TYPES.includes(pt);
     const joined = (h as NWHolding & { client?: { full_name?: string } }).client;
     rows.push({
-      category: BOOK_CATEGORY[pt] ?? 'other',
+      bookId: h.id,
+      category: bookCategoryOf(pt),
       name: h.product_name,
       detail: join([
         !input.client && joined?.full_name,

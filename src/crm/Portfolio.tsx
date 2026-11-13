@@ -1,7 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { LogoLoader } from '../components/LogoLoader';
-import { CasHoldingsView } from './CasHoldingsPanel';
-import { DematHoldingsView } from './DematHoldingsPanel';
 import { loadCasView, type CasCrmView } from './services/casClientView';
 import { loadDematView, type DematCrmView } from './services/dematClientView';
 import { statementTotals } from './services/statementTotals';
@@ -13,7 +11,7 @@ import { fmt, fmtDate, PRODUCT_LABELS, PRODUCT_COLORS, PRODUCT_CHART_COLORS } fr
 import { Plus, X, Pencil, Trash2, ChevronDown, Printer, TrendingUp, Percent, Shield, ArrowLeft, ArrowUp, ArrowDown, Search, Download } from 'lucide-react';
 import type { Insertable } from '../lib/dbJson';
 import { recalcPortfolioValue } from './portfolioValue';
-import { buildPortfolioReportHtml, registrarInvested } from './portfolioReport';
+import { bookCategoryOf, buildPortfolioReportHtml, buildReportCategories, registrarInvested } from './portfolioReport';
 import { fetchRtaMf, type RtaMfData } from '../../shared/mf/rtaMf';
 import { mfSsoEnabled } from '../../shared/platform/env';
 
@@ -742,6 +740,157 @@ export default function Portfolio({ employee, pageParams }: Props) {
 
   const detailClient = view === 'detail' ? clientMap.get(clientFilter) : undefined;
 
+  // In-house book rows for the combined table: several purchases of one ISIN
+  // collapse into an expandable group; every row keeps its edit / delete.
+  const renderBookRows = (list: NWHolding[]): React.ReactNode[] => {
+                // Build ISIN groups: key = clientId + isin + productType
+                const isinGroupKeys = new Map<string, NWHolding[]>();
+                const soloHoldings: NWHolding[] = [];
+                for (const h of list) {
+                  const isin = (h as any).isin;
+                  if (isin) {
+                    const key = `${h.client_id}::${isin}::${h.product_type}`;
+                    const group = isinGroupKeys.get(key) || [];
+                    group.push(h);
+                    isinGroupKeys.set(key, group);
+                  } else {
+                    soloHoldings.push(h);
+                  }
+                }
+                // Re-merge: grouped (>1) items first as group rows, singles as normal rows
+                const rows: React.ReactNode[] = [];
+
+                const renderHoldingRow = (h: NWHolding, isSubRow = false) => {
+                  const pl = (h.current_value || 0) - (h.invested_amount || 0);
+                  const plPct = h.invested_amount > 0 ? ((pl / h.invested_amount) * 100).toFixed(1) : '0';
+                  const isin = (h as any).isin as string | null;
+                  return (
+                    <tr key={h.id} style={{ borderBottom: '1px solid var(--bg-raised)', background: isSubRow ? 'var(--bg-elevated)' : 'transparent' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = isSubRow ? 'var(--bg-elevated)' : 'transparent')}>
+                      <td className={`py-3.5 ${isSubRow ? 'pl-10 pr-5' : 'px-5'}`}>
+                        <p className="text-sm font-medium text-text-primary">{h.product_name}</p>
+                        {isSubRow && (h as any).txn_date && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate((h as any).txn_date)}</p>}
+                        {!isSubRow && (h as any).client && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{(h as any).client.full_name}</p>}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${PRODUCT_COLORS[h.product_type]}`}>{PRODUCT_LABELS[h.product_type]}</span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="space-y-0.5">
+                          {isin && <p className="text-xs font-mono font-semibold" style={{ color: 'var(--accent)' }}>{isin}</p>}
+                          {BOND_TYPES.includes(h.product_type) && h.coupon_rate && (
+                            <p className="text-xs text-c-emerald font-semibold">{h.coupon_rate}% · {PAYOUT_FREQ[h.payout_frequency || 'annual']}</p>
+                          )}
+                          {BOND_TYPES.includes(h.product_type) && h.maturity_date && (
+                            <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Matures {fmtDate(h.maturity_date)}</p>
+                          )}
+                          {h.product_type === 'mutual_fund' && h.folio_number && <p className="text-xs text-c-pink font-semibold">{h.folio_number}</p>}
+                          {h.product_type === 'mutual_fund' && h.scheme_type && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{SCHEME_LABELS[h.scheme_type] || h.scheme_type}</p>}
+                          {h.product_type === 'insurance' && h.policy_number && <p className="text-xs text-c-orange font-semibold">{h.policy_number}</p>}
+                          {h.product_type === 'insurance' && h.insurance_type && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{INS_LABELS[h.insurance_type || ''] || h.insurance_type}</p>}
+                          {!isin && !BOND_TYPES.includes(h.product_type) && h.product_type !== 'mutual_fund' && h.product_type !== 'insurance' && <span style={{ color: 'var(--text-faint)' }}>—</span>}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-text-primary">{h.quantity || '—'}</td>
+                      <td className="px-5 py-3.5 text-sm text-text-primary">{fmt(h.invested_amount || 0)}</td>
+                      <td className="px-5 py-3.5 text-sm font-bold text-text-primary">{fmt(h.current_value || 0)}</td>
+                      <td className="px-5 py-3.5">
+                        <p className={`text-sm font-bold ${pl >= 0 ? 'text-c-emerald' : 'text-c-red'}`}>{pl >= 0 ? '+' : ''}{fmt(pl)}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{pl >= 0 ? '+' : ''}{plPct}%</p>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => openEdit(h)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'rgb(var(--info-soft-rgb))')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Pencil className="w-4 h-4" /></button>
+                          <button onClick={() => setDeleteHolding(h)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                };
+
+                // Render ISIN groups (multiple entries for same ISIN)
+                for (const [key, group] of isinGroupKeys.entries()) {
+                  if (group.length === 1) {
+                    // Single holding with ISIN — render normally
+                    rows.push(renderHoldingRow(group[0]));
+                  } else {
+                    // Multiple holdings with same ISIN — render group header + collapsible sub-rows
+                    const isin = (group[0] as any).isin;
+                    const isExpanded = expandedGroups.has(key);
+                    const groupInvested = group.reduce((s, h) => s + (h.invested_amount || 0), 0);
+                    const groupValue = group.reduce((s, h) => s + (h.current_value || 0), 0);
+                    const groupQty = group.reduce((s, h) => s + (h.quantity || 0), 0);
+                    const groupPL = groupValue - groupInvested;
+                    const groupPLPct = groupInvested > 0 ? ((groupPL / groupInvested) * 100).toFixed(1) : '0';
+                    const sortedGroup = [...group].sort((a, b) => ((a as any).txn_date || a.created_at) < ((b as any).txn_date || b.created_at) ? -1 : 1);
+
+                    rows.push(
+                      <tr key={`group-${key}`} style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', cursor: 'pointer' }}
+                        onClick={() => toggleGroup(key)}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-raised)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}>
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-2">
+                            <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 transition-transform" style={{ color: 'var(--accent)', transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
+                            <div>
+                              <p className="text-sm font-semibold text-text-primary">{group[0].product_name}</p>
+                              <p className="text-xs font-mono" style={{ color: 'var(--accent)' }}>{isin} · {group.length} transactions</p>
+                              {(group[0] as any).client && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{(group[0] as any).client.full_name}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${PRODUCT_COLORS[group[0].product_type]}`}>{PRODUCT_LABELS[group[0].product_type]}</span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {BOND_TYPES.includes(group[0].product_type) && group[0].coupon_rate && (
+                            <p className="text-xs text-c-emerald font-semibold">{group[0].coupon_rate}% · {PAYOUT_FREQ[group[0].payout_frequency || 'annual']}</p>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-text-primary font-semibold">{groupQty}</td>
+                        <td className="px-5 py-3.5 text-sm text-text-primary">{fmt(groupInvested)}</td>
+                        <td className="px-5 py-3.5 text-sm font-bold text-text-primary">{fmt(groupValue)}</td>
+                        <td className="px-5 py-3.5">
+                          <p className={`text-sm font-bold ${groupPL >= 0 ? 'text-c-emerald' : 'text-c-red'}`}>{groupPL >= 0 ? '+' : ''}{fmt(groupPL)}</p>
+                          <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{groupPL >= 0 ? '+' : ''}{groupPLPct}%</p>
+                        </td>
+                        <td className="px-5 py-3.5" />
+                      </tr>
+                    );
+                    if (isExpanded) {
+                      sortedGroup.forEach(h => rows.push(renderHoldingRow(h, true)));
+                    }
+                  }
+                }
+
+    soloHoldings.forEach(h => rows.push(renderHoldingRow(h)));
+    return rows;
+  };
+
+  // The one client's whole portfolio as a single list by product — the same
+  // rows, in the same order, with the same de-duplication as the printed report.
+  const detailCategories = useMemo(() => {
+    if (view !== 'detail') return [];
+    const wanted = productFilter === 'all' ? null : bookCategoryOf(productFilter as ProductType);
+    return buildReportCategories({
+      client: detailClient ?? null,
+      products: PRODUCTS,
+      holdings,
+      clientOf: id => clientMap.get(id),
+      registrar: MF_ON_PLATFORM ? rtaView?.holdings ?? [] : [],
+      cas: casView,
+      demat: dematView,
+    }).filter(c => !wanted || c.key === wanted);
+  }, [view, productFilter, detailClient, holdings, clientMap, rtaView, casView, dematView]);
+
+  // Allocation chart: by product for one client (same groups as the list), by
+  // book product on the client list.
+  const shownChart = view === 'detail'
+    ? detailCategories.filter(c => c.value > 0).map(c => ({ label: c.label, value: c.value, color: c.color }))
+    : chartData;
+  const shownChartTotal = view === 'detail' ? shownChart.reduce((t, d) => t + d.value, 0) : chartTotal;
+
   const printPortfolio = () => {
     // Open window immediately (synchronous) to avoid popup blocker
     const w = window.open('', '_blank');
@@ -1177,14 +1326,14 @@ export default function Portfolio({ employee, pageParams }: Props) {
       </div>
 
       {/* Pie chart + legend */}
-      {chartData.length > 0 && (
+      {shownChart.length > 0 && (
         <div className="rounded-2xl p-6" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
           <h2 className="text-sm font-bold text-text-primary mb-5">Product Allocation</h2>
           <div className="flex flex-col sm:flex-row items-center gap-8">
-            <div className="flex-shrink-0"><PieChart data={chartData} /></div>
+            <div className="flex-shrink-0"><PieChart data={shownChart} /></div>
             <div className="flex-1 space-y-3 w-full">
-              {chartData.map(d => {
-                const pct = chartTotal > 0 ? ((d.value / chartTotal) * 100).toFixed(1) : '0';
+              {shownChart.map(d => {
+                const pct = shownChartTotal > 0 ? ((d.value / shownChartTotal) * 100).toFixed(1) : '0';
                 return (
                   <div key={d.label} className="flex items-center gap-3">
                     <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: d.color }} />
@@ -1323,178 +1472,81 @@ export default function Portfolio({ employee, pageParams }: Props) {
           <table className="w-full nw-table">
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                {['Product', 'Type', 'Key Details', 'Qty', 'Invested', 'Current Value', 'P&L', 'Actions'].map(h => (
+                {['Holding', 'Type / Held', 'Key Details', 'Qty', 'Invested', 'Current Value', 'P&L', 'Actions'].map(h => (
                   <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {loading || stmtLoading ? (
                 <tr><td colSpan={8} className="text-center py-12"><LogoLoader size={40} /></td></tr>
-              ) : holdings.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>{stmt.value > 0 || mfAum > 0 ? 'Nothing booked in-house for this client — their registrar and statement holdings are listed below.' : 'No holdings found'}</td></tr>
-              ) : (() => {
-                // Build ISIN groups: key = clientId + isin + productType
-                const isinGroupKeys = new Map<string, NWHolding[]>();
-                const soloHoldings: NWHolding[] = [];
-                for (const h of holdings) {
-                  const isin = (h as any).isin;
-                  if (isin) {
-                    const key = `${h.client_id}::${isin}::${h.product_type}`;
-                    const group = isinGroupKeys.get(key) || [];
-                    group.push(h);
-                    isinGroupKeys.set(key, group);
-                  } else {
-                    soloHoldings.push(h);
-                  }
-                }
-                // Re-merge: grouped (>1) items first as group rows, singles as normal rows
-                const rows: React.ReactNode[] = [];
-
-                const renderHoldingRow = (h: NWHolding, isSubRow = false) => {
-                  const pl = (h.current_value || 0) - (h.invested_amount || 0);
-                  const plPct = h.invested_amount > 0 ? ((pl / h.invested_amount) * 100).toFixed(1) : '0';
-                  const isin = (h as any).isin as string | null;
-                  return (
-                    <tr key={h.id} style={{ borderBottom: '1px solid var(--bg-raised)', background: isSubRow ? 'var(--bg-elevated)' : 'transparent' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = isSubRow ? 'var(--bg-elevated)' : 'transparent')}>
-                      <td className={`py-3.5 ${isSubRow ? 'pl-10 pr-5' : 'px-5'}`}>
-                        <p className="text-sm font-medium text-text-primary">{h.product_name}</p>
-                        {isSubRow && (h as any).txn_date && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{fmtDate((h as any).txn_date)}</p>}
-                        {!isSubRow && (h as any).client && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{(h as any).client.full_name}</p>}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${PRODUCT_COLORS[h.product_type]}`}>{PRODUCT_LABELS[h.product_type]}</span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="space-y-0.5">
-                          {isin && <p className="text-xs font-mono font-semibold" style={{ color: 'var(--accent)' }}>{isin}</p>}
-                          {BOND_TYPES.includes(h.product_type) && h.coupon_rate && (
-                            <p className="text-xs text-c-emerald font-semibold">{h.coupon_rate}% · {PAYOUT_FREQ[h.payout_frequency || 'annual']}</p>
-                          )}
-                          {BOND_TYPES.includes(h.product_type) && h.maturity_date && (
-                            <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Matures {fmtDate(h.maturity_date)}</p>
-                          )}
-                          {h.product_type === 'mutual_fund' && h.folio_number && <p className="text-xs text-c-pink font-semibold">{h.folio_number}</p>}
-                          {h.product_type === 'mutual_fund' && h.scheme_type && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{SCHEME_LABELS[h.scheme_type] || h.scheme_type}</p>}
-                          {h.product_type === 'insurance' && h.policy_number && <p className="text-xs text-c-orange font-semibold">{h.policy_number}</p>}
-                          {h.product_type === 'insurance' && h.insurance_type && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{INS_LABELS[h.insurance_type || ''] || h.insurance_type}</p>}
-                          {!isin && !BOND_TYPES.includes(h.product_type) && h.product_type !== 'mutual_fund' && h.product_type !== 'insurance' && <span style={{ color: 'var(--text-faint)' }}>—</span>}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm text-text-primary">{h.quantity || '—'}</td>
-                      <td className="px-5 py-3.5 text-sm text-text-primary">{fmt(h.invested_amount || 0)}</td>
-                      <td className="px-5 py-3.5 text-sm font-bold text-text-primary">{fmt(h.current_value || 0)}</td>
-                      <td className="px-5 py-3.5">
-                        <p className={`text-sm font-bold ${pl >= 0 ? 'text-c-emerald' : 'text-c-red'}`}>{pl >= 0 ? '+' : ''}{fmt(pl)}</p>
-                        <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{pl >= 0 ? '+' : ''}{plPct}%</p>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => openEdit(h)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'rgb(var(--info-soft-rgb))')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Pencil className="w-4 h-4" /></button>
-                          <button onClick={() => setDeleteHolding(h)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-faint)' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}><Trash2 className="w-4 h-4" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                };
-
-                // Render ISIN groups (multiple entries for same ISIN)
-                for (const [key, group] of isinGroupKeys.entries()) {
-                  if (group.length === 1) {
-                    // Single holding with ISIN — render normally
-                    rows.push(renderHoldingRow(group[0]));
-                  } else {
-                    // Multiple holdings with same ISIN — render group header + collapsible sub-rows
-                    const isin = (group[0] as any).isin;
-                    const isExpanded = expandedGroups.has(key);
-                    const groupInvested = group.reduce((s, h) => s + (h.invested_amount || 0), 0);
-                    const groupValue = group.reduce((s, h) => s + (h.current_value || 0), 0);
-                    const groupQty = group.reduce((s, h) => s + (h.quantity || 0), 0);
-                    const groupPL = groupValue - groupInvested;
-                    const groupPLPct = groupInvested > 0 ? ((groupPL / groupInvested) * 100).toFixed(1) : '0';
-                    const sortedGroup = [...group].sort((a, b) => ((a as any).txn_date || a.created_at) < ((b as any).txn_date || b.created_at) ? -1 : 1);
-
-                    rows.push(
-                      <tr key={`group-${key}`} style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', cursor: 'pointer' }}
-                        onClick={() => toggleGroup(key)}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-raised)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}>
+              ) : detailCategories.length === 0 ? (
+                <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--text-faint)' }}>No holdings found</td></tr>
+              ) : detailCategories.flatMap(cat => {
+                const book = holdings.filter(h => bookCategoryOf(h.product_type) === cat.key);
+                return [
+                  <tr key={`cat-${cat.key}`} style={{ background: 'var(--bg-raised)', borderBottom: '1px solid var(--border-subtle)' }}>
+                    <td colSpan={5} className="px-5 py-2.5">
+                      <span className="text-xs font-bold uppercase tracking-wider" style={{ color: cat.color }}>{cat.label}</span>
+                      <span className="ml-2 text-xs" style={{ color: 'var(--text-faint)' }}>{cat.rows.length} holding{cat.rows.length === 1 ? '' : 's'}</span>
+                    </td>
+                    <td className="px-5 py-2.5 text-sm font-bold text-text-primary">{fmt(cat.value)}</td>
+                    <td className="px-5 py-2.5 text-sm font-bold" colSpan={2}>
+                      {cat.gain != null && <span className={cat.gain >= 0 ? 'text-c-emerald' : 'text-c-red'}>{cat.gain >= 0 ? '+' : ''}{fmt(cat.gain)}</span>}
+                    </td>
+                  </tr>,
+                  ...renderBookRows(book),
+                  ...cat.rows.filter(r => !r.bookId).map((r, i) => {
+                    const pl = r.invested != null ? r.value - r.invested : null;
+                    return (
+                      <tr key={`${cat.key}-x-${i}`} style={{ borderBottom: '1px solid var(--bg-raised)' }}>
+                        <td className="px-5 py-3.5"><p className="text-sm font-medium text-text-primary">{r.name}</p></td>
                         <td className="px-5 py-3.5">
-                          <div className="flex items-center gap-2">
-                            <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 transition-transform" style={{ color: 'var(--accent)', transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
-                            <div>
-                              <p className="text-sm font-semibold text-text-primary">{group[0].product_name}</p>
-                              <p className="text-xs font-mono" style={{ color: 'var(--accent)' }}>{isin} · {group.length} transactions</p>
-                              {(group[0] as any).client && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{(group[0] as any).client.full_name}</p>}
-                            </div>
-                          </div>
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded whitespace-nowrap" style={{ border: '1px solid var(--border)', color: r.held.startsWith('With') ? 'var(--text-secondary)' : 'var(--warning)' }}>{r.held}</span>
                         </td>
+                        <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-faint)' }}>{r.detail || '—'}</td>
+                        <td className="px-5 py-3.5 text-sm text-text-primary">{r.quantity != null ? r.quantity.toLocaleString('en-IN', { maximumFractionDigits: 3 }) : '—'}</td>
+                        <td className="px-5 py-3.5 text-sm" style={{ color: r.invested != null ? 'var(--text-primary)' : 'var(--text-faint)' }}>{r.invested != null ? fmt(r.invested) : 'Not available'}</td>
+                        <td className="px-5 py-3.5 text-sm font-bold text-text-primary">{fmt(r.value)}</td>
                         <td className="px-5 py-3.5">
-                          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${PRODUCT_COLORS[group[0].product_type]}`}>{PRODUCT_LABELS[group[0].product_type]}</span>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          {BOND_TYPES.includes(group[0].product_type) && group[0].coupon_rate && (
-                            <p className="text-xs text-c-emerald font-semibold">{group[0].coupon_rate}% · {PAYOUT_FREQ[group[0].payout_frequency || 'annual']}</p>
+                          {pl == null ? <span className="text-sm" style={{ color: 'var(--text-faint)' }}>—</span> : (
+                            <>
+                              <p className={`text-sm font-bold ${pl >= 0 ? 'text-c-emerald' : 'text-c-red'}`}>{pl >= 0 ? '+' : ''}{fmt(pl)}</p>
+                              {(r.invested as number) > 0 && <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{pl >= 0 ? '+' : ''}{((pl / (r.invested as number)) * 100).toFixed(1)}%</p>}
+                            </>
                           )}
-                        </td>
-                        <td className="px-5 py-3.5 text-sm text-text-primary font-semibold">{groupQty}</td>
-                        <td className="px-5 py-3.5 text-sm text-text-primary">{fmt(groupInvested)}</td>
-                        <td className="px-5 py-3.5 text-sm font-bold text-text-primary">{fmt(groupValue)}</td>
-                        <td className="px-5 py-3.5">
-                          <p className={`text-sm font-bold ${groupPL >= 0 ? 'text-c-emerald' : 'text-c-red'}`}>{groupPL >= 0 ? '+' : ''}{fmt(groupPL)}</p>
-                          <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{groupPL >= 0 ? '+' : ''}{groupPLPct}%</p>
                         </td>
                         <td className="px-5 py-3.5" />
                       </tr>
                     );
-                    if (isExpanded) {
-                      sortedGroup.forEach(h => rows.push(renderHoldingRow(h, true)));
-                    }
-                  }
-                }
-
-                // Render non-ISIN holdings
-                soloHoldings.forEach(h => rows.push(renderHoldingRow(h)));
-
-                return rows;
-              })()}
+                  }),
+                ];
+              })}
             </tbody>
           </table>
         </div>
       </div>
       )}
 
-      {/*
-        The client's own statement, beside the book rather than merged into it.
-        The table above is what we sold — priced, editable, and the basis of
-        every AUM and MIS figure. This is what they actually hold, including
-        funds bought elsewhere, which is precisely why it must not be counted as
-        ours. Read-only for the same reason.
-      */}
-      {/* Shown with the MF platform on too: the platform only knows funds under
-          our ARN, and this statement is the one place an RM sees the rest. */}
-      {view === 'detail' && clientFilter && (
-        <div className="mt-6">
-          <CasHoldingsView view={casView} loading={stmtLoading} />
-        </div>
+      {/* Where the list above comes from. One list on purpose: the book, the
+          registrar feed and the client's imported statements each used to get a
+          panel of their own, and a holding known to two of them showed twice. */}
+      {view === 'detail' && !stmtLoading && (casView || dematView || (rtaView?.holdings.length ?? 0) > 0) && (
+        <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+          Includes{' '}
+          {[
+            (rtaView?.holdings.length ?? 0) > 0 && `the registrar feed${rtaView?.snapshotDate ? ` (${fmtDate(rtaView.snapshotDate)})` : ''}`,
+            casView && `the client's mutual fund statement${casView.statementTo ? ` (to ${fmtDate(casView.statementTo)})` : ''}`,
+            dematView && `their demat statement${dematView.statementDate ? ` (${fmtDate(dematView.statementDate)})` : ''}`,
+          ].filter(Boolean).join(', ')}
+          . A holding found in more than one place is listed once. Holdings marked "Outside Niyom" are not part of our AUM.
+        </p>
       )}
 
-      {/* The client's imported demat statement — stocks, ETFs, bonds. */}
-      {view === 'detail' && clientFilter && (
-        <div className="mt-6">
-          <DematHoldingsView view={dematView} loading={stmtLoading} />
-        </div>
-      )}
-
-      {/* Mutual funds as the registrar reports them (CAMS/KFintech mailback,
-          imported daily). Independent of the in-house book and the MF platform
-          flag, so it shows whenever a client is selected. */}
-      {view === 'detail' && clientFilter && (
-        <div className="mt-6">
-          <RtaMfPanel clientId={clientFilter} />
-        </div>
+      {/* Registrar transactions and running SIPs; the funds themselves are in
+          the list above. */}
+      {view === 'detail' && clientFilter && clientFilter !== 'all' && (
+        <RtaMfPanel clientId={clientFilter} showHoldings={false} />
       )}
 
       {showAdd && <Modal title="Add Holding" onClose={() => setShowAdd(false)}>{holdingFormJsx}</Modal>}

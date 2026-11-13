@@ -15,7 +15,7 @@ import type { NWTransaction } from '../types';
  * editing it would only make it disagree with the feed it came from. For an RM
  * it answers "what does this client actually hold in MF, and what's running?"
  */
-export function RtaMfPanel({ clientId }: { clientId: string }) {
+export function RtaMfPanel({ clientId, showHoldings = true }: { clientId: string; showHoldings?: boolean }) {
   const [data, setData] = useState<RtaMfData | null>(null);
   const [txns, setTxns] = useState<NWTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +40,9 @@ export function RtaMfPanel({ clientId }: { clientId: string }) {
     </div>
   );
 
+  // With the holdings listed elsewhere (the combined portfolio table) this panel
+  // is only the activity — and is not worth a box when there is none.
+  if (!showHoldings && (loading || error || !data?.hasData)) return null;
   if (loading) return shell(<div className="flex justify-center py-6"><LogoLoader size={32} /></div>);
   if (error) return shell(<p className="text-sm" style={{ color: 'var(--danger)' }}>{error}</p>);
   if (!data || !data.hasData) {
@@ -55,23 +58,26 @@ export function RtaMfPanel({ clientId }: { clientId: string }) {
 
   const active = data.sips.filter((s) => s.status === 'active');
 
+  if (!showHoldings && txns.length === 0 && active.length === 0) return null;
   const asOf = rtaAsOfLabel(data, fmtDate);
   return shell(
     <div className="space-y-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h3 className="text-sm font-bold text-text-primary">Mutual Funds — registrar feed</h3>
+          <h3 className="text-sm font-bold text-text-primary">{showHoldings ? 'Mutual Funds — registrar feed' : 'Mutual fund activity'}</h3>
           <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
             From CAMS/KFintech, updated daily{asOf ? ` · ${asOf}` : ''}
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Value</p>
-          <p className="font-bold text-text-primary">{fmt(data.totalValue)}</p>
-        </div>
+        {showHoldings && (
+          <div className="text-right">
+            <p className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Value</p>
+            <p className="font-bold text-text-primary">{fmt(data.totalValue)}</p>
+          </div>
+        )}
       </div>
 
-      {data.holdings.length > 0 && (
+      {showHoldings && data.holdings.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
