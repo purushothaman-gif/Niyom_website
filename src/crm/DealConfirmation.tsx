@@ -347,6 +347,9 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
   const [cancelDeal, setCancelDeal] = useState<DealRecord | null>(null);
   // Offered right after a confirmed deal is saved: mail it now, or later from the list.
   const [sendPrompt, setSendPrompt] = useState<DealRecord | null>(null);
+  // DSA clients only: the mapped partner, and whether to CC them on that mail.
+  const [promptPartner, setPromptPartner] = useState<{ full_name: string; dsa_code: string; email: string } | null>(null);
+  const [ccPartner, setCcPartner] = useState(true);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [paySummaries, setPaySummaries] = useState<Record<string, { payment_status: 'not_paid' | 'partially_paid' | 'fully_paid' | 'over_paid'; outstanding_amount: number }>>({});
@@ -771,7 +774,16 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
     if (status === 'confirmed' && savedDealId) {
       const { data: saved } = await supabase.from('nw_deal_confirmations').select('*').eq('id', savedDealId).maybeSingle();
       const deal = saved as unknown as DealRecord | null;
-      if (deal && !deal.cancelled_at && deal.acceptance_status !== 'accepted') setSendPrompt(deal);
+      if (deal && !deal.cancelled_at && deal.acceptance_status !== 'accepted') {
+        const { data: cl } = await supabase.from('nw_clients')
+          .select('sourced_via, dsa:nw_dsa(full_name, dsa_code, email, status)')
+          .eq('id', deal.client_id).maybeSingle();
+        const c = cl as { sourced_via?: string; dsa?: { full_name: string; dsa_code: string; email: string | null; status: string } | null } | null;
+        const p = c?.sourced_via === 'dsa' && c.dsa?.status === 'active' && c.dsa.email?.trim() ? c.dsa : null;
+        setPromptPartner(p ? { full_name: p.full_name, dsa_code: p.dsa_code, email: p.email!.trim() } : null);
+        setCcPartner(true);
+        setSendPrompt(deal);
+      }
     }
   };
 
@@ -791,7 +803,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
   // ---------- Send / Resend Secure Link ----------
   // The edge function mints the secure token + 7-day expiry, resets the deal to
   // 'pending', emails the link (no PDF attachment), and logs the event.
-  const handleSendSecureLink = async (deal: DealRecord) => {
+  const handleSendSecureLink = async (deal: DealRecord, opts?: { ccPartner?: boolean }) => {
     if (emailSending) return;
     if (deal.cancelled_at) {
       showToast('This deal was cancelled. Edit it to revise and reissue before sending.', false);
@@ -805,7 +817,7 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
     try {
       const { data: fnData, error: fnError } = await supabase.functions.invoke(
         'send-deal-confirmation-email',
-        { body: { dealId: deal.id } }
+        { body: { dealId: deal.id, ccPartner: !!opts?.ccPartner } }
       );
       if (fnError || !fnData?.success) {
         // A revoked session reaches here as a bare 401 "Unauthorized" while the
@@ -819,7 +831,8 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
           : prev
       );
       await loadDeals();
-      showToast(deal.email_status === 'sent' ? 'Updated secure link sent.' : 'Secure link sent to client.');
+      const ccNote = opts?.ccPartner ? ' (partner in CC)' : '';
+      showToast((deal.email_status === 'sent' ? 'Updated secure link sent.' : 'Secure link sent to client.') + ccNote);
     } catch (err: any) {
       showToast(err?.message || 'Failed to send secure link', false);
     } finally {
@@ -918,15 +931,29 @@ export default function DealConfirmation({ employee, pageParams }: Props) {
         </div>
         <div className="rounded-xl px-4 py-3 text-xs space-y-1" style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
           <p>To: <span className="text-text-primary font-semibold">{sendPrompt.snap_email || 'no email on file'}</span></p>
+          {promptPartner && ccPartner && (
+            <p>CC: <span className="text-text-primary font-semibold">{promptPartner.email}</span> <span style={{ color: 'var(--text-faint)' }}>(partner)</span></p>
+          )}
           <p>Settlement: <span className="text-text-primary font-semibold">{fmt(sendPrompt.settlement_amount)}</span></p>
           <p style={{ color: 'var(--text-faint)' }}>The client gets a secure link to review and accept the deal (valid 7 days).</p>
         </div>
+        {promptPartner && (
+          <label className="flex items-start gap-3 rounded-xl px-4 py-3 cursor-pointer"
+            style={{ background: ccPartner ? 'rgba(var(--accent-rgb),0.08)' : 'var(--bg-raised)', border: `1px solid ${ccPartner ? 'rgba(var(--accent-rgb),0.35)' : 'var(--border)'}` }}>
+            <input type="checkbox" checked={ccPartner} onChange={e => setCcPartner(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[var(--accent)]" />
+            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              <span className="block text-sm font-semibold text-text-primary">CC the partner</span>
+              {promptPartner.full_name} ({promptPartner.dsa_code}) · {promptPartner.email}
+              <span className="block mt-0.5" style={{ color: 'var(--text-faint)' }}>The partner can view the deal; only the client can accept it (OTP to the client's email).</span>
+            </span>
+          </label>
+        )}
         <div className="flex gap-3">
           <button onClick={() => setSendPrompt(null)} disabled={emailSending}
             className="flex-1 py-2.5 rounded-xl text-sm disabled:opacity-50" style={{ background: 'var(--bg-raised)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
             Not now
           </button>
-          <button onClick={async () => { await handleSendSecureLink(sendPrompt); setSendPrompt(null); }} disabled={emailSending}
+          <button onClick={async () => { await handleSendSecureLink(sendPrompt, { ccPartner: !!promptPartner && ccPartner }); setSendPrompt(null); }} disabled={emailSending}
             className="flex-1 py-2.5 rounded-xl text-sm font-bold text-on-accent disabled:opacity-60" style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-strong))' }}>
             {emailSending ? 'Sending...' : 'Send Mail'}
           </button>

@@ -71,13 +71,13 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (!employee) return json({ success: false, error: "Unauthorized" }, 401);
 
-    const { dealId } = await req.json().catch(() => ({}));
+    const { dealId, ccPartner } = await req.json().catch(() => ({}));
     if (!dealId) return json({ success: false, error: "Missing dealId." }, 400);
 
     // --- Load the deal (server-side source of truth) ---
     const { data: deal } = await db
       .from("nw_deal_confirmations")
-      .select("id, confirmation_number, snap_client_name, snap_email, acceptance_status, employee_id, email_status, cancelled_at, revision_no")
+      .select("id, client_id, confirmation_number, snap_client_name, snap_email, acceptance_status, employee_id, email_status, cancelled_at, revision_no")
       .eq("id", dealId)
       .maybeSingle();
     if (!deal) return json({ success: false, error: "Deal not found." }, 404);
@@ -103,11 +103,26 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: "The client email on record is not a valid address." }, 400);
     }
 
-    // --- Recipients: the initial Deal Confirmation link goes to the CLIENT ONLY.
-    // No CC. Admin/employee retain full visibility via the CRM and the append-only
-    // nw_deal_email_log. (Resend uses this same path, so it inherits the rule.)
+    // --- Recipients: the Deal Confirmation link goes to the CLIENT. For a DSA
+    // client the sending employee may opt to CC the mapped partner. The partner
+    // address is resolved here from the client's CURRENT mapping — never taken
+    // from the request — and the partner cannot accept on the client's behalf
+    // (acceptance needs an OTP sent to the client's own email).
     const clientTo = deal.snap_email.trim();
     const ccRecipients: string[] = [];
+    if (ccPartner === true && deal.client_id) {
+      const { data: cl } = await db
+        .from("nw_clients")
+        .select("sourced_via, dsa:nw_dsa(email, status)")
+        .eq("id", deal.client_id)
+        .maybeSingle();
+      const dsa = (cl as { sourced_via?: string; dsa?: { email?: string; status?: string } | null } | null);
+      const partnerEmail = dsa?.dsa?.email?.trim();
+      if (dsa?.sourced_via === "dsa" && dsa.dsa?.status === "active" && isValidEmail(partnerEmail)
+        && partnerEmail.toLowerCase() !== clientTo.toLowerCase()) {
+        ccRecipients.push(partnerEmail);
+      }
+    }
     const isResend = deal.email_status === "sent";
 
     // --- Mint / rotate token (resets to pending for a fresh review) ---
