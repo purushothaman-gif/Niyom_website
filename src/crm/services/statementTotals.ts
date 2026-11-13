@@ -69,18 +69,64 @@ export interface CountedStatementRows {
   dematGroups: DematCrmGroup[];
 }
 
+/**
+ * What the other sources already hold for this client, so a statement row that
+ * repeats one of them is not counted a second time:
+ *
+ *   a bond or unlisted share we sold sits in the client's demat account too —
+ *     same ISIN as the book row, which carries the cost, so the book row wins;
+ *   a fund that moved to us after the statement date is in the registrar feed
+ *     AND still on the statement under its old distributor — same folio.
+ */
+export interface AlreadyHeld {
+  /** Registrar-feed funds (folio + ISIN when resolved). */
+  registrar?: { folio: string; isin: string | null }[];
+  /** ISINs of in-house book holdings. */
+  bookIsins?: (string | null | undefined)[];
+}
+
+const normFolio = (f: string | null | undefined): string => (f ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const normIsin = (i: string | null | undefined): string => (i ?? '').toUpperCase().trim();
+
 export function countedStatementRows(
   cas: CasCrmView | null,
   demat: DematCrmView | null,
   registrarMfValue: number,
+  held: AlreadyHeld = {},
 ): CountedStatementRows {
-  const ours = cas && !(registrarMfValue > 0)
-    ? cas.schemes.filter((s) => s.ownership === MF_OWNERSHIP.heldWithNiyom)
-    : [];
-  const outside = cas ? cas.schemes.filter((s) => s.ownership !== MF_OWNERSHIP.heldWithNiyom) : [];
-  const dematGroups = demat
-    ? demat.groups.filter((g) => !(g.key === 'demat_mf' && cas) && g.value > 0)
-    : [];
+  const regFolios = new Map<string, Set<string>>();
+  const regIsins = new Set<string>();
+  for (const r of held.registrar ?? []) {
+    const f = normFolio(r.folio);
+    const i = normIsin(r.isin);
+    if (f) regFolios.set(f, (regFolios.get(f) ?? new Set()).add(i));
+    if (i) regIsins.add(i);
+  }
+  const bookIsins = new Set((held.bookIsins ?? []).map(normIsin).filter(Boolean));
+
+  // Same folio in the registrar feed, and the same scheme (or one side has no
+  // ISIN to tell them apart): the feed is fresher, so the statement row goes.
+  const inRegistrar = (s: CasCrmScheme): boolean => {
+    const isins = regFolios.get(normFolio(s.folioNumber));
+    if (!isins) return false;
+    const i = normIsin(s.isin);
+    return !i || isins.has(i) || isins.has('');
+  };
+
+  const schemes = cas ? cas.schemes.filter((s) => !inRegistrar(s)) : [];
+  const ours = !(registrarMfValue > 0) ? schemes.filter((s) => s.ownership === MF_OWNERSHIP.heldWithNiyom) : [];
+  const outside = schemes.filter((s) => s.ownership !== MF_OWNERSHIP.heldWithNiyom);
+
+  const dematGroups: DematCrmGroup[] = [];
+  for (const g of demat?.groups ?? []) {
+    if (g.key === 'demat_mf' && cas) continue;
+    const holdings = g.holdings.filter((h) => {
+      const i = normIsin(h.isin);
+      return !i || !(bookIsins.has(i) || (g.key === 'demat_mf' && regIsins.has(i)));
+    });
+    const value = holdings.reduce((t, h) => t + h.value, 0);
+    if (value > 0) dematGroups.push({ ...g, holdings, value });
+  }
   return { ours, outside, dematGroups };
 }
 
@@ -88,13 +134,14 @@ export function statementTotals(
   cas: CasCrmView | null,
   demat: DematCrmView | null,
   registrarMfValue: number,
+  held: AlreadyHeld = {},
 ): StatementTotals {
   const slices: StatementSlice[] = [];
   let value = 0;
   let invested = 0;
   let heldElsewhere = 0;
 
-  const { ours, outside, dematGroups } = countedStatementRows(cas, demat, registrarMfValue);
+  const { ours, outside, dematGroups } = countedStatementRows(cas, demat, registrarMfValue, held);
   const sum = (rows: CasCrmScheme[], k: 'value' | 'cost') => rows.reduce((t, s) => t + s[k], 0);
 
   if (ours.length) {

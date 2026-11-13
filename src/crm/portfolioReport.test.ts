@@ -7,7 +7,7 @@ import type { NWHolding } from './types';
 import type { CasCrmView } from './services/casClientView';
 import type { DematCrmView } from './services/dematClientView';
 import { statementTotals } from './services/statementTotals';
-import { buildPortfolioReportHtml, portfolioReportTotals, type PortfolioReportInput } from './portfolioReport';
+import { buildPortfolioReportHtml, buildReportCategories, portfolioReportTotals, type PortfolioReportInput } from './portfolioReport';
 
 const rta = (o: Partial<RtaHoldingRow>): RtaHoldingRow => ({
   id: 'r1', folio: '123/45', schemeName: 'Alpha Flexi Cap Fund', schemeCode: 'AF1', amcCode: null,
@@ -87,6 +87,37 @@ describe('portfolio report', () => {
     expect(t.gainLoss).toBe(500);
     expect(t.unknownCostCount).toBe(1);
     expect(buildPortfolioReportHtml(i)).toContain('1 holding marked');
+  });
+
+  it('prints one list by product, not one section per source', () => {
+    const i = input({
+      registrar: [rta({})],
+      cas: cas([scheme({})]),
+      demat: demat([{ key: 'equity', label: 'Stocks', value: 2000, holdings: [stock] }]),
+    });
+    const cats = buildReportCategories(i);
+    expect(cats.map((c) => c.label)).toEqual(['Mutual Funds', 'Stocks']);
+    // Registrar fund and statement fund sit in the same Mutual Funds list.
+    expect(cats[0].rows.map((r) => r.held)).toEqual(['With Niyom · Folio', 'Outside Niyom · Folio']);
+    expect(cats[1].rows[0].held).toBe('Outside Niyom · Demat');
+    const html = buildPortfolioReportHtml(i);
+    expect(html.match(/class="section-title"/g)).toHaveLength(2);
+    expect(html).not.toMatch(/registrar|statement|CAMS/i);
+  });
+
+  it('prints a holding once when two sources carry it', () => {
+    const bond = { id: 'b', client_id: 'c', product_type: 'secondary_bond', product_name: 'Epsilon Finance 9.5% 2028', isin: 'INE111A07011', quantity: 10, avg_cost: 1000, invested_amount: 10000, current_value: 10400 } as unknown as NWHolding;
+    const i = input({
+      holdings: [bond],
+      registrar: [rta({ folio: '34268297/74', isin: 'INF1' })],
+      // The same fund still on an older statement under its previous distributor.
+      cas: cas([scheme({ name: 'Alpha Flexi Cap (old statement)', folioNumber: '34268297 / 74', isin: 'INF1' })]),
+      // The bond we sold, as it appears in the client's demat account.
+      demat: demat([{ key: 'corporate_bond', label: 'Corporate Bonds', value: 10400, holdings: [{ ...stock, name: 'EPSILON FIN 9.5 NCD', isin: 'INE111A07011', value: 10400 }] }]),
+    });
+    const cats = buildReportCategories(i);
+    expect(cats.map((c) => [c.label, c.rows.length])).toEqual([['Mutual Funds', 1], ['Bonds', 1]]);
+    expect(portfolioReportTotals(i).value).toBe(3000 + 10400);
   });
 
   it('escapes names and never names the fund platform', () => {

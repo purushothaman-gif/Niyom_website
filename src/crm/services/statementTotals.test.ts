@@ -8,8 +8,8 @@ import { statementTotals } from './statementTotals';
 
 const cas = (schemes: { value: number; cost: number; ownership: string }[]) =>
   ({ schemes } as unknown as CasCrmView);
-const demat = (groups: { key: string; label: string; value: number }[]) =>
-  ({ groups } as unknown as DematCrmView);
+const demat = (groups: { key: string; label: string; value: number; holdings?: object[] }[]) =>
+  ({ groups: groups.map((g) => ({ ...g, holdings: g.holdings ?? [{ isin: null, value: g.value }] })) } as unknown as DematCrmView);
 
 describe('statementTotals', () => {
   it('adds nothing when there are no statements', () => {
@@ -39,5 +39,15 @@ describe('statementTotals', () => {
     const alone = statementTotals(null, d, 0);
     expect(alone.value).toBe(2700);
     expect(alone.slices.map((s) => s.label)).toEqual(['Stocks (demat)', 'Mutual Funds (demat)']);
+  });
+
+  it('does not count a holding a second time when another source already has it', () => {
+    // A bond we sold also sits in the client's demat account.
+    const d = demat([{ key: 'corporate_bond', label: 'Corporate Bonds', value: 3000, holdings: [{ isin: 'INE111A07011', value: 1000 }, { isin: 'INE222B07022', value: 2000 }] }]);
+    expect(statementTotals(null, d, 0, { bookIsins: ['ine111a07011'] }).value).toBe(2000);
+
+    // A fund that moved to us after the statement date: same folio in the feed.
+    const c = cas([{ value: 1300, cost: 1000, ownership: 'held_away', folioNumber: '3426 8297/74', isin: 'INF1' } as never, { value: 400, cost: 300, ownership: 'held_away', folioNumber: '999', isin: 'INF2' } as never]);
+    expect(statementTotals(c, null, 1310, { registrar: [{ folio: '34268297/74', isin: 'INF1' }] }).value).toBe(400);
   });
 });

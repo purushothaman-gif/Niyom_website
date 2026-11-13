@@ -1,4 +1,10 @@
 /**
+ * ONE LIST, BY PRODUCT. The report does not print a section per data source.
+ * Every holding, wherever we learned of it, becomes one row under its product
+ * (Mutual Funds, Bonds, Stocks ...), with a "Held" column saying whether it is
+ * with Niyom or outside and in what form. A holding known to two sources is
+ * printed once (countedStatementRows).
+ *
  * The printable client Portfolio Report ("Print PDF" on the CRM Portfolio page).
  *
  * The report used to be built from the in-house book (nw_holdings) alone. Once
@@ -20,26 +26,67 @@
  */
 import type { RtaHoldingRow } from '../../shared/mf/rtaMf';
 import type { NWClient, NWHolding, ProductType } from './types';
-import { fmtDate, PRODUCT_LABELS } from './utils';
+import { fmtDate } from './utils';
 import type { CasCrmScheme, CasCrmView } from './services/casClientView';
 import type { DematCrmView } from './services/dematClientView';
 import { countedStatementRows } from './services/statementTotals';
 
+
 const BOND_TYPES: ProductType[] = ['secondary_bond', 'primary_bond', 'fixed_deposit'];
 const DSA_PRICE_TYPES: ProductType[] = ['unlisted_share', 'secondary_bond', 'primary_bond'];
 const PAYOUT_FREQ: Record<string, string> = { annual: 'Annual', halfyearly: 'Half-Yearly', quarterly: 'Quarterly', monthly: 'Monthly' };
-const SECTION_COLORS: Record<string, string> = {
-  unlisted_share: '#7C3AED', secondary_bond: '#0891B2', primary_bond: '#0E7490',
-  mutual_fund: '#DB2777', fixed_deposit: '#D97706', insurance: '#EA580C',
+
+/** Product categories, in print order. */
+const CATEGORIES: { key: string; label: string; color: string }[] = [
+  { key: 'mutual_fund', label: 'Mutual Funds', color: '#DB2777' },
+  { key: 'unlisted_share', label: 'Unlisted Shares', color: '#7C3AED' },
+  { key: 'bond', label: 'Bonds', color: '#0891B2' },
+  { key: 'gsec', label: 'Government Securities', color: '#6B7A99' },
+  { key: 'equity', label: 'Stocks', color: '#2E9E8F' },
+  { key: 'etf', label: 'ETFs', color: '#3E7CB1' },
+  { key: 'fixed_deposit', label: 'Fixed Deposits', color: '#D97706' },
+  { key: 'insurance', label: 'Insurance', color: '#EA580C' },
+  { key: 'aif', label: 'AIFs', color: '#8E6FB3' },
+  { key: 'nps', label: 'NPS', color: '#4C8C6B' },
+  { key: 'other', label: 'Other Securities', color: '#7688A4' },
+];
+const BOOK_CATEGORY: Record<string, string> = {
+  mutual_fund: 'mutual_fund', unlisted_share: 'unlisted_share', secondary_bond: 'bond', primary_bond: 'bond',
+  fixed_deposit: 'fixed_deposit', insurance: 'insurance',
 };
-const MF_COLOR = '#DB2777';
-const OUTSIDE_COLOR = '#9A6FD0';
-const DEMAT_COLOR = '#2E9E8F';
+const DEMAT_CATEGORY: Record<string, string> = {
+  equity: 'equity', etf: 'etf', corporate_bond: 'bond', gsec: 'gsec', aif: 'aif', nps: 'nps', demat_mf: 'mutual_fund', other: 'other',
+};
+
+/** One holding, whichever source it came from. */
+export interface ReportRow {
+  category: string;
+  name: string;
+  /** Second line under the name: folio, ISIN, coupon, policy ... */
+  detail: string;
+  /** Where and how it is held, e.g. "With Niyom · Folio". */
+  held: string;
+  quantity: number | null;
+  price: number | null;
+  /** null = no purchase cost on record. */
+  invested: number | null;
+  value: number;
+}
+
+export interface ReportCategory {
+  key: string;
+  label: string;
+  color: string;
+  rows: ReportRow[];
+  value: number;
+  /** Gain across rows with a known cost, or null when none has one. */
+  gain: number | null;
+}
 
 export interface PortfolioReportInput {
   /** The client the report is for, or null for a whole-book print. */
   client: Pick<NWClient, 'full_name' | 'client_code'> | null;
-  /** Product types to print from the book, in order. */
+  /** Product types to print from the book. */
   products: ProductType[];
   /** In-house book rows (already scoped the way the screen scopes them). */
   holdings: NWHolding[];
@@ -60,40 +107,126 @@ export interface PortfolioReportTotals {
   value: number;
   invested: number;
   gainLoss: number;
-  /** Rows printed across every section. */
+  /** Rows printed across every category. */
   rowCount: number;
   /** Holdings with no cost behind them (entered at value). */
   unknownCostCount: number;
 }
+
+type RowsInput = Pick<PortfolioReportInput, 'holdings' | 'registrar' | 'cas' | 'demat'> & Partial<Pick<PortfolioReportInput, 'products' | 'clientOf' | 'client'>>;
+
+export const registrarValueOf = (h: RtaHoldingRow): number => h.rtaValue ?? h.navValue ?? 0;
 
 /** What registrar funds add to "invested": their cost, or their value when unknown. */
 export function registrarInvested(rows: RtaHoldingRow[]): number {
   return rows.reduce((s, h) => s + (h.investedCost ?? registrarValueOf(h)), 0);
 }
 
-export const registrarValueOf = (h: RtaHoldingRow): number => h.rtaValue ?? h.navValue ?? 0;
+const join = (parts: (string | null | undefined | false)[]): string => parts.filter(Boolean).join(' · ');
 
-/** The figures the report prints — the same sums as the on-screen cards. */
-export function portfolioReportTotals(
-  input: Pick<PortfolioReportInput, 'holdings' | 'registrar' | 'cas' | 'demat'>,
-): PortfolioReportTotals {
+/** Every holding from every source, once each, grouped by product. */
+export function buildReportCategories(input: RowsInput): ReportCategory[] {
+  const rows: ReportRow[] = [];
+
+  const products = input.products;
+  for (const h of input.holdings) {
+    if (products && !products.includes(h.product_type)) continue;
+    const pt = h.product_type;
+    const isDsa = input.clientOf?.(h.client_id)?.sourced_via === 'dsa' && DSA_PRICE_TYPES.includes(pt);
+    const joined = (h as NWHolding & { client?: { full_name?: string } }).client;
+    rows.push({
+      category: BOOK_CATEGORY[pt] ?? 'other',
+      name: h.product_name,
+      detail: join([
+        !input.client && joined?.full_name,
+        pt === 'primary_bond' && 'Primary issue',
+        h.isin && `ISIN ${h.isin}`,
+        BOND_TYPES.includes(pt) && h.coupon_rate ? `${h.coupon_rate}% ${PAYOUT_FREQ[h.payout_frequency || 'annual'] || ''}`.trim() : '',
+        BOND_TYPES.includes(pt) && h.maturity_date ? `Matures ${fmtDate(h.maturity_date)}` : '',
+        pt === 'mutual_fund' && h.folio_number ? `Folio ${h.folio_number}` : '',
+        pt === 'insurance' && h.policy_number ? `Policy ${h.policy_number}` : '',
+        pt === 'insurance' && h.sum_assured ? `Cover Rs ${Number(h.sum_assured).toLocaleString('en-IN')}` : '',
+      ]),
+      held: pt === 'unlisted_share' || pt === 'secondary_bond' || pt === 'primary_bond' ? 'With Niyom · Demat'
+        : pt === 'mutual_fund' ? 'With Niyom · Folio' : 'With Niyom',
+      quantity: h.quantity || null,
+      // DSA clients see the price they paid (client_price), not our avg_cost.
+      price: (isDsa && h.client_price ? h.client_price : h.avg_cost) || null,
+      invested: h.invested_amount || 0,
+      value: h.current_value || 0,
+    });
+  }
+
   const registrar = input.registrar.filter((h) => registrarValueOf(h) > 0 || h.units > 0);
   const registrarValue = registrar.reduce((s, h) => s + registrarValueOf(h), 0);
-  const { ours, outside, dematGroups } = countedStatementRows(input.cas, input.demat, registrarValue);
-  const casRows = [...ours, ...outside];
-  const dematValue = dematGroups.reduce((s, g) => s + g.value, 0);
-  const dematCount = dematGroups.reduce((s, g) => s + g.holdings.length, 0);
+  for (const h of registrar) {
+    rows.push({
+      category: 'mutual_fund',
+      name: h.schemeName ?? h.schemeCode,
+      detail: join([h.folio && `Folio ${h.folio}`]),
+      held: 'With Niyom · Folio',
+      quantity: h.units,
+      price: h.nav,
+      invested: h.investedCost,
+      value: registrarValueOf(h),
+    });
+  }
 
-  const bookValue = input.holdings.reduce((s, h) => s + (h.current_value || 0), 0);
-  const bookInvested = input.holdings.reduce((s, h) => s + (h.invested_amount || 0), 0);
-  const value = bookValue + registrarValue + casRows.reduce((s, r) => s + r.value, 0) + dematValue;
-  const invested = bookInvested + registrarInvested(registrar) + casRows.reduce((s, r) => s + r.cost, 0) + dematValue;
+  const { ours, outside, dematGroups } = countedStatementRows(input.cas, input.demat, registrarValue, {
+    registrar,
+    bookIsins: input.holdings.map((h) => h.isin),
+  });
+  const casRow = (r: CasCrmScheme, held: string): ReportRow => ({
+    category: 'mutual_fund',
+    name: r.name,
+    detail: join([r.folioNumber && r.folioNumber !== 'unknown' && `Folio ${r.folioNumber}`]),
+    held,
+    quantity: r.units,
+    price: r.nav || null,
+    invested: r.cost > 0 ? r.cost : null,
+    value: r.value,
+  });
+  for (const r of ours) rows.push(casRow(r, 'With Niyom · Folio'));
+  for (const r of outside) rows.push(casRow(r, 'Outside Niyom · Folio'));
+
+  for (const g of dematGroups) {
+    for (const h of g.holdings) {
+      rows.push({
+        category: DEMAT_CATEGORY[g.key] ?? 'other',
+        name: h.name,
+        detail: join([h.isin && `ISIN ${h.isin}`]),
+        held: 'Outside Niyom · Demat',
+        quantity: h.units,
+        price: h.price || null,
+        invested: null,
+        value: h.value,
+      });
+    }
+  }
+
+  return CATEGORIES.map((c) => {
+    const own = rows.filter((r) => r.category === c.key).sort((a, b) => b.value - a.value);
+    const costed = own.filter((r) => r.invested != null);
+    return {
+      ...c,
+      rows: own,
+      value: own.reduce((s, r) => s + r.value, 0),
+      gain: costed.length ? costed.reduce((s, r) => s + r.value - (r.invested as number), 0) : null,
+    };
+  }).filter((c) => c.rows.length > 0);
+}
+
+/** The figures the report prints — the same sums as the on-screen cards. */
+export function portfolioReportTotals(input: RowsInput): PortfolioReportTotals {
+  const rows = buildReportCategories(input).flatMap((c) => c.rows);
+  const value = rows.reduce((s, r) => s + r.value, 0);
+  const invested = rows.reduce((s, r) => s + (r.invested ?? r.value), 0);
   return {
     value,
     invested,
     gainLoss: value - invested,
-    rowCount: input.holdings.length + registrar.length + casRows.length + dematCount,
-    unknownCostCount: registrar.filter((h) => h.investedCost == null).length + casRows.filter((r) => !(r.cost > 0)).length + dematCount,
+    rowCount: rows.length,
+    unknownCostCount: rows.filter((r) => r.invested == null).length,
   };
 }
 
@@ -105,137 +238,32 @@ const signed = (n: number): string =>
   `<span class="${n >= 0 ? 'green' : 'red'}">${n >= 0 ? '+' : '-'}${inr(Math.abs(n))}</span>`;
 const NA = '<span class="na">Not available</span>';
 
-function sectionHeader(title: string, color: string, count: number, value: number, gain: number | null, note?: string): string {
-  return `
-    <div class="section-header" style="border-left:4px solid ${color}">
-      <span class="section-title" style="color:${color}">${esc(title)}</span>
-      <span class="section-summary">${count} holding${count === 1 ? '' : 's'} &nbsp;&middot;&nbsp; Value: ${inr(value)}${gain != null ? ` &nbsp;&middot;&nbsp; ${signed(gain)}` : ''}</span>
-    </div>${note ? `<div class="section-note">${esc(note)}</div>` : ''}`;
-}
-
-function bookSections(input: PortfolioReportInput): string {
-  return input.products.map((pt) => {
-    const group = input.holdings.filter((h) => h.product_type === pt);
-    if (group.length === 0) return '';
-    const groupValue = group.reduce((s, h) => s + (h.current_value || 0), 0);
-    const groupInvested = group.reduce((s, h) => s + (h.invested_amount || 0), 0);
-    const isBondType = BOND_TYPES.includes(pt);
-
-    const extraCols = isBondType ? '<th>Coupon</th><th>Maturity</th>'
-      : pt === 'mutual_fund' ? '<th>Folio No.</th><th>NAV</th>'
-      : pt === 'insurance' ? '<th>Policy No.</th><th>Cover</th>'
-      : '';
-
-    const rows = group.map((h, i) => {
-      const isDsaHolding = input.clientOf(h.client_id)?.sourced_via === 'dsa' && DSA_PRICE_TYPES.includes(pt);
-      // DSA clients see the price they paid (client_price), not our avg_cost.
-      const displayPrice = isDsaHolding && h.client_price ? h.client_price : (h.avg_cost || 0);
-      const pl = (h.current_value || 0) - (h.invested_amount || 0);
-      const joined = (h as NWHolding & { client?: { full_name?: string } }).client;
-      const extraTds = isBondType
-        ? `<td>${h.coupon_rate ? esc(h.coupon_rate) + '% ' + (PAYOUT_FREQ[h.payout_frequency || 'annual'] || '') : '&mdash;'}</td><td>${h.maturity_date ? fmtDate(h.maturity_date) : '&mdash;'}</td>`
-        : pt === 'mutual_fund'
-        ? `<td>${h.folio_number ? esc(h.folio_number) : '&mdash;'}</td><td>${h.current_nav ? inr(Number(h.current_nav)) : '&mdash;'}</td>`
-        : pt === 'insurance'
-        ? `<td>${h.policy_number ? esc(h.policy_number) : '&mdash;'}</td><td>${h.sum_assured ? inr(Number(h.sum_assured)) : '&mdash;'}</td>`
-        : '';
-      return `<tr>
-        <td>${i + 1}</td>
-        <td><strong>${esc(h.product_name)}</strong>${!input.client && joined?.full_name ? `<br><span class="muted">${esc(joined.full_name)}</span>` : ''}</td>
-        <td>${h.quantity || '&mdash;'}</td>
-        <td>${inr(displayPrice)}</td>
-        <td>${inr(h.invested_amount || 0)}</td>
-        <td>${inr(h.current_value || 0)}</td>
-        <td>${signed(pl)}</td>
-        ${extraTds}
-      </tr>`;
-    }).join('');
-
-    return `${sectionHeader(PRODUCT_LABELS[pt], SECTION_COLORS[pt] || '#555', group.length, groupValue, groupValue - groupInvested)}
-      <table>
-        <thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Price / Unit</th><th>Invested</th><th>Current Value</th><th>P&amp;L</th>${extraCols}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-  }).join('');
-}
-
-const MF_HEAD = '<thead><tr><th>#</th><th>Scheme</th><th>Folio No.</th><th>Units</th><th>NAV</th><th>Invested</th><th>Current Value</th><th>P&amp;L</th></tr></thead>';
-
-function registrarSection(rows: RtaHoldingRow[]): string {
-  if (rows.length === 0) return '';
-  const value = rows.reduce((s, h) => s + registrarValueOf(h), 0);
-  const costed = rows.filter((h) => h.investedCost != null);
-  const gain = costed.length ? costed.reduce((s, h) => s + registrarValueOf(h) - (h.investedCost as number), 0) : null;
-  const body = rows.map((h, i) => {
-    const v = registrarValueOf(h);
-    const cost = h.investedCost;
-    return `<tr>
+function categorySection(c: ReportCategory): string {
+  const isFund = c.key === 'mutual_fund';
+  const body = c.rows.map((r, i) => `<tr>
       <td>${i + 1}</td>
-      <td><strong>${esc(h.schemeName ?? h.schemeCode)}</strong></td>
-      <td>${esc(h.folio) || '&mdash;'}</td>
-      <td>${units(h.units)}</td>
-      <td>${h.nav ? inr(h.nav) : '&mdash;'}</td>
-      <td>${cost != null ? inr(cost) : NA}</td>
-      <td>${inr(v)}</td>
-      <td>${cost != null ? signed(v - cost) : NA}</td>
-    </tr>`;
-  }).join('');
-  return `${sectionHeader('Mutual Funds', MF_COLOR, rows.length, value, gain, 'As reported by the registrar (CAMS / KFintech), valued at the latest NAV.')}
-    <table>${MF_HEAD}<tbody>${body}</tbody></table>`;
-}
-
-function casSection(title: string, color: string, rows: CasCrmScheme[], note: string): string {
-  if (rows.length === 0) return '';
-  const value = rows.reduce((s, r) => s + r.value, 0);
-  const cost = rows.reduce((s, r) => s + r.cost, 0);
-  const body = rows.map((r, i) => `<tr>
-      <td>${i + 1}</td>
-      <td><strong>${esc(r.name)}</strong>${r.amc ? `<br><span class="muted">${esc(r.amc)}</span>` : ''}</td>
-      <td>${esc(r.folioNumber) || '&mdash;'}</td>
-      <td>${units(r.units)}</td>
-      <td>${r.nav ? inr(r.nav) : '&mdash;'}</td>
-      <td>${r.cost > 0 ? inr(r.cost) : NA}</td>
+      <td><strong>${esc(r.name)}</strong>${r.detail ? `<br><span class="muted">${esc(r.detail)}</span>` : ''}</td>
+      <td>${esc(r.held)}</td>
+      <td>${r.quantity != null ? units(r.quantity) : '&mdash;'}</td>
+      <td>${r.price ? inr(r.price) : '&mdash;'}</td>
+      <td>${r.invested != null ? inr(r.invested) : NA}</td>
       <td>${inr(r.value)}</td>
-      <td>${r.cost > 0 ? signed(r.value - r.cost) : NA}</td>
+      <td>${r.invested != null ? signed(r.value - r.invested) : NA}</td>
     </tr>`).join('');
-  return `${sectionHeader(title, color, rows.length, value, cost > 0 ? value - cost : null, note)}
-    <table>${MF_HEAD}<tbody>${body}</tbody></table>`;
-}
-
-function dematSections(groups: ReturnType<typeof countedStatementRows>['dematGroups'], statementDate: string | null): string {
-  return groups.map((g) => {
-    const body = g.holdings.map((h, i) => `<tr>
-      <td>${i + 1}</td>
-      <td><strong>${esc(h.name)}</strong>${h.dpName ? `<br><span class="muted">${esc(h.dpName)}</span>` : ''}</td>
-      <td>${h.isin ? esc(h.isin) : '&mdash;'}</td>
-      <td>${units(h.units)}</td>
-      <td>${h.price ? inr(h.price) : '&mdash;'}</td>
-      <td>${NA}</td>
-      <td>${inr(h.value)}</td>
-    </tr>`).join('');
-    const title = /demat/i.test(g.label) ? g.label : `${g.label} (demat)`;
-    return `${sectionHeader(title, DEMAT_COLOR, g.holdings.length, g.value, null, `From the client's demat statement${statementDate ? ` dated ${fmtDate(statementDate)}` : ''}. Held outside Niyom.`)}
-      <table>
-        <thead><tr><th>#</th><th>Security</th><th>ISIN</th><th>Qty</th><th>Price</th><th>Invested</th><th>Current Value</th></tr></thead>
-        <tbody>${body}</tbody>
-      </table>`;
-  }).join('');
+  return `
+    <div class="section-header" style="border-left:4px solid ${c.color}">
+      <span class="section-title" style="color:${c.color}">${esc(c.label)}</span>
+      <span class="section-summary">${c.rows.length} holding${c.rows.length === 1 ? '' : 's'} &nbsp;&middot;&nbsp; Value: ${inr(c.value)}${c.gain != null ? ` &nbsp;&middot;&nbsp; ${signed(c.gain)}` : ''}</span>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Holding</th><th>Held</th><th>${isFund ? 'Units' : 'Qty'}</th><th>${isFund ? 'NAV' : 'Price'}</th><th>Invested</th><th>Current Value</th><th>P&amp;L</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
 }
 
 export function buildPortfolioReportHtml(input: PortfolioReportInput): string {
-  const registrar = input.registrar.filter((h) => registrarValueOf(h) > 0 || h.units > 0);
-  const registrarValue = registrar.reduce((s, h) => s + registrarValueOf(h), 0);
-  const { ours, outside, dematGroups } = countedStatementRows(input.cas, input.demat, registrarValue);
   const totals = portfolioReportTotals(input);
-  const casDate = input.cas?.statementTo ? ` to ${fmtDate(input.cas.statementTo)}` : '';
-
-  const sections = [
-    bookSections(input),
-    registrarSection(registrar),
-    casSection('Mutual Funds (statement)', MF_COLOR, ours, `From the client's consolidated account statement${casDate}.`),
-    casSection('Mutual Funds held outside Niyom', OUTSIDE_COLOR, outside, `From the client's consolidated account statement${casDate}. Held through another distributor.`),
-    dematSections(dematGroups, input.demat?.statementDate ?? null),
-  ].join('');
+  const sections = buildReportCategories(input).map(categorySection).join('');
 
   const stats = totals.rowCount === 0
     ? '<div class="empty">No holdings on record</div>'

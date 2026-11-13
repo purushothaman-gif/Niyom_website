@@ -631,7 +631,10 @@ export default function Portfolio({ employee, pageParams }: Props) {
     ? (mfByClient.get(clientFilter) ?? 0)
     : [...mfByClient.values()].reduce((sm, v) => sm + v, 0);
   // What the selected client's imported statements add (one-client view only).
-  const stmt = useMemo(() => statementTotals(casView, dematView, mfAum), [casView, dematView, mfAum]);
+  const stmt = useMemo(
+    () => statementTotals(casView, dematView, mfAum, { registrar: rtaView?.holdings, bookIsins: scopedHoldings.map(h => h.isin) }),
+    [casView, dematView, mfAum, rtaView, scopedHoldings],
+  );
   const chartData = [
     ...PRODUCTS.map(p => ({
       label: PRODUCT_LABELS[p],
