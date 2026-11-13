@@ -5,7 +5,7 @@ import { prepareUploadFile } from '../components/PdfPasswordPrompt';
 import { passwordError, isPasswordStrong } from '../lib/passwordPolicy';
 import { NWEmployee, NWDSA, CRMPage } from './types';
 import { ContactMatch, SharedContactPanel, findContactMatches, saveRelationships, sharedContactError } from './SharedContact';
-import { User, Building2, Upload, FileText, CheckCircle2, AlertCircle, ChevronRight, Users, Handshake, UserCheck, UserPlus, Sparkles } from 'lucide-react';
+import { User, Building2, Upload, FileText, CheckCircle2, AlertCircle, ChevronRight, Users, Handshake, UserCheck, UserPlus, Sparkles, Search, X } from 'lucide-react';
 import { mfSsoEnabled } from '../../shared/platform/env';
 import { InvestorProfileEditorModal } from './InvestorProfileEditor';
 
@@ -144,6 +144,7 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
 
   const [dsaMode, setDsaMode] = useState<'new' | 'existing' | ''>('');
   const [existingDSAs, setExistingDSAs] = useState<NWDSA[]>([]);
+  const [dsaSearch, setDsaSearch] = useState('');
   const [selectedExistingDSA, setSelectedExistingDSA] = useState<NWDSA | null>(null);
   const [dsaForm, setDsaForm] = useState<DSAForm>({
     full_name: '', email: '', mobile: '', pan: '', address: '',
@@ -746,8 +747,40 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
                     No active DSAs found. Please register a New DSA.
                   </div>
                 ) : (
+                  <>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
+                    <input value={dsaSearch} onChange={e => setDsaSearch(e.target.value)} autoFocus
+                      placeholder="Search by name, DSA code or mobile"
+                      className="w-full pl-9 pr-9 py-2.5 rounded-xl text-sm text-text-primary outline-none"
+                      style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }} />
+                    {dsaSearch && (
+                      <button onClick={() => setDsaSearch('')} title="Clear search"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md" style={{ color: 'var(--text-faint)' }}>
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {(() => {
+                    const q = dsaSearch.trim().toLowerCase();
+                    const qDigits = q.replace(/\D/g, '');
+                    const matches = q
+                      ? existingDSAs.filter(d =>
+                          d.full_name.toLowerCase().includes(q)
+                          || (d.dsa_code ?? '').toLowerCase().includes(q)
+                          || (qDigits.length > 0 && (d.mobile ?? '').includes(qDigits)))
+                      : existingDSAs;
+                    // Keep the chosen DSA visible even when it no longer matches the query.
+                    const shown = selectedExistingDSA && !matches.some(d => d.id === selectedExistingDSA.id)
+                      && existingDSAs.some(d => d.id === selectedExistingDSA.id)
+                      ? [selectedExistingDSA, ...matches] : matches;
+                    return shown.length === 0 ? (
+                      <div className="p-4 rounded-xl text-sm text-center" style={{ background: 'var(--bg-base)', border: '1px solid var(--border)', color: 'var(--text-faint)' }}>
+                        No DSA matches “{dsaSearch.trim()}”.
+                      </div>
+                    ) : (
                   <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {existingDSAs.map(dsa => (
+                    {shown.map(dsa => (
                       <button key={dsa.id} onClick={() => setSelectedExistingDSA(dsa)}
                         className="w-full text-left p-3.5 rounded-xl transition-all flex items-center gap-3"
                         style={{
@@ -771,6 +804,14 @@ export default function ClientOnboarding({ employee, onNavigate, pageParams }: P
                       </button>
                     ))}
                   </div>
+                    );
+                  })()}
+                  {dsaSearch.trim() && (
+                    <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                      Showing matches from {existingDSAs.length} active DSAs.
+                    </p>
+                  )}
+                  </>
                 )}
               </div>
             )}
