@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-time setup for the KFintech mailback agent on a Mac (a RESIDENTIAL network
-# the KFintech WAF allows). Installs a launchd job that runs the agent every 2
-# hours: it pulls the links the Gmail sync queued, downloads each ZIP here, and
+# the KFintech WAF allows). Installs a launchd job that runs the agent every
+# hour: it pulls the links the Gmail sync queued, downloads each ZIP here, and
 # posts the bytes to mf-rta-ingest. Re-run any time to change the secret/URL.
 #
 #   bash scripts/mf-rta-mac-agent-setup.sh
@@ -38,7 +38,7 @@ cat > "$PLIST" <<PL
     <key>RTA_INGEST_SECRET</key><string>$SECRET</string>
     <key>SUPABASE_ANON_KEY</key><string>$ANON</string>
   </dict>
-  <key>StartInterval</key><integer>7200</integer>
+  <key>StartInterval</key><integer>3600</integer>
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>$LOG</string>
   <key>StandardErrorPath</key><string>$LOG</string>
@@ -50,7 +50,7 @@ launchctl unload "$PLIST" 2>/dev/null || true
 launchctl load "$PLIST"
 
 echo
-echo "Installed '$LABEL' — runs now and every 2 hours while your Mac is awake."
+echo "Installed '$LABEL' — runs now and every hour while your Mac is awake."
 echo "Log:      $LOG"
 echo "Run now:  launchctl start $LABEL   (then: tail -f \"$LOG\")"
 echo "Stop:     launchctl unload \"$PLIST\""
