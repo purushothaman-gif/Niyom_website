@@ -20,6 +20,7 @@ import { ActivityIndicator, Alert, BackHandler, Linking, Pressable, View } from 
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
+import Constants from 'expo-constants';
 import { WebView, type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 import { RefreshCw, WifiOff } from 'lucide-react-native';
@@ -45,7 +46,19 @@ function pathOf(url: string): string {
   return (m && m[1]) || '/';
 }
 
+/** The installed app's version, as the CRM's update pop-up compares it. */
+const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
+
+/** Runs before the CRM page: tells it which app build it is inside. */
+const APP_INFO_SCRIPT = `window.__NIYOM_APP__ = ${JSON.stringify({ version: APP_VERSION, platform: 'android' })};\ntrue;`;
+
 function openOutside(url: string) {
+  // An app update (APK) must go to the phone's real browser, whose download
+  // manager hands the file to Android's installer; an in-app tab would not.
+  if (/\.apk(\?|$)|\/app-releases\//i.test(url)) {
+    void Linking.openURL(url);
+    return;
+  }
   if (/^https?:/i.test(url)) {
     void WebBrowser.openBrowserAsync(url).catch(() => Linking.openURL(url));
   } else {
@@ -181,7 +194,7 @@ export default function CrmScreen() {
         ref={ref}
         source={{ uri: CRM_URL }}
         style={{ flex: 1, backgroundColor: p.bg.base, display: failed ? 'none' : 'flex' }}
-        injectedJavaScriptBeforeContentLoaded={CRM_BRIDGE_SCRIPT}
+        injectedJavaScriptBeforeContentLoaded={APP_INFO_SCRIPT + CRM_BRIDGE_SCRIPT}
         onMessage={onMessage}
         onNavigationStateChange={onNav}
         onShouldStartLoadWithRequest={onShouldStart}
@@ -201,7 +214,7 @@ export default function CrmScreen() {
         allowFileAccess={false}
         geolocationEnabled={false}
         mediaPlaybackRequiresUserAction
-        applicationNameForUserAgent="NiyomWealthApp/1.0"
+        applicationNameForUserAgent={`NiyomWealthApp/${APP_VERSION}`}
         originWhitelist={['https://*', 'about:*', 'blob:*', 'data:*']}
         pullToRefreshEnabled
         overScrollMode="never"

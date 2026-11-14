@@ -43,6 +43,8 @@ import MfAccountQueue from './MfAccountQueue';
 import BondOrders from './BondOrders';
 import ShareOrders from './ShareOrders';
 import Mail from './mail/Mail';
+import MobileApp from './mobileApp/MobileApp';
+import { AppUpdatePrompt } from './mobileApp/AppUpdatePrompt';
 /*
  * HR is lazy on purpose. Statically imported it added ~260 KB (~64 KB gzipped)
  * to the CRM chunk that every employee downloads on every page load, for ten
@@ -124,6 +126,7 @@ export default function CRM() {
     'hr_payslips',
     'hr_reports',
     'hr_settings',
+    'mobile_app',
     'settings'
   ];
 
@@ -236,6 +239,7 @@ export default function CRM() {
     return (
       <Layout employee={employee} page="transfer_queue" onNavigate={() => {}}>
         <TransferQueue employee={employee} />
+        <AppUpdatePrompt />
       </Layout>
     );
   }
@@ -319,6 +323,7 @@ export default function CRM() {
               : <MyIncentive employee={employee} />}
           </Suspense>
         );
+      case 'mobile_app': return <MobileApp employee={employee} />;
       case 'settings': return <Settings employee={employee} />;
       default: return <Dashboard employee={employee} onNavigate={navigate} />;
     }
@@ -329,6 +334,7 @@ export default function CRM() {
   return (
     <Layout employee={employee} page={page} onNavigate={navigate}>
       {renderPage()}
+      <AppUpdatePrompt />
       {pinPromptOpen && !isAdmin && (
         <SurfaceSetPinPrompt
           supabase={supabase}

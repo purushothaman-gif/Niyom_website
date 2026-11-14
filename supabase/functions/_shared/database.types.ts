@@ -7726,6 +7726,59 @@ export type Database = {
           },
         ]
       }
+      nw_app_releases: {
+        Row: {
+          audience: string
+          download_url: string | null
+          file_size: number | null
+          id: string
+          is_active: boolean
+          is_mandatory: boolean
+          notes: string | null
+          platform: string
+          published_at: string
+          published_by: string | null
+          storage_path: string | null
+          version_name: string
+        }
+        Insert: {
+          audience?: string
+          download_url?: string | null
+          file_size?: number | null
+          id?: string
+          is_active?: boolean
+          is_mandatory?: boolean
+          notes?: string | null
+          platform?: string
+          published_at?: string
+          published_by?: string | null
+          storage_path?: string | null
+          version_name: string
+        }
+        Update: {
+          audience?: string
+          download_url?: string | null
+          file_size?: number | null
+          id?: string
+          is_active?: boolean
+          is_mandatory?: boolean
+          notes?: string | null
+          platform?: string
+          published_at?: string
+          published_by?: string | null
+          storage_path?: string | null
+          version_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_app_releases_published_by_fkey"
+            columns: ["published_by"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nw_bond_orders: {
         Row: {
           amount: number | null
@@ -13726,6 +13779,7 @@ export type Database = {
       nw_current_client_code: { Args: never; Returns: string }
       nw_current_client_id: { Args: never; Returns: string }
       nw_current_dsa_id: { Args: never; Returns: string }
+      nw_current_emp_is_active: { Args: never; Returns: boolean }
       nw_current_emp_is_admin: { Args: never; Returns: boolean }
       nw_current_emp_is_transfer_admin: { Args: never; Returns: boolean }
       nw_current_employee_id: { Args: never; Returns: string }

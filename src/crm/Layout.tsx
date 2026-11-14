@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { NWEmployee, NWAlert, CRMPage } from './types';
 import {
-  LayoutDashboard, UserPlus, Users, PieChart, ArrowLeftRight,
+  LayoutDashboard, Smartphone, UserPlus, Users, PieChart, ArrowLeftRight,
   FileText, UserCog, Settings, LogOut, Bell, ChevronRight, X, Home,
   FolderOpen, Shield, BarChart3, Wallet, Handshake, ClipboardList,
   Send, Target, Landmark, LifeBuoy, Sparkles, LineChart, BadgePercent, Gem,
@@ -121,6 +121,7 @@ const NAV: NavSection[] = [
     items: [
       { key: 'my_hr' as CRMPage,             label: 'My HR',             icon: Fingerprint, payrollOnly: true },
       { key: 'my_incentive' as CRMPage,      label: 'My Incentive',      icon: Trophy, hideForAdmin: true },
+      { key: 'mobile_app' as CRMPage,        label: 'Mobile App',        icon: Smartphone },
     ],
   },
   {
