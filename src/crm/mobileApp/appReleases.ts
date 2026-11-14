@@ -96,9 +96,20 @@ export async function releaseDownloadUrl(r: AppRelease): Promise<string> {
  * browser AND in the app, whose WebView hands any non-CRM address to the
  * phone's browser, where Android's download + install flow takes over.
  */
-export async function downloadRelease(r: AppRelease): Promise<void> {
+export async function downloadRelease(r: AppRelease): Promise<'in-app' | 'browser'> {
   const url = await releaseDownloadUrl(r);
+  // App 1.2.0+ downloads and installs the update itself (progress bar, then
+  // Android's "Update this app?" screen) — see mobile/src/features/crm/apkUpdater.ts.
+  const w = window as unknown as {
+    __NIYOM_APP__?: { installer?: boolean };
+    ReactNativeWebView?: { postMessage: (m: string) => void };
+  };
+  if (w.__NIYOM_APP__?.installer && w.ReactNativeWebView) {
+    w.ReactNativeWebView.postMessage(JSON.stringify({ type: 'install-update', url, version: r.version_name }));
+    return 'in-app';
+  }
   window.location.href = url;
+  return 'browser';
 }
 
 export async function publishRelease(input: {

@@ -28,7 +28,8 @@ export const CRM_HOSTS = new Set(['niyomwealth.com', 'www.niyomwealth.com']);
 
 export type BridgeMessage =
   | { type: 'download'; fileName: string; mimeType: string; base64: string }
-  | { type: 'download-error'; message: string };
+  | { type: 'download-error'; message: string }
+  | { type: 'install-update'; url: string; version: string };
 
 export const CRM_BRIDGE_SCRIPT = `
 (function () {

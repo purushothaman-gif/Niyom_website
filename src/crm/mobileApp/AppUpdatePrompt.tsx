@@ -61,7 +61,8 @@ export function AppUpdatePrompt() {
     setBusy(true);
     setErr(null);
     try {
-      await downloadRelease(release);
+      // In-app install: the app's own sheet takes over from here.
+      if ((await downloadRelease(release)) === 'in-app') setRelease(null);
     } catch (e) {
       setErr((e as Error)?.message || 'Could not start the download');
     } finally {
@@ -99,7 +100,7 @@ export function AppUpdatePrompt() {
         )}
 
         <p className="mt-4 text-xs" style={{ color: 'var(--text-muted)' }}>
-          Tap Download, then open the file and tap <b>Update</b>. Your sign-in and data stay as they are.
+          Tap Download, then tap <b>Update</b> when Android asks. Your sign-in and data stay as they are.
         </p>
 
         {err && <p className="mt-3 text-sm" style={{ color: 'var(--danger, #dc2626)' }}>{err}</p>}

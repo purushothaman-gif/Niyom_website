@@ -35,6 +35,8 @@ import {
   type BridgeMessage,
 } from '@/features/crm/crmBridge';
 import { forgetCrm, rememberCrm } from '@/features/crm/lastSurface';
+import { canInstallInApp } from '@/features/crm/apkUpdater';
+import { UpdateSheet, type UpdateRequest } from '@/features/crm/UpdateSheet';
 
 function hostOf(url: string): string | null {
   const m = /^https?:\/\/([^/:?#]+)/i.exec(url);
@@ -50,7 +52,13 @@ function pathOf(url: string): string {
 const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
 
 /** Runs before the CRM page: tells it which app build it is inside. */
-const APP_INFO_SCRIPT = `window.__NIYOM_APP__ = ${JSON.stringify({ version: APP_VERSION, platform: 'android' })};\ntrue;`;
+const APP_INFO_SCRIPT = `window.__NIYOM_APP__ = ${JSON.stringify({
+  version: APP_VERSION,
+  platform: 'android',
+  // From 1.2.0: the CRM may post { type: 'install-update' } instead of
+  // navigating to the APK, and the app downloads + installs it itself.
+  installer: canInstallInApp,
+})};\ntrue;`;
 
 function openOutside(url: string) {
   // An app update (APK) must go to the phone's real browser, whose download
@@ -75,6 +83,7 @@ export default function CrmScreen() {
   const canGoBack = useRef(false);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [update, setUpdate] = useState<UpdateRequest | null>(null);
 
   useEffect(() => {
     void rememberCrm();
@@ -144,6 +153,12 @@ export default function CrmScreen() {
       } catch (err) {
         Alert.alert('Could not save the file', String((err as Error)?.message ?? err));
       }
+    } else if (msg.type === 'install-update') {
+      // Only the CRM itself may start an install, and only over https.
+      const from = hostOf(e.nativeEvent.url ?? '');
+      if (!canInstallInApp || !from || !CRM_HOSTS.has(from)) return;
+      if (!/^https:\/\//i.test(msg.url) || !/^\d+\.\d+\.\d+$/.test(msg.version)) return;
+      setUpdate({ url: msg.url, version: msg.version });
     } else if (msg.type === 'download-error') {
       Alert.alert('Could not save the file', msg.message);
     }
@@ -220,6 +235,8 @@ export default function CrmScreen() {
         overScrollMode="never"
         textZoom={100}
       />
+
+      <UpdateSheet request={update} onClose={() => setUpdate(null)} />
 
       {loading && !failed ? (
         <View

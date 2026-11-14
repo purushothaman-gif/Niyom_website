@@ -33,6 +33,7 @@ import {
 import { ThemeProvider, useTheme } from '@/design/ThemeProvider';
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext';
 import { clientSupabase, partnerSupabase, supabase } from '@/platform/supabase';
+import { OtaUpdater } from '@/features/updates/OtaUpdater';
 
 /*
  * Hold the splash until the fonts are in. Space Grotesk decides the width of
@@ -145,6 +146,7 @@ function ThemedShell() {
           animation: 'slide_from_right',
         }}
       />
+      <OtaUpdater />
     </View>
   );
 }
