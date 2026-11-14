@@ -2,7 +2,7 @@
  * The launch router.
  *
  * Renders nothing. It waits for the stored session to be checked, then sends
- * the app to exactly one of four places — and holding navigation until
+ * the app to exactly one of five places (incl. the CRM WebView) — and holding navigation until
  * `restoring` is false is what stops a returning client seeing the sign-in
  * screen flash before their dashboard.
  */
@@ -11,6 +11,7 @@ import { View } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/features/auth/AuthContext';
 import { usePalette } from '@/design/ThemeProvider';
+import { lastSurfaceIsCrm } from '@/features/crm/lastSurface';
 
 export default function LaunchRouter() {
   const { session, restoring } = useAuth();
@@ -20,8 +21,15 @@ export default function LaunchRouter() {
     if (restoring) return;
 
     if (!session) {
-      router.replace('/(auth)/welcome');
-      return;
+      // An employee's CRM session lives inside the CRM WebView, not here, so a
+      // phone last used for the CRM goes straight back to it.
+      let cancelled = false;
+      void lastSurfaceIsCrm().then((crm) => {
+        if (!cancelled) router.replace(crm ? '/crm' : '/(auth)/welcome');
+      });
+      return () => {
+        cancelled = true;
+      };
     }
 
     /*

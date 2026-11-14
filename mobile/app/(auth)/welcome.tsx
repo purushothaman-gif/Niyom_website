@@ -28,6 +28,7 @@ import {
   ArrowRight,
   ChevronRight,
   Fingerprint,
+  Briefcase,
   Handshake,
   LineChart,
   ShieldCheck,
@@ -163,8 +164,15 @@ export default function Welcome() {
             body="Clients, payouts, leads"
             onPress={() => router.push('/(auth)/partner-login')}
           />
+          <Choice
+            index={2}
+            icon={Briefcase}
+            title="I'm an employee"
+            body="Niyom CRM — clients, deals, leads, HR"
+            onPress={() => router.push('/crm')}
+          />
 
-          <Animated.View entering={FadeInDown.duration(400).delay(220)}>
+          <Animated.View entering={FadeInDown.duration(400).delay(290)}>
             <Pressable
               onPress={() => router.push('/(auth)/get-started')}
               style={({ pressed }) => ({

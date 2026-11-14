@@ -108,7 +108,7 @@ registerFileWriter(async ({ fileName, base64, mimeType }) => {
     await Sharing.shareAsync(target.uri, {
       mimeType,
       dialogTitle: fileName,
-      UTI: 'org.openxmlformats.spreadsheetml.sheet',
+      UTI: mimeType === 'application/pdf' ? 'com.adobe.pdf' : mimeType.startsWith('image/') ? 'public.image' : 'org.openxmlformats.spreadsheetml.sheet',
     });
   }
 });
