@@ -764,3 +764,8 @@ verify_jwt = true
 #     it authenticates with the NAV_REFRESH_SECRET header instead. ---
 [functions.mf-nav-series]
 verify_jwt = false
+
+# Phone notifications: called only by the nw_alerts_push trigger, which
+# authenticates with the vault's push_secret (checked in-database).
+[functions.send-push]
+verify_jwt = false

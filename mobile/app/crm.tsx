@@ -18,6 +18,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Linking, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
+import {
+  onNotificationUrl,
+  registerForPush,
+  takePendingUrl,
+} from '@/features/push/pushNotifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
@@ -58,6 +63,9 @@ const APP_INFO_SCRIPT = `window.__NIYOM_APP__ = ${JSON.stringify({
   // From 1.2.0: the CRM may post { type: 'install-update' } instead of
   // navigating to the APK, and the app downloads + installs it itself.
   installer: canInstallInApp,
+  // From 1.3.0: the signed-in CRM may post { type: 'push-register' } and
+  // gets this phone's push token back as a 'niyom-push-token' event.
+  push: true,
 })};\ntrue;`;
 
 function openOutside(url: string) {
@@ -84,6 +92,17 @@ export default function CrmScreen() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [update, setUpdate] = useState<UpdateRequest | null>(null);
+  // A notification tapped while the app was closed opens straight on its page.
+  const [startUrl] = useState(() => takePendingUrl() ?? CRM_URL);
+
+  // …and one tapped while the CRM is open moves the CRM there.
+  useEffect(
+    () =>
+      onNotificationUrl((url) => {
+        ref.current?.injectJavaScript(`window.location.assign(${JSON.stringify(url)});true;`);
+      }),
+    [],
+  );
 
   useEffect(() => {
     void rememberCrm();
@@ -159,6 +178,20 @@ export default function CrmScreen() {
       if (!canInstallInApp || !from || !CRM_HOSTS.has(from)) return;
       if (!/^https:\/\//i.test(msg.url) || !/^\d+\.\d+\.\d+$/.test(msg.version)) return;
       setUpdate({ url: msg.url, version: msg.version });
+    } else if (msg.type === 'push-register') {
+      const from = hostOf(e.nativeEvent.url ?? '');
+      if (!from || !CRM_HOSTS.has(from)) return;
+      try {
+        const reg = await registerForPush();
+        if (!reg) return;
+        const detail = JSON.stringify({ token: reg.token, device: reg.device, version: APP_VERSION });
+        ref.current?.injectJavaScript(
+          `(function(){var d=${detail};window.__NIYOM_APP__=window.__NIYOM_APP__||{};window.__NIYOM_APP__.pushToken=d.token;` +
+            `window.dispatchEvent(new CustomEvent('niyom-push-token',{detail:d}));})();true;`,
+        );
+      } catch {
+        /* no Firebase / Play services, or offline — the bell still works */
+      }
     } else if (msg.type === 'download-error') {
       Alert.alert('Could not save the file', msg.message);
     }
@@ -207,7 +240,7 @@ export default function CrmScreen() {
 
       <WebView
         ref={ref}
-        source={{ uri: CRM_URL }}
+        source={{ uri: startUrl }}
         style={{ flex: 1, backgroundColor: p.bg.base, display: failed ? 'none' : 'flex' }}
         injectedJavaScriptBeforeContentLoaded={APP_INFO_SCRIPT + CRM_BRIDGE_SCRIPT}
         onMessage={onMessage}

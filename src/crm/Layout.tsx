@@ -14,6 +14,7 @@ import { ThemeToggle } from '../theme/ThemeToggle';
 import { clearStorageKeepingTrustedDevices } from './mfa';
 import { EmployeeAvatar } from './EmployeeAvatar';
 import { MarketTicker } from '../components/marketWatch/MarketTicker';
+import { unregisterPushToken, usePushRegistration } from './mobileApp/pushRegistration';
 
 interface Props {
   children: React.ReactNode;
@@ -167,6 +168,8 @@ const MOBILE_TABS: { key: CRMPage; label: string; icon: typeof LayoutDashboard }
 
 export default function Layout({ children, page, onNavigate, employee }: Props) {
   const [alerts, setAlerts] = useState<NWAlert[]>([]);
+  // Inside the mobile app: save this phone so bell alerts reach it too.
+  usePushRegistration(employee.id);
   const [showAlerts, setShowAlerts] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -267,6 +270,8 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
       onNavigate(a.action_url.replace('/crm/', '') as CRMPage);
     }
     else if (a.action_url && a.action_url.includes('/my_hr')) onNavigate('my_hr' as CRMPage);
+    // Any other /crm/<page> link (e.g. app updates → /crm/mobile_app).
+    else if (a.action_url && /^\/crm\/[a-z_]+$/.test(a.action_url)) onNavigate(a.action_url.slice(5) as CRMPage);
   };
 
   const canSee = (n: NavItem) => isTransferLogin
@@ -375,7 +380,7 @@ export default function Layout({ children, page, onNavigate, employee }: Props) 
             className={`crm-icon-action p-1 rounded-lg transition-colors flex-shrink-0 ${page === SETTINGS_ITEM.key ? 'is-active' : ''}`}>
             <Settings className="w-4 h-4" />
           </button>}
-          <button onClick={async () => { await supabase.auth.signOut(); clearStorageKeepingTrustedDevices(); window.location.replace('/crm'); }}
+          <button onClick={async () => { await unregisterPushToken(); await supabase.auth.signOut(); clearStorageKeepingTrustedDevices(); window.location.replace('/crm'); }}
             title="Sign out" aria-label="Sign out" className="crm-icon-danger p-1 rounded-lg transition-colors flex-shrink-0">
             <LogOut className="w-4 h-4" />
           </button>

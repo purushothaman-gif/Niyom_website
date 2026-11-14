@@ -12,6 +12,7 @@ import {
   compareVersions, deleteRelease, detectInstalledApp, downloadRelease, formatSize, isAndroidDevice,
   latestOf, listReleases, publishRelease, setReleaseActive, type AppRelease,
 } from './appReleases';
+import PushPanel from './PushPanel';
 
 const card = { background: 'var(--bg-surface)', border: '1px solid var(--border)' } as const;
 const input = { background: 'var(--bg-input, var(--bg-base))', border: '1px solid var(--border)', color: 'var(--text-primary)' } as const;
@@ -136,6 +137,8 @@ export default function MobileApp({ employee }: { employee: NWEmployee }) {
       </div>
 
       {isAdmin && <PublishForm employee={employee} latest={latest} onDone={load} />}
+
+      {isAdmin && <PushPanel />}
 
       {/* ----------------------------- history ----------------------------- */}
       {releases.length > 0 && (

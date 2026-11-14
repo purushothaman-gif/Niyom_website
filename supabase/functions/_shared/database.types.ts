@@ -11395,6 +11395,47 @@ export type Database = {
           },
         ]
       }
+      nw_push_tokens: {
+        Row: {
+          app_version: string | null
+          created_at: string
+          device_name: string | null
+          employee_id: string
+          id: string
+          last_seen_at: string
+          platform: string
+          token: string
+        }
+        Insert: {
+          app_version?: string | null
+          created_at?: string
+          device_name?: string | null
+          employee_id: string
+          id?: string
+          last_seen_at?: string
+          platform?: string
+          token: string
+        }
+        Update: {
+          app_version?: string | null
+          created_at?: string
+          device_name?: string | null
+          employee_id?: string
+          id?: string
+          last_seen_at?: string
+          platform?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nw_push_tokens_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "nw_employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nw_share_orders: {
         Row: {
           amount: number | null
@@ -14309,6 +14350,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      nw_push_devices: {
+        Args: never
+        Returns: {
+          app_version: string
+          device_name: string
+          employee_id: string
+          full_name: string
+          last_seen_at: string
+        }[]
+      }
+      nw_push_secret_ok: { Args: { p_secret: string }; Returns: boolean }
       nw_reassign_client: {
         Args: { p_client_id: string; p_reason?: string; p_to_employee: string }
         Returns: undefined
@@ -14319,6 +14371,15 @@ export type Database = {
       }
       nw_recompute_portfolio_value: {
         Args: { p_client_id: string }
+        Returns: undefined
+      }
+      nw_register_push_token: {
+        Args: {
+          p_app_version?: string
+          p_device?: string
+          p_platform?: string
+          p_token: string
+        }
         Returns: undefined
       }
       nw_request_duplicate_review: {
@@ -14334,6 +14395,10 @@ export type Database = {
         Returns: Json
       }
       nw_revoke_auth_sessions: { Args: { p_user_id: string }; Returns: number }
+      nw_send_staff_notification: {
+        Args: { p_employee_ids?: string[]; p_message: string; p_title: string }
+        Returns: number
+      }
       nw_set_asset_class: {
         Args: { p_asset_class: string; p_isin: string; p_note?: string }
         Returns: undefined
@@ -14363,6 +14428,10 @@ export type Database = {
           p_transferred_at?: string
         }
         Returns: Json
+      }
+      nw_unregister_push_token: {
+        Args: { p_token: string }
+        Returns: undefined
       }
       nw_unwind_txn_holding: {
         Args: { p_txn: Database["public"]["Tables"]["nw_transactions"]["Row"] }
